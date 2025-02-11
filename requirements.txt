@@ -1,2 +1,2 @@
-sentry-sdk
-flask
+sentry-sdk==2.20.0
+flask==3.1.0

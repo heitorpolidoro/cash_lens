@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath("../"))
 sys.path.insert(0, os.path.abspath("../src"))
 
 
-project = "PROJECT_NAME"
+project = "cash_lens"
 copyright = "2024, Heitor Polidoro"
 author = "Heitor Polidoro"
 

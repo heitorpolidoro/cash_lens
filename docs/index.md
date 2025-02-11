@@ -1,4 +1,4 @@
-# PROJECT_NAME
+# cash_lens
 
 Project description
 
