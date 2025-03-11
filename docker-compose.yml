@@ -1,0 +1,51 @@
+services:
+  cash_lens_front:
+    container_name: cash_lens_front
+    build:
+      context: ./cash_lens_front
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./cash_lens_front:/cash_lens_front
+    depends_on:
+      - cash_lens_back
+    working_dir: /cash_lens_front
+    command: npm start
+    env_file:
+      - cash_lens_front/.env
+
+  cash_lens_back:
+    container_name: cash_lens_back
+    build:
+      context: ./cash_lens_back
+      dockerfile: Dockerfile
+    ports:
+      - "3030:3000"
+    volumes:
+      - ./cash_lens_back:/cash_lens_back
+    working_dir: /cash_lens_back
+
+    command: vercel dev --yes --token $VERCEL_TOKEN
+
+    env_file:
+      - cash_lens_back/.env
+    depends_on:
+      - postgres
+
+
+
+  postgres:
+    container_name: postgres-db
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: your-postgres-user
+      POSTGRES_PASSWORD: your-postgres-password
+      POSTGRES_DB: cash_lens
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

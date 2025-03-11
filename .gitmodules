@@ -1,0 +1,6 @@
+[submodule "cash_lens_front"]
+	path = cash_lens_front
+	url = https://github.com/heitorpolidoro/cash_lens_front.git
+[submodule "cash_lens_back"]
+	path = cash_lens_back
+	url = https://github.com/heitorpolidoro/cash_lens_back.git
