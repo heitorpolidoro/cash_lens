@@ -1,0 +1,27 @@
+<div class="min-h-screen bg-gray-50">
+  <.live_title suffix=" · Phoenix Framework">
+    <%= assigns[:page_title] || "CashLens" %>
+  </.live_title>
+  <.live_navbar current_user={@current_user} />
+  <div class="flex">
+    <.live_menu_component id="menu" />
+    <div class="flex-1 ml-64">
+      <main class="px-4 py-20 sm:px-6 lg:px-8">
+        <div class="mx-auto max-w-xl lg:mx-0">
+          <%= @inner_content %>
+        </div>
+      </main>
+    </div>
+  </div>
+  <.flash_group flash={@flash} position="bottom-4 right-4" />
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const infoFlash = document.querySelector('[data-flash-type="info"]');
+      if (infoFlash) {
+        setTimeout(() => {
+          infoFlash.remove();
+        }, 3000);
+      }
+    });
+  </script>
+</div>
