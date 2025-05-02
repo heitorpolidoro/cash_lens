@@ -21,7 +21,7 @@ defmodule CashLensWeb.Layouts do
   @spec live_menu_component(any()) :: Phoenix.LiveView.Rendered.t()
   def live_menu_component(assigns) do
     ~H"""
-    <.live_component module={CashLensWeb.MenuComponent} id="menu" />
+    <.live_component module={CashLensWeb.MenuComponent} id="menu" current_path={assigns[:current_path] || "/"} />
     """
   end
 end

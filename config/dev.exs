@@ -74,3 +74,13 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Configure your database
+config :cash_lens, CashLens.Repo,
+  username: "your-postgres-user",
+  password: "your-postgres-password",
+  hostname: "localhost",
+  database: "cash_lens",
+  stacktrace: true,
+  show_sensitive_data_on_connection_error: true,
+  pool_size: 10

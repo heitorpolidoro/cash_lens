@@ -22,3 +22,12 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+# Configure your database
+config :cash_lens, CashLens.Repo,
+  username: "your-postgres-user",
+  password: "your-postgres-password",
+  hostname: "localhost",
+  database: "cash_lens_test#{System.get_env("MIX_TEST_PARTITION")}",
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: 10

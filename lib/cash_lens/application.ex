@@ -8,12 +8,14 @@ defmodule CashLens.Application do
   @impl true
   def start(_type, _args) do
     unless Mix.env == :prod do
-      Dotenv.load
+      # Dotenv.load
       Mix.Task.run("loadconfig")
     end
     children = [
       CashLensWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:cash_lens, :dns_cluster_query) || :ignore},
+      # Start the Ecto repository
+      CashLens.Repo,
       {Phoenix.PubSub, name: CashLens.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: CashLens.Finch},

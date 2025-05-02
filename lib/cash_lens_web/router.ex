@@ -31,6 +31,7 @@ defmodule CashLensWeb.Router do
     pipe_through [:browser, :require_authenticated_user]
 
     live "/", PageLive, :index
+    live "/transactions", TransactionsLive, :index
     delete "/logout", AuthController, :delete
   end
 

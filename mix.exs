@@ -4,7 +4,7 @@ defmodule CashLens.MixProject do
   def project do
     [
       app: :cash_lens,
-      version: "0.1.0",
+      version: System.get_env("VERSION", "0.1.0"),
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -58,7 +58,10 @@ defmodule CashLens.MixProject do
       {:ueberauth, "~> 0.10.5"},
       {:ueberauth_google, "~> 0.10.2"},
       {:plug_cowboy, "~> 2.7"},
-      {:dotenv, "~> 3.1.0", only: [:dev, :test]}
+      {:dotenv, "~> 3.0.0", only: [:dev, :test]},
+      {:csv, "~> 3.2"},
+      {:ecto_sql, "~> 3.10"},
+      {:postgrex, ">= 0.0.0"}
     ]
   end
 
@@ -70,14 +73,17 @@ defmodule CashLens.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "assets.setup", "assets.build"],
+      setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["tailwind cash_lens", "esbuild cash_lens"],
+      "assets.build": ["tailwind cash_lens --minify", "esbuild cash_lens --minify"],
       "assets.deploy": [
         "tailwind cash_lens --minify",
         "esbuild cash_lens --minify",
         "phx.digest"
-      ]
+      ],
+      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
+      "ecto.reset": ["ecto.drop", "ecto.setup"],
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"]
     ]
   end
 end

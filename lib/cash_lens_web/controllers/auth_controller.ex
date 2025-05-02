@@ -9,6 +9,7 @@ defmodule CashLensWeb.AuthController do
       nil ->
         conn
         |> redirect(to: "/login")
+        |> halt()
       user ->
         assign(conn, :current_user, user)
     end
