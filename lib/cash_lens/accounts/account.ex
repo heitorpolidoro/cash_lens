@@ -6,6 +6,7 @@ defmodule CashLens.Accounts.Account do
     field :name, :string
     field :bank_name, :string
     field :type, Ecto.Enum, values: [:checking, :credit_card, :investment]
+    field :parser, Ecto.Enum, values: [:bb_csv, :csv_nimble]
 
     timestamps()
   end
@@ -13,7 +14,7 @@ defmodule CashLens.Accounts.Account do
   @doc false
   def changeset(account, attrs) do
     account
-    |> cast(attrs, [:name, :bank_name, :type])
-    |> validate_required([:name, :bank_name, :type])
+    |> cast(attrs, [:name, :bank_name, :type, :parser])
+    |> validate_required([:name, :bank_name, :type, :parser])
   end
 end

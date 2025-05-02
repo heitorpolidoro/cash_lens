@@ -5,6 +5,7 @@ defmodule CashLensWeb.AccountsLive do
 
   alias CashLens.Accounts
   alias CashLens.Accounts.Account
+  alias CashLens.Parsers
 
   def mount(_params, session, socket) do
     {:ok,
@@ -15,7 +16,8 @@ defmodule CashLensWeb.AccountsLive do
         accounts: Accounts.list_accounts(),
         account_changeset: Accounts.change_account(%Account{}),
         editing_account: nil,
-        show_form: false
+        show_form: false,
+        available_parsers: Parsers.available_parsers()
       )
     }
   end
@@ -149,6 +151,10 @@ defmodule CashLensWeb.AccountsLive do
                   <.input field={f[:type]} type="select" label="Type" options={[{"Checking", :checking}, {"Credit Card", :credit_card}, {"Investment", :investment}]} class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
                 </div>
 
+                <div>
+                  <.input field={f[:parser]} type="select" label="Parser" options={@available_parsers} class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+                </div>
+
                 <div class="flex space-x-2">
                   <.button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Save</.button>
                   <button
@@ -174,6 +180,7 @@ defmodule CashLensWeb.AccountsLive do
                       <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                       <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bank</th>
                       <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parser</th>
                       <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -183,6 +190,7 @@ defmodule CashLensWeb.AccountsLive do
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= account.name %></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= account.bank_name %></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= format_account_type(account.type) %></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= format_parser_type(account.parser) %></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <div class="flex space-x-2">
                             <button
@@ -219,4 +227,8 @@ defmodule CashLensWeb.AccountsLive do
   defp format_account_type(:credit_card), do: "Credit Card"
   defp format_account_type(:investment), do: "Investment"
   defp format_account_type(_), do: "Unknown"
+
+  defp format_parser_type(:bb_csv), do: "BB (CSV)"
+  defp format_parser_type(:csv_nimble), do: "CSV (NimbleCSV)"
+  defp format_parser_type(_), do: "Unknown"
 end
