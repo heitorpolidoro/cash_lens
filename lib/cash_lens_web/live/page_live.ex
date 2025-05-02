@@ -6,11 +6,6 @@ defmodule CashLensWeb.PageLive do
   end
 
   def render(assigns) do
-    ~H"""
-    <div class="space-y-6">
-      <!-- Add your main content here -->
-        Main Content
-    </div>
-    """
+    CashLensWeb.PageLiveHTML.page(assigns)
   end
 end

@@ -38,9 +38,6 @@ defmodule CashLens.Parsers do
   defp parse_with_nimble_csv(content) do
     # Using NimbleCSV's RFC4180 parser
     content
-    |> String.split("\n", trim: true)
-    |> NimbleCSV.RFC4180.parse_string(skip_headers: false)
-    |> convert_to_maps()
   end
 
   # Convert list of lists to list of maps with headers
