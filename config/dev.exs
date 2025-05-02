@@ -77,10 +77,11 @@ config :swoosh, :api_client, false
 
 # Configure your database
 config :cash_lens, CashLens.Repo,
-  username: "your-postgres-user",
-  password: "your-postgres-password",
-  hostname: "localhost",
-  database: "cash_lens",
+  username: System.get_env("POSTGRES_USER", "your-postgres-user"),
+  password: System.get_env("POSTGRES_PASSWORD", "your-postgres-password"),
+  hostname: System.get_env("POSTGRES_HOST", "localhost"),
+  database: System.get_env("POSTGRES_DB", "cash_lens"),
+  port: String.to_integer(System.get_env("POSTGRES_PORT", "5432")),
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

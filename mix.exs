@@ -61,6 +61,7 @@ defmodule CashLens.MixProject do
       {:dotenv, "~> 3.0.0", only: [:dev, :test]},
       {:csv, "~> 3.2"},
       {:ecto_sql, "~> 3.10"},
+      {:phoenix_ecto, "~> 4.4"},
       {:postgrex, ">= 0.0.0"}
     ]
   end

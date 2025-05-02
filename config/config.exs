@@ -8,7 +8,8 @@
 import Config
 
 config :cash_lens,
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  ecto_repos: [CashLens.Repo]
 
 # Configures the endpoint
 config :cash_lens, CashLensWeb.Endpoint,

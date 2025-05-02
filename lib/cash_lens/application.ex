@@ -19,6 +19,8 @@ defmodule CashLens.Application do
       {Phoenix.PubSub, name: CashLens.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: CashLens.Finch},
+      # Start the TransactionParser GenServer
+      CashLens.TransactionParser,
       # Start a worker by calling: CashLens.Worker.start_link(arg)
       # {CashLens.Worker, arg},
       # Start to serve requests, typically the last entry

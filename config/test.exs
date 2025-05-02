@@ -25,9 +25,10 @@ config :phoenix_live_view,
 
 # Configure your database
 config :cash_lens, CashLens.Repo,
-  username: "your-postgres-user",
-  password: "your-postgres-password",
-  hostname: "localhost",
-  database: "cash_lens_test#{System.get_env("MIX_TEST_PARTITION")}",
+  username: System.get_env("POSTGRES_USER", "your-postgres-user"),
+  password: System.get_env("POSTGRES_PASSWORD", "your-postgres-password"),
+  hostname: System.get_env("POSTGRES_HOST", "localhost"),
+  database: "#{System.get_env("POSTGRES_DB", "cash_lens")}_test#{System.get_env("MIX_TEST_PARTITION")}",
+  port: String.to_integer(System.get_env("POSTGRES_PORT", "5432")),
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 10

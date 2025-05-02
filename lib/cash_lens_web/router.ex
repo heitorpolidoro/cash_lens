@@ -32,6 +32,7 @@ defmodule CashLensWeb.Router do
 
     live "/", PageLive, :index
     live "/transactions", TransactionsLive, :index
+    live "/accounts", AccountsLive, :index
     delete "/logout", AuthController, :delete
   end
 
