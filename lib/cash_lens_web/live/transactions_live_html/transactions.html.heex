@@ -11,15 +11,6 @@
 
       <div class="mt-5">
         <div class="mb-4">
-          <label for="parser-select" class="block text-sm font-medium text-gray-700">Select Parser</label>
-          <select id="parser-select" name="parser" phx-change="change-parser" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-            <%= for {label, value} <- @available_parsers do %>
-              <option value={value} selected={@parser_type == value}><%= label %></option>
-            <% end %>
-          </select>
-        </div>
-
-        <div class="mb-4">
           <label for="bank-select" class="block text-sm font-medium text-gray-700">Select Account <span class="text-red-500">*</span></label>
           <select id="bank-select" name="bank" phx-change="change-bank" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
             <option value="" selected={is_nil(@selected_bank)}>-- Select an Account --</option>
@@ -30,6 +21,16 @@
           <%= if is_nil(@selected_bank) do %>
             <p class="mt-1 text-sm text-red-500">Please select an account</p>
           <% end %>
+        </div>
+
+        <div class="mb-4">
+          <label for="parser-select" class="block text-sm font-medium text-gray-700">Select Parser</label>
+          <select id="parser-select" name="parser" phx-change="change-parser" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+          <option value="" selected={is_nil(@selected_bank)}>-- Select a Parser --</option>
+            <%= for {label, value} <- @available_parsers do %>
+              <option value={value} selected={@parser_type == value}><%= label %></option>
+            <% end %>
+          </select>
         </div>
 
         <form id="upload-form" phx-submit="save" phx-change="validate" class="space-y-4">

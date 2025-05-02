@@ -32,7 +32,7 @@
             </div>
 
             <div>
-              <.input field={f[:type]} type="select" label="Type" options={[{"Checking", :checking}, {"Credit Card", :credit_card}, {"Investment", :investment}]} class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+              <.input field={f[:type]} type="select" label="Type" options={@available_types} class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
             </div>
 
             <div>

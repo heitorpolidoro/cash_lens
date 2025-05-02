@@ -15,7 +15,8 @@ defmodule CashLensWeb.AccountsLive do
        account_changeset: Accounts.change_account(%Account{}),
        editing_account: nil,
        show_form: false,
-       available_parsers: Parsers.available_parsers()
+       available_parsers: Parsers.available_parsers(),
+       available_types: Accounts.available_types()
      )}
   end
 

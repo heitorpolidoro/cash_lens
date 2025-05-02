@@ -111,4 +111,12 @@ defmodule CashLens.Accounts do
     |> distinct(true)
     |> Repo.all()
   end
+
+  def available_types() do
+    [
+      {"Checking", :checking},
+      {"Credit Card", :credit_card},
+      {"Investment", :investment}
+    ]
+  end
 end
