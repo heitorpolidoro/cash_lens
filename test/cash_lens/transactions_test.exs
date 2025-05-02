@@ -8,7 +8,7 @@ defmodule CashLens.TransactionsTest do
 
     import CashLens.TransactionsFixtures
 
-    @invalid_attrs %{date: nil, time: nil, reason: nil, category: nil, amount: nil}
+    @invalid_attrs %{date: nil, reason: nil, amount: nil, identifyer: nil}
 
     test "list_transactions/0 returns all transactions" do
       transaction = transaction_fixture()
@@ -34,6 +34,21 @@ defmodule CashLens.TransactionsTest do
       assert transaction.time == ~T[12:00:00]
       assert transaction.reason == "some reason"
       assert transaction.category == "some category"
+      assert Decimal.equal?(transaction.amount, Decimal.new("120.5"))
+    end
+
+    test "create_transaction/1 with nullable fields creates a transaction" do
+      valid_attrs = %{
+        date: ~D[2024-06-01],
+        reason: "some reason",
+        amount: "120.5"
+      }
+
+      assert {:ok, %Transaction{} = transaction} = Transactions.create_transaction(valid_attrs)
+      assert transaction.date == ~D[2024-06-01]
+      assert transaction.time == nil
+      assert transaction.reason == "some reason"
+      assert transaction.category == nil
       assert Decimal.equal?(transaction.amount, Decimal.new("120.5"))
     end
 

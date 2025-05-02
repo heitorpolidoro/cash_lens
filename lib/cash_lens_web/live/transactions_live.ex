@@ -14,10 +14,10 @@ defmodule CashLensWeb.TransactionsLive do
         current_path: "/transactions",
         transactions: [],
         available_parsers: Parsers.available_parsers(),
-        parser_type: :csv_standard,
+        selected_parser: nil,
         parsing_status: nil,
-        bank_names: Accounts.list_bank_names(),
-        selected_bank: nil
+        accounts: Accounts.list_accounts(),
+        selected_account: nil
       )
      |> allow_upload(:transaction_file,
         accept: ~w(.csv),
@@ -41,36 +41,21 @@ defmodule CashLensWeb.TransactionsLive do
   end
 
   def handle_event("validate", _params, socket) do
+
     {:noreply, socket}
-#    {:noreply, validate_uploads(socket, :transaction_file)}
   end
 
-  def handle_event("change-parser", %{"parser" => parser_type}, socket) do
-    {:noreply, assign(socket, parser_type: String.to_atom(parser_type))}
-  end
-
-  def handle_event("change-bank", %{"bank" => bank_name}, socket) do
-    {:noreply, assign(socket, selected_bank: bank_name)}
+  def handle_event("change-account", %{"account" => account_id}, socket) do
+    default_parser = Accounts.get_account!(account_id).parser
+    {:noreply, assign(socket, selected_account: account_id, selected_parser: default_parser)}
   end
 
   def handle_event("cancel-upload", %{"ref" => ref}, socket) do
     {:noreply, cancel_upload(socket, :transaction_file, ref)}
   end
 
-  def handle_event("trigger-upload", _params, socket) do
-    # Add an acknowledgment ID to the event
-    ack_id = "upload-ack-#{:rand.uniform(1000000)}"
-    {:noreply, push_event(socket, "click-file-input", %{ack: "file-input-clicked-#{ack_id}"})}
-  end
-
-  # Handle the acknowledgment event from the client
-  def handle_event("file-input-clicked-" <> _ack_id, _params, socket) do
-    # The client successfully processed the click-file-input event
-    {:noreply, socket}
-  end
-
-  def handle_event("save", _params, socket) do
-    if is_nil(socket.assigns.selected_bank) do
+  def handle_event("save", %{"account" => account, "parser" => parser}, socket) do
+    if is_nil(account) do
       {:noreply,
        socket
        |> put_flash(:error, "Please select an account before uploading a file.")
@@ -80,7 +65,7 @@ defmodule CashLensWeb.TransactionsLive do
       consumed_entries =
         consume_uploaded_entries(socket, :transaction_file, fn %{path: path}, entry ->
           # Send the file path to the TransactionParser GenServer for async parsing
-          TransactionParser.parse_file(path, socket.assigns.parser_type, self(), entry.client_name)
+          TransactionParser.parse_file(path, account, String.to_atom(parser), self(), entry.client_name)
 
           # Return the entry name
           {:ok, entry.client_name}
@@ -103,11 +88,11 @@ defmodule CashLensWeb.TransactionsLive do
   @doc """
   Handle the message from the TransactionParser GenServer when parsing is complete.
   """
-  def handle_info({:transactions_parsed, client_name}, socket) do
+  def handle_info({:transactions_parsed, client_name, account, parser_type}, socket) do
     {:noreply,
      socket
-     |> put_flash(:info, "File parsing completed: #{client_name}")
-     |> assign(:parsing_status, :completed)
+     |> put_flash(:info, "File parsing completed: #{client_name} using #{parser_type} for account #{account} ")
+     |> assign(parsing_status: :completed, selected_account: nil, selected_parser: nil)
     }
   end
 

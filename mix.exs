@@ -62,7 +62,8 @@ defmodule CashLens.MixProject do
       {:csv, "~> 3.2"},
       {:ecto_sql, "~> 3.10"},
       {:phoenix_ecto, "~> 4.4"},
-      {:postgrex, ">= 0.0.0"}
+      {:postgrex, ">= 0.0.0"},
+      {:timex, "~> 3.7"}
     ]
   end
 

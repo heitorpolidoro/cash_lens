@@ -23,23 +23,9 @@ import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
-let Hooks = {}
-Hooks.UploadFile = {
-    mounted() {
-        this.el.addEventListener("click-file-input", e => {
-            console.log("click-file-input", e)
-            const fileInput = this.el.querySelector("#transaction-file-input")
-            if(fileInput) {
-                fileInput.click()
-            }
-        });
-    }
-}
-
 let liveSocket = new LiveSocket("/live", Socket, {
     longPollFallbackMs: 2500,
     params: {_csrf_token: csrfToken},
-    hooks: Hooks
 })
 
 // Show progress bar on live navigation and form submits

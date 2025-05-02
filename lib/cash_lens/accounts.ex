@@ -37,6 +37,10 @@ defmodule CashLens.Accounts do
   """
   def get_account!(id), do: Repo.get!(Account, id)
 
+  def get_account_by_name!(name) do
+    Repo.one(from a in Account, where: a.name == ^name)
+  end
+
   @doc """
   Creates a account.
 
@@ -103,13 +107,13 @@ defmodule CashLens.Accounts do
   end
 
   @doc """
-  Returns a list of bank names from all accounts.
+  Returns a list of account names from all accounts.
   """
-  def list_bank_names do
+  def list_account_options do
     Account
-    |> select([a], a.bank_name)
-    |> distinct(true)
     |> Repo.all()
+    |> Enum.map(fn a -> "#{a.bank_name} - #{a.name}" end)
+    |> Enum.uniq()
   end
 
   def available_types() do

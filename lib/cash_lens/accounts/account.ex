@@ -6,7 +6,7 @@ defmodule CashLens.Accounts.Account do
     field :name, :string
     field :bank_name, :string
     field :type, Ecto.Enum, values: [:checking, :credit_card, :investment]
-    field :parser, Ecto.Enum, values: [:bb_csv, :csv_nimble]
+    field :parser, Ecto.Enum, values: [:bb_csv]
 
     timestamps()
   end
