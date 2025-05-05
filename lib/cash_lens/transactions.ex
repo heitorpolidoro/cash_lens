@@ -17,8 +17,10 @@ defmodule CashLens.Transactions do
       [%Transaction{}, ...]
 
   """
-  def list_transactions do
-    Repo.all(Transaction)
+  def list_transactions(order_by_fields \\ :id) do
+    Transaction
+    |> order_by(^order_by_fields)
+    |> Repo.all()
   end
 
   @doc """

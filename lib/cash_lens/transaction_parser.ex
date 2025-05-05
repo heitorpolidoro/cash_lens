@@ -4,6 +4,9 @@ defmodule CashLens.TransactionParser do
   """
   use GenServer
 
+  require Logger
+
+
   alias CashLens.Parsers
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions
@@ -71,12 +74,13 @@ defmodule CashLens.TransactionParser do
             |> IO.inspect()
 
           # Send the result back to the caller
-          IO.puts("Parsing complete for #{file_name}")
+          Logger.info("Parsing complete for #{file_name}")
           send(caller, {:transactions_parsed, file_name, account_id, parser_type})
         rescue
           error ->
             error_message = "Error parsing file #{file_name}: #{Exception.message(error)}"
-            IO.puts("Parsing error: #{error_message}")
+            Logger.error(Exception.format(:error, "Parsing error: #{error_message}", __STACKTRACE__))
+
             send(caller, {:transactions_parse_error, file_name, error_message})
         end
       end)

@@ -13,7 +13,7 @@ defmodule CashLensWeb.TransactionsLive do
         current_user: session["current_user"],
         uploaded_files: [],
         current_path: "/transactions",
-        transactions: Transactions.list_transactions(),
+        transactions: Transactions.list_transactions([desc: :id]),
         available_parsers: Parsers.available_parsers(),
         selected_parser: nil,
         parsing_status: nil,
@@ -97,7 +97,7 @@ defmodule CashLensWeb.TransactionsLive do
         parsing_status: :completed,
         selected_account: nil,
         selected_parser: nil,
-        transactions: Transactions.list_transactions()
+        transactions: Transactions.list_transactions([desc: :id])
       )
     }
   end
@@ -108,7 +108,7 @@ defmodule CashLensWeb.TransactionsLive do
      socket
      |> put_flash(:error, error_message)
      |> assign(:parsing_status, :error)
-     |> assign(:transactions, Transactions.list_transactions())
+     |> assign(:transactions, Transactions.list_transactions([desc: :id]))
     }
   end
 
