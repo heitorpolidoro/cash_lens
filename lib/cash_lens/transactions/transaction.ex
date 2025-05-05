@@ -8,7 +8,7 @@ defmodule CashLens.Transactions.Transaction do
     field :reason, :string
     field :category, :string
     field :amount, :decimal
-    field :identifyer, :string
+    field :identifier, :string
     belongs_to :account, CashLens.Accounts.Account
 
     timestamps()
@@ -17,7 +17,7 @@ defmodule CashLens.Transactions.Transaction do
   @doc false
   def changeset(transaction, attrs) do
     transaction
-    |> cast(attrs, [:date, :time, :reason, :category, :amount, :identifyer])
-    |> validate_required([:date, :reason, :amount, :identifyer])
+    |> cast(attrs, [:date, :time, :reason, :category, :amount, :identifier, :account_id])
+    |> validate_required([:date, :reason, :amount, :identifier])
   end
 end

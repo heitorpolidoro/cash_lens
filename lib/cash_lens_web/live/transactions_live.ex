@@ -4,6 +4,7 @@ defmodule CashLensWeb.TransactionsLive do
   alias CashLens.Parsers
   alias CashLens.TransactionParser
   alias CashLens.Accounts
+  alias CashLens.Transactions
 
   def mount(_params, session, socket) do
     {:ok,
@@ -12,7 +13,7 @@ defmodule CashLensWeb.TransactionsLive do
         current_user: session["current_user"],
         uploaded_files: [],
         current_path: "/transactions",
-        transactions: [],
+        transactions: Transactions.list_transactions(),
         available_parsers: Parsers.available_parsers(),
         selected_parser: nil,
         parsing_status: nil,
@@ -92,7 +93,12 @@ defmodule CashLensWeb.TransactionsLive do
     {:noreply,
      socket
      |> put_flash(:info, "File parsing completed: #{client_name} using #{parser_type} for account #{account} ")
-     |> assign(parsing_status: :completed, selected_account: nil, selected_parser: nil)
+     |> assign(
+        parsing_status: :completed,
+        selected_account: nil,
+        selected_parser: nil,
+        transactions: Transactions.list_transactions()
+      )
     }
   end
 
@@ -102,6 +108,7 @@ defmodule CashLensWeb.TransactionsLive do
      socket
      |> put_flash(:error, error_message)
      |> assign(:parsing_status, :error)
+     |> assign(:transactions, Transactions.list_transactions())
     }
   end
 

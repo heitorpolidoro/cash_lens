@@ -42,7 +42,7 @@ defmodule CashLens.Parsers do
         date: Timex.parse!(row["Data"], "{D}/{M}/{YYYY}"),
         reason: row["Histórico"],
         amount: row["Valor"],
-        identifyer: row["Número do documento"]
+        identifier: row["Número do documento"]
       }
     end)
   end
