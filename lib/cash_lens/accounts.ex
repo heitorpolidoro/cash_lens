@@ -18,7 +18,7 @@ defmodule CashLens.Accounts do
 
   """
   def list_accounts do
-    Repo.all(Account)
+    Repo.all(Account) |> Repo.preload(:parser)
   end
 
   @doc """
@@ -35,10 +35,10 @@ defmodule CashLens.Accounts do
       ** (Ecto.NoResultsError)
 
   """
-  def get_account!(id), do: Repo.get!(Account, id)
+  def get_account!(id), do: Repo.get!(Account, id) |> Repo.preload(:parser)
 
   def get_account_by_name!(name) do
-    Repo.one(from a in Account, where: a.name == ^name)
+    Repo.one(from a in Account, where: a.name == ^name) |> Repo.preload(:parser)
   end
 
   @doc """

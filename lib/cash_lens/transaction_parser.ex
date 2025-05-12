@@ -6,9 +6,7 @@ defmodule CashLens.TransactionParser do
 
   require Logger
 
-
   alias CashLens.Parsers
-  alias CashLens.Transactions.Transaction
   alias CashLens.Transactions
 
   # Client API
@@ -34,10 +32,10 @@ defmodule CashLens.TransactionParser do
 
   - `:ok`: The parsing process has been started
   """
-  def parse_file(file_path, account, parser_type, caller, client_name) do
+  def parse_file(file_path, parser_slug, caller) do
     GenServer.cast(
       __MODULE__,
-      {:parse_file, file_path, account, parser_type, caller, client_name}
+      {:parse_file, file_path, parser_slug, caller}
     )
   end
 
@@ -49,7 +47,7 @@ defmodule CashLens.TransactionParser do
   end
 
   @impl true
-  def handle_cast({:parse_file, file_path, account_id, parser_type, caller, file_name}, state) do
+  def handle_cast({:parse_file, file_path, parser_type, caller}, state) do
     # Read the file content immediately to avoid issues with temporary files being deleted
     try do
       # Read the file content
@@ -62,34 +60,28 @@ defmodule CashLens.TransactionParser do
         try do
           # Parse the content
           transactions =
-            Parsers.parse(content, parser_type)
-            |> Enum.map(fn row ->
-                Transactions.create_transaction(row)
-#              %Transaction{}
-#              |> Ecto.Changeset.cast(row, [:date, :reason, :amount, :identifyer])
-#              |> Ecto.Changeset.put_change(:account_id, account_id)
-#              |> Ecto.Changeset.apply_changes()
-#              |> Repo.insert!()
-            end)
-            |> IO.inspect()
+          Parsers.parse(content, parser_type)
 
-          # Send the result back to the caller
-          Logger.info("Parsing complete for #{file_name}")
-          send(caller, {:transactions_parsed, file_name, account_id, parser_type})
+          send(caller, {:transactions_parsed, transactions})
         rescue
           error ->
-            error_message = "Error parsing file #{file_name}: #{Exception.message(error)}"
-            Logger.error(Exception.format(:error, "Parsing error: #{error_message}", __STACKTRACE__))
+            error_message = Exception.message(error)
 
-            send(caller, {:transactions_parse_error, file_name, error_message})
+            Logger.error(
+              Exception.format(:error, "Parsing error: #{error_message}", __STACKTRACE__)
+            )
+
+            send(caller, {:transactions_parse_error, error_message})
         end
       end)
     rescue
       error ->
-        error_message = "Error parsing file #{file_name}: #{Exception.message(error)}"
-        IO.puts("Parsing error: #{error_message}")
+        error_message =Exception.message(error)
+        Logger.error(
+          Exception.format(:error, "Parsing error: #{error_message}", __STACKTRACE__)
+        )
         # Send the error message back to the caller immediately
-        send(caller, {:transactions_parse_error, file_name, error_message})
+        send(caller, {:transactions_parse_error, error_message})
     end
 
     {:noreply, state}

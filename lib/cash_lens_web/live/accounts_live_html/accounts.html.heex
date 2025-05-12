@@ -36,7 +36,7 @@
             </div>
 
             <div>
-              <.input field={f[:parser]} type="select" label="Parser" options={@available_parsers} class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+              <.input field={f[:parser_id]} type="select" label="Parser" options={@available_parsers} class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
             </div>
 
             <div class="flex space-x-2">
@@ -74,7 +74,7 @@
                     <td class="px-3 py-4 text-sm text-gray-500"><%= account.name %></td>
                     <td class="px-3 py-4 text-sm text-gray-500"><%= account.bank_name %></td>
                     <td class="px-3 py-4 text-sm text-gray-500"><%= format_account_type(account.type) %></td>
-                    <td class="px-3 py-4 text-sm text-gray-500"><%= format_parser_type(account.parser) %></td>
+                    <td class="px-3 py-4 text-sm text-gray-500"><%= account.parser && account.parser.name %></td>
                     <td class="px-3 py-4 text-sm text-gray-500">
                       <div class="flex space-x-2">
                         <button

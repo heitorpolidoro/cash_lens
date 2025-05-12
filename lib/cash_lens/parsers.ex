@@ -2,32 +2,42 @@ defmodule CashLens.Parsers do
   @moduledoc """
   Module for handling different file parsers for transaction data.
   """
+  import Number.Currency
+
+  alias Timex
+  alias CashLens.ReasonsToIgnore
 
   @doc """
   Returns a list of available parsers.
   """
-
-  alias Timex
-
   def available_parsers do
     [
-      {"BB (CSV)", :bb_csv}
+      %{name: "Banco do Brasil", extension: :csv, slug: :bb_csv}
     ]
+  end
+
+  def available_parsers_slugs do
+    available_parsers()
+    |> Enum.map(fn parser -> parser.slug end)
+  end
+
+  def get_parser_by_slug(slug) do
+    available_parsers()
+    |> Enum.find(fn parser -> parser.slug == String.to_atom(slug) end)
+  end
+
+  def format_parser(parser) do
+    "#{parser.name} (#{String.upcase(to_string(parser.extension))})"
   end
 
   @doc """
   Parses the file content using the specified parser.
   """
-  def parse(content, parser_type) do
-    case parser_type do
-      :bb_csv ->
-        parse_bb_csv(content)
-    end
-  end
-
-  defp parse_bb_csv(content) do
-    reasons_to_ignore = ["Saldo Anterior", "BB Rende Fácil - Rende Facil"]
-    substrings_to_remove = ["Compra com Cartão -"]
+  def parse(content, :bb_csv) do
+    reasons_to_ignore = ReasonsToIgnore.get_reasons_to_ignore_by_parser!(:bb_csv)
+    |> IO.inspect()
+    substrings_to_remove = []
+#    substrings_to_remove = ["Compra com Cartão -"]
 
     content
     |> String.split("\n", trim: true)
@@ -52,10 +62,11 @@ defmodule CashLens.Parsers do
       parsed_info =
         case Regex.run(date_time_regex, reason) do
           [date_time, date, time] ->
-            %{date: "#{date}/2025", time: time, reason: String.replace(reason, date_time, "")}
+            # TODO REPLACE THE HARDCODED YEAR
+            %{date_time: "#{date}/2025 #{time}", reason: String.replace(reason, date_time, "")}
 
           nil ->
-            %{date: row["Data"], time: "00:00", reason: reason}
+            %{date_time: "#{row["Data"]} 00:00", reason: reason}
         end
 
       reason =
@@ -65,13 +76,12 @@ defmodule CashLens.Parsers do
         |> String.trim()
 
       %{
-        date: Timex.parse!(parsed_info.date, "{D}/{M}/{YYYY}"),
-        time: Timex.parse!(parsed_info.time, "{h24}:{m}"),
+        date_time: Timex.parse!(parsed_info.date_time, "{D}/{M}/{YYYY} {h24}:{m}"),
         reason: reason,
-        amount: row["Valor"],
-        identifier: row["Número do documento"]
+        amount: number_to_currency(row["Valor"], unit: "R$", separator: ",", delimiter: "."),
+        identifier: row["Número do documento"],
+        category: nil
       }
-      |> IO.inspect()
     end)
   end
 end

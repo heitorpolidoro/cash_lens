@@ -63,7 +63,8 @@ defmodule CashLens.MixProject do
       {:ecto_sql, "~> 3.10"},
       {:phoenix_ecto, "~> 4.4"},
       {:postgrex, ">= 0.0.0"},
-      {:timex, "~> 3.7"}
+      {:timex, "~> 3.7"},
+      {:number, "~> 1.0"}
     ]
   end
 

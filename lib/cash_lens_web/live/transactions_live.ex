@@ -14,7 +14,7 @@ defmodule CashLensWeb.TransactionsLive do
         uploaded_files: [],
         current_path: "/transactions",
         transactions: Transactions.list_transactions([desc: :id]),
-        available_parsers: Parsers.available_parsers(),
+        available_parsers: Enum.map(Parsers.available_parsers(), fn p -> {p.name, p.extension} end),
         selected_parser: nil,
         parsing_status: nil,
         accounts: Accounts.list_accounts(),
@@ -27,27 +27,12 @@ defmodule CashLensWeb.TransactionsLive do
     }
   end
 
-  def validate_uploads(socket, upload_name) do
-    # This function validates the uploads and returns the socket
-    # It's called by the "validate" event handler
-    socket
-    |> Map.put(:uploads, Map.update!(socket.uploads, upload_name, fn upload ->
-      # Validate each entry in the upload
-      entries = for entry <- upload.entries do
-        # Here you can add custom validation logic if needed
-        entry
-      end
-      %{upload | entries: entries}
-    end))
-  end
-
   def handle_event("validate", _params, socket) do
-
     {:noreply, socket}
   end
 
   def handle_event("change-account", %{"account" => account_id}, socket) do
-    default_parser = Accounts.get_account!(account_id).parser
+    default_parser = Accounts.get_account!(account_id).parser && Accounts.get_account!(account_id).parser.extension
     {:noreply, assign(socket, selected_account: account_id, selected_parser: default_parser)}
   end
 

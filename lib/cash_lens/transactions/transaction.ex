@@ -3,8 +3,7 @@ defmodule CashLens.Transactions.Transaction do
   import Ecto.Changeset
 
   schema "transactions" do
-    field :date, :date
-    field :time, :time
+    field :date_time, :utc_datetime
     field :reason, :string
     field :category, :string
     field :amount, :decimal
@@ -17,7 +16,7 @@ defmodule CashLens.Transactions.Transaction do
   @doc false
   def changeset(transaction, attrs) do
     transaction
-    |> cast(attrs, [:date, :time, :reason, :category, :amount, :identifier, :account_id])
-    |> validate_required([:date, :reason, :amount, :identifier])
+    |> cast(attrs, [:date_time, :reason, :category, :amount, :identifier, :account_id])
+    |> validate_required([:date_time, :reason, :amount, :identifier])
   end
 end

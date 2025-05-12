@@ -3,8 +3,7 @@ defmodule CashLens.Repo.Migrations.CreateTransactionsTable do
 
   def change do
     create table(:transactions) do
-      add :date, :date, null: false
-      add :time, :time, null: true
+      add :date_time, :utc_datetime, null: false
       add :reason, :string, null: false
       add :category, :string, null: true
       add :amount, :decimal, precision: 10, scale: 2, null: false
