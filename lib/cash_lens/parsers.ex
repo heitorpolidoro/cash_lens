@@ -35,7 +35,6 @@ defmodule CashLens.Parsers do
   """
   def parse(content, :bb_csv) do
     reasons_to_ignore = ReasonsToIgnore.get_reasons_to_ignore_by_parser!(:bb_csv)
-    |> IO.inspect()
     substrings_to_remove = []
 #    substrings_to_remove = ["Compra com Cartão -"]
 

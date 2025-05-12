@@ -7,7 +7,6 @@ defmodule CashLens.TransactionParser do
   require Logger
 
   alias CashLens.Parsers
-  alias CashLens.Transactions
 
   # Client API
 
@@ -16,6 +15,17 @@ defmodule CashLens.TransactionParser do
   """
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  end
+
+  def send_flash_message(caller, level, message) do
+    Logger.info(message)
+    send(caller, {:flash, level, message})
+  end
+
+  def send_flash_message(caller, level, message, stack_trace) do
+    Logger.error(Exception.format(:error, message, stack_trace))
+
+    send(caller, {:flash, level, message})
   end
 
   @doc """
@@ -37,6 +47,12 @@ defmodule CashLens.TransactionParser do
       __MODULE__,
       {:parse_file, file_path, parser_slug, caller}
     )
+
+    send_flash_message(
+      caller,
+      :info,
+      "File uploaded successfully: #{Path.basename(file_path)}. Parsing in progress..."
+    )
   end
 
   # Server Callbacks
@@ -54,32 +70,25 @@ defmodule CashLens.TransactionParser do
       content = File.read!(file_path)
 
       # Spawn a process to do the parsing with the content already in memory
-      IO.puts("Starting parsing")
-
       Task.start(fn ->
         try do
           # Parse the content
           transactions =
-          Parsers.parse(content, parser_type)
+            Parsers.parse(content, parser_type)
 
+          send_flash_message(caller, :info, "Parsing completed successfully.")
           send(caller, {:transactions_parsed, transactions})
         rescue
           error ->
             error_message = Exception.message(error)
 
-            Logger.error(
-              Exception.format(:error, "Parsing error: #{error_message}", __STACKTRACE__)
-            )
-
-            send(caller, {:transactions_parse_error, error_message})
+            send_flash_message(caller, :error, error_message, stacktrace: __STACKTRACE__)
         end
       end)
     rescue
       error ->
-        error_message =Exception.message(error)
-        Logger.error(
-          Exception.format(:error, "Parsing error: #{error_message}", __STACKTRACE__)
-        )
+        error_message = Exception.message(error)
+        Logger.error(Exception.format(:error, "Parsing error: #{error_message}", __STACKTRACE__))
         # Send the error message back to the caller immediately
         send(caller, {:transactions_parse_error, error_message})
     end

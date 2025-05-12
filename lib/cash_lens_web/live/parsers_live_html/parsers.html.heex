@@ -45,10 +45,10 @@
       </div>
     </div>
   </div>
-  <%= if !is_nil(@testing_parser) do %>
+  <%= if !is_nil(@selected_parser) do %>
   <div class="bg-white shadow sm:rounded-lg">
     <div class="px-4 py-5 sm:p-6">
-      <h3 class="text-lg font-medium leading-6 text-gray-900">Testing {Parsers.format_parser(@testing_parser)}</h3>
+      <h3 class="text-lg font-medium leading-6 text-gray-900">Testing {Parsers.format_parser(@selected_parser)}</h3>
     </div>
     <form id="upload-form" phx-submit="save" class="space-y-4">
       <div class="mt-5">
@@ -64,50 +64,12 @@
     </form>
   </div>
   <div class="bg-white shadow sm:rounded-lg">
-    <table class="w-full table-auto divide-y divide-gray-200">
-      <thead class="bg-gray-50">
-      <tr>
-        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-          Datetime
-        </th>
-        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-          Reason
-        </th>
-        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-          Category
-        </th>
-        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-          Amount
-        </th>
-        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-          Identifier
-        </th>
-      </tr>
-      </thead>
-      <tbody class="bg-white divide-y divide-gray-200">
-      <%= for transaction <- @transactions do %>
-      <tr>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= Timex.format!(transaction.date_time,
-          "{0D}/{0M}/{YYYY} {h24}:{0m}") %>
-        </td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-          <svg phx-click="ignore-reason" phx-value-reason={transaction.reason} class="w-5 h-5 mr-3" fill="none" viewBox="0 0 512 512" >
-            <path phx-click="ignore-reason" phx-value-reason={transaction.reason} stroke-linecap="round" stroke-linejoin="round" stroke-width="2" style="fill:#ff4f19;" d="M256,0C114.84,0,0,114.842,0,256s114.84,256,256,256s256-114.842,256-256S397.16,0,256,0z
-	 M256,49.548c48.011,0,92.246,16.473,127.351,44.065L93.613,383.351C66.022,348.246,49.548,304.011,49.548,256
-	C49.548,142.163,142.163,49.548,256,49.548z M256,462.452c-48.011,0-92.246-16.473-127.351-44.065l289.738-289.738
-	c27.592,35.105,44.065,79.34,44.065,127.351C462.452,369.837,369.837,462.452,256,462.452 M256,0v49.548c48.011,0,92.246,16.473,127.351,44.065L256,220.964v70.071l162.387-162.387
-	c27.592,35.105,44.065,79.34,44.065,127.351c0,113.837-92.614,206.452-206.452,206.452V512c141.16,0,256-114.842,256-256
-	S397.16,0,256,0z"/>
-          </svg>
-          <%= transaction.reason %>
-        </td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= transaction.category %></td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= transaction.amount %></td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><%= transaction.identifier %></td>
-      </tr>
-      <% end %>
-      </tbody>
-    </table>
+    <.live_component
+      module={CashLensWeb.TransactionsTableComponent}
+      id="transactions-table"
+      transactions={@transactions}
+      selected_parser={@selected_parser}
+    />
   </div>
   <% end %>
 </div>

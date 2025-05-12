@@ -51,7 +51,7 @@ defmodule CashLensWeb.TransactionsLive do
       consumed_entries =
         consume_uploaded_entries(socket, :transaction_file, fn %{path: path}, entry ->
           # Send the file path to the TransactionParser GenServer for async parsing
-          TransactionParser.parse_file(path, account, String.to_atom(parser), self(), entry.client_name)
+          TransactionParser.parse_file(path, String.to_atom(parser), self())
 
           # Return the entry name
           {:ok, entry.client_name}

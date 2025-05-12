@@ -60,7 +60,9 @@ defmodule CashLens.ReasonsToIgnore do
   def create_reason_to_ignore(attrs \\ %{}) do
     %ReasonToIgnore{}
     |> ReasonToIgnore.changeset(attrs)
-    |> Repo.insert()
+#    |> Repo.insert()
+
+    {:ok, %{reason: "ok"}}
   end
 
   @doc """
