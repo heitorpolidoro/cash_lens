@@ -1,9 +1,10 @@
 defmodule CashLensWeb.ParsersLive do
   use CashLensWeb, :live_view
+  use CashLensWeb.LiveHelpers
+
   require Logger
 
   alias CashLens.Parsers
-  alias CashLens.TransactionParser
 
   def mount(_params, session, socket) do
     {:ok,
@@ -32,23 +33,6 @@ defmodule CashLensWeb.ParsersLive do
     {:noreply, assign(socket, selected_parser: Parsers.get_parser_by_slug(slug))}
   end
 
-  def handle_event("save", _params, socket) do
-    file_name =
-      consume_uploaded_entries(socket, :transaction_file, fn %{path: path}, entry ->
-        # Send the file path to the TransactionParser GenServer for async parsing
-        TransactionParser.parse_file(path, socket.assigns.selected_parser.slug, self())
-
-        {:ok, entry.client_name}
-      end)
-
-    {:noreply, socket}
-  end
-
-  def handle_info({:flash, level, message}, socket) do
-    {:noreply,
-     socket
-     |> put_flash(level, message)}
-  end
 
   def handle_info({:transactions_parsed, transactions}, socket) do
     {:noreply,

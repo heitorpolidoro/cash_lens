@@ -4,6 +4,7 @@ defmodule CashLensWeb.AccountsLive do
   alias CashLens.Accounts
   alias CashLens.Accounts.Account
   alias CashLens.Parsers
+  alias CashLens.Utils
 
   def mount(_params, session, socket) do
     {:ok,
@@ -15,8 +16,8 @@ defmodule CashLensWeb.AccountsLive do
        account_changeset: Accounts.change_account(%Account{}),
        editing_account: nil,
        show_form: false,
-       available_parsers: Enum.map(Parsers.available_parsers(), fn p -> Parsers.format_parser(p) end),
-       available_types: Accounts.available_types()
+       available_parsers: Parsers.available_parsers_options(),
+       available_types: Utils.to_options(Account.available_types())
      )}
   end
 
@@ -85,7 +86,13 @@ defmodule CashLensWeb.AccountsLive do
          )}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, account_changeset: changeset)}
+      errors = changeset.errors
+      |> Enum.map(fn {field, {message, _}} -> "#{field}: #{message}" end)
+      |> Enum.join(" - ")
+        {:noreply,
+         socket
+         |> put_flash(:error, errors)
+         |> assign(account_changeset: changeset)}
     end
   end
 

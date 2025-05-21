@@ -11,10 +11,10 @@
           <table class="w-full table-auto divide-y divide-gray-200">
             <thead class="bg-gray-50">
             <tr>
-              <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" class="table-header-default">
                 Name
               </th>
-              <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" class="table-header-default">
                 Extension
               </th>
             </tr>
@@ -22,10 +22,10 @@
             <tbody class="bg-white divide-y divide-gray-200">
             <%= for parser <- @parsers do %>
             <tr>
-              <td class="px-3 py-4 text-sm text-gray-500"><%= parser.name %>
+              <td class="text-default"><%= parser.name %>
               </td>
-              <td class="px-3 py-4 text-sm text-gray-500"><%= parser.extension %></td>
-              <td class="px-3 py-4 text-sm text-gray-500">
+              <td class="text-default"><%= parser.extension %></td>
+              <td class="text-default">
                 <div class="flex space-x-2">
                   <button
                       phx-click="test"
@@ -50,15 +50,11 @@
     <div class="px-4 py-5 sm:p-6">
       <h3 class="text-lg font-medium leading-6 text-gray-900">Testing {Parsers.format_parser(@selected_parser)}</h3>
     </div>
-    <form id="upload-form" phx-submit="save" class="space-y-4">
+    <form id="upload-form" phx-submit="parse" class="space-y-4">
       <div class="mt-5">
         <.live_file_input upload={@uploads.transaction_file} phx-change="validate" />
         <div>
-          <button type="submit"
-                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                  }>
-            Upload
-          </button>
+          <.button type="submit" class="btn-primary">Upload</.button>
         </div>
       </div>
     </form>

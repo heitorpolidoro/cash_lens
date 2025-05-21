@@ -7,6 +7,16 @@ defmodule CashLens.Accounts do
   alias CashLens.Repo
 
   alias CashLens.Accounts.Account
+  alias CashLens.Parsers
+
+  def load_parser(accounts) when is_list(accounts) do
+    accounts
+    |> Enum.map(fn acc -> load_parser(acc) end)
+  end
+
+  def load_parser(account) do
+    %{account | parser: Parsers.get_parser_by_slug(account.parser)}
+  end
 
   @doc """
   Returns the list of accounts.
@@ -18,7 +28,8 @@ defmodule CashLens.Accounts do
 
   """
   def list_accounts do
-    Repo.all(Account) |> Repo.preload(:parser)
+    Repo.all(Account)
+    |> load_parser()
   end
 
   @doc """
@@ -35,10 +46,10 @@ defmodule CashLens.Accounts do
       ** (Ecto.NoResultsError)
 
   """
-  def get_account!(id), do: Repo.get!(Account, id) |> Repo.preload(:parser)
+  def get_account!(id), do: Repo.get!(Account, id) |> load_parser()
 
   def get_account_by_name!(name) do
-    Repo.one(from a in Account, where: a.name == ^name) |> Repo.preload(:parser)
+    Repo.one(from(a in Account, where: a.name == ^name)) |> load_parser()
   end
 
   @doc """
@@ -57,6 +68,7 @@ defmodule CashLens.Accounts do
     %Account{}
     |> Account.changeset(attrs)
     |> Repo.insert()
+    |> load_parser()
   end
 
   @doc """
@@ -75,6 +87,7 @@ defmodule CashLens.Accounts do
     account
     |> Account.changeset(attrs)
     |> Repo.update()
+    |> load_parser()
   end
 
   @doc """
@@ -114,13 +127,5 @@ defmodule CashLens.Accounts do
     |> Repo.all()
     |> Enum.map(fn a -> "#{a.bank_name} - #{a.name}" end)
     |> Enum.uniq()
-  end
-
-  def available_types() do
-    [
-      {"Checking", :checking},
-      {"Credit Card", :credit_card},
-      {"Investment", :investment}
-    ]
   end
 end

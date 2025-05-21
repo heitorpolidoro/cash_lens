@@ -4,6 +4,7 @@ defmodule CashLensWeb.TransactionsTableComponent do
   require Logger
 
   alias CashLens.Parsers
+  alias CashLens.Transactions
 
   def update(assigns, socket) do
     {:ok, assign(socket, assigns |> Map.put_new(:reason_to_confirm, nil))}
@@ -33,7 +34,7 @@ defmodule CashLensWeb.TransactionsTableComponent do
   end
 
   defp ignore_reason(reason, socket) do
-    parser = socket.assigns.selected_parser
+    %{selected_parser: parser, transactions: transactions} = socket.assigns
 
     {level, message} =
       case CashLens.ReasonsToIgnore.create_reason_to_ignore(%{
@@ -49,8 +50,12 @@ defmodule CashLensWeb.TransactionsTableComponent do
 
     Logger.log(level, message)
 
+    transactions
+        |> Enum.filter(&(&1.reason == reason and &1.id != nil))
+        |> Transactions.delete_transaction()
+
     socket
-    |> assign(transactions: socket.assigns.transactions
+    |> assign(transactions: transactions
        |> Enum.reject(&(&1.reason == reason)))
     |> put_flash(level, message)
   end

@@ -6,20 +6,8 @@
   >
     <p class="mb-5">Are you sure you want to ignore the reason "<%= @reason_to_confirm %>"?</p>
     <div class="flex justify-end gap-3">
-      <button
-        phx-click="cancel-ignore-reason"
-        phx-target={@myself}
-        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-gray-800 bg-gray-300 hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
-      >
-        Cancel
-      </button>
-      <button
-        phx-click="confirm-ignore-reason"
-        phx-target={@myself}
-        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-      >
-        Confirm
-      </button>
+      <.button phx-click="cancel-ignore-reason" phx-target={@myself} class="btn-cancel" >Cancel</.button>
+      <.button phx-click="confirm-ignore-reason" phx-target={@myself} class="btn-primary" >Confirm</.button>
     </div>
   </.modal>
 
@@ -60,7 +48,7 @@
         </svg>
         <%= transaction.reason %>
       </td>
-      <td class="px-6 py-4 whitespace-normal text-sm text-gray-500"><%= transaction.category %></td>
+      <td class="px-6 py-4 whitespace-normal text-sm text-gray-500"><%= if transaction.category, do: transaction.category.name, else: "" %></td>
       <td class="px-6 py-4 whitespace-normal text-sm text-gray-500"><%= transaction.amount %></td>
       <td class="px-6 py-4 whitespace-normal text-sm text-gray-500"><%= transaction.identifier %></td>
     </tr>

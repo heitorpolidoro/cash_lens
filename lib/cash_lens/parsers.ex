@@ -16,18 +16,25 @@ defmodule CashLens.Parsers do
     ]
   end
 
+  def format_parser(parser) do
+    "#{parser.name} (#{String.upcase(to_string(parser.extension))})"
+  end
+
+  def available_parsers_options do
+    Enum.map(available_parsers(), fn p -> {format_parser(p), p.slug} end)
+  end
+
   def available_parsers_slugs do
     available_parsers()
     |> Enum.map(fn parser -> parser.slug end)
   end
 
-  def get_parser_by_slug(slug) do
+  def get_parser_by_slug(slug) when is_atom(slug) do
     available_parsers()
-    |> Enum.find(fn parser -> parser.slug == String.to_atom(slug) end)
+    |> Enum.find(fn parser -> parser.slug == slug end)
   end
-
-  def format_parser(parser) do
-    "#{parser.name} (#{String.upcase(to_string(parser.extension))})"
+  def get_parser_by_slug(slug) do
+    get_parser_by_slug(String.to_atom(slug))
   end
 
   @doc """
@@ -36,7 +43,6 @@ defmodule CashLens.Parsers do
   def parse(content, :bb_csv) do
     reasons_to_ignore = ReasonsToIgnore.get_reasons_to_ignore_by_parser!(:bb_csv)
     substrings_to_remove = []
-#    substrings_to_remove = ["Compra com Cartão -"]
 
     content
     |> String.split("\n", trim: true)
@@ -73,6 +79,7 @@ defmodule CashLens.Parsers do
           String.replace(acc, substring, "", global: true)
         end)
         |> String.trim()
+      Process.sleep(1000)
 
       %{
         date_time: Timex.parse!(parsed_info.date_time, "{D}/{M}/{YYYY} {h24}:{m}"),

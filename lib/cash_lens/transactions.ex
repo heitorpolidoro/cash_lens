@@ -21,6 +21,7 @@ defmodule CashLens.Transactions do
     Transaction
     |> order_by(^order_by_fields)
     |> Repo.all()
+    |> Repo.preload([:category, :account])
   end
 
   @doc """
@@ -37,7 +38,11 @@ defmodule CashLens.Transactions do
       ** (Ecto.NoResultsError)
 
   """
-  def get_transaction!(id), do: Repo.get!(Transaction, id)
+  def get_transaction!(id) do
+    Transaction
+    |> Repo.get!(id)
+    |> Repo.preload([:category, :account])
+  end
 
   @doc """
   Creates a transaction.

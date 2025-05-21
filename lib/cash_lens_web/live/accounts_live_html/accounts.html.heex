@@ -24,30 +24,24 @@
             class="space-y-4"
           >
             <div>
-              <.input field={f[:bank_name]} type="text" label="Bank Name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+              <.input field={f[:bank_name]} type="text" label="Bank Name" class="input-default" />
             </div>
 
             <div>
-              <.input field={f[:name]} type="text" label="Name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+              <.input field={f[:name]} type="text" label="Name" class="input-default" />
             </div>
 
             <div>
-              <.input field={f[:type]} type="select" label="Type" options={@available_types} class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+              <.input field={f[:type]} type="select" label="Type" options={@available_types} class="input-default" />
             </div>
 
             <div>
-              <.input field={f[:parser_id]} type="select" label="Parser" options={@available_parsers} class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+              <.input field={f[:parser]} type="select" label="Parser" options={@available_parsers} class="input-default" />
             </div>
 
             <div class="flex space-x-2">
-              <.button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Save</.button>
-              <button
-                type="button"
-                phx-click="cancel"
-                class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Cancel
-              </button>
+              <.button type="submit" class="btn-primary">Save</.button>
+              <.button type="button" phx-click="cancel" class="btn-cancel">Cancel</.button>
             </div>
           </.form>
         </div>
@@ -61,21 +55,21 @@
             <table class="w-full table-auto divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bank</th>
-                  <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parser</th>
-                  <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th scope="col" class="table-header-default">Name</th>
+                  <th scope="col" class="table-header-default">Bank</th>
+                  <th scope="col" class="table-header-default">Type</th>
+                  <th scope="col" class="table-header-default">Parser</th>
+                  <th scope="col" class="table-header-default">Actions</th>
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
                 <%= for account <- @accounts do %>
                   <tr>
-                    <td class="px-3 py-4 text-sm text-gray-500"><%= account.name %></td>
-                    <td class="px-3 py-4 text-sm text-gray-500"><%= account.bank_name %></td>
-                    <td class="px-3 py-4 text-sm text-gray-500"><%= format_account_type(account.type) %></td>
-                    <td class="px-3 py-4 text-sm text-gray-500"><%= account.parser && account.parser.name %></td>
-                    <td class="px-3 py-4 text-sm text-gray-500">
+                    <td class="text-default"><%= account.name %></td>
+                    <td class="text-default"><%= account.bank_name %></td>
+                    <td class="text-default"><%= format_account_type(account.type) %></td>
+                    <td class="text-default"><%= Parsers.format_parser(account.parser) %></td>
+                    <td class="text-default">
                       <div class="flex space-x-2">
                         <button
                           phx-click="edit"

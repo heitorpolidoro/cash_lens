@@ -1,6 +1,5 @@
 defmodule CashLensWeb.TransactionsTableComponentHTML do
   use Phoenix.Component
-
   import CashLensWeb.CoreComponents
 
   embed_templates "transactions_table_component_html/*"

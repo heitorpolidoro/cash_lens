@@ -3,16 +3,16 @@ defmodule CashLens.Repo.Migrations.CreateTransactionsTable do
 
   def change do
     create table(:transactions) do
-      add :date_time, :utc_datetime, null: false
-      add :reason, :string, null: false
-      add :category, :string, null: true
-      add :amount, :decimal, precision: 10, scale: 2, null: false
-      add :identifier, :string, null: false
-      add :account_id, references(:accounts), null: true
+      add(:date_time, :utc_datetime, null: false)
+      add(:reason, :string, null: false)
+      add(:amount, :decimal, precision: 10, scale: 2, null: false)
+      add(:identifier, :string, null: false)
+      add(:category_id, references(:categories), null: true)
+      add(:account_id, references(:accounts), null: true)
 
       timestamps()
     end
 
-    create index(:transactions, [:account_id])
+    create(index(:transactions, [:account_id]))
   end
 end
