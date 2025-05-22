@@ -21,21 +21,11 @@
       class="space-y-4"
       as={:category}
       >
-      <div>
-        <.input field={f[:name]} type="text" label="Name" class="input-default" />
-      </div>
-      <div>
-        <.input field={f[:type]} type="select" label="Type" options={@available_types} class="input-default" />
-      </div>
-      <div>
-        <.input field={f[:parent_id]} type="select" label="Parent Category" options={@available_categories} class="input-default" selected={nil} />
-      </div>
-      <div class="flex space-x-2">
-        <.button type="submit" class="btn-primary">Save
-      </.button>
-      <.button type="button" phx-click="cancel" class="btn-cancel" >Cancel
-    </.button>
-  </div>
+      <.input field={f[:name]} type="text" label="Name" class="input-default" />
+      <.input field={f[:type]} type="select" label="Type" options={@available_types} class="input-default" />
+      <.input field={f[:parent_id]} type="select" label="Parent Category" options={@available_categories} class="input-default" />
+      <.button type="submit" class="btn-primary">Save</.button>
+      <.button type="button" phx-click="cancel" class="btn-cancel" >Cancel</.button>
 </.form>
 </div>
 <% end %>
