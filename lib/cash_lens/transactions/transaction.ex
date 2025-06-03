@@ -3,12 +3,13 @@ defmodule CashLens.Transactions.Transaction do
   import Ecto.Changeset
 
   schema "transactions" do
-    field :date_time, :utc_datetime
-    field :reason, :string
-    field :amount, :decimal
-    field :identifier, :string
-    belongs_to :account, CashLens.Accounts.Account
-    belongs_to :category, CashLens.Categories.Category
+    field(:date_time, :utc_datetime)
+    field(:reason, :string)
+    field(:amount, :decimal)
+    field(:identifier, :string)
+    belongs_to(:account, CashLens.Accounts.Account)
+    belongs_to(:category, CashLens.Categories.Category)
+    belongs_to(:user, CashLens.Users.User)
 
     timestamps()
   end

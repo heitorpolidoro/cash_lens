@@ -17,8 +17,9 @@ defmodule CashLens.Transactions do
       [%Transaction{}, ...]
 
   """
-  def list_transactions(order_by_fields \\ :id) do
+  def list_transactions(user_id, order_by_fields \\ :id) do
     Transaction
+    |> where([t], t.user_id == ^user_id)
     |> order_by(^order_by_fields)
     |> Repo.all()
     |> Repo.preload([:category, :account])

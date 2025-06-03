@@ -64,6 +64,16 @@ config :phoenix, :json_library, Jason
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
 
+# Configure file_system to use inotify-tools
+config :file_system,
+  backends: [
+    :fs_inotify,
+    :fs_poll
+  ],
+  fs_inotify: [
+    executable_file: System.get_env("FILESYSTEM_FSINOTIFY_EXECUTABLE_FILE")
+  ]
+
 # Configure Ueberauth
 config :ueberauth, Ueberauth,
   providers: [

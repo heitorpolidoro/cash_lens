@@ -32,7 +32,7 @@ defmodule CashLens.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:phoenix, "~> 1.7.21"},
+      {:phoenix, "~> 1.8.0-rc.3"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.0"},
@@ -64,7 +64,8 @@ defmodule CashLens.MixProject do
       {:phoenix_ecto, "~> 4.4"},
       {:postgrex, ">= 0.0.0"},
       {:timex, "~> 3.7"},
-      {:number, "~> 1.0"}
+      {:number, "~> 1.0"},
+      {:salad_ui, "~> 0.14"}
     ]
   end
 

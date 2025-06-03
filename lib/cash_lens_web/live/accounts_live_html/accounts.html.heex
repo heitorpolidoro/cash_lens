@@ -5,33 +5,31 @@
     <div class="px-4 py-5 sm:p-6">
       <div class="flex justify-between items-center">
         <h3 class="text-lg font-medium leading-6 text-gray-900">Your Accounts</h3>
-        <button
-          phx-click="new_account"
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          New Account
-        </button>
+        <.button phx-click="new_account" class="btn-primary" >New Account</.button>
       </div>
 
-      <%= if @show_form do %>
+      <.modal
+      :if={@show_form}
+      id="account_modal"
+      show
+      >
         <div class="mt-5">
           <.form
             :let={f}
             for={@account_changeset}
             id="account-form"
-            phx-change="validate"
             phx-submit="save"
             class="space-y-4"
           >
               <.input field={f[:bank_name]} type="text" label="Bank Name" class="input-default" />
               <.input field={f[:name]} type="text" label="Name" class="input-default" />
               <.input field={f[:type]} type="select" label="Type" options={@available_types} class="input-default" />
-              <.input field={f[:parser]} type="select" label="Parser" options={@available_parsers} class="input-default" />
+              <.input field={f[:parser]} value={f[:parser].value |> IO.inspect() && f[:parser].value.slug} type="select" label="Parser" options={@available_parsers} class="input-default" />
               <.button type="submit" class="btn-primary">Save</.button>
               <.button type="button" phx-click="cancel" class="btn-cancel">Cancel</.button>
           </.form>
         </div>
-      <% end %>
+      </.modal>
 
       <div class="mt-5">
         <%= if Enum.empty?(@accounts) do %>

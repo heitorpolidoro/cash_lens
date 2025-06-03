@@ -3,10 +3,6 @@ defmodule CashLensWeb.LiveHelpers do
 
   defmacro __using__(_) do
     quote do
-      def handle_info({:flash, level, message}, socket) do
-        {:noreply, put_flash(socket, level, message)}
-      end
-
       def handle_info({:transactions_parse_error, error_message}, socket) do
         {:noreply, put_flash(socket, :error, error_message)}
       end

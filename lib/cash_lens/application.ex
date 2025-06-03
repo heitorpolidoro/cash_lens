@@ -24,7 +24,9 @@ defmodule CashLens.Application do
       # Start a worker by calling: CashLens.Worker.start_link(arg)
       # {CashLens.Worker, arg},
       # Start to serve requests, typically the last entry
-      CashLensWeb.Endpoint
+      CashLensWeb.Endpoint,
+      # SaladUI
+      TwMerge.Cache
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

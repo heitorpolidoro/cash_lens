@@ -1,16 +1,16 @@
 defmodule CashLensWeb.TransactionsLive do
   use CashLensWeb, :live_view
-  on_mount CashLensWeb.BaseLive
   use CashLensWeb.BaseLive
+  on_mount CashLensWeb.BaseLive
 
 
   alias CashLens.Transactions
 
-  def mount(_params, session, socket) do
+  def mount(_params, %{"current_user" => current_user} = _session, socket) do
     {:ok,
      socket
      |> assign(
-       transactions: Transactions.list_transactions(desc: :id)
+       transactions: Transactions.list_transactions(current_user.id, desc: :id)
      )}
   end
 

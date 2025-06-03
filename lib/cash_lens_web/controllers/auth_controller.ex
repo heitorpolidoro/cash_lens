@@ -4,6 +4,8 @@ defmodule CashLensWeb.AuthController do
 
   plug Ueberauth
 
+  alias CashLens.Users
+
     def fetch_current_user(conn, _opts) do
     case get_session(conn, :current_user) do
       nil ->
@@ -35,6 +37,9 @@ defmodule CashLensWeb.AuthController do
       picture: auth.info.image
     }
     if user.sub == Application.get_env(:cash_lens, :allowed_google_sub)  do
+      Logger.info("User #{user.sub} logged in.")
+      user = Map.merge(user, Users.fetch_user(user))
+
       conn
       |> put_flash(:info, "Successfully authenticated.")
       |> put_session(:current_user, user)

@@ -14,6 +14,7 @@ defmodule CashLens.Accounts.Account do
     field(:bank_name, :string)
     field(:type, Ecto.Enum, values: Utils.to_atoms(@available_types))
     field(:parser, Ecto.Enum, values: Parsers.available_parsers_slugs())
+    belongs_to(:user, CashLens.Users.User)
 
     timestamps()
   end
@@ -21,7 +22,7 @@ defmodule CashLens.Accounts.Account do
   @doc false
   def changeset(account, attrs) do
     account
-    |> cast(attrs, [:name, :bank_name, :type, :parser])
-    |> validate_required([:name, :bank_name, :type, :parser])
+    |> cast(attrs, [:name, :bank_name, :type, :parser, :user_id])
+    |> validate_required([:name, :bank_name, :type, :parser, :user_id])
   end
 end

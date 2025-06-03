@@ -14,6 +14,10 @@ defmodule CashLens.Accounts do
     |> Enum.map(fn acc -> load_parser(acc) end)
   end
 
+  def load_parser({:ok, account}) do
+    {:ok, load_parser(account)}
+  end
+
   def load_parser(account) do
     %{account | parser: Parsers.get_parser_by_slug(account.parser)}
   end
@@ -27,8 +31,10 @@ defmodule CashLens.Accounts do
       [%Account{}, ...]
 
   """
-  def list_accounts do
-    Repo.all(Account)
+  def list_accounts(user_id) do
+    Account
+    |> where([a], a.user_id == ^user_id)
+    |> Repo.all()
     |> load_parser()
   end
 

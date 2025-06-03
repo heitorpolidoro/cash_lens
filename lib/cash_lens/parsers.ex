@@ -6,13 +6,15 @@ defmodule CashLens.Parsers do
 
   alias Timex
   alias CashLens.ReasonsToIgnore
+  alias CashLens.Transactions.Transaction
 
   @doc """
   Returns a list of available parsers.
   """
   def available_parsers do
     [
-      %{name: "Banco do Brasil", extension: :csv, slug: :bb_csv}
+      %{name: "Banco do Brasil", extension: :csv, slug: :bb_csv},
+      %{name: "Banco do Brasil2", extension: :csv, slug: :bb_csv2}
     ]
   end
 
@@ -81,7 +83,7 @@ defmodule CashLens.Parsers do
         |> String.trim()
       Process.sleep(1000)
 
-      %{
+      %Transaction{
         date_time: Timex.parse!(parsed_info.date_time, "{D}/{M}/{YYYY} {h24}:{m}"),
         reason: reason,
         amount: number_to_currency(row["Valor"], unit: "R$", separator: ",", delimiter: "."),

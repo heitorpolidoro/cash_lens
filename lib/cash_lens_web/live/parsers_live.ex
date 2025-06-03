@@ -1,6 +1,6 @@
 defmodule CashLensWeb.ParsersLive do
   use CashLensWeb, :live_view
-  use CashLensWeb.LiveHelpers
+  on_mount CashLensWeb.BaseLive
 
   require Logger
 
@@ -10,12 +10,15 @@ defmodule CashLensWeb.ParsersLive do
     {:ok,
      socket
      |> assign(
-       current_user: session["current_user"],
        current_path: "/parsers",
        parsers: Parsers.available_parsers(),
-       selected_parser: nil,
-       show_form: false,
-       transactions: []
+       selected_parser: Parsers.get_parser_by_slug(:bb_csv),
+       is_testing: false,
+#       selected_parser: nil,
+#       is_testing: false,
+       transactions: [],
+       upload_file: nil,
+       action: nil,
      )
      |> allow_upload(:transaction_file,
        accept: ~w(.csv),
@@ -25,19 +28,23 @@ defmodule CashLensWeb.ParsersLive do
      )}
   end
 
-  def handle_event("validate", _params, socket) do
+
+  def handle_event("select-parser", %{"slug" => slug} = params, socket) do
+    is_testing = Map.get(params, "test", false) == "true"
+
+    {:noreply, assign(socket, selected_parser: Parsers.get_parser_by_slug(slug), is_testing: is_testing)}
+  end
+
+  def handle_event("parse", _params, socket) do
+    consume_uploaded_entries(socket, :transaction_file, fn %{path: path}, entry ->
+      # Send the file path to the TransactionParser GenServer for async parsing
+      TransactionParser.parse_file(path, socket.assigns.selected_parser.slug, self())
+
+
+      {:ok, entry.client_name}
+    end) |> IO.inspect()
+
     {:noreply, socket}
-  end
-
-  def handle_event("test", %{"slug" => slug}, socket) do
-    {:noreply, assign(socket, selected_parser: Parsers.get_parser_by_slug(slug))}
-  end
-
-
-  def handle_info({:transactions_parsed, transactions}, socket) do
-    {:noreply,
-     socket
-     |> assign(transactions: transactions)}
   end
 
   def render(assigns) do

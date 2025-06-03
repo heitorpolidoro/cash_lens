@@ -9,6 +9,7 @@ defmodule CashLens.Repo.Migrations.CreateTransactionsTable do
       add(:identifier, :string, null: false)
       add(:category_id, references(:categories), null: true)
       add(:account_id, references(:accounts), null: true)
+      add(:user_id, references(:users), null: false)
 
       timestamps()
     end
