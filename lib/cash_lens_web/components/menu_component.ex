@@ -18,7 +18,7 @@ defmodule CashLensWeb.MenuComponent do
 
   def render(assigns) do
     ~H"""
-    <div class="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200">
+    <div class="fixed top-16 bottom-0 left-0 w-64 bg-white shadow-md">
       <div class="flex flex-col h-full">
         <div class="p-4">
           <h2 class="text-lg font-semibold text-gray-900">Menu</h2>

@@ -7,8 +7,8 @@ defmodule CashLensWeb.NavbarComponent do
 
   def render(assigns) do
     ~H"""
-    <header class="px-4 sm:px-6 lg:px-8">
-      <div class="flex h-16 items-center justify-between">
+    <header class="px-4 sm:px-6 lg:px-8 bg-white shadow-md">
+      <div class="flex h-16 items-center justify-between ">
         <div class="flex items-center">
           <img class="h-8 w-auto" src="/images/cash_lens_logo.jpeg" alt="CashLens" />
           <span class="ml-2 text-xl font-semibold">CashLens</span>

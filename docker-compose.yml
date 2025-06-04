@@ -45,7 +45,6 @@ services:
       - .:/app:cached
       - /app/deps
       - /app/_build
-      - /app/priv/static
     depends_on:
       - postgres
     networks:

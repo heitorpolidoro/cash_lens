@@ -6,7 +6,7 @@ while ! nc -z $POSTGRES_HOST $POSTGRES_PORT; do
 done
 echo "PostgreSQL started"
 
-mix deps.get
+#mix deps.get
 # Create, migrate, and seed the database
 echo "Setting up the database..."
 mix ecto.setup || mix ecto.create && mix ecto.migrate

@@ -33,13 +33,14 @@ defmodule CashLensWeb.AccountsLive do
 
   def handle_event("save", %{"account" => account_params}, socket) do
     current_user = socket.assigns.current_user
+    IO.puts("save")
 
     account_params =
       account_params
       |> Map.put("user_id", current_user.id)
 
     if socket.assigns.editing_account do
-      account_params
+      {:noreply, socket}
 #      update_account(socket, socket.assigns.editing_account, account_params)
     else
       case Accounts.create_account(account_params) do
@@ -65,17 +66,17 @@ defmodule CashLensWeb.AccountsLive do
     end
   end
 
-  #  def handle_event("edit", %{"id" => id}, socket) do
-  #    account = Accounts.get_account!(id)
-  #
-  #    {:noreply,
-  #     socket
-  #     |> assign(
-  #       account_changeset: Accounts.change_account(account),
-  #       editing_account: account,
-  #       show_form: true
-  #     )}
-  #  end
+    def handle_event("edit", %{"id" => id}, socket) do
+      account = Accounts.get_account!(id)
+
+      {:noreply,
+       socket
+       |> assign(
+         account_changeset: Accounts.change_account(account),
+         editing_account: account,
+         show_form: true
+       )}
+    end
   #
   #  def handle_event("delete", %{"id" => id}, socket) do
   #    account = Accounts.get_account!(id)
