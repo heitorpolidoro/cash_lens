@@ -32,6 +32,7 @@ RUN mix deps.get
 
 # Install and setup assets
 RUN mix assets.setup
+RUN mix assets.deploy
 
 # Expose port
 EXPOSE 4000

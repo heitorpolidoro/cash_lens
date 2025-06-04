@@ -48,7 +48,7 @@ defmodule CashLensWeb.AccountsLive do
            socket
            |> put_flash(:info, "Account created successfully.")
            |> assign(
-             accounts: Accounts.list_accounts(),
+             accounts: Accounts.list_accounts(current_user),
              show_form: false
            )}
 

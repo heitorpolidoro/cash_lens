@@ -5,6 +5,7 @@ defmodule CashLensWeb.ParsersLiveHTML do
   import SaladUI.Tooltip
   import SaladUI.Input
   import SaladUI.Form
+  import SaladUI.Label
 
   alias CashLens.Parsers
   alias CashLens.Users.User
