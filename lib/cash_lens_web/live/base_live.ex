@@ -7,6 +7,19 @@ defmodule CashLensWeb.BaseLive do
   import SaladUI.Button
   import SaladUI.Table
 
+  def extract_module_name(%{:target => target}) when is_atom(target) do
+    extract_module_name(%{"target" => Atom.to_string(target)})
+  end
+  def extract_module_name(%{"target" => target}) do
+    parts = String.split(target, ".")
+    {Enum.join(Enum.drop(parts, -1), "."), List.last(parts)}
+  end
+
+  def call_method(base_module, module_name, method_prefix, args) do
+    method = "#{method_prefix}_#{String.downcase(module_name)}"
+    apply(String.to_existing_atom(base_module), String.to_existing_atom(method), args)
+  end
+
   def on_mount(:default, _params, %{"current_user" => current_user} = _session, socket) do
     {:cont, assign(socket, current_user: current_user, changeset: nil)}
   end
@@ -22,27 +35,21 @@ defmodule CashLensWeb.BaseLive do
       end
 
       def handle_event("save", params, socket) do
-        parts = String.split(params["target"], ".")
-        {base_module, module_name} = {Enum.join(Enum.drop(parts, -1), "."), List.last(parts)}
-
+        {base_module, module_name} = extract_module_name(params)
         module_name_downcase = String.downcase(module_name)
-        method = "create_#{module_name_downcase}"
-        attributes = params[module_name_downcase]
 
-        attributes = Map.replace(attributes, "user_id", socket.assigns.current_user.id)
+        attributes =
+          params[module_name_downcase]
+          |> Map.replace("user_id", socket.assigns.current_user.id)
 
-        case apply(
-          String.to_existing_atom(base_module),
-          String.to_existing_atom(method),
-          [attributes])
-        do
+        case call_method(base_module, module_name, "create", [attributes]) do
           {:ok, _} ->
             {:noreply,
               socket
                 |> put_flash(:info, "#{module_name} created successfully")}
             {:error, %Ecto.Changeset{} = changeset} ->
             errors = changeset.errors
-            |> Enum.map(fn {field, {message, _}} -> "#{field}: #{message}" end)
+            |> Enum.map(fn {field, {message, _}} -> "#{capitalize(field)}: #{message}" end)
             |> Enum.join(" - ")
               {:noreply,
                socket
@@ -52,12 +59,14 @@ defmodule CashLensWeb.BaseLive do
     end
   end
 
-  def crud(%{"target": target, "list": list} = assigns) do
+  def crud(%{"target": target} = assigns) do
     IO.inspect(assigns)
-    name = Module.split(target) |> List.last()
-    plural_name = Map.get(assigns, :plural, "#{name}s")
-    formatter = Map.get(assigns, :formatter, [])
+    formatter = Map.get(assigns, :formatter, %{})
 
+    {base_module, module_name} = extract_module_name(assigns)
+    module_name_downcase = String.downcase(module_name)
+
+    plural_name = Map.get(assigns, :plural, "#{module_name}s")
     fields =
       target.__schema__(:fields)
       |> Enum.filter(fn k -> k not in [:inserted_at, :updated_at, :id] end)
@@ -83,26 +92,28 @@ defmodule CashLensWeb.BaseLive do
         {k, type, label, options}
       end)
 
-    list = list
-    |> Enum.map(fn item ->
-      fields
-      |> Enum.reduce(item, fn f, acc ->
-          if Map.has_key?(formatter, elem(f, 0)) do
-            Map.put(acc, elem(f, 0), Map.get(formatter, elem(f, 0)).(Map.get(acc, elem(f, 0))))
-          else
-            acc
-          end
-        end)
-    end)
+    list =
+      call_method(base_module, module_name <> "s", "list", [assigns.current_user.id])
+      |> Enum.map(fn item ->
+        fields
+        |> Enum.reduce(item, fn f, acc ->
+            if Map.has_key?(formatter, elem(f, 0)) do
+              Map.put(acc, elem(f, 0), Map.get(formatter, elem(f, 0)).(Map.get(acc, elem(f, 0))))
+            else
+              acc
+            end
+          end)
+      end)
 
     show_fields = Enum.filter(fields, fn tuple -> elem(tuple, 0) != :user_id end)
+    assigns = assign(assigns, :extra_var, "Some Value")
     ~H"""
     <h1 class="text-2xl font-semibold">{plural_name}</h1>
     <div class="bg-white shadow-md">
       <div class="px-4 py-5 sm:p-6">
         <div class="flex justify-between items-center">
           <h3 class="text-lg font-medium">{plural_name} list</h3>
-            <.button phx-click={show_modal("crud_modal")}>New {name}</.button>
+            <.button phx-click={show_modal("crud_modal")}>New {module_name}</.button>
         </div>
 
         <.crud_modal target={target} formatter={@formatter} fields={fields}/>

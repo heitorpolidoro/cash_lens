@@ -1,8 +1,8 @@
 defmodule CashLensWeb.AccountsLive do
   use CashLensWeb, :live_view
+  import CashLensWeb.BaseLive
   use CashLensWeb.BaseLive
   on_mount CashLensWeb.BaseLive
-  import CashLensWeb.BaseLive
 
   alias CashLens.Accounts
   alias CashLens.Accounts.Account
@@ -11,7 +11,7 @@ defmodule CashLensWeb.AccountsLive do
 
   def render(assigns) do
     ~H"""
-      <.crud target={Account} list={Accounts.list_accounts(assigns.current_user.id)} formatter={
+      <.crud {assigns} target={Account} formatter={
         %{
           parser: &Parsers.format_parser/1,
           type: &Utils.capitalize/1
