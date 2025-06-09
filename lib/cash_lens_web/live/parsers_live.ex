@@ -1,6 +1,6 @@
 defmodule CashLensWeb.ParsersLive do
   use CashLensWeb, :live_view
-  on_mount CashLensWeb.BaseLive
+#  on_mount CashLensWeb.BaseLive
 
   require Logger
 
@@ -47,6 +47,6 @@ defmodule CashLensWeb.ParsersLive do
 
 
   def render(assigns) do
-    CashLensWeb.ParsersLiveHTML.parsers(assigns)
+    "CashLensWeb.ParsersLiveHTML.parsers(assigns)"
   end
 end

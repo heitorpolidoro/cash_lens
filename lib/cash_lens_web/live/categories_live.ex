@@ -113,6 +113,7 @@ defmodule CashLensWeb.CategoriesLive do
   end
 
   def render(assigns) do
-    CashLensWeb.CategoriesLiveHTML.categories(assigns)
+    "oi"
+#    CashLensWeb.CategoriesLiveHTML.categories(assigns)
   end
 end

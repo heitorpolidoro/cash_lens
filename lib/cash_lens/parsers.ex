@@ -18,6 +18,9 @@ defmodule CashLens.Parsers do
     ]
   end
 
+  def format_parser(parser) when is_atom(parser) or is_binary(parser) do
+    format_parser(get_parser_by_slug(parser))
+  end
   def format_parser(parser) do
     "#{parser.name} (#{String.upcase(to_string(parser.extension))})"
   end
@@ -35,6 +38,7 @@ defmodule CashLens.Parsers do
     available_parsers()
     |> Enum.find(fn parser -> parser.slug == slug end)
   end
+
   def get_parser_by_slug(slug) do
     get_parser_by_slug(String.to_atom(slug))
   end

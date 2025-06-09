@@ -11,7 +11,7 @@ defmodule CashLensWeb.TransactionsTableComponent do
   end
 
   def render(assigns) do
-    CashLensWeb.TransactionsTableComponentHTML.transactions_table(assigns)
+    "CashLensWeb.TransactionsTableComponentHTML.transactions_table(assigns)"
   end
 
   def handle_event("ignore-reason", %{"reason" => reason}, socket) do

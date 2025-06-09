@@ -18,6 +18,10 @@ defmodule CashLens.Accounts do
     {:ok, load_parser(account)}
   end
 
+  def load_parser({:error, account}) do
+    {:error, account}
+  end
+
   def load_parser(account) do
     %{account | parser: Parsers.get_parser_by_slug(account.parser)}
   end
