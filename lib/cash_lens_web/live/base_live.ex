@@ -2,10 +2,13 @@ defmodule CashLensWeb.BaseLive do
   @moduledoc false
   use CashLensWeb, :live_view
 
-  import CashLensWeb.CoreComponents, except: [button: 1, table: 1]
+  import CashLensWeb.CoreComponents, except: [button: 1, table: 1, icon: 1]
   import CashLens.Utils
   import SaladUI.Button
   import SaladUI.Table
+  import SaladUI.Tooltip
+  import SaladUI.Icon
+  require Logger
 
   def extract_module_name(%{:target => target}) when is_atom(target) do
     extract_module_name(%{"target" => Atom.to_string(target)})
@@ -15,9 +18,26 @@ defmodule CashLensWeb.BaseLive do
     {Enum.join(Enum.drop(parts, -1), "."), List.last(parts)}
   end
 
-  def call_method(base_module, module_name, method_prefix, args) do
+  def call_method_if_exists(base_module, method_name, args) do
+    call_method(base_module, method_name, "", args, False)
+  end
+
+  def call_method(base_module, method_name, method_prefix, args, rize_error_if_dont_exists \\ True)
+  def call_method(base_module, method_name, "", args, rize_error_if_dont_exists) do
+    try do
+      apply(String.to_existing_atom(base_module), method_name, args)
+    rescue error -> error
+      if rize_error_if_dont_exists do
+        Logger.error([String.to_existing_atom(base_module), method_name, args])
+        raise error
+      else
+        nil
+      end
+    end
+  end
+  def call_method(base_module, module_name, method_prefix, args, rize_error_if_dont_exists) do
     method = "#{method_prefix}_#{String.downcase(module_name)}"
-    apply(String.to_existing_atom(base_module), String.to_existing_atom(method), args)
+    call_method(base_module, String.to_existing_atom(method), "", args)
   end
 
   def on_mount(:default, _params, %{"current_user" => current_user} = _session, socket) do
@@ -35,19 +55,23 @@ defmodule CashLensWeb.BaseLive do
       end
 
       def handle_event("save", params, socket) do
+        IO.puts("-----------------\nCALL save\n-----------------")
+
         {base_module, module_name} = extract_module_name(params)
         module_name_downcase = String.downcase(module_name)
+        current_user_id = socket.assigns.current_user.id
 
         attributes =
           params[module_name_downcase]
-          |> Map.replace("user_id", socket.assigns.current_user.id)
+          |> Map.put("user_id", current_user_id)
 
         case call_method(base_module, module_name, "create", [attributes]) do
-          {:ok, _} ->
+          {:ok, item} ->
+            item_str = call_method_if_exists(base_module, :to_str, [item]) || module_name
             {:noreply,
               socket
-                |> put_flash(:info, "#{module_name} created successfully")}
-            {:error, %Ecto.Changeset{} = changeset} ->
+               |> put_flash(:info, "#{item_str} created successfully")}
+          {:error, %Ecto.Changeset{} = changeset} ->
             errors = changeset.errors
             |> Enum.map(fn {field, {message, _}} -> "#{capitalize(field)}: #{message}" end)
             |> Enum.join(" - ")
@@ -56,11 +80,35 @@ defmodule CashLensWeb.BaseLive do
                |> put_flash(:error, errors)}
         end
       end
+
+      def handle_event("delete", %{"id" => id} = params, socket) do
+        {base_module, module_name} = extract_module_name(params)
+
+        # Get the item by ID
+        item = call_method(base_module, module_name <> "!", "get", [id])
+
+        # Delete the item
+        case call_method(base_module, module_name, "delete", [item]) do
+          {:ok, item} ->
+            item_str = call_method_if_exists(base_module, :to_str, [item]) || module_name
+            {:noreply,
+             socket
+             |> put_flash(:info, "#{item_str}##{id} deleted successfully")}
+          {:error, %Ecto.Changeset{} = changeset} ->
+            errors = changeset.errors
+            |> Enum.map(fn {field, {message, _}} -> "#{capitalize(field)}: #{message}" end)
+            |> Enum.join(" - ")
+            {:noreply,
+             socket
+             |> put_flash(:error, errors)}
+        end
+      end
     end
   end
 
   def crud(%{"target": target} = assigns) do
-    IO.inspect(assigns)
+#    IO.puts("-----------------\nCALL crud\n-----------------")
+#    IO.inspect(assigns)
     formatter = Map.get(assigns, :formatter, %{})
 
     {base_module, module_name} = extract_module_name(assigns)
@@ -106,7 +154,12 @@ defmodule CashLensWeb.BaseLive do
       end)
 
     show_fields = Enum.filter(fields, fn tuple -> elem(tuple, 0) != :user_id end)
-    assigns = assign(assigns, :extra_var, "Some Value")
+    assigns = assigns
+      |> assign(target: target)
+      |> assign(show_fields: show_fields)
+#      |> assign(list: list)
+#      |> assign(module_name: module_name_downcase)
+#      |> assign(module_name_capitalize: module_name)
     ~H"""
     <h1 class="text-2xl font-semibold">{plural_name}</h1>
     <div class="bg-white shadow-md">
@@ -116,7 +169,7 @@ defmodule CashLensWeb.BaseLive do
             <.button phx-click={show_modal("crud_modal")}>New {module_name}</.button>
         </div>
 
-        <.crud_modal target={target} formatter={@formatter} fields={fields}/>
+        <.crud_modal target={@target} formatter={@formatter} fields={fields}/>
         <div class="mt-5">
           <%= if Enum.empty?(list) do %>
             <p class="text-sm text-gray-500">No accounts yet. Create one to get started.</p>
@@ -124,9 +177,10 @@ defmodule CashLensWeb.BaseLive do
             <.table>
               <.table_header>
                 <.table_row>
-                  <%= for {field, type, label, options} <- show_fields do %>
+                  <%= for {field, type, label, options} <- @show_fields do %>
                     <.table_head>{label}</.table_head>
                   <% end %>
+                  <.table_head>Action</.table_head>
                 </.table_row>
               </.table_header>
               <.table_body>
@@ -135,6 +189,28 @@ defmodule CashLensWeb.BaseLive do
                     <%= for {field, type, label, options} <- show_fields do %>
                       <.table_cell>{Map.get(item, field)}</.table_cell>
                     <% end %>
+                    <.table_cell>
+                      <.tooltip>
+                        <.tooltip_trigger>
+                          <div phx-click="edit" phx-value-id={item.id} phx-value-target={@target} class="cursor-pointer">
+                            <.icon name="hero-pencil-solid" class="h-5 w-5" />
+                          </div>
+                        </.tooltip_trigger>
+                        <.tooltip_content>
+                          <p>Edit</p>
+                        </.tooltip_content>
+                      </.tooltip>
+                      <.tooltip>
+                        <.tooltip_trigger>
+                          <div phx-click="delete" phx-value-id={item.id} phx-value-target={@target} class="cursor-pointer">
+                            <.icon name="hero-x-mark-solid" class="h-7 w-7 text-red-500" />
+                          </div>
+                        </.tooltip_trigger>
+                        <.tooltip_content>
+                          <p>Delete</p>
+                        </.tooltip_content>
+                      </.tooltip>
+                    </.table_cell>
                   </.table_row>
                 <% end %>
               </.table_body>
@@ -150,19 +226,21 @@ defmodule CashLensWeb.BaseLive do
   def crud_modal(%{"target": target} = assigns) do
 
     changeset = target.changeset(struct(target, %{}), %{})
+    assigns =
+      assigns
+        |> assign(target: target)
+        |> assign(changeset: changeset)
     ~H"""
           <.modal id="crud_modal">
             <.simple_form
             :let={f}
-            for={changeset}
+            for={@changeset}
             phx-submit="save"
             >
-              <h3 class="text-lg font-bold">Hello!</h3>
-              <input type="hidden" name="target" value={target} />
+              <input type="hidden" name="target" value={@target} />
               <%= for {field, type, label, options} <- @fields do %>
                 <%= case field do %>
                   <% :user_id -> %>
-                    <.input type="hidden" field={f[field]} value={""} />
                   <% _ -> %>
                     <.input label={label} field={f[field]} type={type} options={options}/>
                 <% end %>

@@ -129,13 +129,8 @@ defmodule CashLens.Accounts do
     Account.changeset(account, attrs)
   end
 
-  @doc """
-  Returns a list of account names from all accounts.
-  """
-  def list_account_options do
-    Account
-    |> Repo.all()
-    |> Enum.map(fn a -> "#{a.bank_name} - #{a.name}" end)
-    |> Enum.uniq()
+  def to_str(account) do
+    "#{account.name} - #{account.bank_name} (#{account.type})"
   end
+
 end
