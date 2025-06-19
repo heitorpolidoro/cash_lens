@@ -17,8 +17,11 @@ defmodule CashLens.Categories do
       [%Category{}, ...]
 
   """
-  def list_categories do
-    Repo.all(Category) |> Repo.preload(:parent)
+  def list_categories(user_id) do
+    Category
+    |> where([c], c.user_id == ^user_id)
+    |> Repo.all
+    |> Repo.preload(:parent)
   end
 
   @doc """
@@ -100,6 +103,11 @@ defmodule CashLens.Categories do
   """
   def change_category(%Category{} = category, attrs \\ %{}) do
     Category.changeset(category, attrs)
+  end
+
+  def to_str(category) do
+    # TODO PARENT
+    "#{category.name} (#{category.type})"
   end
 
 end

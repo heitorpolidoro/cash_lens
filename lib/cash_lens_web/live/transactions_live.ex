@@ -1,20 +1,18 @@
 defmodule CashLensWeb.TransactionsLive do
   use CashLensWeb, :live_view
-#  use CashLensWeb.BaseLive
-#  on_mount CashLensWeb.BaseLive
-
+  import CashLensWeb.BaseLive
+  use CashLensWeb.BaseLive
+  on_mount CashLensWeb.BaseLive
 
   alias CashLens.Transactions
-
-  def mount(_params, %{"current_user" => current_user} = _session, socket) do
-    {:ok,
-     socket
-     |> assign(
-       transactions: Transactions.list_transactions(current_user.id, desc: :id)
-     )}
-  end
+  alias CashLens.Transactions.Transaction
 
   def render(assigns) do
-    "CashLensWeb.TransactionsLiveHTML.transactions(assigns)"
+    ~H"""
+      <.crud {assigns} target={Transaction} formatter={
+        %{
+        }
+      }/>
+    """
   end
 end

@@ -1,6 +1,7 @@
 defmodule CashLensWeb.BaseLive do
   @moduledoc false
   use CashLensWeb, :live_view
+  alias CashLens.Utils
 
   import CashLensWeb.CoreComponents, except: [button: 1, table: 1, icon: 1]
   import CashLens.Utils
@@ -10,25 +11,31 @@ defmodule CashLensWeb.BaseLive do
   import SaladUI.Icon
   require Logger
 
-  def extract_module_name(%{:target => target}) when is_atom(target) do
-    extract_module_name(%{"target" => Atom.to_string(target)})
+  def extract_module_info(target) when is_atom(target) do
+    extract_module_info(%{"target" => Atom.to_string(target)})
   end
-  def extract_module_name(%{"target" => target}) do
+  def extract_module_info(%{:target => target}) when is_atom(target) do
+    extract_module_info(%{"target" => Atom.to_string(target)})
+  end
+  def extract_module_info(%{"target" => target}) do
     parts = String.split(target, ".")
-    {Enum.join(Enum.drop(parts, -1), "."), List.last(parts)}
+    {Enum.join(Enum.drop(parts, -1), "."), List.last(parts), List.last(Enum.drop(parts, -1))}
   end
 
   def call_method_if_exists(base_module, method_name, args) do
-    call_method(base_module, method_name, "", args, False)
+    call_method(base_module, method_name, "", args, false)
   end
 
-  def call_method(base_module, method_name, method_prefix, args, rize_error_if_dont_exists \\ True)
+  def call_method(base_module, method_name, method_prefix, args, rize_error_if_dont_exists \\ true)
   def call_method(base_module, method_name, "", args, rize_error_if_dont_exists) do
+    IO.puts("-----------------\nCALL call_method")
+    IO.inspect([base_module, method_name, args, rize_error_if_dont_exists])
+    IO.puts("-----------------")
     try do
-      apply(String.to_existing_atom(base_module), method_name, args)
+      apply(String.to_atom(base_module), method_name, args)
     rescue error -> error
       if rize_error_if_dont_exists do
-        Logger.error([String.to_existing_atom(base_module), method_name, args])
+        Logger.error([String.to_atom(base_module), method_name, args])
         raise error
       else
         nil
@@ -37,7 +44,7 @@ defmodule CashLensWeb.BaseLive do
   end
   def call_method(base_module, module_name, method_prefix, args, rize_error_if_dont_exists) do
     method = "#{method_prefix}_#{String.downcase(module_name)}"
-    call_method(base_module, String.to_existing_atom(method), "", args)
+    call_method(base_module, String.to_atom(method), "", args)
   end
 
   def on_mount(:default, _params, %{"current_user" => current_user} = _session, socket) do
@@ -57,7 +64,7 @@ defmodule CashLensWeb.BaseLive do
       def handle_event("save", params, socket) do
         IO.puts("-----------------\nCALL save\n-----------------")
 
-        {base_module, module_name} = extract_module_name(params)
+        {base_module, module_name, _plural_name} = extract_module_info(params)
         module_name_downcase = String.downcase(module_name)
         current_user_id = socket.assigns.current_user.id
 
@@ -82,7 +89,7 @@ defmodule CashLensWeb.BaseLive do
       end
 
       def handle_event("delete", %{"id" => id} = params, socket) do
-        {base_module, module_name} = extract_module_name(params)
+        {base_module, module_name, _plural_name} = extract_module_info(params)
 
         # Get the item by ID
         item = call_method(base_module, module_name <> "!", "get", [id])
@@ -107,17 +114,24 @@ defmodule CashLensWeb.BaseLive do
   end
 
   def crud(%{"target": target} = assigns) do
-#    IO.puts("-----------------\nCALL crud\n-----------------")
-#    IO.inspect(assigns)
+    IO.puts("-----------------\nCALL crud\n-----------------")
+    IO.inspect(assigns)
     formatter = Map.get(assigns, :formatter, %{})
+    |> Enum.map(fn {k, v} ->
+      v = case v do
+        :capitalize -> &Utils.capitalize/1
+        _ -> v
+      end
+      {k, v}
+    end)
+    |> Enum.into(%{})
 
-    {base_module, module_name} = extract_module_name(assigns)
+    {base_module, module_name, plural_name} = extract_module_info(assigns)
     module_name_downcase = String.downcase(module_name)
 
-    plural_name = Map.get(assigns, :plural, "#{module_name}s")
     fields =
       target.__schema__(:fields)
-      |> Enum.filter(fn k -> k not in [:inserted_at, :updated_at, :id] end)
+      |> Enum.filter(fn k -> k not in [:inserted_at, :updated_at, :id, :user_id] end)
       |> Enum.map(fn k ->
         {type, options} =
           case target.__schema__(:type, k) do
@@ -132,8 +146,26 @@ defmodule CashLensWeb.BaseLive do
                     value
                   end
                 end)
-              {"select", options  }
-            type -> {"text", []}
+              {"select", options }
+
+            :id ->
+              # Find the model
+              model =
+                target.__schema__(:associations)
+                |> Enum.map(fn assoc_name ->
+                  target.__schema__(:association, assoc_name)
+                end)
+                |> Enum.find(fn assoc ->
+                    assoc.__struct__ == Ecto.Association.BelongsTo and assoc.owner_key == k
+                end)
+                |> Map.get(:related)
+
+              {base_module, module_name, plural_name} = extract_module_info(model)
+              options = call_method(base_module, plural_name, "list", [assigns.current_user.id])
+              |> Enum.map(fn x -> {call_method_if_exists(base_module, :to_str, [x]) || x.name, x.id} end)
+              {"select", options}
+
+            _ -> {"text", []}
           end
 
         label = from_atom(k)
@@ -141,7 +173,7 @@ defmodule CashLensWeb.BaseLive do
       end)
 
     list =
-      call_method(base_module, module_name <> "s", "list", [assigns.current_user.id])
+      call_method(base_module, plural_name, "list", [assigns.current_user.id])
       |> Enum.map(fn item ->
         fields
         |> Enum.reduce(item, fn f, acc ->
@@ -153,13 +185,9 @@ defmodule CashLensWeb.BaseLive do
           end)
       end)
 
-    show_fields = Enum.filter(fields, fn tuple -> elem(tuple, 0) != :user_id end)
     assigns = assigns
       |> assign(target: target)
-      |> assign(show_fields: show_fields)
-#      |> assign(list: list)
-#      |> assign(module_name: module_name_downcase)
-#      |> assign(module_name_capitalize: module_name)
+      |> assign(fields: fields)
     ~H"""
     <h1 class="text-2xl font-semibold">{plural_name}</h1>
     <div class="bg-white shadow-md">
@@ -177,7 +205,7 @@ defmodule CashLensWeb.BaseLive do
             <.table>
               <.table_header>
                 <.table_row>
-                  <%= for {field, type, label, options} <- @show_fields do %>
+                  <%= for {field, type, label, options} <- @fields do %>
                     <.table_head>{label}</.table_head>
                   <% end %>
                   <.table_head>Action</.table_head>
@@ -186,7 +214,7 @@ defmodule CashLensWeb.BaseLive do
               <.table_body>
                 <%= for item <- list do %>
                   <.table_row>
-                    <%= for {field, type, label, options} <- show_fields do %>
+                    <%= for {field, type, label, options} <- @fields do %>
                       <.table_cell>{Map.get(item, field)}</.table_cell>
                     <% end %>
                     <.table_cell>
@@ -240,7 +268,6 @@ defmodule CashLensWeb.BaseLive do
               <input type="hidden" name="target" value={@target} />
               <%= for {field, type, label, options} <- @fields do %>
                 <%= case field do %>
-                  <% :user_id -> %>
                   <% _ -> %>
                     <.input label={label} field={f[field]} type={type} options={options}/>
                 <% end %>

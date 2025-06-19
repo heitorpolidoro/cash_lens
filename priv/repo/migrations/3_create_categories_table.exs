@@ -6,6 +6,7 @@ defmodule CashLens.Repo.Migrations.CreateCategoriesTable do
       add :name, :string, null: false
       add :type, :string, null: false
       add(:parent_id, references(:categories), null: true)
+      add(:user_id, references(:users), null: false)
 
       timestamps()
     end

@@ -41,7 +41,6 @@ defmodule CashLens.Accounts do
     |> Repo.all()
     |> load_parser()
   end
-
   @doc """
   Gets a single account.
 
