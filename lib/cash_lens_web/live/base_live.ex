@@ -1,5 +1,17 @@
 defmodule CashLensWeb.BaseLive do
-  @moduledoc false
+  @moduledoc """
+  Base LiveView module that provides common functionality for CashLens LiveView components.
+
+  This module serves as a foundation for other LiveView modules in the CashLens application.
+  It provides:
+
+  - Utility functions for extracting module information and dynamically calling methods
+  - Common event handlers for CRUD operations through the `__using__` macro
+  - Reusable UI components for displaying and managing data
+
+  Modules that use `CashLensWeb.BaseLive` automatically inherit common event handlers
+  for saving, deleting, and other operations, reducing code duplication across LiveView modules.
+  """
   use CashLensWeb, :live_view
   alias CashLens.Utils
 
@@ -11,6 +23,22 @@ defmodule CashLensWeb.BaseLive do
   import SaladUI.Icon
   require Logger
 
+  @doc """
+  Extracts module information from a target module.
+
+  This function parses a module name and returns a tuple containing:
+  - The base module name (without the last part)
+  - The last part of the module name (typically the entity name)
+  - The second-to-last part of the module name (typically the plural form of the entity)
+
+  ## Examples
+
+      iex> extract_module_info(CashLens.Accounts.Account)
+      {"CashLens.Accounts", "Account", "Accounts"}
+
+      iex> extract_module_info(%{"target" => "CashLens.Accounts.Account"})
+      {"CashLens.Accounts", "Account", "Accounts"}
+  """
   def extract_module_info(target) when is_atom(target) do
     extract_module_info(%{"target" => Atom.to_string(target)})
   end
@@ -22,35 +50,127 @@ defmodule CashLensWeb.BaseLive do
     {Enum.join(Enum.drop(parts, -1), "."), List.last(parts), List.last(Enum.drop(parts, -1))}
   end
 
+  @doc """
+  Calls a method on a module if it exists, returning nil if the method doesn't exist.
+
+  This is a convenience wrapper around `call_method/5` that suppresses errors when the method doesn't exist.
+
+  ## Parameters
+
+  - `base_module` - The string name of the module to call the method on
+  - `method_name` - The atom name of the method to call
+  - `args` - The list of arguments to pass to the method
+
+  ## Returns
+
+  The result of the method call, or `nil` if the method doesn't exist.
+
+  ## Examples
+
+      iex> call_method_if_exists("CashLens.Accounts", :to_str, [account])
+      "Personal Account"
+
+      iex> call_method_if_exists("CashLens.Accounts", :nonexistent_method, [])
+      nil
+  """
   def call_method_if_exists(base_module, method_name, args) do
     call_method(base_module, method_name, "", args, false)
   end
 
-  def call_method(base_module, method_name, method_prefix, args, rize_error_if_dont_exists \\ true)
-  def call_method(base_module, method_name, "", args, rize_error_if_dont_exists) do
-    IO.puts("-----------------\nCALL call_method")
-    IO.inspect([base_module, method_name, args, rize_error_if_dont_exists])
-    IO.puts("-----------------")
+  @doc """
+  Dynamically calls a method on a module.
+
+  This function provides a flexible way to call methods on modules dynamically, with options
+  for error handling and method name construction.
+
+  ## Parameters
+
+  - `base_module` - The string name of the module to call the method on
+  - `method_name` - The atom name of the method to call, or a string to be combined with `method_prefix`
+  - `method_prefix` - A string prefix to combine with `method_name` (when `method_name` is a string)
+  - `args` - The list of arguments to pass to the method
+  - `raise_error_if_not_exists` - Whether to raise an error if the method doesn't exist (default: true)
+
+  ## Returns
+
+  The result of the method call, or `nil` if the method doesn't exist and `raise_error_if_not_exists` is false.
+
+  ## Examples
+
+      iex> call_method("CashLens.Accounts", :list, "", [user_id])
+      [%Account{}, %Account{}]
+
+      iex> call_method("CashLens.Accounts", "Account", "get", [id])
+      %Account{}
+  """
+  def call_method(base_module, method_name, method_prefix, args, raise_error_if_not_exists \\ true)
+  def call_method(base_module, method_name, "", args, raise_error_if_not_exists) do
     try do
       apply(String.to_atom(base_module), method_name, args)
     rescue error -> error
-      if rize_error_if_dont_exists do
-        Logger.error([String.to_atom(base_module), method_name, args])
+      if raise_error_if_not_exists do
+        Logger.error("Error calling method: #{inspect([String.to_atom(base_module), method_name, args])}")
         raise error
       else
         nil
       end
     end
   end
-  def call_method(base_module, module_name, method_prefix, args, rize_error_if_dont_exists) do
+  def call_method(base_module, module_name, method_prefix, args, raise_error_if_not_exists) do
     method = "#{method_prefix}_#{String.downcase(module_name)}"
     call_method(base_module, String.to_atom(method), "", args)
   end
 
+  @doc """
+  LiveView on_mount callback that sets up the socket with the current user.
+
+  This callback is called when a LiveView that uses this module is mounted.
+  It assigns the current user to the socket and initializes the changeset to nil.
+
+  ## Parameters
+
+  - `_params` - The parameters passed to the LiveView
+  - `session` - The session data, expected to contain the current user
+  - `socket` - The LiveView socket
+
+  ## Returns
+
+  `{:cont, socket}` with the current user and nil changeset assigned to the socket.
+  """
   def on_mount(:default, _params, %{"current_user" => current_user} = _session, socket) do
     {:cont, assign(socket, current_user: current_user, changeset: nil)}
   end
 
+  @doc """
+  Formats changeset errors into a human-readable string.
+
+  ## Parameters
+
+  - `changeset` - The Ecto.Changeset containing errors
+
+  ## Returns
+
+  A string with formatted error messages
+  """
+  def format_changeset_errors(changeset) do
+    changeset.errors
+    |> Enum.map(fn {field, {message, _}} -> "#{capitalize(field)}: #{message}" end)
+    |> Enum.join(" - ")
+  end
+
+  @doc """
+  Provides common event handlers and functionality to LiveView modules.
+
+  When a module uses `CashLensWeb.BaseLive`, it automatically includes:
+
+  - A `handle_params/3` callback that assigns the current path to the socket
+  - A `handle_info/2` callback for handling flash messages
+  - A `handle_event/3` callback for "save" events that creates new items
+  - A `handle_event/3` callback for "delete" events that deletes items
+
+  These callbacks use the utility functions in this module to dynamically
+  call the appropriate context functions based on the parameters.
+  """
   defmacro __using__(_) do
     quote do
       def handle_params(_params, uri, socket) do
@@ -62,8 +182,6 @@ defmodule CashLensWeb.BaseLive do
       end
 
       def handle_event("save", params, socket) do
-        IO.puts("-----------------\nCALL save\n-----------------")
-
         {base_module, module_name, _plural_name} = extract_module_info(params)
         module_name_downcase = String.downcase(module_name)
         current_user_id = socket.assigns.current_user.id
@@ -76,15 +194,11 @@ defmodule CashLensWeb.BaseLive do
           {:ok, item} ->
             item_str = call_method_if_exists(base_module, :to_str, [item]) || module_name
             {:noreply,
-              socket
-               |> put_flash(:info, "#{item_str} created successfully")}
+             socket |> put_flash(:info, "#{item_str} created successfully")}
           {:error, %Ecto.Changeset{} = changeset} ->
-            errors = changeset.errors
-            |> Enum.map(fn {field, {message, _}} -> "#{capitalize(field)}: #{message}" end)
-            |> Enum.join(" - ")
-              {:noreply,
-               socket
-               |> put_flash(:error, errors)}
+            errors = format_changeset_errors(changeset)
+            {:noreply,
+             socket |> put_flash(:error, errors)}
         end
       end
 
@@ -99,24 +213,31 @@ defmodule CashLensWeb.BaseLive do
           {:ok, item} ->
             item_str = call_method_if_exists(base_module, :to_str, [item]) || module_name
             {:noreply,
-             socket
-             |> put_flash(:info, "#{item_str}##{id} deleted successfully")}
+             socket |> put_flash(:info, "#{item_str}##{id} deleted successfully")}
           {:error, %Ecto.Changeset{} = changeset} ->
-            errors = changeset.errors
-            |> Enum.map(fn {field, {message, _}} -> "#{capitalize(field)}: #{message}" end)
-            |> Enum.join(" - ")
+            errors = format_changeset_errors(changeset)
             {:noreply,
-             socket
-             |> put_flash(:error, errors)}
+             socket |> put_flash(:error, errors)}
         end
       end
     end
   end
 
-  def crud(%{"target": target} = assigns) do
-    IO.puts("-----------------\nCALL crud\n-----------------")
-    IO.inspect(assigns)
-    formatter = Map.get(assigns, :formatter, %{})
+  @doc """
+  Processes formatter functions for the CRUD interface.
+
+  Converts formatter specifications into actual functions.
+
+  ## Parameters
+
+  - `formatter_map` - Map of field names to formatter specifications
+
+  ## Returns
+
+  A map of field names to formatter functions
+  """
+  def process_formatters(formatter_map) do
+    formatter_map
     |> Enum.map(fn {k, v} ->
       v = case v do
         :capitalize -> &Utils.capitalize/1
@@ -125,65 +246,123 @@ defmodule CashLensWeb.BaseLive do
       {k, v}
     end)
     |> Enum.into(%{})
+  end
+
+  @doc """
+  Generates form fields for the CRUD interface based on schema information.
+
+  ## Parameters
+
+  - `target` - The schema module to generate fields for
+  - `formatter` - Map of field formatters
+  - `current_user_id` - ID of the current user for filtering related data
+
+  ## Returns
+
+  A list of field specifications for the form
+  """
+  def generate_form_fields(target, formatter, current_user_id) do
+    target.__schema__(:fields)
+    |> Enum.filter(fn k -> k not in [:inserted_at, :updated_at, :id, :user_id] end)
+    |> Enum.map(fn k ->
+      {type, options} =
+        case target.__schema__(:type, k) do
+          {:parameterized, {_, type}} ->
+            options =
+              type.on_cast
+              |> Map.keys
+              |> Enum.map(fn value ->
+                if Map.has_key?(formatter, k) do
+                  {Map.get(formatter, k).(value), value}
+                else
+                  value
+                end
+              end)
+            {"select", options }
+
+          :id ->
+            # Find the model
+            model =
+              target.__schema__(:associations)
+              |> Enum.map(fn assoc_name ->
+                target.__schema__(:association, assoc_name)
+              end)
+              |> Enum.find(fn assoc ->
+                  assoc.__struct__ == Ecto.Association.BelongsTo and assoc.owner_key == k
+              end)
+              |> Map.get(:related)
+
+            {base_module, module_name, plural_name} = extract_module_info(model)
+            options = call_method(base_module, plural_name, "list", [current_user_id])
+            |> Enum.map(fn x -> {call_method_if_exists(base_module, :to_str, [x]) || x.name, x.id} end)
+            {"select", options}
+
+          _ -> {"text", []}
+        end
+
+      label = from_atom(k)
+      {k, type, label, options}
+    end)
+  end
+
+  @doc """
+  Processes a list of items by applying formatters to their fields.
+
+  ## Parameters
+
+  - `base_module` - The base module name
+  - `plural_name` - The plural name of the entity
+  - `current_user_id` - ID of the current user for filtering items
+  - `fields` - List of field specifications
+  - `formatter` - Map of field formatters
+
+  ## Returns
+
+  A list of items with formatted field values
+  """
+  def process_item_list(base_module, plural_name, current_user_id, fields, formatter) do
+    call_method(base_module, plural_name, "list", [current_user_id])
+    |> Enum.map(fn item ->
+      fields
+      |> Enum.reduce(item, fn f, acc ->
+          if Map.has_key?(formatter, elem(f, 0)) do
+            Map.put(acc, elem(f, 0), Map.get(formatter, elem(f, 0)).(Map.get(acc, elem(f, 0))))
+          else
+            acc
+          end
+        end)
+    end)
+  end
+
+  @doc """
+  Renders a CRUD (Create, Read, Update, Delete) interface for a given schema.
+
+  This component generates a complete UI for managing entities of the given schema,
+  including a table of existing items and a button to create new items. It dynamically
+  determines the fields to display based on the schema's fields and associations.
+
+  ## Parameters
+
+  - `assigns` - A map of assigns that must include:
+    - `:target` - The schema module to generate the CRUD interface for
+    - `:current_user` - The current user for filtering items
+    - `:formatter` (optional) - A map of field formatters for customizing display
+
+  ## Examples
+
+      # In a LiveView template:
+      crud(%{"target": CashLens.Accounts.Account, formatter: %{type: :capitalize}})
+  """
+  def crud(%{"target": target} = assigns) do
+    formatter = Map.get(assigns, :formatter, %{})
+    |> process_formatters()
 
     {base_module, module_name, plural_name} = extract_module_info(assigns)
     module_name_downcase = String.downcase(module_name)
 
-    fields =
-      target.__schema__(:fields)
-      |> Enum.filter(fn k -> k not in [:inserted_at, :updated_at, :id, :user_id] end)
-      |> Enum.map(fn k ->
-        {type, options} =
-          case target.__schema__(:type, k) do
-            {:parameterized, {_, type}} ->
-              options =
-                type.on_cast
-                |> Map.keys
-                |> Enum.map(fn value ->
-                  if Map.has_key?(formatter, k) do
-                    {Map.get(formatter, k).(value), value}
-                  else
-                    value
-                  end
-                end)
-              {"select", options }
+    fields = generate_form_fields(target, formatter, assigns.current_user.id)
 
-            :id ->
-              # Find the model
-              model =
-                target.__schema__(:associations)
-                |> Enum.map(fn assoc_name ->
-                  target.__schema__(:association, assoc_name)
-                end)
-                |> Enum.find(fn assoc ->
-                    assoc.__struct__ == Ecto.Association.BelongsTo and assoc.owner_key == k
-                end)
-                |> Map.get(:related)
-
-              {base_module, module_name, plural_name} = extract_module_info(model)
-              options = call_method(base_module, plural_name, "list", [assigns.current_user.id])
-              |> Enum.map(fn x -> {call_method_if_exists(base_module, :to_str, [x]) || x.name, x.id} end)
-              {"select", options}
-
-            _ -> {"text", []}
-          end
-
-        label = from_atom(k)
-        {k, type, label, options}
-      end)
-
-    list =
-      call_method(base_module, plural_name, "list", [assigns.current_user.id])
-      |> Enum.map(fn item ->
-        fields
-        |> Enum.reduce(item, fn f, acc ->
-            if Map.has_key?(formatter, elem(f, 0)) do
-              Map.put(acc, elem(f, 0), Map.get(formatter, elem(f, 0)).(Map.get(acc, elem(f, 0))))
-            else
-              acc
-            end
-          end)
-      end)
+    list = process_item_list(base_module, plural_name, assigns.current_user.id, fields, formatter)
 
     assigns = assigns
       |> assign(target: target)
@@ -251,6 +430,24 @@ defmodule CashLensWeb.BaseLive do
     """
   end
 
+  @doc """
+  Renders a modal dialog for creating or editing items in the CRUD interface.
+
+  This component is used by the `crud/1` component to provide a form for creating
+  or editing items. It dynamically generates form fields based on the schema's fields.
+
+  ## Parameters
+
+  - `assigns` - A map of assigns that must include:
+    - `:target` - The schema module to generate the form for
+    - `:fields` - The fields to include in the form, as determined by the `crud/1` component
+    - `:formatter` (optional) - A map of field formatters for customizing display
+
+  ## Examples
+
+      # In a LiveView template:
+      crud_modal(%{"target": CashLens.Accounts.Account, fields: fields})
+  """
   def crud_modal(%{"target": target} = assigns) do
 
     changeset = target.changeset(struct(target, %{}), %{})
