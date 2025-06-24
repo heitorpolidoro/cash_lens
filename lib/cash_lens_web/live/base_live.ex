@@ -16,12 +16,96 @@ defmodule CashLensWeb.BaseLive do
   alias CashLens.Utils
 
   import CashLensWeb.CoreComponents, except: [button: 1, table: 1, icon: 1]
-  import CashLens.Utils
   import SaladUI.Button
   import SaladUI.Table
   import SaladUI.Tooltip
   import SaladUI.Icon
   require Logger
+
+  @doc """
+  LiveView on_mount callback that sets up the socket with the current user.
+
+  This callback is called when a LiveView that uses this module is mounted.
+  It assigns the current user to the socket and initializes the changeset to nil.
+
+  ## Parameters
+
+  - `_params` - The parameters passed to the LiveView
+  - `session` - The session data, expected to contain the current user
+  - `socket` - The LiveView socket
+
+  ## Returns
+
+  `{:cont, socket}` with the current user and nil changeset assigned to the socket.
+  """
+  def on_mount(:default, _params, %{"current_user" => current_user} = _session, socket) do
+    {:cont, assign(socket, current_user: current_user, changeset: nil)}
+  end
+
+  @doc """
+  Provides common event handlers and functionality to LiveView modules.
+
+  When a module uses `CashLensWeb.BaseLive`, it automatically includes:
+
+  - A `handle_params/3` callback that assigns the current path to the socket
+  - A `handle_info/2` callback for handling flash messages
+  - A `handle_event/3` callback for "save" events that creates new items
+  - A `handle_event/3` callback for "delete" events that deletes items
+
+  These callbacks use the utility functions in this module to dynamically
+  call the appropriate context functions based on the parameters.
+  """
+  defmacro __using__(_) do
+    quote do
+      def handle_params(_params, uri, socket) do
+        {:noreply, assign(socket, :current_path, URI.parse(uri).path)}
+      end
+
+      def handle_info({:flash, level, message}, socket) do
+        {:noreply, put_flash(socket, level, message)}
+      end
+
+      def handle_event("save", %{"target" => target} = params, socket) do
+        current_user_id = socket.assigns.current_user.id
+
+        attributes =
+        params
+          |> Map.drop(["target"])
+          |> Map.values()
+          |> List.first()
+          |> Map.put("user_id", current_user_id)
+
+        case call_method(target, :create, [attributes]) do
+          {:ok, item} ->
+            item_str = call_method_if_exists(target, :to_str, [item]) || target
+            {:noreply,
+              socket |> put_flash(:info, "#{item_str} created successfully")}
+          {:error, %Ecto.Changeset{} = changeset} ->
+            errors = format_changeset_errors(changeset)
+            {:noreply,
+              socket |> put_flash(:error, errors)}
+        end
+      end
+
+      def handle_event("delete", %{"id" => id, "target" => target} = params, socket) do
+
+        # Get the item by ID
+        item = call_method(target, :get, [id])
+
+        # Delete the item
+        case call_method(target, :delete, [item]) do
+          {:ok, item} ->
+            item_str = call_method_if_exists(target, :to_str, [item]) || target
+            {:noreply,
+              socket |> put_flash(:info, "#{item_str}##{id} deleted successfully")}
+          {:error, %Ecto.Changeset{} = changeset} ->
+            errors = format_changeset_errors(changeset)
+            {:noreply,
+              socket |> put_flash(:error, errors)}
+        end
+      end
+    end
+  end
 
   @doc """
   Extracts module information from a target module.
@@ -67,14 +151,14 @@ defmodule CashLensWeb.BaseLive do
 
   ## Examples
 
-      iex> call_method_if_exists("CashLens.Accounts", :to_str, [account])
+      iex> call_method_if_exists("CashLens.Accounts.Account", :to_str, [account])
       "Personal Account"
 
-      iex> call_method_if_exists("CashLens.Accounts", :nonexistent_method, [])
+      iex> call_method_if_exists("CashLens.Accounts.Account", :nonexistent_method, [])
       nil
   """
-  def call_method_if_exists(base_module, method_name, args) do
-    call_method(base_module, method_name, "", args, false)
+  def call_method_if_exists(target, method, args) do
+    call_method(target, method, args, false)
   end
 
   @doc """
@@ -103,42 +187,38 @@ defmodule CashLensWeb.BaseLive do
       iex> call_method("CashLens.Accounts", "Account", "get", [id])
       %Account{}
   """
-  def call_method(base_module, method_name, method_prefix, args, raise_error_if_not_exists \\ true)
-  def call_method(base_module, method_name, "", args, raise_error_if_not_exists) do
-    try do
-      apply(String.to_atom(base_module), method_name, args)
-    rescue error -> error
-      if raise_error_if_not_exists do
-        Logger.error("Error calling method: #{inspect([String.to_atom(base_module), method_name, args])}")
-        raise error
+  def call_method(target, method, args, raise_error_if_not_exists \\ true)
+  def call_method(target, method, args, raise_error_if_not_exists) when is_atom(target) do
+    call_method(Atom.to_string(target), method, args, raise_error_if_not_exists)
+  end
+  def call_method(target, method, args, raise_error_if_not_exists) do
+    parts = String.split(target, ".")
+    base_module = String.to_atom(Enum.join(Enum.drop(parts, -1), "."))
+    method_target_name =
+      case method do
+        :list -> Enum.at(parts, -2)
+        :to_str -> nil
+        :get -> "#{List.last(parts)}!"
+        _-> List.last(parts)
+      end
+    method_name =
+    if method_target_name do
+      Enum.join([method, method_target_name], "_")
+      |> String.downcase
+      |> String.to_atom
       else
+      method
+      end
+
+    if Code.ensure_loaded?(base_module) and function_exported?(base_module, method_name, length(args)) do
+      apply(base_module, method_name, args)
+    else if raise_error_if_not_exists do
+        raise "Method not found: #{inspect([base_module, method_name, length(args)])}"
+      else
+        Logger.info("Method not found: #{inspect([base_module, method_name, length(args)])}")
         nil
       end
     end
-  end
-  def call_method(base_module, module_name, method_prefix, args, raise_error_if_not_exists) do
-    method = "#{method_prefix}_#{String.downcase(module_name)}"
-    call_method(base_module, String.to_atom(method), "", args)
-  end
-
-  @doc """
-  LiveView on_mount callback that sets up the socket with the current user.
-
-  This callback is called when a LiveView that uses this module is mounted.
-  It assigns the current user to the socket and initializes the changeset to nil.
-
-  ## Parameters
-
-  - `_params` - The parameters passed to the LiveView
-  - `session` - The session data, expected to contain the current user
-  - `socket` - The LiveView socket
-
-  ## Returns
-
-  `{:cont, socket}` with the current user and nil changeset assigned to the socket.
-  """
-  def on_mount(:default, _params, %{"current_user" => current_user} = _session, socket) do
-    {:cont, assign(socket, current_user: current_user, changeset: nil)}
   end
 
   @doc """
@@ -154,73 +234,8 @@ defmodule CashLensWeb.BaseLive do
   """
   def format_changeset_errors(changeset) do
     changeset.errors
-    |> Enum.map(fn {field, {message, _}} -> "#{capitalize(field)}: #{message}" end)
+    |> Enum.map(fn {field, {message, _}} -> "#{Utils.capitalize(field)}: #{message}" end)
     |> Enum.join(" - ")
-  end
-
-  @doc """
-  Provides common event handlers and functionality to LiveView modules.
-
-  When a module uses `CashLensWeb.BaseLive`, it automatically includes:
-
-  - A `handle_params/3` callback that assigns the current path to the socket
-  - A `handle_info/2` callback for handling flash messages
-  - A `handle_event/3` callback for "save" events that creates new items
-  - A `handle_event/3` callback for "delete" events that deletes items
-
-  These callbacks use the utility functions in this module to dynamically
-  call the appropriate context functions based on the parameters.
-  """
-  defmacro __using__(_) do
-    quote do
-      def handle_params(_params, uri, socket) do
-        {:noreply, assign(socket, :current_path, URI.parse(uri).path)}
-      end
-
-      def handle_info({:flash, level, message}, socket) do
-        {:noreply, put_flash(socket, level, message)}
-      end
-
-      def handle_event("save", params, socket) do
-        {base_module, module_name, _plural_name} = extract_module_info(params)
-        module_name_downcase = String.downcase(module_name)
-        current_user_id = socket.assigns.current_user.id
-
-        attributes =
-          params[module_name_downcase]
-          |> Map.put("user_id", current_user_id)
-
-        case call_method(base_module, module_name, "create", [attributes]) do
-          {:ok, item} ->
-            item_str = call_method_if_exists(base_module, :to_str, [item]) || module_name
-            {:noreply,
-             socket |> put_flash(:info, "#{item_str} created successfully")}
-          {:error, %Ecto.Changeset{} = changeset} ->
-            errors = format_changeset_errors(changeset)
-            {:noreply,
-             socket |> put_flash(:error, errors)}
-        end
-      end
-
-      def handle_event("delete", %{"id" => id} = params, socket) do
-        {base_module, module_name, _plural_name} = extract_module_info(params)
-
-        # Get the item by ID
-        item = call_method(base_module, module_name <> "!", "get", [id])
-
-        # Delete the item
-        case call_method(base_module, module_name, "delete", [item]) do
-          {:ok, item} ->
-            item_str = call_method_if_exists(base_module, :to_str, [item]) || module_name
-            {:noreply,
-             socket |> put_flash(:info, "#{item_str}##{id} deleted successfully")}
-          {:error, %Ecto.Changeset{} = changeset} ->
-            errors = format_changeset_errors(changeset)
-            {:noreply,
-             socket |> put_flash(:error, errors)}
-        end
-      end
-    end
   end
 
   @doc """
@@ -261,47 +276,20 @@ defmodule CashLensWeb.BaseLive do
 
   A list of field specifications for the form
   """
-  def generate_form_fields(target, formatter, current_user_id) do
+  def generate_form_fields(target) do
     target.__schema__(:fields)
-    |> Enum.filter(fn k -> k not in [:inserted_at, :updated_at, :id, :user_id] end)
-    |> Enum.map(fn k ->
-      {type, options} =
-        case target.__schema__(:type, k) do
+    |> Enum.filter(fn field -> field not in [:inserted_at, :updated_at, :id] end)
+    |> Enum.map(fn field ->
+      {type, label} =
+        case target.__schema__(:type, field) do
           {:parameterized, {_, type}} ->
-            options =
-              type.on_cast
-              |> Map.keys
-              |> Enum.map(fn value ->
-                if Map.has_key?(formatter, k) do
-                  {Map.get(formatter, k).(value), value}
-                else
-                  value
-                end
-              end)
-            {"select", options }
-
+            {"select", Utils.capitalize_from_atom(field)}
           :id ->
-            # Find the model
-            model =
-              target.__schema__(:associations)
-              |> Enum.map(fn assoc_name ->
-                target.__schema__(:association, assoc_name)
-              end)
-              |> Enum.find(fn assoc ->
-                  assoc.__struct__ == Ecto.Association.BelongsTo and assoc.owner_key == k
-              end)
-              |> Map.get(:related)
-
-            {base_module, module_name, plural_name} = extract_module_info(model)
-            options = call_method(base_module, plural_name, "list", [current_user_id])
-            |> Enum.map(fn x -> {call_method_if_exists(base_module, :to_str, [x]) || x.name, x.id} end)
-            {"select", options}
-
-          _ -> {"text", []}
+            {"select", Utils.capitalize_from_atom(field) |> String.replace(" Id", "")}
+          _ ->
+            {"text", Utils.capitalize_from_atom(field)}
         end
-
-      label = from_atom(k)
-      {k, type, label, options}
+      {field, type, label}
     end)
   end
 
@@ -320,18 +308,28 @@ defmodule CashLensWeb.BaseLive do
 
   A list of items with formatted field values
   """
-  def process_item_list(base_module, plural_name, current_user_id, fields, formatter) do
-    call_method(base_module, plural_name, "list", [current_user_id])
+  def get_target_list(target, fields, formatter, extra_args \\ []) do
+    call_method(target, :list, extra_args)
     |> Enum.map(fn item ->
       fields
       |> Enum.reduce(item, fn f, acc ->
-          if Map.has_key?(formatter, elem(f, 0)) do
-            Map.put(acc, elem(f, 0), Map.get(formatter, elem(f, 0)).(Map.get(acc, elem(f, 0))))
+          if Map.has_key?(formatter, f) do
+            Map.put(acc, f, Map.get(formatter, f).(Map.get(acc, f)))
           else
             acc
           end
         end)
     end)
+  end
+
+  def format_value(value, field, formatter) do
+    Map.get(formatter, field, fn x -> x end).(value)
+  end
+
+  def get_value(item, field, formatter) do
+    value =
+      Map.get(item, field)
+      |> format_value(field, formatter)
   end
 
   @doc """
@@ -357,44 +355,51 @@ defmodule CashLensWeb.BaseLive do
     formatter = Map.get(assigns, :formatter, %{})
     |> process_formatters()
 
+    current_user_id = assigns.current_user.id
+
     {base_module, module_name, plural_name} = extract_module_info(assigns)
     module_name_downcase = String.downcase(module_name)
 
-    fields = generate_form_fields(target, formatter, assigns.current_user.id)
+    fields = generate_form_fields(target)
 
-    list = process_item_list(base_module, plural_name, assigns.current_user.id, fields, formatter)
+
+    list = get_target_list(target, fields, formatter, [current_user_id])
 
     assigns = assigns
       |> assign(target: target)
       |> assign(fields: fields)
+      |> assign(list: list)
+      |> assign(module_name: module_name)
+      |> assign(plural_name: plural_name)
+      |> assign(formatter: formatter)
     ~H"""
-    <h1 class="text-2xl font-semibold">{plural_name}</h1>
+    <h1 class="text-2xl font-semibold">{@plural_name}</h1>
     <div class="bg-white shadow-md">
       <div class="px-4 py-5 sm:p-6">
         <div class="flex justify-between items-center">
-          <h3 class="text-lg font-medium">{plural_name} list</h3>
-            <.button phx-click={show_modal("crud_modal")}>New {module_name}</.button>
+          <h3 class="text-lg font-medium">{@plural_name} list</h3>
+            <.button phx-click={show_modal("crud_modal")}>New {@module_name}</.button>
         </div>
 
-        <.crud_modal target={@target} formatter={@formatter} fields={fields}/>
+        <.crud_modal {assigns} target={@target} formatter={@formatter} fields={@fields}/>
         <div class="mt-5">
-          <%= if Enum.empty?(list) do %>
+          <%= if Enum.empty?(@list) do %>
             <p class="text-sm text-gray-500">No accounts yet. Create one to get started.</p>
           <% else %>
             <.table>
               <.table_header>
                 <.table_row>
-                  <%= for {field, type, label, options} <- @fields do %>
+                  <%= for {field, _type, label} <- @fields do %>
                     <.table_head>{label}</.table_head>
                   <% end %>
                   <.table_head>Action</.table_head>
                 </.table_row>
               </.table_header>
               <.table_body>
-                <%= for item <- list do %>
+                <%= for item <- @list do %>
                   <.table_row>
-                    <%= for {field, type, label, options} <- @fields do %>
-                      <.table_cell>{Map.get(item, field)}</.table_cell>
+                    <%= for {field, type, label} <- @fields do %>
+                      <.table_cell>{get_value(item, field, @formatter)}</.table_cell>
                     <% end %>
                     <.table_cell>
                       <.tooltip>
@@ -448,13 +453,45 @@ defmodule CashLensWeb.BaseLive do
       # In a LiveView template:
       crud_modal(%{"target": CashLens.Accounts.Account, fields: fields})
   """
-  def crud_modal(%{"target": target} = assigns) do
+  def crud_modal(%{"target": target, "fields": fields} = assigns) do
 
     changeset = target.changeset(struct(target, %{}), %{})
+    current_user_id = assigns.current_user.id
+
+    formatter = Map.get(assigns, :formatter, %{})
+    options =
+      fields
+      |> Enum.filter(fn {field, type, label} -> type == "select" end)
+      |> Enum.map(fn {field, type, _label} ->
+        options =
+          case target.__schema__(:type, field) do
+            {:parameterized, {_, type}} ->
+              type.on_cast
+              |> Map.keys
+              |> Enum.map(fn v -> {format_value(v, field, formatter), v} end)
+            :id ->
+              model =
+                target.__schema__(:associations)
+                |> Enum.map(fn assoc_name ->
+                  target.__schema__(:association, assoc_name)
+                end)
+                |> Enum.find(fn assoc ->
+                    assoc.__struct__ == Ecto.Association.BelongsTo and assoc.owner_key == field
+                end)
+                |> Map.get(:related)
+
+              get_target_list(model, fields, %{}, if(field == :user_id, do: [], else: [current_user_id]))
+              |> Enum.map(fn x -> {call_method_if_exists(model, :to_str, [x]) || x.name, x.id} end)
+        end
+          {field, options}
+      end)
+      |> Enum.into(%{})
     assigns =
       assigns
         |> assign(target: target)
         |> assign(changeset: changeset)
+        |> assign(options: options)
+        |> assign(formatter: formatter)
     ~H"""
           <.modal id="crud_modal">
             <.simple_form
@@ -463,10 +500,10 @@ defmodule CashLensWeb.BaseLive do
             phx-submit="save"
             >
               <input type="hidden" name="target" value={@target} />
-              <%= for {field, type, label, options} <- @fields do %>
+              <%= for {field, type, label} <- @fields do %>
                 <%= case field do %>
                   <% _ -> %>
-                    <.input label={label} field={f[field]} type={type} options={options}/>
+                    <.input label={label} field={f[field]} type={type} options={Map.get(@options, field, [])}/>
                 <% end %>
               <% end %>
               <:actions>

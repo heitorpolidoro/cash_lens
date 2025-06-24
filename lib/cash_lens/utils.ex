@@ -25,12 +25,12 @@ defmodule CashLens.Utils do
     |> Enum.join(" ")
   end
 
-  def from_atom(atom) do
+  def capitalize_from_atom(atom) do
     capitalize(Atom.to_string(atom))
   end
 
-  def from_atoms(list) do
-    Enum.map(list, &from_atom/1)
+  def capitalize_from_atoms(list) do
+    Enum.map(list, &capitalize_from_atom/1)
   end
 
   def to_options(list) do

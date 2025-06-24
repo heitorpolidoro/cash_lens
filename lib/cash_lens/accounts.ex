@@ -8,6 +8,7 @@ defmodule CashLens.Accounts do
 
   alias CashLens.Accounts.Account
   alias CashLens.Parsers
+  alias CashLens.Utils
 
   def load_parser(accounts) when is_list(accounts) do
     accounts
@@ -129,7 +130,7 @@ defmodule CashLens.Accounts do
   end
 
   def to_str(account) do
-    "#{account.name} - #{account.bank_name} (#{account.type})"
+    "#{account.name} - #{account.bank_name} (#{Utils.capitalize(account.type)})"
   end
 
 end
