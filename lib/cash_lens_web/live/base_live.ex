@@ -88,7 +88,6 @@ defmodule CashLensWeb.BaseLive do
       end
 
       def handle_event("delete", %{"id" => id, "target" => target} = params, socket) do
-
         # Get the item by ID
         item = call_method(target, :get, [id])
 
@@ -102,6 +101,9 @@ defmodule CashLensWeb.BaseLive do
             errors = format_changeset_errors(changeset)
             {:noreply,
               socket |> put_flash(:error, errors)}
+          {:error, error} ->
+            {:noreply,
+              socket |> put_flash(:error, error)}
         end
       end
     end
@@ -131,7 +133,7 @@ defmodule CashLensWeb.BaseLive do
   end
   def extract_module_info(%{"target" => target}) do
     parts = String.split(target, ".")
-    {Enum.join(Enum.drop(parts, -1), "."), List.last(parts), List.last(Enum.drop(parts, -1))}
+    {List.last(parts), List.last(Enum.drop(parts, -1))}
   end
 
   @doc """
@@ -211,7 +213,12 @@ defmodule CashLensWeb.BaseLive do
       end
 
     if Code.ensure_loaded?(base_module) and function_exported?(base_module, method_name, length(args)) do
-      apply(base_module, method_name, args)
+      try do
+        apply(base_module, method_name, args)
+      rescue
+        error ->
+          {:error, Exception.message(error)}
+      end
     else if raise_error_if_not_exists do
         raise "Method not found: #{inspect([base_module, method_name, length(args)])}"
       else
@@ -357,8 +364,7 @@ defmodule CashLensWeb.BaseLive do
 
     current_user_id = assigns.current_user.id
 
-    {base_module, module_name, plural_name} = extract_module_info(assigns)
-    module_name_downcase = String.downcase(module_name)
+    {module_name, plural_name} = extract_module_info(assigns)
 
     fields = generate_form_fields(target)
 
