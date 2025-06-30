@@ -41,6 +41,7 @@ defmodule CashLens.Accounts do
     |> where([a], a.user_id == ^user_id)
     |> Repo.all()
     |> load_parser()
+    |> Repo.preload(:user)
   end
   @doc """
   Gets a single account.

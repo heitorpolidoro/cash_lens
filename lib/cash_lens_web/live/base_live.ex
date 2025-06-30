@@ -315,28 +315,31 @@ defmodule CashLensWeb.BaseLive do
 
   A list of items with formatted field values
   """
-  def get_target_list(target, fields, formatter, extra_args \\ []) do
+  def get_target_list(target, extra_args \\ []) do
     call_method(target, :list, extra_args)
-    |> Enum.map(fn item ->
-      fields
-      |> Enum.reduce(item, fn f, acc ->
-          if Map.has_key?(formatter, f) do
-            Map.put(acc, f, Map.get(formatter, f).(Map.get(acc, f)))
-          else
-            acc
-          end
-        end)
-    end)
   end
 
   def format_value(value, field, formatter) do
+#    IO.inspect({"DEBUG", value, field, formatter})
     Map.get(formatter, field, fn x -> x end).(value)
   end
 
   def get_value(item, field, formatter) do
-    value =
+#    IO.inspect({"DEBUG", item, field, formatter})
+    if String.ends_with?(Atom.to_string(field), "_id") do
+      field =
+        field
+      |> Atom.to_string
+      |> String.replace("_id", "")
+      |> String.to_atom()
+      value = Map.get(item, field)
+      if value != nil do
+        value_to_str = call_method_if_exists(value.__struct__, :to_str, [value]) || value.id
+      end
+    else
       Map.get(item, field)
       |> format_value(field, formatter)
+    end
   end
 
   @doc """
@@ -369,7 +372,7 @@ defmodule CashLensWeb.BaseLive do
     fields = generate_form_fields(target)
 
 
-    list = get_target_list(target, fields, formatter, [current_user_id])
+    list = get_target_list(target, [current_user_id])
 
     assigns = assigns
       |> assign(target: target)
@@ -462,6 +465,11 @@ defmodule CashLensWeb.BaseLive do
   def crud_modal(%{"target": target, "fields": fields} = assigns) do
 
     changeset = target.changeset(struct(target, %{}), %{})
+
+    required_fields = changeset.errors
+      |> Enum.filter(fn {field, error} -> elem(error, 1) == [validation: :required] end)
+    |> Enum.map(fn {field, error} -> field end)
+
     current_user_id = assigns.current_user.id
 
     formatter = Map.get(assigns, :formatter, %{})
@@ -486,7 +494,7 @@ defmodule CashLensWeb.BaseLive do
                 end)
                 |> Map.get(:related)
 
-              get_target_list(model, fields, %{}, if(field == :user_id, do: [], else: [current_user_id]))
+              get_target_list(model, if(field == :user_id, do: [], else: [current_user_id]))
               |> Enum.map(fn x -> {call_method_if_exists(model, :to_str, [x]) || x.name, x.id} end)
         end
           {field, options}

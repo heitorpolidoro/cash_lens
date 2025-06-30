@@ -22,6 +22,7 @@ defmodule CashLens.Categories do
     |> where([c], c.user_id == ^user_id)
     |> Repo.all
     |> Repo.preload(:parent)
+    |> Repo.preload(:user)
   end
 
   @doc """

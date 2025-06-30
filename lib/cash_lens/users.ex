@@ -116,4 +116,8 @@ defmodule CashLens.Users do
         user
     end
   end
+
+  def to_str(user) do
+    user.name
+  end
 end
