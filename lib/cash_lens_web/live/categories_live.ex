@@ -9,11 +9,12 @@ defmodule CashLensWeb.CategoriesLive do
 
   def render(assigns) do
     ~H"""
-      <.crud {assigns} target={Category} formatter={
-        %{
-          type: :capitalize
-        }
-      }/>
+      <.crud {assigns}
+        target={Category}
+        formatter={%{type: :capitalize}}
+        default_value={%{user_id: assigns.current_user.id}}
+        hidden_fields={[:user_id]}
+      />
     """
   end
 end

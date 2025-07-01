@@ -66,20 +66,21 @@ defmodule CashLensWeb.BaseLive do
       end
 
       def handle_event("save", %{"target" => target} = params, socket) do
-        current_user_id = socket.assigns.current_user.id
 
         attributes =
         params
           |> Map.drop(["target"])
           |> Map.values()
           |> List.first()
-          |> Map.put("user_id", current_user_id)
 
         case call_method(target, :create, [attributes]) do
           {:ok, item} ->
             item_str = call_method_if_exists(target, :to_str, [item]) || target
             {:noreply,
-              socket |> put_flash(:info, "#{item_str} created successfully")}
+              socket
+              |> put_flash(:info, "#{item_str} created successfully")
+              |> push_event("close_modal", %{})
+            }
           {:error, %Ecto.Changeset{} = changeset} ->
             errors = format_changeset_errors(changeset)
             {:noreply,
@@ -283,18 +284,22 @@ defmodule CashLensWeb.BaseLive do
 
   A list of field specifications for the form
   """
-  def generate_form_fields(target) do
+  def generate_form_fields(%{"target": target} = assigns) do
     target.__schema__(:fields)
     |> Enum.filter(fn field -> field not in [:inserted_at, :updated_at, :id] end)
     |> Enum.map(fn field ->
       {type, label} =
-        case target.__schema__(:type, field) do
-          {:parameterized, {_, type}} ->
-            {"select", Utils.capitalize_from_atom(field)}
-          :id ->
-            {"select", Utils.capitalize_from_atom(field) |> String.replace(" Id", "")}
-          _ ->
-            {"text", Utils.capitalize_from_atom(field)}
+        if field in Map.get(assigns, :hidden_fields, []) do
+          {"hidden", nil}
+        else
+          case target.__schema__(:type, field) do
+            {:parameterized, {_, type}} ->
+              {"select", Utils.capitalize_from_atom(field)}
+            :id ->
+              {"select", Utils.capitalize_from_atom(field) |> String.replace(" Id", "")}
+            _ ->
+              {"text", Utils.capitalize_from_atom(field)}
+          end
         end
       {field, type, label}
     end)
@@ -320,25 +325,24 @@ defmodule CashLensWeb.BaseLive do
   end
 
   def format_value(value, field, formatter) do
-#    IO.inspect({"DEBUG", value, field, formatter})
     Map.get(formatter, field, fn x -> x end).(value)
   end
 
   def get_value(item, field, formatter) do
-#    IO.inspect({"DEBUG", item, field, formatter})
-    if String.ends_with?(Atom.to_string(field), "_id") do
-      field =
-        field
-      |> Atom.to_string
-      |> String.replace("_id", "")
-      |> String.to_atom()
-      value = Map.get(item, field)
-      if value != nil do
-        value_to_str = call_method_if_exists(value.__struct__, :to_str, [value]) || value.id
-      end
-    else
-      Map.get(item, field)
-      |> format_value(field, formatter)
+    value = Map.get(item, field)
+    cond do
+      value == nil ->
+        nil
+      String.ends_with?(Atom.to_string(field), "_id") ->
+        field =
+          field
+        |> Atom.to_string
+        |> String.replace("_id", "")
+        |> String.to_atom()
+        value = Map.get(item, field)
+        call_method_if_exists(value.__struct__, :to_str, [value]) || value.id
+      true ->
+        format_value(value, field, formatter)
     end
   end
 
@@ -369,18 +373,17 @@ defmodule CashLensWeb.BaseLive do
 
     {module_name, plural_name} = extract_module_info(assigns)
 
-    fields = generate_form_fields(target)
-
+    fields = generate_form_fields(assigns)
 
     list = get_target_list(target, [current_user_id])
 
     assigns = assigns
-      |> assign(target: target)
       |> assign(fields: fields)
       |> assign(list: list)
       |> assign(module_name: module_name)
       |> assign(plural_name: plural_name)
       |> assign(formatter: formatter)
+      |> assign_new(:hidden_fields, fn -> [] end)
     ~H"""
     <h1 class="text-2xl font-semibold">{@plural_name}</h1>
     <div class="bg-white shadow-md">
@@ -399,7 +402,9 @@ defmodule CashLensWeb.BaseLive do
               <.table_header>
                 <.table_row>
                   <%= for {field, _type, label} <- @fields do %>
-                    <.table_head>{label}</.table_head>
+                    <%= if field not in @hidden_fields do %>
+                      <.table_head>{label}</.table_head>
+                    <% end %>
                   <% end %>
                   <.table_head>Action</.table_head>
                 </.table_row>
@@ -408,7 +413,9 @@ defmodule CashLensWeb.BaseLive do
                 <%= for item <- @list do %>
                   <.table_row>
                     <%= for {field, type, label} <- @fields do %>
-                      <.table_cell>{get_value(item, field, @formatter)}</.table_cell>
+                      <%= if field not in @hidden_fields do %>
+                        <.table_cell>{get_value(item, field, @formatter)}</.table_cell>
+                      <% end %>
                     <% end %>
                     <.table_cell>
                       <.tooltip>
@@ -500,12 +507,15 @@ defmodule CashLensWeb.BaseLive do
           {field, options}
       end)
       |> Enum.into(%{})
+
     assigns =
       assigns
         |> assign(target: target)
         |> assign(changeset: changeset)
         |> assign(options: options)
         |> assign(formatter: formatter)
+        |> assign(required_fields: required_fields)
+        |> assign_new(:default_value, fn ->  %{} end)
     ~H"""
           <.modal id="crud_modal">
             <.simple_form
@@ -517,15 +527,28 @@ defmodule CashLensWeb.BaseLive do
               <%= for {field, type, label} <- @fields do %>
                 <%= case field do %>
                   <% _ -> %>
-                    <.input label={label} field={f[field]} type={type} options={Map.get(@options, field, [])}/>
+                    <.input
+                      label={label}
+                      field={f[field]}
+                      type={type}
+                      value={Map.get(@default_value, field, nil)}
+                      options={[{"Select the #{label}", ""} | Map.get(@options, field, [])]}
+                      required={field in @required_fields}
+                    />
                 <% end %>
               <% end %>
               <:actions>
-                <.button type="button" variant="secondary" phx-click={hide_modal("crud_modal")}>Cancel</.button>
-                <.button  phx-click={hide_modal("crud_modal")}>Save</.button>
+                <.button id="close_modal_btn" type="button" variant="secondary" phx-click={hide_modal("crud_modal")}>Cancel</.button>
+                <.button>Save</.button>
               </:actions>
             </.simple_form>
           </.modal>
+        <script>
+          window.addEventListener("phx:close_modal", () => {
+            const close_btn = document.getElementById("close_modal_btn");
+            if (close_btn) close_btn.click();
+          });
+        </script>
       """
   end
 end

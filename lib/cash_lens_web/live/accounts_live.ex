@@ -9,12 +9,17 @@ defmodule CashLensWeb.AccountsLive do
 
   def render(assigns) do
     ~H"""
-      <.crud {assigns} target={Account} formatter={
-        %{
-          parser: &Parsers.format_parser/1,
-          type: :capitalize
+      <.crud {assigns}
+        target={Account}
+        formatter={
+          %{
+            parser: &Parsers.format_parser/1,
+            type: :capitalize
+          }
         }
-      }/>
+        default_value={%{user_id: assigns.current_user.id}}
+        hidden_fields={[:user_id]}
+      />
     """
   end
 end
