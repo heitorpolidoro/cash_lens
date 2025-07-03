@@ -73,7 +73,15 @@ defmodule CashLensWeb.BaseLive do
           |> Map.values()
           |> List.first()
 
-        case call_method(target, :create, [attributes]) do
+        changeset = socket.assigns.changeset
+
+        {method, method_params} =
+          if changeset.data.id == nil do
+            {:create, [attributes]}
+          else
+            {:update, [changeset.data, attributes]}
+          end
+        case call_method(target, method, method_params) do
           {:ok, item} ->
             item_str = call_method_if_exists(target, :to_str, [item]) || target
             {:noreply,
@@ -106,6 +114,33 @@ defmodule CashLensWeb.BaseLive do
             {:noreply,
               socket |> put_flash(:error, error)}
         end
+      end
+
+      def handle_event("edit", %{"id" => id, "target" => target} = params, socket) do
+        # Get the item by ID
+        item = call_method(target, :get, [id])
+
+        # Delete the item
+#        case call_method(target, :delete, [item]) do
+#          {:ok, item} ->
+#            item_str = call_method_if_exists(target, :to_str, [item]) || target
+#            {:noreply,
+#              socket |> put_flash(:info, "#{item_str}##{id} deleted successfully")}
+#          {:error, %Ecto.Changeset{} = changeset} ->
+#            errors = format_changeset_errors(changeset)
+#            {:noreply,
+#              socket |> put_flash(:error, errors)}
+#          {:error, error} ->
+#            {:noreply,
+#              socket |> put_flash(:error, error)}
+#        end
+        {
+          :noreply,
+          socket
+            |> assign(changeset: apply(item.__struct__, :changeset, [item, %{}]))
+            |> assign(show_modal: true)
+          |> push_event("show_modal", %{})
+        }
       end
     end
   end
@@ -383,6 +418,7 @@ defmodule CashLensWeb.BaseLive do
       |> assign(module_name: module_name)
       |> assign(plural_name: plural_name)
       |> assign(formatter: formatter)
+      |> assign_new(:show_modal, fn -> false end)
       |> assign_new(:hidden_fields, fn -> [] end)
     ~H"""
     <h1 class="text-2xl font-semibold">{@plural_name}</h1>
@@ -390,7 +426,7 @@ defmodule CashLensWeb.BaseLive do
       <div class="px-4 py-5 sm:p-6">
         <div class="flex justify-between items-center">
           <h3 class="text-lg font-medium">{@plural_name} list</h3>
-            <.button phx-click={show_modal("crud_modal")}>New {@module_name}</.button>
+            <.button id="show_modal_btn" phx-click={show_modal("crud_modal")}>New {@module_name}</.button>
         </div>
 
         <.crud_modal {assigns} target={@target} formatter={@formatter} fields={@fields}/>
@@ -448,6 +484,17 @@ defmodule CashLensWeb.BaseLive do
 
       </div>
     </div>
+    <script>
+      window.addEventListener("phx:close_modal", () => {
+        const close_btn = document.getElementById("close_modal_btn");
+        if (close_btn) close_btn.click();
+      });
+      window.addEventListener("phx:show_modal", () => {
+        const show_btn = document.getElementById("show_modal_btn");
+      console.log(show_btn)
+        if (show_btn) show_btn.click();
+      });
+    </script>
     """
   end
 
@@ -471,7 +518,9 @@ defmodule CashLensWeb.BaseLive do
   """
   def crud_modal(%{"target": target, "fields": fields} = assigns) do
 
-    changeset = target.changeset(struct(target, %{}), %{})
+    formatter = Map.get(assigns, :formatter, %{})
+    changeset = assigns.changeset || target.changeset(struct(target, %{}), %{})
+    IO.inspect(changeset.data, label: "\n\n------------------")
 
     required_fields = changeset.errors
       |> Enum.filter(fn {field, error} -> elem(error, 1) == [validation: :required] end)
@@ -479,7 +528,6 @@ defmodule CashLensWeb.BaseLive do
 
     current_user_id = assigns.current_user.id
 
-    formatter = Map.get(assigns, :formatter, %{})
     options =
       fields
       |> Enum.filter(fn {field, type, label} -> type == "select" end)
@@ -517,7 +565,7 @@ defmodule CashLensWeb.BaseLive do
         |> assign(required_fields: required_fields)
         |> assign_new(:default_value, fn ->  %{} end)
     ~H"""
-          <.modal id="crud_modal">
+          <.modal id="crud_modal" show={@show_modal}>
             <.simple_form
             :let={f}
             for={@changeset}
@@ -531,7 +579,7 @@ defmodule CashLensWeb.BaseLive do
                       label={label}
                       field={f[field]}
                       type={type}
-                      value={Map.get(@default_value, field, nil)}
+                      value={Map.get(@default_value, field, f[field].value)}
                       options={[{"Select the #{label}", ""} | Map.get(@options, field, [])]}
                       required={field in @required_fields}
                     />
@@ -543,12 +591,6 @@ defmodule CashLensWeb.BaseLive do
               </:actions>
             </.simple_form>
           </.modal>
-        <script>
-          window.addEventListener("phx:close_modal", () => {
-            const close_btn = document.getElementById("close_modal_btn");
-            if (close_btn) close_btn.click();
-          });
-        </script>
       """
   end
 end

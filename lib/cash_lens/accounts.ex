@@ -10,23 +10,6 @@ defmodule CashLens.Accounts do
   alias CashLens.Parsers
   alias CashLens.Utils
 
-  def load_parser(accounts) when is_list(accounts) do
-    accounts
-    |> Enum.map(fn acc -> load_parser(acc) end)
-  end
-
-  def load_parser({:ok, account}) do
-    {:ok, load_parser(account)}
-  end
-
-  def load_parser({:error, account}) do
-    {:error, account}
-  end
-
-  def load_parser(account) do
-    %{account | parser: Parsers.get_parser_by_slug(account.parser)}
-  end
-
   @doc """
   Returns the list of accounts.
 
@@ -40,7 +23,6 @@ defmodule CashLens.Accounts do
     Account
     |> where([a], a.user_id == ^user_id)
     |> Repo.all()
-    |> load_parser()
     |> Repo.preload(:user)
   end
   @doc """
@@ -57,10 +39,10 @@ defmodule CashLens.Accounts do
       ** (Ecto.NoResultsError)
 
   """
-  def get_account!(id), do: Repo.get!(Account, id) |> load_parser()
+  def get_account!(id), do: Repo.get!(Account, id)
 
   def get_account_by_name!(name) do
-    Repo.one(from(a in Account, where: a.name == ^name)) |> load_parser()
+    Repo.one(from(a in Account, where: a.name == ^name))
   end
 
   @doc """
@@ -79,7 +61,6 @@ defmodule CashLens.Accounts do
     %Account{}
     |> Account.changeset(attrs)
     |> Repo.insert()
-    |> load_parser()
   end
 
   @doc """
@@ -98,7 +79,6 @@ defmodule CashLens.Accounts do
     account
     |> Account.changeset(attrs)
     |> Repo.update()
-    |> load_parser()
   end
 
   @doc """
