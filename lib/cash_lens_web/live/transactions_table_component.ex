@@ -11,7 +11,7 @@ defmodule CashLensWeb.TransactionsTableComponent do
   end
 
   def render(assigns) do
-    "CashLensWeb.TransactionsTableComponentHTML.transactions_table(assigns)"
+    CashLensWeb.TransactionsTableComponentHTML.transactions_table(assigns)
   end
 
   def handle_event("ignore-reason", %{"reason" => reason}, socket) do
@@ -50,13 +50,11 @@ defmodule CashLensWeb.TransactionsTableComponent do
 
     Logger.log(level, message)
 
-    transactions
-        |> Enum.filter(&(&1.reason == reason and &1.id != nil))
-        |> Transactions.delete_transaction()
-
     socket
-    |> assign(transactions: transactions
-       |> Enum.reject(&(&1.reason == reason)))
+    |> assign_async(:transactions, fn ->
+      {:ok, %{transactions: transactions.result
+        |> Enum.reject(&(&1.reason == reason))}}
+      end)
     |> put_flash(level, message)
   end
 end

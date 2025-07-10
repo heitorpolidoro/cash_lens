@@ -332,6 +332,8 @@ defmodule CashLensWeb.BaseLive do
               {"select", Utils.capitalize_from_atom(field)}
             :id ->
               {"select", Utils.capitalize_from_atom(field) |> String.replace(" Id", "")}
+              :utc_datetime ->
+              {"datetime-local", Utils.capitalize_from_atom(field)}
             _ ->
               {"text", Utils.capitalize_from_atom(field)}
           end
@@ -520,7 +522,6 @@ defmodule CashLensWeb.BaseLive do
 
     formatter = Map.get(assigns, :formatter, %{})
     changeset = assigns.changeset || target.changeset(struct(target, %{}), %{})
-    IO.inspect(changeset.data, label: "\n\n------------------")
 
     required_fields = changeset.errors
       |> Enum.filter(fn {field, error} -> elem(error, 1) == [validation: :required] end)

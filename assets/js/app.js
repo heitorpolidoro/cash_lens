@@ -33,14 +33,15 @@ const Hooks = {
         const reader = new FileReader();
         reader.onload = (e) => {
           const content = e.target.result;
+          console.log(content);
           this.pushEvent("handle-file-upload", {
             filename: file.name,
             content: content,
-            type: file.type,
-            size: file.size
+            // type: file.type,
+            // size: file.size
           });
         };
-        reader.readAsText(file);
+        reader.readAsText(file, "ISO-8859-1");
       });
     }
   }

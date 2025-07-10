@@ -52,23 +52,17 @@ defmodule CashLens.Parsers do
 
     content
     |> String.split("\n", trim: true)
-    |> Enum.take(6)
+    |> Enum.take(6) # TODO REMOVE
     |> CSV.decode!(headers: true)
     |> Enum.to_list()
-    |> Enum.map(fn row ->
-      Enum.map(row, fn {key, value} ->
-        {:unicode.characters_to_binary(key, :latin1, :utf8),
-         :unicode.characters_to_binary(value, :latin1, :utf8)}
-      end)
-      |> Enum.into(%{})
-    end)
     |> Enum.filter(fn row ->
       !Enum.member?(reasons_to_ignore, row["Histórico"])
     end)
-    |> Enum.map(fn row ->
+    |> Enum.map(fn row  ->
       date_time_regex = ~r/(\d{2}\/\d{2}) (\d{2}:\d{2})/
 
       reason = row["Histórico"]
+      if (reason == nil), do: raise "Reason cannot be nil"
 
       parsed_info =
         case Regex.run(date_time_regex, reason) do
@@ -85,7 +79,7 @@ defmodule CashLens.Parsers do
           String.replace(acc, substring, "", global: true)
         end)
         |> String.trim()
-      Process.sleep(1000)
+#      Process.sleep(1000)
 
       %Transaction{
         date_time: Timex.parse!(parsed_info.date_time, "{D}/{M}/{YYYY} {h24}:{m}"),

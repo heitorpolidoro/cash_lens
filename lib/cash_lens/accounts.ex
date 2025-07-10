@@ -113,5 +113,4 @@ defmodule CashLens.Accounts do
   def to_str(account) do
     "#{account.name} - #{account.bank_name} (#{Utils.capitalize(account.type)})"
   end
-
 end

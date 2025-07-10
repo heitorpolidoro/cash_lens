@@ -17,7 +17,7 @@
               <.table_cell><%= parser.extension %></.table_cell>
               <.table_cell class="text-right">
                 <div class="flex justify-end space-x-2">
-                  <.tooltip id="tooltip-single-default">
+                  <.tooltip id="tooltip-select-parser">
                     <.tooltip_trigger>
                       <.link phx-click="select-parser" phx-value-slug={parser.slug}  >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4">
@@ -30,7 +30,7 @@
                       <p>Upload a file to parse</p>
                     </.tooltip_content>
                   </.tooltip>
-                  <.tooltip id="tooltip-single-default">
+                  <.tooltip id="tooltip-test-parser">
                     <.tooltip_trigger>
                       <.link phx-click="select-parser" phx-value-slug={parser.slug} phx-value-test="true">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4">
