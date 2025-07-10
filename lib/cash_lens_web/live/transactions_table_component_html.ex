@@ -1,6 +1,11 @@
 defmodule CashLensWeb.TransactionsTableComponentHTML do
   use Phoenix.Component
-  import CashLensWeb.CoreComponents
+
+  import CashLensWeb.CoreComponents, except: [button: 1, icon: 1]
+
+  import SaladUI.Button
+  import SaladUI.Icon
+
 
   embed_templates "transactions_table_component_html/*"
 

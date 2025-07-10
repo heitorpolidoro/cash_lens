@@ -8,18 +8,20 @@ defmodule CashLensWeb.ParsersLive do
 
   alias CashLens.Parsers
   alias CashLens.TransactionParser
+  alias CashLens.Categories
 
   def mount(_params, session, socket) do
     {:ok,
-     socket
-     |> assign(
-       current_path: "/parsers",
-       parsers: Parsers.available_parsers(),
-       selected_parser: Parsers.get_parser_by_slug(:bb_csv),
-#       selected_parser: nil,
-       is_testing: true,
-       transactions: nil,
-     )}
+      socket
+      |> assign(
+        current_path: "/parsers",
+        parsers: Parsers.available_parsers(),
+        selected_parser: Parsers.get_parser_by_slug(:bb_csv),
+  #     selected_parser: nil,
+        categories_options: Categories.list_categories(socket.assigns.current_user.id)|> Enum.map(fn x -> {Categories.to_str(x), x.id} end),
+        is_testing: true,
+        transactions: nil,
+        )}
   end
 
   def handle_event("select-parser", %{"slug" => slug} = params, socket) do

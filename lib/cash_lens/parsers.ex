@@ -7,6 +7,7 @@ defmodule CashLens.Parsers do
   alias Timex
   alias CashLens.ReasonsToIgnore
   alias CashLens.Transactions.Transaction
+  alias CashLens.Categories
 
   @doc """
   Returns a list of available parsers.
