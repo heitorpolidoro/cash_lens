@@ -18,7 +18,7 @@ defmodule CashLensWeb.ParsersLive do
         parsers: Parsers.available_parsers(),
         selected_parser: Parsers.get_parser_by_slug(:bb_csv),
   #     selected_parser: nil,
-        categories_options: Categories.list_categories(socket.assigns.current_user.id)|> Enum.map(fn x -> {Categories.to_str(x), x.id} end),
+        categories_options: [{"New Category", "new"}] ++ (Categories.list_categories(socket.assigns.current_user.id)|> Enum.map(fn x -> {Categories.to_str(x), x.id} end)),
         is_testing: true,
         transactions: nil,
         )}

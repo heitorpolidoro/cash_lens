@@ -1,10 +1,10 @@
 <div class="overflow-x-auto max-w-full">
   <.modal
-    :if={@reason_to_confirm}
+    :if={@reason_to_ignore}
     id="confirm-ignore-modal"
     show
   >
-    <p class="mb-5">Are you sure you want to ignore the reason "<%= @reason_to_confirm %>"?</p>
+    <p class="mb-5">Are you sure you want to ignore the reason "<%= @reason_to_ignore %>"?</p>
     <div class="flex justify-end gap-3">
       <.button phx-click="cancel-ignore-reason" phx-target={@myself} class="btn-cancel" >Cancel</.button>
       <.button phx-click="confirm-ignore-reason" phx-target={@myself} class="btn-primary" >Confirm</.button>
@@ -38,7 +38,7 @@
       </tr>
       </thead>
       <tbody class="bg-white divide-y divide-gray-200">
-        <%= for transaction <- @transactions.result do %>
+        <%= for {transaction, index} <- Enum.with_index(@transactions.result) do %>
         <tr>
           <td class="px-6 py-4 whitespace-normal text-sm text-gray-500">
             <%= format_datetime(transaction) %>
@@ -50,10 +50,15 @@
             </div>
           </td>
           <td class="px-6 py-4 whitespace-normal text-sm text-gray-500">
-            <.input
-              name="category_select"
-              value={if transaction.category == nil, do: nil, else: transaction.category.id} type="select"
-              options={[{ "Select the Category", ""} | @categories_options]} />
+            <.form phx-change="category-change" phx-target={@myself} >
+              <input type="hidden" name="index" value={index} />
+              <.input
+                name="category_select"
+                value={if transaction.category_id == nil, do: nil, else: transaction.category_id} type="select"
+                options={[{ "Select the Category", ""} | @categories_options]}
+
+              />
+            </.form>
           </td>
           <td class="px-6 py-4 whitespace-normal text-sm text-gray-500"><%= transaction.amount %></td>
           <td class="px-6 py-4 whitespace-normal text-sm text-gray-500"><%= transaction.identifier %></td>
