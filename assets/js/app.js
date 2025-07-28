@@ -22,36 +22,10 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
-// Define hooks
-const Hooks = {
-  UploadFile: {
-    mounted() {
-      this.el.addEventListener("click", () => {
-        const fileInput = document.getElementById("file-input");
-        const file = fileInput.files[0];
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const content = e.target.result;
-          console.log(content);
-          this.pushEvent("handle-file-upload", {
-            filename: file.name,
-            content: content,
-            // type: file.type,
-            // size: file.size
-          });
-        };
-        reader.readAsText(file, "ISO-8859-1");
-      });
-    }
-  }
-};
-
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let liveSocket = new LiveSocket("/live", Socket, {
-    longPollFallbackMs: 2500,
-    params: {_csrf_token: csrfToken},
-    hooks: Hooks
+  longPollFallbackMs: 2500,
+  params: {_csrf_token: csrfToken}
 })
 
 // Show progress bar on live navigation and form submits
@@ -68,9 +42,3 @@ liveSocket.connect()
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket
 
-// Allows to execute JS commands from the server
-window.addEventListener("phx:js-exec", ({detail}) => {
-  document.querySelectorAll(detail.to).forEach(el => {
-    liveSocket.execJS(el, el.getAttribute(detail.attr))
-  })
-})

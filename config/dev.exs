@@ -1,20 +1,41 @@
 import Config
-
-
+# Configure your database
+config :cash_lens, CashLens.Repo,
+  username: System.get_env("POSTGRES_USER", "your-postgres-user"),
+  password: System.get_env("POSTGRES_PASSWORD", "your-postgres-password"),
+  hostname: System.get_env("POSTGRES_HOST", "localhost"),
+  database: System.get_env("POSTGRES_DB", "cash_lens"),
+  port: String.to_integer(System.get_env("POSTGRES_PORT", "5432")),
+  stacktrace: true,
+  show_sensitive_data_on_connection_error: true,
+  pool_size: 10
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
+
+# Configure the endpoint
+bind_ip = case System.get_env("PHX_BIND_IP") do
+  "0.0.0.0" -> {0, 0, 0, 0}
+  nil -> {127, 0, 0, 1}  # Default to localhost for local development
+  ip_string ->
+    # Parse custom IP if provided
+    ip_string
+    |> String.split(".")
+    |> Enum.map(&String.to_integer/1)
+    |> List.to_tuple()
+end
+
 config :cash_lens, CashLensWeb.Endpoint,
-  # Binding to all interfaces to allow access from other machines, including Docker.
-  # Use PHX_BIND_IP environment variable if set, otherwise default to 0.0.0.0
-  http: [ip: System.get_env("PHX_BIND_IP") |> (fn ip -> if ip, do: String.split(ip, ".") |> Enum.map(&String.to_integer/1) |> List.to_tuple(), else: {0, 0, 0, 0} end).(), port: String.to_integer(System.get_env("PORT") || "4000")],
+  # Binding to loopback ipv4 address prevents access from other machines.
+  # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
+  http: [ip: bind_ip, port: 4000],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "gjpi+c9d3N0oQB7ZyYORL5+TP+yhq/sUMVgzSlqMIVt/PvpAaKzIB7pKsYN3ohDg",
+  secret_key_base: "M4QnDEKsULINFkMfVJIcfxBv8PPWStOoOJqHfltjoMMwqTwvnoLBwzbRvanJgLIZ",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:cash_lens, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:cash_lens, ~w(--watch)]}
@@ -74,17 +95,3 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
-
-# Configure your database
-config :cash_lens, CashLens.Repo,
-  username: System.get_env("POSTGRES_USER", "your-postgres-user"),
-  password: System.get_env("POSTGRES_PASSWORD", "your-postgres-password"),
-  hostname: System.get_env("POSTGRES_HOST", "localhost"),
-  database: System.get_env("POSTGRES_DB", "cash_lens"),
-  port: String.to_integer(System.get_env("POSTGRES_PORT", "5432")),
-  stacktrace: true,
-  show_sensitive_data_on_connection_error: true,
-  pool_size: 10
-
-# Path to install SaladUI components
-config :salad_ui, components_path: Path.join(File.cwd!(), "lib/cash_lens_web/components")

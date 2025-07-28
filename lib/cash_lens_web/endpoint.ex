@@ -7,7 +7,7 @@ defmodule CashLensWeb.Endpoint do
   @session_options [
     store: :cookie,
     key: "_cash_lens_key",
-    signing_salt: "lZfVqJzN",
+    signing_salt: "0ytn1x5u",
     same_site: "Lax"
   ]
 
@@ -31,6 +31,7 @@ defmodule CashLensWeb.Endpoint do
     socket "/phoenix/live_reload/socket", Phoenix.LiveReloader.Socket
     plug Phoenix.LiveReloader
     plug Phoenix.CodeReloader
+    plug Phoenix.Ecto.CheckRepoStatus, otp_app: :cash_lens
   end
 
   plug Phoenix.LiveDashboard.RequestLogger,

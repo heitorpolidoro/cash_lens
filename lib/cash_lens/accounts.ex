@@ -7,8 +7,6 @@ defmodule CashLens.Accounts do
   alias CashLens.Repo
 
   alias CashLens.Accounts.Account
-  alias CashLens.Parsers
-  alias CashLens.Utils
 
   @doc """
   Returns the list of accounts.
@@ -19,12 +17,10 @@ defmodule CashLens.Accounts do
       [%Account{}, ...]
 
   """
-  def list_accounts(user_id) do
-    Account
-    |> where([a], a.user_id == ^user_id)
-    |> Repo.all()
-    |> Repo.preload(:user)
+  def list_accounts do
+    Repo.all(Account)
   end
+
   @doc """
   Gets a single account.
 
@@ -40,10 +36,6 @@ defmodule CashLens.Accounts do
 
   """
   def get_account!(id), do: Repo.get!(Account, id)
-
-  def get_account_by_name!(name) do
-    Repo.one(from(a in Account, where: a.name == ^name))
-  end
 
   @doc """
   Creates a account.
@@ -108,9 +100,5 @@ defmodule CashLens.Accounts do
   """
   def change_account(%Account{} = account, attrs \\ %{}) do
     Account.changeset(account, attrs)
-  end
-
-  def to_str(account) do
-    "#{account.name} - #{account.bank_name} (#{Utils.capitalize(account.type)})"
   end
 end

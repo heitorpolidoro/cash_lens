@@ -4,7 +4,7 @@ defmodule CashLens.MixProject do
   def project do
     [
       app: :cash_lens,
-      version: System.get_env("VERSION", "0.1.0"),
+      version: "0.1.0",
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -32,40 +32,33 @@ defmodule CashLens.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:phoenix, "~> 1.8.0-rc.3"},
+      {:phoenix, "~> 1.7.21"},
+      {:phoenix_ecto, "~> 4.5"},
+      {:ecto_sql, "~> 3.10"},
+      {:postgrex, ">= 0.0.0"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.0"},
       {:floki, ">= 0.30.0", only: :test},
-      {:phoenix_live_dashboard, "~> 0.8"},
-      {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
-      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
+      {:phoenix_live_dashboard, "~> 0.8.3"},
+      {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
+      {:tailwind, "~> 0.2.0", runtime: Mix.env() == :dev},
       {:heroicons,
-      github: "tailwindlabs/heroicons",
-      tag: "v2.1.1",
-      sparse: "optimized",
-      app: false,
-      compile: false,
-      depth: 1},
+       github: "tailwindlabs/heroicons",
+       tag: "v2.1.1",
+       sparse: "optimized",
+       app: false,
+       compile: false,
+       depth: 1},
       {:swoosh, "~> 1.5"},
       {:finch, "~> 0.13"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:gettext, "~> 0.26"},
       {:jason, "~> 1.2"},
-      {:dns_cluster, "~> 0.2"},
+      {:dns_cluster, "~> 0.1.1"},
       {:bandit, "~> 1.5"},
-      {:ueberauth, "~> 0.10.5"},
-      {:ueberauth_google, "~> 0.12"},
-      {:plug_cowboy, "~> 2.7"},
-      {:dotenv, "~> 3.1", only: [:dev, :test]},
-      {:csv, "~> 3.2"},
-      {:ecto_sql, "~> 3.10"},
-      {:phoenix_ecto, "~> 4.4"},
-      {:postgrex, ">= 0.0.0"},
-      {:timex, "~> 3.7"},
-      {:number, "~> 1.0"},
-      {:salad_ui, "~> 0.14"}
+      {:dotenv, "~> 3.1", only: [:dev, :test]}
     ]
   end
 
@@ -78,16 +71,16 @@ defmodule CashLens.MixProject do
   defp aliases do
     [
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
+      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
+      "ecto.reset": ["ecto.drop", "ecto.setup"],
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["tailwind cash_lens --minify", "esbuild cash_lens --minify"],
+      "assets.build": ["tailwind cash_lens", "esbuild cash_lens"],
       "assets.deploy": [
         "tailwind cash_lens --minify",
         "esbuild cash_lens --minify",
         "phx.digest"
-      ],
-      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
-      "ecto.reset": ["ecto.drop", "ecto.setup"],
-      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"]
+      ]
     ]
   end
 end

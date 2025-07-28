@@ -1,7 +1,13 @@
 FROM elixir:1.14-alpine
 
 # Install build dependencies
-RUN apk add --no-cache build-base npm git python3 netcat-openbsd inotify-tools
+RUN apk add --no-cache  \
+    build-base  \
+    git  \
+    inotify-tools \
+    netcat-openbsd \
+    npm  \
+    python3
 
 # Set environment variables
 ENV MIX_ENV=dev \
@@ -28,11 +34,12 @@ RUN mix local.hex --force && \
 COPY . .
 
 # Update dependencies to ensure lock file is in sync
-RUN mix deps.get
-
+RUN mix deps.get && \
 # Install and setup assets
-RUN mix assets.setup
-RUN mix assets.deploy
+  mix assets.setup && \
+  mix assets.deploy && \
+  mix esbuild.install && \
+  mix tailwind.install
 
 # Expose port
 EXPOSE 4000

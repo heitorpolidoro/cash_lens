@@ -7,26 +7,17 @@ defmodule CashLens.Application do
 
   @impl true
   def start(_type, _args) do
-    unless Mix.env == :prod do
-      # Dotenv.load
-      Mix.Task.run("loadconfig")
-    end
     children = [
       CashLensWeb.Telemetry,
-      {DNSCluster, query: Application.get_env(:cash_lens, :dns_cluster_query) || :ignore},
-      # Start the Ecto repository
       CashLens.Repo,
+      {DNSCluster, query: Application.get_env(:cash_lens, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: CashLens.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: CashLens.Finch},
-      # Start the TransactionParser GenServer
-      CashLens.TransactionParser,
       # Start a worker by calling: CashLens.Worker.start_link(arg)
       # {CashLens.Worker, arg},
       # Start to serve requests, typically the last entry
-      CashLensWeb.Endpoint,
-      # SaladUI
-      TwMerge.Cache
+      CashLensWeb.Endpoint
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
