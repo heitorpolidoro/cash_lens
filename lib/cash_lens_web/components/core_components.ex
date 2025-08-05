@@ -90,6 +90,38 @@ defmodule CashLensWeb.CoreComponents do
   end
 
   @doc """
+  Renders a confirm modal.
+  """
+  attr :id, :string, required: true
+  attr :show, :boolean, default: false
+  attr :on_cancel, JS, default: %JS{}
+  attr :on_confirm, :string, required: true
+  attr :method, :string, default: "post"
+  slot :cancel, required: false
+  slot :confirm, required: false
+  slot :inner_block, required: true
+
+  def confirm_modal(assigns) do
+    ~H"""
+    <.modal id={@id}>
+      <div class="text-left">
+        {render_slot(@inner_block)}
+      </div>
+      <div class="flex items-center justify-between py-3 text-sm">
+        <%= if Enum.any?(@cancel) do %>
+          <.button variant="secondary" phx-click={hide_modal(@id)}>{render_slot(@cancel)}</.button>
+        <% end %>
+        <%= if Enum.any?(@confirm) do %>
+          <.link href={@on_confirm} method={@method}>
+            <.button variant="primary">{render_slot(@confirm)}</.button>
+          </.link>
+        <% end %>
+      </div>
+    </.modal>
+    """
+  end
+
+  @doc """
   Renders flash notices.
 
   ## Examples
@@ -222,27 +254,38 @@ defmodule CashLensWeb.CoreComponents do
       <.button>Send!</.button>
       <.button phx-click="go" class="ml-2">Send!</.button>
   """
-  attr :type, :string, default: nil
-  attr :class, :string, default: nil
-  attr :rest, :global, include: ~w(disabled form name value)
-
+  attr :variant, :string, default: "primary"
+  attr :class, :string, default: ""
+  attr :disabled, :boolean, default: false
+  attr :type, :string, default: "button"
+  attr :rest, :global
   slot :inner_block, required: true
 
   def button(assigns) do
+    assigns = assign(assigns, :variant_class, button_class(assigns.variant))
+
     ~H"""
     <button
       type={@type}
-      class={[
-        "phx-submit-loading:opacity-75 rounded-lg bg-zinc-900 hover:bg-zinc-700 py-2 px-3",
-        "text-sm font-semibold leading-6 text-white active:text-white/80",
-        @class
-      ]}
+      class={[@variant_class, @class]}
+      disabled={@disabled}
       {@rest}
     >
-      {render_slot(@inner_block)}
+      <%= render_slot(@inner_block) %>
     </button>
     """
   end
+
+  defp button_class("primary"), do: "bg-black hover:bg-black text-white font-semibold py-2 px-4 rounded"
+  defp button_class("secondary"), do: "bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded"
+  defp button_class("danger"), do: "bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
+  defp button_class("success"), do: "bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded"
+  defp button_class("outline"), do: "border border-gray-400 text-gray-800 py-2 px-4 rounded hover:bg-gray-100"
+  defp button_class("ghost"), do: "bg-transparent text-gray-800 py-2 px-4 hover:bg-gray-100"
+  defp button_class("link"), do: "text-black underline hover:text-black"
+  defp button_class("disabled"), do: "bg-gray-300 text-gray-500 cursor-not-allowed py-2 px-4 rounded"
+  defp button_class(_), do: "bg-black text-white py-2 px-4 rounded" # fallback
+
 
   @doc """
   Renders an input with label and error messages.

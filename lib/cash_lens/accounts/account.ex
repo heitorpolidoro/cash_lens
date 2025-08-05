@@ -2,27 +2,25 @@ defmodule CashLens.Accounts.Account do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias CashLens.Parsers
-  alias CashLens.Utils
-
-  @available_types ["Checking", "Credit Card", "Investment"]
-
-  def available_types(), do: @available_types
+  @valid_types [:checking, :credit_card, :investment, :savings]
 
   schema "accounts" do
-    field(:name, :string)
-    field(:bank_name, :string)
-    field(:type, Ecto.Enum, values: Utils.to_atoms(@available_types))
-    field(:parser, Ecto.Enum, values: Parsers.available_parsers_slugs())
-    belongs_to(:user, CashLens.Users.User)
+    field :name, :string
+    field :type, :string
+    field :bank_name, :string
 
-    timestamps()
+    timestamps(type: :utc_datetime)
   end
 
   @doc false
   def changeset(account, attrs) do
     account
-    |> cast(attrs, [:name, :bank_name, :type, :parser, :user_id])
-    |> validate_required([:name, :bank_name, :type, :parser, :user_id])
+    |> cast(attrs, [:name, :bank_name, :type])
+    |> validate_required([:name, :bank_name, :type])
+    |> validate_inclusion(:type, Enum.map(@valid_types, &to_string/1), message: "must be one of: #{inspect(@valid_types)}")
+  end
+
+  def valid_types() do
+    @valid_types
   end
 end

@@ -44,7 +44,7 @@ defmodule CashLensWeb.AccountController do
       {:ok, account} ->
         conn
         |> put_flash(:info, "Account updated successfully.")
-        |> redirect(to: ~p"/accounts/#{account}")
+        |> redirect(to: ~p"/accounts")
 
       {:error, %Ecto.Changeset{} = changeset} ->
         render(conn, :edit, account: account, changeset: changeset)
