@@ -10,6 +10,6 @@ defmodule CashLens.Repo.Migrations.CreateAccounts do
       timestamps(type: :utc_datetime)
     end
 
-    create index(:accounts, [:user_id])
+    create index(:accounts, [:name, :bank_name])
   end
 end
