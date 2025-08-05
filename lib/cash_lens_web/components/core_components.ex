@@ -97,8 +97,8 @@ defmodule CashLensWeb.CoreComponents do
   attr :on_cancel, JS, default: %JS{}
   attr :on_confirm, :string, required: true
   attr :method, :string, default: "post"
-  slot :cancel, required: false
-  slot :confirm, required: false
+  attr :confirm, :string, required: false, default: "Yes"
+  attr :cancel, :string, required: false, default: "No"
   slot :inner_block, required: true
 
   def confirm_modal(assigns) do
@@ -108,14 +108,10 @@ defmodule CashLensWeb.CoreComponents do
         {render_slot(@inner_block)}
       </div>
       <div class="flex items-center justify-between py-3 text-sm">
-        <%= if Enum.any?(@cancel) do %>
-          <.button variant="secondary" phx-click={hide_modal(@id)}>{render_slot(@cancel)}</.button>
-        <% end %>
-        <%= if Enum.any?(@confirm) do %>
-          <.link href={@on_confirm} method={@method}>
-            <.button variant="primary">{render_slot(@confirm)}</.button>
-          </.link>
-        <% end %>
+        <.button variant="secondary" phx-click={hide_modal(@id)}>{@cancel}</.button>
+        <.link href={@on_confirm} method={@method}>
+          <.button variant="primary">{@confirm}</.button>
+        </.link>
       </div>
     </.modal>
     """
