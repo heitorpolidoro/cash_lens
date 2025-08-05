@@ -12,6 +12,7 @@
 
 <.list>
   <:item title="Name">{@category.name}</:item>
+  <:item title="Fixed">{if @category.fixed, do: "Yes", else: "No"}</:item>
 </.list>
 
 <.back navigate={~p"/categories"}>Back to categories</.back>

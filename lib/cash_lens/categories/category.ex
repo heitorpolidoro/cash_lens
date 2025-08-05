@@ -4,6 +4,7 @@ defmodule CashLens.Categories.Category do
 
   schema "categories" do
     field :name, :string
+    field :fixed, :boolean, default: false
 
     timestamps(type: :utc_datetime)
   end
@@ -11,7 +12,7 @@ defmodule CashLens.Categories.Category do
   @doc false
   def changeset(category, attrs) do
     category
-    |> cast(attrs, [:name])
+    |> cast(attrs, [:name, :fixed])
     |> validate_required([:name])
     |> unique_constraint(:name)
   end

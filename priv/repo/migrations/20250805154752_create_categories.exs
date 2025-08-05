@@ -4,6 +4,7 @@ defmodule CashLens.Repo.Migrations.CreateCategories do
   def change do
     create table(:categories) do
       add :name, :string
+      add :fixed, :boolean, default: false, null: false
 
       timestamps(type: :utc_datetime)
     end
