@@ -1,0 +1,17 @@
+<.header>
+  Category
+  <:actions>
+    <.link href={~p"/categories/#{@category}/edit"}>
+      <.button>Edit category</.button>
+    </.link>
+    <.link href={~p"/categories/#{@category}"} method="delete" data-confirm="Are you sure?">
+      <.button>Delete category</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Name">{@category.name}</:item>
+</.list>
+
+<.back navigate={~p"/categories"}>Back to categories</.back>

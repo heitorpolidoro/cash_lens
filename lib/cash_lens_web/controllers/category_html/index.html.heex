@@ -1,0 +1,40 @@
+<.header>
+  Listing Categories
+  <:actions>
+    <.link href={~p"/categories/new"}>
+      <.button>New Category</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table id="categories" rows={@categories} row_click={&JS.navigate(~p"/categories/#{&1}")}>
+  <:col :let={category} label="Name">{category.name}</:col>
+  <:action :let={category}>
+    <div class="sr-only">
+      <.link navigate={~p"/categories/#{category}"}>Show</.link>
+    </div>
+    <.link navigate={~p"/categories/#{category}/edit"}>Edit</.link>
+  </:action>
+  <:action :let={category}>
+    <.link phx-click={show_modal("confirm-modal-#{category.id}")}>
+      Delete
+    </.link>
+    <.confirm_modal id={"confirm-modal-#{category.id}"} on_confirm={~p"/categories/#{category.id}"} method="delete">
+      Are you sure you want to delete this category?
+      <:confirm>Yes, delete</:confirm>
+      <:cancel>No, cancel</:cancel>
+    </.confirm_modal>
+  </:action>
+</.table>
+<script>
+    window.addEventListener("my:click", e => {
+        eval(e.detail.cmd)
+        e.target.click()
+    })
+    function deletePost(id) {
+        fetch(`/categories/${id}`, {
+            method: "DELETE",
+            headers: {"x-csrf-token": document.querySelector("meta[name='csrf-token']").content}
+        });
+    }
+</script>
