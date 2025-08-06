@@ -1,0 +1,31 @@
+<.header>
+  Transactions
+  <:actions>
+    <.link href={~p"/transactions/new"}>
+      <.button>New Transaction</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table id="transactions" rows={@transactions} row_click={&JS.navigate(~p"/transactions/#{&1}")}>
+  <:col :let={transaction} label="Date">{Calendar.strftime(transaction.datetime, "%Y-%m-%d %H:%M")}</:col>
+  <:col :let={transaction} label="Account">{transaction.account.name}</:col>
+  <:col :let={transaction} label="Value" class="text-right">{transaction.value}</:col>
+  <:col :let={transaction} label="Reason">{transaction.reason || "-"}</:col>
+  <:col :let={transaction} label="Category">{if transaction.category, do: transaction.category.name, else: "-"}</:col>
+
+  <:action :let={transaction}>
+    <div class="sr-only">
+      <.link navigate={~p"/transactions/#{transaction}"}>Show</.link>
+    </div>
+    <.link navigate={~p"/transactions/#{transaction}/edit"}>Edit</.link>
+  </:action>
+  <:action :let={transaction}>
+    <.link phx-click={show_modal("confirm-modal-#{transaction.id}")}>
+      Delete
+    </.link>
+    <.confirm_modal id={"confirm-modal-#{transaction.id}"} on_confirm={~p"/transactions/#{transaction.id}"} method="delete">
+      Are you sure you want to delete this transaction?
+    </.confirm_modal>
+  </:action>
+</.table>

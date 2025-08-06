@@ -5,7 +5,7 @@ config :cash_lens, CashLens.Repo,
   password: System.get_env("POSTGRES_PASSWORD", "your-postgres-password"),
   hostname: System.get_env("POSTGRES_HOST", "localhost"),
   database: System.get_env("POSTGRES_DB", "cash_lens"),
-  port: String.to_integer(System.get_env("POSTGRES_PORT", "5432")),
+  port: String.to_integer(System.get_env("POSTGRES_PORT", "5454")),
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

@@ -20,6 +20,7 @@ defmodule CashLensWeb.Router do
     get "/", PageController, :home
     resources "/accounts", AccountController
     resources "/categories", CategoryController
+    resources "/transactions", TransactionController
   end
 
   # Other scopes may use custom stacks.
