@@ -21,6 +21,8 @@ defmodule CashLensWeb.Router do
     resources "/accounts", AccountController
     resources "/categories", CategoryController
     resources "/transactions", TransactionController
+
+    live "/parse-statement", ParseStatementLive, :index
   end
 
   # Other scopes may use custom stacks.
