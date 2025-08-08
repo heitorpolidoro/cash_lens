@@ -7,6 +7,7 @@
   <.input field={f[:value]} type="number" step="0.01" label="Value" />
   <.input field={f[:reason]} type="text" label="Reason" />
   <.input field={f[:category_id]} type="select" options={[{"-- Select Category --", ""}] ++ @categories} label="Category" />
+  <.input field={f[:refundable]} type="checkbox" label="Refundable" />
   <:actions>
     <.button type="submit">Save Transaction</.button>
   </:actions>

@@ -10,5 +10,8 @@ defmodule CashLensWeb.Layouts do
   """
   use CashLensWeb, :html
 
+  # Import the sidebar component
+  import CashLensWeb.SidebarComponent
+
   embed_templates "layouts/*"
 end
