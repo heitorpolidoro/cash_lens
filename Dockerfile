@@ -1,4 +1,4 @@
-FROM elixir:1.14-alpine
+FROM elixir:1.18-alpine
 
 # Install build dependencies
 RUN apk add --no-cache  \
@@ -34,8 +34,8 @@ RUN mix local.hex --force && \
 COPY . .
 
 # Update dependencies to ensure lock file is in sync
-RUN mix deps.get && \
 # Install and setup assets
+RUN mix deps.get && \
   mix assets.setup && \
   mix assets.deploy && \
   mix esbuild.install && \
