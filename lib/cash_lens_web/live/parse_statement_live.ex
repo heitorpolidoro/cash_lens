@@ -124,79 +124,86 @@ defmodule CashLensWeb.ParseStatementLive do
           <% end %>
         </div>
       </div>
-      <%= if @transactions do %>
-    <.table id="transactions" rows={@transactions}>
-    <:col :let={transaction} label="Date">{Calendar.strftime(transaction.datetime, "%Y-%m-%d %H:%M")}</:col>
-    <:col :let={transaction} label="Account">{transaction.account && transaction.account.name || "-"}</:col>
-    <:col :let={transaction} label="Value" class="text-right">{transaction.value}</:col>
-    <:col :let={transaction} label="Reason">{transaction.reason || "-"}</:col>
-    <:col :let={transaction} label="Category">{if transaction.category, do: transaction.category.name, else: "-"}</:col>
-    <:col :let={transaction} label="Refundable">{if transaction.refundable, do: "Yes", else: "No"}</:col>
+      <.transactions_table transactions={@transactions} />
 
-    <:action :let={transaction}>
-      <%= if transaction.id do %>
-        <div class="sr-only">
-          <.link navigate={~p"/transactions/#{transaction}"}>Show</.link>
-        </div>
-        <.link navigate={~p"/transactions/#{transaction}/edit"}>Edit</.link>
-      <% else %>
-        <span class="text-gray-400">Edit</span>
-      <% end %>
-    </:action>
-    <:action :let={transaction}>
-      <%= if transaction.id do %>
-        <.link phx-click={show_modal("confirm-modal-#{transaction.id}")}>
-          Delete
-        </.link>
-        <.confirm_modal id={"confirm-modal-#{transaction.id}"} on_confirm={~p"/transactions/#{transaction.id}"} method="delete">
-          Are you sure you want to delete this transaction?
-        </.confirm_modal>
-      <% else %>
-        <span class="text-gray-400">Delete</span>
-      <% end %>
-    </:action>
-    </.table>      <% end %>
-
-      <%= if @show_parser_modal do %>
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-          <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-medium text-gray-900">Select Parser</h3>
-              <button phx-click="close_modal" class="text-gray-400 hover:text-gray-500">
-                <span class="sr-only">Close</span>
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <p class="mb-4 text-sm text-gray-500">
-              Select a parser for <%= @selected_statement && @selected_statement.filename %>
-            </p>
-
-            <div class="space-y-2">
-              <%= for parser <- @parsers do %>
-                <button
-                  phx-click="parse_file"
-                  phx-value-parser={parser.module}
-                  class="w-full text-left px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  <%= parser.name %>
-                </button>
-              <% end %>
-            </div>
-          </div>
-        </div>
-      <% end %>
+      <.parser_modal
+        show_parser_modal={@show_parser_modal}
+        selected_statement={@selected_statement}
+        parsers={@parsers}
+      />
     </div>
     """
   end
 
+  def parser_modal(assigns) do
+    ~H"""
+    <%= if @show_parser_modal do %>
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900">Select Parser</h3>
+            <button phx-click="close_modal" class="text-gray-400 hover:text-gray-500">
+              <span class="sr-only">Close</span>
+              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <p class="mb-4 text-sm text-gray-500">
+            Select a parser for <%= @selected_statement && @selected_statement.filename %>
+          </p>
+
+          <div class="space-y-2">
+            <%= for parser <- @parsers do %>
+              <button
+                phx-click="parse_file"
+                phx-value-parser={parser.module}
+                class="w-full text-left px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                <%= parser.name %>
+              </button>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% end %>
+    """
+  end
+
+  def transactions_table(assigns) do
+    ~H"""
+    <%= if @transactions do %>
+      <div class="bg-white shadow rounded-lg p-6">
+        <.table id="transactions" rows={@transactions}>
+          <:col :let={transaction} label="Date">{Calendar.strftime(transaction.datetime, "%Y-%m-%d %H:%M")}</:col>
+          <:col :let={transaction} label="Account">{transaction.account && transaction.account.name || "-"}</:col>
+          <:col :let={transaction} label="Value" class="text-right">
+            <span class={cond do
+                transaction.value > 0 -> "text-blue-600"
+                transaction.value < 0 -> "text-red-600"
+                true -> ""
+              end}>
+              {format_currency(transaction.value)}
+            </span>
+          </:col>
+          <:col :let={transaction} label="Reason">{transaction.reason || "-"}</:col>
+          <:col :let={transaction} label="Category">{if transaction.category, do: transaction.category.name, else: "-"}</:col>
+          <:col :let={transaction} label="Refundable">{if transaction.refundable, do: "Yes", else: "No"}</:col>
+        </.table>
+      </div>
+    <% end %>
+    """
+  end
   defp format_size(size) when size < 1024, do: "#{size} B"
   defp format_size(size) when size < 1024 * 1024, do: "#{Float.round(size / 1024, 2)} KB"
   defp format_size(size), do: "#{Float.round(size / (1024 * 1024), 2)} MB"
 
   defp format_date(datetime) do
     Calendar.strftime(datetime, "%Y-%m-%d %H:%M")
+  end
+
+  defp format_currency(value) do
+    "R$ #{:erlang.float_to_binary(abs(value), [decimals: 2])}"
   end
 end

@@ -28,7 +28,7 @@ defmodule CashLens.Parsers.BBCSVParser do
       %Transaction{
         datetime: utc_date,
         reason: reason,
-        value: value,
+        value: String.to_float(value),
         account: nil,
         category: nil
       }
