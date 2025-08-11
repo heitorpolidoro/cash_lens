@@ -111,7 +111,7 @@ defmodule CashLensWeb.ParseStatementLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto py-8 px-4 sm:px-6 lg:px-8">
       <h1 class="text-2xl font-semibold text-zinc-900 mb-6">Parse Statement</h1>
 
       <div class="bg-white shadow rounded-lg p-6">
@@ -279,10 +279,10 @@ defmodule CashLensWeb.ParseStatementLive do
       <div class="bg-white shadow rounded-lg p-6">
         <.table id="transactions" rows={@transactions}>
           <:col :let={transaction} label="Date">
-            {Calendar.strftime(transaction.datetime, "%d/%m/%Y\u00A0%H:%M")}
+            {Calendar.strftime(transaction.datetime, "%d/%m/%Y %H:%M")}
           </:col>
           <:col :let={transaction} label="Account">
-            {(transaction.account && "#{transaction.account.bank_name}\n#{transaction.account.name}") || "-"}
+            {(transaction.account && Accounts.to_str(transaction.account)) || "-"}
           </:col>
           <:col :let={transaction} label="Value" class="text-right">
             <span class={
