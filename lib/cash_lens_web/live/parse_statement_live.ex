@@ -277,12 +277,12 @@ defmodule CashLensWeb.ParseStatementLive do
     ~H"""
     <%= if @transactions do %>
       <div class="bg-white shadow rounded-lg p-6">
-        <.table id="transactions" rows={@transactions} class="w-auto">
-          <:col :let={transaction} label="Date" class="w-auto">
-            {Calendar.strftime(transaction.datetime, "%Y-%m-%d %H:%M")}
+        <.table id="transactions" rows={@transactions}>
+          <:col :let={transaction} label="Date">
+            {Calendar.strftime(transaction.datetime, "%d/%m/%Y\u00A0%H:%M")}
           </:col>
           <:col :let={transaction} label="Account">
-            {(transaction.account && Accounts.to_str(transaction.account)) || "-"}
+            {(transaction.account && "#{transaction.account.bank_name}\n#{transaction.account.name}") || "-"}
           </:col>
           <:col :let={transaction} label="Value" class="text-right">
             <span class={
@@ -317,6 +317,6 @@ defmodule CashLensWeb.ParseStatementLive do
   end
 
   defp format_currency(value) do
-    "R$ #{:erlang.float_to_binary(abs(value), decimals: 2)}"
+    "R$\u00A0#{:erlang.float_to_binary(abs(value), decimals: 2)}"
   end
 end
