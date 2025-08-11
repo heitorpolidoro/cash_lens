@@ -107,29 +107,30 @@ defmodule CashLensWeb.ParseStatementLive do
   end
 
   @impl true
-  def handle_event("select_category", %{"value" => "new", "index" => index}, socket) do
-    # Show the new category modal
-    {:noreply,
-     assign(socket,
-       show_new_category_modal: true,
-       new_category_transaction_index: String.to_integer(index),
-       new_category_name: ""
-     )}
-  end
+  def handle_event("select_category", %{"category_select" => value}, socket) do
+    # Parse the value to get category_id and index
+    [category_id, index_str] = String.split(value, ":")
+    index = String.to_integer(index_str)
 
-  @impl true
-  def handle_event("select_category", %{"value" => category_id, "index" => index}, socket) do
-    # Update the transaction with the selected category
-    index = String.to_integer(index)
-    category = Enum.find(socket.assigns.categories, &(&1.id == String.to_integer(category_id)))
+    case category_id do
+      "new" ->
+        # Show the new category modal
+        {:noreply,
+         assign(socket,
+           show_new_category_modal: true,
+           new_category_transaction_index: index,
+           new_category_name: ""
+         )}
 
-    updated_transactions =
-      socket.assigns.transactions
-      |> List.update_at(index, fn transaction ->
-        %{transaction | category: category}
-      end)
+      _ ->
+        updated_transactions =
+          socket.assigns.transactions
+          |> List.update_at(index, fn transaction ->
+            %{transaction | category_id: category_id}
+          end)
 
-    {:noreply, assign(socket, transactions: updated_transactions)}
+        {:noreply, assign(socket, transactions: updated_transactions)}
+    end
   end
 
   @impl true
@@ -138,9 +139,9 @@ defmodule CashLensWeb.ParseStatementLive do
   end
 
   @impl true
-  def handle_event("create_category", %{"category_name" => name}, socket) do
+  def handle_event("create_category", %{"category_name" => name, "category_fixed" => fixed}, socket) do
     # Create a new category
-    case Categories.create_category(%{name: name}) do
+    case Categories.create_category(%{name: name, fixed: fixed}) do
       {:ok, category} ->
         # Update the transaction with the new category
         index = socket.assigns.new_category_transaction_index
@@ -374,22 +375,11 @@ defmodule CashLensWeb.ParseStatementLive do
           <form phx-submit="create_category">
             <div class="mb-4">
               <label for="category_name" class="block text-sm font-medium text-gray-700">Category Name</label>
-              <input
-                type="text"
-                name="category_name"
-                id="category_name"
-                value={@new_category_name}
-                phx-keyup="update_new_category_name"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                placeholder="Enter category name"
-                required
-              />
+              <.input name="category_name" value={nil} type="text" label="Name" />
+              <.input name="category_fixed" value={false} type="checkbox" label="Fixed" />
             </div>
             <div class="flex justify-end">
-              <button
-                type="submit"
-                class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-              >
+              <button type="submit">
                 Create
               </button>
             </div>
@@ -426,19 +416,21 @@ defmodule CashLensWeb.ParseStatementLive do
           </:col>
           <:col :let={{transaction, _index}} label="Reason" >{transaction.reason || "-"}</:col>
           <:col :let={{transaction, index}} label="Category" >
+          <form>
             <select
+              name="category_select"
               phx-change="select_category"
-              phx-value-index={index}
               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
             >
               <option value="" disabled selected={is_nil(transaction.category)}>-- Select Category --</option>
               <%= for category <- @categories do %>
-                <option value={category.id} selected={transaction.category && transaction.category.id == category.id}>
+                <option value={"#{category.id}:#{index}"} selected={transaction.category && transaction.category.id == category.id}>
                   {category.name}
                 </option>
               <% end %>
-              <option value="new">+ Create New Category</option>
+              <option value={"new:#{index}"}>+ Create New Category</option>
             </select>
+            </form>
           </:col>
           <:col :let={{transaction, _index}} label="Refundable" >
             {if transaction.refundable, do: "Yes", else: "No"}
