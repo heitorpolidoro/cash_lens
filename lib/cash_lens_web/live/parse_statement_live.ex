@@ -3,23 +3,29 @@ defmodule CashLensWeb.ParseStatementLive do
 
   alias CashLens.Parsers
   alias CashLens.Accounts
+  alias CashLens.Categories
 
   @impl true
   def mount(_params, _session, socket) do
     statements = list_statement_files()
     parsers = Parsers.list_parsers()
     accounts = Accounts.list_accounts()
+    categories = Categories.list_categories()
 
     {:ok,
      assign(socket,
        statements: statements,
        parsers: parsers,
        accounts: accounts,
+       categories: categories,
        show_parser_modal: false,
        show_account_modal: false,
+       show_new_category_modal: false,
        selected_statement: nil,
        selected_parser: nil,
        selected_account: nil,
+       new_category_name: nil,
+       new_category_transaction_index: nil,
        transactions: nil
      )}
   end
@@ -42,13 +48,17 @@ defmodule CashLensWeb.ParseStatementLive do
 
   @impl true
   def handle_event("close_modals", _, socket) do
-    {:noreply, assign(socket, show_parser_modal: false, show_account_modal: false)}
+    {:noreply, assign(socket,
+      show_parser_modal: false,
+      show_account_modal: false,
+      show_new_category_modal: false
+    )}
   end
 
   @impl true
   def handle_event("select_parser", %{"parser" => parser_module}, socket) do
     # Find the parser module
-    parser = Enum.find(socket.assigns.parsers, &(&1.module == parser_module))
+    _parser = Enum.find(socket.assigns.parsers, &(&1.module == parser_module))
     parser_module = String.to_existing_atom(parser_module)
 
     {:noreply,
@@ -74,7 +84,7 @@ defmodule CashLensWeb.ParseStatementLive do
   end
 
   @impl true
-  def handle_event("parse_file", params, socket) do
+  def handle_event("parse_file", _params, socket) do
     statement = socket.assigns.selected_statement
     parser_module = socket.assigns.selected_parser
     selected_account = socket.assigns.selected_account
@@ -94,6 +104,70 @@ defmodule CashLensWeb.ParseStatementLive do
        show_parser_modal: false,
        transactions: transactions
      )}
+  end
+
+  @impl true
+  def handle_event("select_category", %{"value" => "new", "index" => index}, socket) do
+    # Show the new category modal
+    {:noreply,
+     assign(socket,
+       show_new_category_modal: true,
+       new_category_transaction_index: String.to_integer(index),
+       new_category_name: ""
+     )}
+  end
+
+  @impl true
+  def handle_event("select_category", %{"value" => category_id, "index" => index}, socket) do
+    # Update the transaction with the selected category
+    index = String.to_integer(index)
+    category = Enum.find(socket.assigns.categories, &(&1.id == String.to_integer(category_id)))
+
+    updated_transactions =
+      socket.assigns.transactions
+      |> List.update_at(index, fn transaction ->
+        %{transaction | category: category}
+      end)
+
+    {:noreply, assign(socket, transactions: updated_transactions)}
+  end
+
+  @impl true
+  def handle_event("update_new_category_name", %{"value" => name}, socket) do
+    {:noreply, assign(socket, new_category_name: name)}
+  end
+
+  @impl true
+  def handle_event("create_category", %{"category_name" => name}, socket) do
+    # Create a new category
+    case Categories.create_category(%{name: name}) do
+      {:ok, category} ->
+        # Update the transaction with the new category
+        index = socket.assigns.new_category_transaction_index
+
+        updated_transactions =
+          socket.assigns.transactions
+          |> List.update_at(index, fn transaction ->
+            %{transaction | category: category}
+          end)
+
+        # Update the categories list
+        updated_categories = [category | socket.assigns.categories]
+
+        {:noreply,
+         assign(socket,
+           transactions: updated_transactions,
+           categories: updated_categories,
+           show_new_category_modal: false
+         )}
+
+      {:error, _changeset} ->
+        # Show an error message
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to create category. Name may already be taken.")
+         |> assign(show_new_category_modal: false)}
+    end
   end
 
   defp list_statement_files do
@@ -175,7 +249,7 @@ defmodule CashLensWeb.ParseStatementLive do
           <% end %>
         </div>
       </div>
-      <.transactions_table transactions={@transactions} />
+      <.transactions_table transactions={@transactions} categories={@categories} />
 
       <.parser_modal
         show_parser_modal={@show_parser_modal}
@@ -186,6 +260,10 @@ defmodule CashLensWeb.ParseStatementLive do
         show_account_modal={@show_account_modal}
         selected_statement={@selected_statement}
         accounts={@accounts}
+      />
+      <.new_category_modal
+        show_new_category_modal={@show_new_category_modal}
+        new_category_name={@new_category_name}
       />
     </div>
     """
@@ -273,33 +351,96 @@ defmodule CashLensWeb.ParseStatementLive do
     """
   end
 
+  def new_category_modal(assigns) do
+    ~H"""
+    <%= if @show_new_category_modal do %>
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900">Create New Category</h3>
+            <button phx-click="close_modals" class="text-gray-400 hover:text-gray-500">
+              <span class="sr-only">Close</span>
+              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <form phx-submit="create_category">
+            <div class="mb-4">
+              <label for="category_name" class="block text-sm font-medium text-gray-700">Category Name</label>
+              <input
+                type="text"
+                name="category_name"
+                id="category_name"
+                value={@new_category_name}
+                phx-keyup="update_new_category_name"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                placeholder="Enter category name"
+                required
+              />
+            </div>
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                Create
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    <% end %>
+    """
+  end
+
   def transactions_table(assigns) do
     ~H"""
     <%= if @transactions do %>
       <div class="bg-white shadow rounded-lg p-6">
-        <.table id="transactions" rows={@transactions}>
-          <:col :let={transaction} label="Date">
+        <.table id="transactions" rows={Enum.with_index(@transactions)}>
+          <:col :let={{transaction, _index}} label="Date">
             {Calendar.strftime(transaction.datetime, "%d/%m/%Y %H:%M")}
           </:col>
-          <:col :let={transaction} label="Account">
+          <:col :let={{transaction, _index}} label="Account">
             {(transaction.account && Accounts.to_str(transaction.account)) || "-"}
           </:col>
-          <:col :let={transaction} label="Value" class="text-right">
-            <span class={
-              cond do
-                transaction.value > 0 -> "text-blue-600"
-                transaction.value < 0 -> "text-red-600"
-                true -> ""
-              end
-            }>
-              {format_currency(transaction.value)}
-            </span>
+          <:col :let={{transaction, _index}} label="Value">
+            <div class="text-right">
+              <span class={
+                cond do
+                  transaction.value > 0 -> "text-blue-600"
+                  transaction.value < 0 -> "text-red-600"
+                  true -> ""
+                end
+              }>
+                {format_currency(transaction.value)}
+              </span>
+            </div>
           </:col>
-          <:col :let={transaction} label="Reason" >{transaction.reason || "-"}</:col>
-          <:col :let={transaction} label="Category" >
-            {if transaction.category, do: transaction.category.name, else: "-"}
+          <:col :let={{transaction, _index}} label="Reason" >{transaction.reason || "-"}</:col>
+          <:col :let={{transaction, index}} label="Category" >
+            <select
+              phx-change="select_category"
+              phx-value-index={index}
+              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="" disabled selected={is_nil(transaction.category)}>-- Select Category --</option>
+              <%= for category <- @categories do %>
+                <option value={category.id} selected={transaction.category && transaction.category.id == category.id}>
+                  {category.name}
+                </option>
+              <% end %>
+              <option value="new">+ Create New Category</option>
+            </select>
           </:col>
-          <:col :let={transaction} label="Refundable" >
+          <:col :let={{transaction, _index}} label="Refundable" >
             {if transaction.refundable, do: "Yes", else: "No"}
           </:col>
         </.table>
