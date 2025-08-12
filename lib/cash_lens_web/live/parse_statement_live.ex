@@ -107,10 +107,10 @@ defmodule CashLensWeb.ParseStatementLive do
   end
 
   @impl true
-  def handle_event("select_category", %{"category_select" => value}, socket) do
+  def handle_event("select_category", %{"category_select" => category_str, "index" => index_str}, socket) do
     # Parse the value to get category_id and index
-    [category_id, index_str] = String.split(value, ":")
     index = String.to_integer(index_str)
+    category_id = String.to_integer(category_str)
 
     case category_id do
       "new" ->
@@ -169,6 +169,18 @@ defmodule CashLensWeb.ParseStatementLive do
          |> put_flash(:error, "Failed to create category. Name may already be taken.")
          |> assign(show_new_category_modal: false)}
     end
+  end
+
+  @impl true
+  def handle_event("toggle_refundable", %{"refundable_checkbox" => refundable, "index" => index_str}, socket) do
+    index = String.to_integer(index_str)
+    updated_transactions =
+      socket.assigns.transactions
+      |> List.update_at(index, fn transaction ->
+        %{transaction | refundable: refundable == "true"}
+      end) |> IO.inspect()
+
+    {:noreply, assign(socket, transactions: updated_transactions)}
   end
 
   defp list_statement_files do
@@ -416,24 +428,30 @@ defmodule CashLensWeb.ParseStatementLive do
           </:col>
           <:col :let={{transaction, _index}} label="Reason" >{transaction.reason || "-"}</:col>
           <:col :let={{transaction, index}} label="Category" >
-          <form>
-            <select
-              name="category_select"
-              phx-change="select_category"
-              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            >
-              <option value="" disabled selected={is_nil(transaction.category)}>-- Select Category --</option>
-              <%= for category <- @categories do %>
-                <option value={"#{category.id}:#{index}"} selected={transaction.category && transaction.category.id == category.id}>
-                  {category.name}
-                </option>
-              <% end %>
-              <option value={"new:#{index}"}>+ Create New Category</option>
-            </select>
+            <form phx-value-index={index}>
+              <select
+                name="category_select"
+                phx-change="select_category"
+                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >
+                <option value="" disabled selected={is_nil(transaction.category)}>-- Select Category --</option>
+                <%= for category <- @categories do %>
+                  <option value={category.id} selected={transaction.category && transaction.category.id == category.id}>
+                    {category.name}
+                  </option>
+                <% end %>
+                <option value={"new"}>+ Create New Category</option>
+              </select>
             </form>
           </:col>
-          <:col :let={{transaction, _index}} label="Refundable" >
-            {if transaction.refundable, do: "Yes", else: "No"}
+          <:col :let={{transaction, index}} label="Refundable" >
+            <form phx-value-index={index}>
+              <.input
+                type="checkbox"
+                name="refundable_checkbox"
+                phx-change="toggle_refundable"
+                />
+            </form>
           </:col>
         </.table>
       </div>
