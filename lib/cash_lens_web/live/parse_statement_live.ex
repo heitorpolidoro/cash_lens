@@ -4,6 +4,7 @@ defmodule CashLensWeb.ParseStatementLive do
   alias CashLens.Parsers
   alias CashLens.Accounts
   alias CashLens.Categories
+  alias CashLens.Transactions
 
   @impl true
   def mount(_params, _session, socket) do
@@ -110,9 +111,8 @@ defmodule CashLensWeb.ParseStatementLive do
   def handle_event("select_category", %{"category_select" => category_str, "index" => index_str}, socket) do
     # Parse the value to get category_id and index
     index = String.to_integer(index_str)
-    category_id = String.to_integer(category_str)
 
-    case category_id do
+    case category_str do
       "new" ->
         # Show the new category modal
         {:noreply,
@@ -126,7 +126,7 @@ defmodule CashLensWeb.ParseStatementLive do
         updated_transactions =
           socket.assigns.transactions
           |> List.update_at(index, fn transaction ->
-            %{transaction | category_id: category_id}
+            %{transaction | category_id: String.to_integer(category_str)}
           end)
 
         {:noreply, assign(socket, transactions: updated_transactions)}
@@ -178,9 +178,39 @@ defmodule CashLensWeb.ParseStatementLive do
       socket.assigns.transactions
       |> List.update_at(index, fn transaction ->
         %{transaction | refundable: refundable == "true"}
-      end) |> IO.inspect()
+      end)
 
     {:noreply, assign(socket, transactions: updated_transactions)}
+  end
+
+
+  @impl true
+  def handle_event("save_transaction", %{"index" => index_str}, socket) do
+    index = String.to_integer(index_str)
+    transactions = socket.assigns.transactions
+
+    transaction =
+      transactions
+      |> Enum.at(index)
+
+    transaction_attrs =
+      transaction
+      |> Map.from_struct()
+      |> Map.take([:datetime, :value, :reason, :refundable])
+      |> Map.put(:account_id, transaction.account.id)
+      |> Map.put(:category_id, transaction.category && transaction.category.id)
+
+    case Transactions.create_transaction(transaction_attrs) do
+      {:ok, _transaction} ->
+        {
+          :noreply,
+          socket
+          |> put_flash(:info, "Transaction saved successfully")
+          |> assign(transactions: List.delete_at(transactions, index))
+        }
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to save transaction")}
+    end
   end
 
   defp list_statement_files do
@@ -407,6 +437,15 @@ defmodule CashLensWeb.ParseStatementLive do
     <%= if @transactions do %>
       <div class="bg-white shadow rounded-lg p-6">
         <.table id="transactions" rows={Enum.with_index(@transactions)}>
+          <:col :let={{_transaction, index}} label="Save">
+            <button
+              phx-click="save_transaction"
+              phx-value-index={index}
+              type="button"
+            >
+              <.icon name="hero-check" class="h-5 w-5 text-green-800" />
+            </button>
+          </:col>
           <:col :let={{transaction, _index}} label="Date">
             {Calendar.strftime(transaction.datetime, "%d/%m/%Y %H:%M")}
           </:col>
@@ -426,31 +465,27 @@ defmodule CashLensWeb.ParseStatementLive do
               </span>
             </div>
           </:col>
-          <:col :let={{transaction, _index}} label="Reason" >{transaction.reason || "-"}</:col>
-          <:col :let={{transaction, index}} label="Category" >
-            <form phx-value-index={index}>
-              <select
-                name="category_select"
-                phx-change="select_category"
-                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              >
-                <option value="" disabled selected={is_nil(transaction.category)}>-- Select Category --</option>
-                <%= for category <- @categories do %>
-                  <option value={category.id} selected={transaction.category && transaction.category.id == category.id}>
-                    {category.name}
-                  </option>
-                <% end %>
-                <option value={"new"}>+ Create New Category</option>
-              </select>
-            </form>
+          <:col :let={{transaction, _index}} label="Reason">{transaction.reason || "-"}</:col>
+          <:col :let={{transaction, index}} label="Category">
+          <form phx-change="select_category" phx-value-index={index}>
+            <select name="category_select">
+              <option value="" disabled selected={is_nil(transaction.category)}>-- Select Category --</option>
+              <%= for category <- @categories do %>
+                <option value={category.id} selected={transaction.category && transaction.category.id == category.id}>
+                  {category.name}
+                </option>
+              <% end %>
+              <option value="new">+ Create New Category</option>
+            </select>
+          </form>
           </:col>
-          <:col :let={{transaction, index}} label="Refundable" >
-            <form phx-value-index={index}>
+          <:col :let={{transaction, index}} label="Refundable">
+            <form phx-change="toggle_refundable" phx-value-index={index}>
               <.input
                 type="checkbox"
                 name="refundable_checkbox"
-                phx-change="toggle_refundable"
-                />
+                checked={transaction.refundable}
+              />
             </form>
           </:col>
         </.table>
