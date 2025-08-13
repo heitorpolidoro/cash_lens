@@ -208,9 +208,31 @@ defmodule CashLensWeb.ParseStatementLive do
           |> put_flash(:info, "Transaction saved successfully")
           |> assign(transactions: List.delete_at(transactions, index))
         }
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to save transaction")}
+      {:error, changeset} ->
+        {:noreply, put_flash(socket, :error, changeset_errors_to_string(changeset))}
     end
+  end
+
+  # Get all errors as a single string
+  def changeset_errors_to_string(changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {msg, opts} ->
+      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
+        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+      end)
+    end)
+    |> Enum.map(fn {field, errors} ->
+      "#{humanize_field(field)}: #{Enum.join(errors, ", ")}"
+    end)
+    |> Enum.join("; ")
+  end
+
+  defp humanize_field(field) do
+    field
+    |> Atom.to_string()
+    |> String.trim_trailing("_id")
+    |> String.replace("_", " ")
+    |> String.capitalize()
   end
 
   defp list_statement_files do

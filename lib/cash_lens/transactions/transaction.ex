@@ -18,7 +18,7 @@ defmodule CashLens.Transactions.Transaction do
   def changeset(transaction, attrs) do
     transaction
     |> cast(attrs, [:datetime, :value, :reason, :refundable, :account_id, :category_id])
-    |> validate_required([:datetime, :value, :account_id])
+    |> validate_required([:datetime, :value, :account_id, :category_id])
     |> foreign_key_constraint(:account_id)
     |> foreign_key_constraint(:category_id)
   end
