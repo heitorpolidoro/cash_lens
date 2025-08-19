@@ -18,5 +18,6 @@ defmodule CashLens.Repo.Migrations.CreateTransactions do
     create index(:transactions, [:datetime])
     create index(:transactions, [:value])
     create index(:transactions, [:reason])
+    create unique_index(:transactions, [:datetime, :value, :reason, :account_id])
   end
 end

@@ -9,6 +9,6 @@ defmodule CashLens.Repo.Migrations.CreateCategories do
       timestamps(type: :utc_datetime)
     end
 
-    create unique_index(:categories, [:name])
+    create unique_index(:categories, ["lower(name)"])
   end
 end

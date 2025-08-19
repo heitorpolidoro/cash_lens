@@ -10,6 +10,8 @@ defmodule CashLens.Repo.Migrations.CreateAccounts do
       timestamps(type: :utc_datetime)
     end
 
-    create index(:accounts, [:name, :bank_name])
+    create unique_index(:accounts, ["lower(name)", "lower(bank_name)"],
+             name: :accounts_name_bank_name_index
+           )
   end
 end

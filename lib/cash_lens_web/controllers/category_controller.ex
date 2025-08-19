@@ -18,7 +18,7 @@ defmodule CashLensWeb.CategoryController do
     case Categories.create_category(category_params) do
       {:ok, category} ->
         conn
-        |> put_flash(:info, "Category created successfully.")
+        |> put_flash(:info, "Category '#{to_str(category)}' created successfully.")
         |> redirect(to: ~p"/categories")
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -43,7 +43,7 @@ defmodule CashLensWeb.CategoryController do
     case Categories.update_category(category, category_params) do
       {:ok, category} ->
         conn
-        |> put_flash(:info, "Category updated successfully.")
+        |> put_flash(:info, "Category '#{to_str(category)}' updated successfully.")
         |> redirect(to: ~p"/categories")
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -56,7 +56,11 @@ defmodule CashLensWeb.CategoryController do
     {:ok, _category} = Categories.delete_category(category)
 
     conn
-    |> put_flash(:info, "Category deleted successfully.")
+    |> put_flash(:info, "Category '#{to_str(category)}' deleted successfully.")
     |> redirect(to: ~p"/categories")
+  end
+
+  def to_str(category) do
+    "#{category.name}"
   end
 end

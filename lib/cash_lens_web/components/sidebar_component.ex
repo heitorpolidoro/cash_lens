@@ -22,6 +22,10 @@ defmodule CashLensWeb.SidebarComponent do
             <.icon name="hero-tag-mini" class="h-5 w-5 mr-3" />
             Categories
           </a>
+          <a href="/reasons" class="flex items-center px-4 py-2 text-sm font-medium text-zinc-900 rounded-md hover:bg-zinc-100">
+            <.icon name="hero-document-text" class="h-5 w-5 mr-3" />
+            Reasons
+          </a>
           <a href="/parse-statement" class="flex items-center px-4 py-2 text-sm font-medium text-zinc-900 rounded-md hover:bg-zinc-100">
             <.icon name="hero-document-text-mini" class="h-5 w-5 mr-3" />
             Parse Statement

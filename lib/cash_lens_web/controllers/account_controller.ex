@@ -18,7 +18,7 @@ defmodule CashLensWeb.AccountController do
     case Accounts.create_account(account_params) do
       {:ok, account} ->
         conn
-        |> put_flash(:info, "Account created successfully.")
+        |> put_flash(:info, "Account '#{to_str(account)}' created successfully.")
         |> redirect(to: ~p"/accounts")
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -43,7 +43,7 @@ defmodule CashLensWeb.AccountController do
     case Accounts.update_account(account, account_params) do
       {:ok, account} ->
         conn
-        |> put_flash(:info, "Account updated successfully.")
+        |> put_flash(:info, "Account '#{to_str(account)}' updated successfully.")
         |> redirect(to: ~p"/accounts")
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -56,7 +56,11 @@ defmodule CashLensWeb.AccountController do
     {:ok, _account} = Accounts.delete_account(account)
 
     conn
-    |> put_flash(:info, "Account deleted successfully.")
+    |> put_flash(:info, "Account '#{to_str(account)}' deleted successfully.")
     |> redirect(to: ~p"/accounts")
+  end
+
+  def to_str(account) do
+    "#{account.bank_name} - #{account.name}"
   end
 end

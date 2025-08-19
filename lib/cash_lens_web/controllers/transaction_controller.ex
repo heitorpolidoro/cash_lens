@@ -18,9 +18,9 @@ defmodule CashLensWeb.TransactionController do
 
   def create(conn, %{"transaction" => transaction_params}) do
     case Transactions.create_transaction(transaction_params) do
-      {:ok, _transaction} ->
+      {:ok, transaction} ->
         conn
-        |> put_flash(:info, "Transaction created successfully.")
+        |> put_flash(:info, "Transaction '#{to_str(transaction)}' created successfully.")
         |> redirect(to: ~p"/transactions")
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -47,9 +47,9 @@ defmodule CashLensWeb.TransactionController do
     transaction = Transactions.get_transaction!(id)
 
     case Transactions.update_transaction(transaction, transaction_params) do
-      {:ok, _transaction} ->
+      {:ok, transaction} ->
         conn
-        |> put_flash(:info, "Transaction updated successfully.")
+        |> put_flash(:info, "Transaction '#{to_str(transaction)}' updated successfully.")
         |> redirect(to: ~p"/transactions")
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -64,7 +64,11 @@ defmodule CashLensWeb.TransactionController do
     {:ok, _transaction} = Transactions.delete_transaction(transaction)
 
     conn
-    |> put_flash(:info, "Transaction deleted successfully.")
+    |> put_flash(:info, "Transaction '#{to_str(transaction)}' deleted successfully.")
     |> redirect(to: ~p"/transactions")
+  end
+
+  def to_str(transaction) do
+    "#{transaction.datetime} - #{transaction.value}"
   end
 end

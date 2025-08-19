@@ -1,0 +1,8 @@
+<.header>
+  New Reason
+  <:subtitle>Use this form to create a new reason.</:subtitle>
+</.header>
+
+<.reason_form changeset={@changeset} action={~p"/reasons"} categories={@categories} parent_reasons={@parent_reasons} />
+
+<.back navigate={~p"/reasons"}>Back to reasons</.back>
