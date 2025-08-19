@@ -613,6 +613,22 @@ defmodule CashLensWeb.ParseStatementLive do
   end
 
   defp format_currency(value) do
-    "R$\u00A0#{:erlang.float_to_binary(abs(value), decimals: 2)}"
+    # Format with 2 decimal places
+    formatted = :erlang.float_to_binary(abs(value), decimals: 2)
+
+    # Split into integer and decimal parts
+    [int_part, dec_part] = String.split(formatted, ".")
+
+    # Add thousand separators to integer part
+    int_with_separators =
+      int_part
+      |> String.to_charlist()
+      |> Enum.reverse()
+      |> Enum.chunk_every(3)
+      |> Enum.join(".")
+      |> String.reverse()
+
+    # Combine with comma as decimal separator
+    "R$\u00A0#{int_with_separators},#{dec_part}"
   end
 end
