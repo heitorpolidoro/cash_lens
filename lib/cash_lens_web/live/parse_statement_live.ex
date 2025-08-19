@@ -258,6 +258,16 @@ defmodule CashLensWeb.ParseStatementLive do
   end
 
   @impl true
+  def handle_event("ignore_transaction", %{"index" => index_str}, socket) do
+    index = String.to_integer(index_str)
+    {
+      :noreply,
+      socket
+      |> put_flash(:info, "Transaction ignored successfully")
+      |> assign(transactions: List.delete_at(socket.assigns.transactions, index))
+    }
+  end
+  @impl true
   def handle_event("ignore_reason", %{"reason" => reason, "index" => index_str}, socket) do
     case Reasons.create_reason(%{reason: reason, ignore: true}) do
       {:ok, _reason} ->
@@ -530,6 +540,9 @@ defmodule CashLensWeb.ParseStatementLive do
           <:col :let={{_transaction, index}} label="Save">
             <button phx-click="save_transaction" phx-value-index={index} type="button">
               <.icon name="hero-check" class="h-5 w-5 text-green-800" />
+            </button>
+            <button phx-click="ignore_transaction" phx-value-index={index} type="button">
+              <.icon name="hero-x-mark" class="h-5 w-5 text-red-800" />
             </button>
           </:col>
           <:col :let={{transaction, _index}} label="Date">
