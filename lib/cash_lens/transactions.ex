@@ -9,6 +9,7 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.Transaction
   alias CashLens.Accounts.Account
   alias CashLens.Categories.Category
+  alias CashLens.ML.TransactionClassifier
 
   @doc """
   Returns the list of transactions.
@@ -130,5 +131,84 @@ defmodule CashLens.Transactions do
   """
   def list_categories_for_select do
     Repo.all(from c in Category, select: {c.name, c.id}, order_by: c.name)
+  end
+
+  @doc """
+  Trains the transaction classification model using existing transaction data.
+
+  Returns `:ok` if training was successful, or `{:error, reason}` if it failed.
+
+  ## Examples
+
+      iex> train_classification_model()
+      {:ok, "Model saved successfully"}
+
+      iex> train_classification_model()
+      {:error, "No transactions with categories found for training"}
+
+  """
+  def train_classification_model do
+    case TransactionClassifier.train_model() do
+      {:ok, message} = result ->
+        # Reload the model in the worker after training
+        CashLens.ML.ModelWorker.reload_model()
+        result
+      error -> error
+    end
+  end
+
+  @doc """
+  Predicts category and refundable status for a transaction.
+
+  Takes a transaction map or struct with at least :datetime, :value, and :reason fields.
+  Returns `{:ok, %{category_id: id, refundable: boolean}}` if successful,
+  or `{:error, reason}` if prediction failed.
+
+  ## Examples
+
+      iex> predict_transaction_attributes(%{datetime: ~U[2025-08-19 10:00:00Z], value: Decimal.new("123.45"), reason: "Grocery shopping"})
+      {:ok, %{category_id: 1, refundable: false}}
+
+      iex> predict_transaction_attributes(%{})
+      {:error, "Transaction must have datetime, value, and reason fields"}
+
+  """
+  def predict_transaction_attributes(transaction) do
+    TransactionClassifier.predict(transaction)
+  end
+
+  @doc """
+  Creates a transaction with predicted category and refundable status.
+
+  If the transaction doesn't have a category_id or refundable field set,
+  it attempts to predict these values using the ML model.
+
+  ## Examples
+
+      iex> create_transaction_with_prediction(%{datetime: ~U[2025-08-19 10:00:00Z], value: Decimal.new("123.45"), reason: "Grocery shopping", account_id: 1})
+      {:ok, %Transaction{}}
+
+  """
+  def create_transaction_with_prediction(attrs) do
+    # Check if category_id is missing
+    if is_nil(attrs[:category_id]) or is_nil(attrs["category_id"]) do
+      case predict_transaction_attributes(attrs) do
+        {:ok, %{category_id: category_id, refundable: refundable}} ->
+          # Merge predictions with attrs
+          attrs =
+            attrs
+            |> Map.put_new(:category_id, category_id)
+            |> Map.put_new(:refundable, refundable)
+
+          create_transaction(attrs)
+
+        {:error, _reason} ->
+          # Proceed without predictions
+          create_transaction(attrs)
+      end
+    else
+      # Category is already set, proceed normally
+      create_transaction(attrs)
+    end
   end
 end
