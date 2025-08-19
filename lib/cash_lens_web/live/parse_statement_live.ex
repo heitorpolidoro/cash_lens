@@ -96,26 +96,39 @@ defmodule CashLensWeb.ParseStatementLive do
     selected_account = socket.assigns.selected_account
 
     # Read file with latin1 encoding
-    transactions =
+    parsed_transactions =
       statement.path
       |> File.stream!()
       |> Stream.map(&:unicode.characters_to_binary(&1, :latin1))
       |> parser_module.parse
       |> Enum.filter(fn transaction -> !Reasons.should_ignore_reason(transaction.reason) end)
       |> Enum.map(fn transaction ->
-        transaction
-        |> Map.put(:account, selected_account)
-        |> Map.put(
-          :exists,
-          Repo.exists?(
-            from(t in Transaction,
-              where:
-                t.reason == ^transaction.reason and
-                  t.datetime == ^transaction.datetime and
-                  t.value == ^transaction.value
-            )
+        Map.put(transaction, :account, selected_account)
+      end)
+
+    # Check for duplicates in the database and within the parsed transactions
+    transactions =
+      parsed_transactions
+      |> Enum.with_index()
+      |> Enum.map(fn {transaction, index} ->
+        # Check if transaction exists in database
+        exists = Repo.exists?(
+          from(t in Transaction,
+            where:
+              t.reason == ^transaction.reason and
+                t.datetime == ^transaction.datetime and
+                t.value == ^transaction.value
           )
-        )
+        ) || Enum.with_index(parsed_transactions)
+          |> Enum.any?(fn {t, i} ->
+            i != index &&
+            t.reason == transaction.reason &&
+            t.datetime == transaction.datetime &&
+            t.value == transaction.value
+          end)
+
+        # Mark as existing if it exists in DB or is duplicated in the list
+        Map.put(transaction, :exists, exists)
       end)
 
     # Parse the content
