@@ -1,11 +1,14 @@
 defmodule CashLensWeb.ParseStatementLive do
   use CashLensWeb, :live_view
+  import Ecto.Query
 
   alias CashLens.Parsers
   alias CashLens.Accounts
   alias CashLens.Categories
   alias CashLens.Transactions
   alias CashLens.Reasons
+  alias CashLens.Transactions.Transaction
+  alias CashLens.Repo
 
   @impl true
   def mount(_params, _session, socket) do
@@ -98,7 +101,14 @@ defmodule CashLensWeb.ParseStatementLive do
       |> Stream.map(&:unicode.characters_to_binary(&1, :latin1))
       |> parser_module.parse
       |> Enum.filter(fn transaction -> !Reasons.should_ignore_reason(transaction.reason) end)
-      |> Enum.map(fn transaction -> %{transaction | account: selected_account} end)
+      |> Enum.map(fn transaction ->
+        transaction
+        |> Map.put(:account, selected_account)
+        |> Map.put(:exists, Repo.exists?(from(t in Transaction,
+                                          where: t.reason == ^transaction.reason and
+                                                 t.datetime == ^transaction.datetime and
+                                                 t.value == ^transaction.value)))
+      end)
 
     # Parse the content
 
@@ -197,10 +207,8 @@ defmodule CashLensWeb.ParseStatementLive do
 
     transaction_attrs =
       transaction
-      |> Map.from_struct()
-      |> Map.take([:datetime, :value, :reason, :refundable])
+      |> Map.take([:datetime, :value, :reason, :refundable, :category_id])
       |> Map.put(:account_id, transaction.account.id)
-      |> Map.put(:category_id, transaction.category && transaction.category.id)
 
     case Transactions.create_transaction(transaction_attrs) do
       {:ok, _transaction} ->
@@ -220,9 +228,6 @@ defmodule CashLensWeb.ParseStatementLive do
     case Reasons.create_reason(%{reason: reason, ignore: true}) do
       {:ok, _reason} ->
         index = String.to_integer(index_str)
-        #        transactions =
-        #          socket.assigns.transactions
-        #          |> Enum.filter(fn transaction -> !Reasons.should_ignore_reason(transaction.reason) end)
         {
           :noreply,
           socket
@@ -478,7 +483,7 @@ defmodule CashLensWeb.ParseStatementLive do
     ~H"""
     <%= if @transactions do %>
       <div class="bg-white shadow rounded-lg p-6">
-        <.table id="transactions" rows={Enum.with_index(@transactions)}>
+        <.table id="transactions" rows={Enum.with_index(@transactions)} row_class={fn {t, _index} -> if t.exists, do: "bg-yellow-100", else: "" end}>
           <:col :let={{_transaction, index}} label="Save">
             <button
               phx-click="save_transaction"

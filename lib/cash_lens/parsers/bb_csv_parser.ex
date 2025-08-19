@@ -31,7 +31,7 @@ defmodule CashLens.Parsers.BBCSVParser do
         value: String.to_float(value),
         account: nil,
         category: nil
-      }
+      } |> Map.from_struct()
     end)
   end
 

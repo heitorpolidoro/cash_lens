@@ -501,6 +501,8 @@ defmodule CashLensWeb.CoreComponents do
     default: &Function.identity/1,
     doc: "the function for mapping each row before calling the :col and :action slots"
 
+  attr :row_class, :any
+
   slot :col, required: true do
     attr :label, :string
   end
@@ -510,8 +512,10 @@ defmodule CashLensWeb.CoreComponents do
   def table(assigns) do
     assigns =
       with %{rows: %Phoenix.LiveView.LiveStream{}} <- assigns do
-        assign(assigns, row_id: assigns.row_id || fn {id, _item} -> id end)
+        assigns
+          |> assign(row_id: assigns.row_id || fn {id, _item} -> id end)
       end
+      |> assign(row_class: assigns[:row_class] || fn _ -> "" end)
 
     ~H"""
     <div class="overflow-y-auto px-4 sm:overflow-visible sm:px-0">
@@ -536,7 +540,7 @@ defmodule CashLensWeb.CoreComponents do
               class={["relative p-0", @row_click && "hover:cursor-pointer"]}
             >
               <div class="block py-4 pr-6">
-                <span class="absolute -inset-y-px right-0 -left-4 group-hover:bg-zinc-50 sm:rounded-l-xl" />
+                <span class={"absolute -inset-y-px right-0 -left-4 group-hover:bg-zinc-50 sm:rounded-l-xl #{@row_class.(row)}"} />
                 <span class={["relative", i == 0 && "font-semibold text-zinc-900"]}>
                   {render_slot(col, @row_item.(row))}
                 </span>
