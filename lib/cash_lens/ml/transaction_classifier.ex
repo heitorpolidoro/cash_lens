@@ -89,13 +89,15 @@ defmodule CashLens.ML.TransactionClassifier do
   # Private functions
 
   defp prepare_training_data(transactions) do
-    features = Enum.map(transactions, fn t ->
-      extract_features(t.datetime, t.value, t.reason)
-    end)
+    features =
+      Enum.map(transactions, fn t ->
+        extract_features(t.datetime, t.value, t.reason)
+      end)
 
-    labels = Enum.map(transactions, fn t ->
-      %{category_id: t.category_id, refundable: t.refundable}
-    end)
+    labels =
+      Enum.map(transactions, fn t ->
+        %{category_id: t.category_id, refundable: t.refundable}
+      end)
 
     {features, labels}
   end
@@ -106,8 +108,14 @@ defmodule CashLens.ML.TransactionClassifier do
     month = datetime.month
     day_of_month = datetime.day
 
-    # Convert value to float
-    value_float = Decimal.to_float(value)
+    #     Convert value to float
+    value_float =
+      if is_struct(value, Decimal) do
+        Decimal.to_float(value)
+      else
+        value
+      end
+    IO.inspect({value, value_float})
 
     # Extract features from reason (simplified)
     # In a real implementation, you would use NLP techniques
@@ -131,26 +139,32 @@ defmodule CashLens.ML.TransactionClassifier do
     # For now, we'll just create a simple model based on patterns in the data
 
     # Group transactions by category_id and calculate statistics
-    category_stats = Enum.reduce(Enum.zip(features, labels), %{}, fn {feature, label}, acc ->
-      category_id = label.category_id
+    category_stats =
+      Enum.reduce(Enum.zip(features, labels), %{}, fn {feature, label}, acc ->
+        category_id = label.category_id
 
-      category_data = Map.get(acc, category_id, %{
-        count: 0,
-        total_value: 0,
-        refundable_count: 0,
-        reason_patterns: %{}
-      })
+        category_data =
+          Map.get(acc, category_id, %{
+            count: 0,
+            total_value: 0,
+            refundable_count: 0,
+            reason_patterns: %{}
+          })
 
-      # Update statistics
-      updated_data = %{
-        count: category_data.count + 1,
-        total_value: category_data.total_value + feature.value,
-        refundable_count: if(label.refundable, do: category_data.refundable_count + 1, else: category_data.refundable_count),
-        reason_patterns: update_reason_patterns(category_data.reason_patterns, feature)
-      }
+        # Update statistics
+        updated_data = %{
+          count: category_data.count + 1,
+          total_value: category_data.total_value + feature.value,
+          refundable_count:
+            if(label.refundable,
+              do: category_data.refundable_count + 1,
+              else: category_data.refundable_count
+            ),
+          reason_patterns: update_reason_patterns(category_data.reason_patterns, feature)
+        }
 
-      Map.put(acc, category_id, updated_data)
-    end)
+        Map.put(acc, category_id, updated_data)
+      end)
 
     # Create a simple model with category statistics
     %{
@@ -173,7 +187,7 @@ defmodule CashLens.ML.TransactionClassifier do
     {category_id, category_data} =
       Enum.max_by(model.category_stats, fn {_id, data} ->
         # Simple scoring based on value similarity
-        value_similarity = 1 / (1 + abs(features.value - (data.total_value / data.count)))
+        value_similarity = 1 / (1 + abs(features.value - data.total_value / data.count))
 
         # You would use more sophisticated scoring in a real implementation
         value_similarity
@@ -192,6 +206,7 @@ defmodule CashLens.ML.TransactionClassifier do
 
     # Serialize and save the model
     serialized_model = :erlang.term_to_binary(model)
+
     case File.write(@model_path, serialized_model) do
       :ok -> {:ok, "Model saved successfully"}
       {:error, reason} -> {:error, "Failed to save model: #{inspect(reason)}"}

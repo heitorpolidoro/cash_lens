@@ -9,6 +9,7 @@ defmodule CashLensWeb.ParseStatementLive do
   alias CashLens.Reasons
   alias CashLens.Transactions.Transaction
   alias CashLens.Repo
+  alias CashLens.ML.TransactionClassifier
 
   @impl true
   def mount(_params, _session, socket) do
@@ -31,7 +32,8 @@ defmodule CashLensWeb.ParseStatementLive do
        selected_account: nil,
        new_category_name: nil,
        new_category_transaction_index: nil,
-       transactions: nil
+       transactions: nil,
+     retrain: false
      )}
   end
 
@@ -83,7 +85,8 @@ defmodule CashLensWeb.ParseStatementLive do
       socket
       |> assign(
         selected_account: selected_account,
-        show_account_modal: false
+        show_account_modal: false,
+      retrain: true
       )
 
     handle_event("parse_file", nil, socket)
@@ -128,10 +131,20 @@ defmodule CashLensWeb.ParseStatementLive do
           end)
 
         # Mark as existing if it exists in DB or is duplicated in the list
-        Map.put(transaction, :exists, exists)
-      end)
+        transaction = Map.put(transaction, :exists, exists)
 
-    # Parse the content
+        # Predict category and refundable status using ML model
+        case TransactionClassifier.predict(transaction) do
+          {:ok, %{category_id: category_id, refundable: refundable}} ->
+            IO.inspect({category_id, refundable})
+            transaction
+            |> Map.put(:category, Categories.get_category!(category_id))
+            |> Map.put(:refundable, refundable)
+          {:error, _reason} ->
+            # If prediction fails, return transaction without predictions
+            transaction
+        end
+      end)
 
     {:noreply,
      assign(socket,
@@ -200,7 +213,8 @@ defmodule CashLensWeb.ParseStatementLive do
          assign(socket,
            transactions: updated_transactions,
            categories: updated_categories,
-           show_new_category_modal: false
+           show_new_category_modal: false,
+           retrain: true
          )}
 
       {:error, _changeset} ->
@@ -242,14 +256,16 @@ defmodule CashLensWeb.ParseStatementLive do
       transaction
       |> Map.take([:datetime, :value, :reason, :refundable, :category_id])
       |> Map.put(:account_id, transaction.account.id)
+      |> Map.put(:category_id, transaction.category_id || transaction.category.id)
 
     case Transactions.create_transaction(transaction_attrs) do
       {:ok, _transaction} ->
+        if socket.assigns.retrain, do: TransactionClassifier.train_model()
         {
           :noreply,
           socket
-          |> put_flash(:info, "Transaction saved successfully")
-          |> assign(transactions: List.delete_at(transactions, index))
+          |> put_flash(:info, "Transaction saved successfully" <> (if socket.assigns.retrain, do: ". Retrained", else: ""))
+          |> assign(transactions: List.delete_at(transactions, index), retrain: false)
         }
 
       {:error, changeset} ->
