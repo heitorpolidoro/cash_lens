@@ -83,7 +83,6 @@ case Transactions.predict_transaction_attributes(test_transaction) do
   {:ok, prediction} ->
     IO.puts("✅ Prediction successful")
     IO.puts("   Predicted category_id: #{prediction.category_id}")
-    IO.puts("   Predicted refundable: #{prediction.refundable}")
 
     # Get the category name
     category = CashLens.Repo.get(CashLens.Categories.Category, prediction.category_id)
@@ -111,7 +110,6 @@ case Transactions.create_transaction_with_prediction(test_transaction) do
     IO.puts("   Transaction ID: #{transaction.id}")
     IO.puts("   Category ID: #{transaction.category_id}")
     IO.puts("   Category name: #{transaction.category.name}")
-    IO.puts("   Refundable: #{transaction.refundable}")
   {:error, changeset} ->
     IO.puts("❌ Transaction creation failed:")
     IO.inspect(changeset.errors)

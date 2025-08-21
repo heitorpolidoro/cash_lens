@@ -1,7 +1,5 @@
 defmodule CashLensWeb.ReasonHTML do
   use CashLensWeb, :html
-  alias CashLens.Reasons.Reason
-  alias CashLens.Helper
 
   embed_templates "reason_html/*"
 

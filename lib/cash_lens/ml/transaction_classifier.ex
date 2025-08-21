@@ -6,10 +6,10 @@ defmodule CashLens.ML.TransactionClassifier do
   - Train a supervised classification model using transaction data
   - Save the trained model to disk
   - Load a previously trained model
-  - Predict category and refundable status for new transactions
+  - Predict category for new transactions
 
   The model uses transaction datetime, value, and reason as input features
-  to predict category_id and refundable status.
+  to predict category_id.
   """
 
   alias CashLens.Transactions.Transaction
@@ -65,10 +65,10 @@ defmodule CashLens.ML.TransactionClassifier do
   end
 
   @doc """
-  Predicts category_id and refundable status for a transaction.
+  Predicts category_id for a transaction.
 
   Takes a transaction map or struct with at least :datetime, :value, and :reason fields.
-  Returns `{:ok, %{category_id: id, refundable: boolean}}` if successful,
+  Returns `{:ok, %{category_id: id}}` if successful,
   or `{:error, reason}` if prediction failed.
   """
   def predict(%{datetime: datetime, value: value, reason: reason} = _transaction) do
@@ -96,7 +96,7 @@ defmodule CashLens.ML.TransactionClassifier do
 
     labels =
       Enum.map(transactions, fn t ->
-        %{category_id: t.category_id, refundable: t.refundable}
+        %{category_id: t.category_id}
       end)
 
     {features, labels}
@@ -147,7 +147,6 @@ defmodule CashLens.ML.TransactionClassifier do
           Map.get(acc, category_id, %{
             count: 0,
             total_value: 0,
-            refundable_count: 0,
             reason_patterns: %{}
           })
 
@@ -155,11 +154,6 @@ defmodule CashLens.ML.TransactionClassifier do
         updated_data = %{
           count: category_data.count + 1,
           total_value: category_data.total_value + feature.value,
-          refundable_count:
-            if(label.refundable,
-              do: category_data.refundable_count + 1,
-              else: category_data.refundable_count
-            ),
           reason_patterns: update_reason_patterns(category_data.reason_patterns, feature)
         }
 
@@ -173,7 +167,7 @@ defmodule CashLens.ML.TransactionClassifier do
     }
   end
 
-  defp update_reason_patterns(patterns, feature) do
+  defp update_reason_patterns(patterns, _feature) do
     # This is a simplified implementation
     # In a real implementation, you would use more sophisticated NLP techniques
     patterns
@@ -184,7 +178,7 @@ defmodule CashLens.ML.TransactionClassifier do
     # In a real implementation, you would use the trained model to make predictions
 
     # Find the most likely category based on value and other features
-    {category_id, category_data} =
+    {category_id, _category_data} =
       Enum.max_by(model.category_stats, fn {_id, data} ->
         # Simple scoring based on value similarity
         value_similarity = 1 / (1 + abs(features.value - data.total_value / data.count))
@@ -193,11 +187,7 @@ defmodule CashLens.ML.TransactionClassifier do
         value_similarity
       end)
 
-    # Predict refundable status based on category statistics
-    refundable_probability = category_data.refundable_count / category_data.count
-    refundable = refundable_probability > 0.5
-
-    %{category_id: category_id, refundable: refundable}
+    %{category_id: category_id}
   end
 
   defp save_model(model) do

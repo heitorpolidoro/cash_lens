@@ -149,7 +149,7 @@ defmodule CashLens.Transactions do
   """
   def train_classification_model do
     case TransactionClassifier.train_model() do
-      {:ok, message} = result ->
+      {:ok, _message} = result ->
         # Reload the model in the worker after training
         CashLens.ML.ModelWorker.reload_model()
         result
@@ -158,16 +158,16 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
-  Predicts category and refundable status for a transaction.
+  Predicts category for a transaction.
 
   Takes a transaction map or struct with at least :datetime, :value, and :reason fields.
-  Returns `{:ok, %{category_id: id, refundable: boolean}}` if successful,
+  Returns `{:ok, %{category_id: id}}` if successful,
   or `{:error, reason}` if prediction failed.
 
   ## Examples
 
       iex> predict_transaction_attributes(%{datetime: ~U[2025-08-19 10:00:00Z], value: Decimal.new("123.45"), reason: "Grocery shopping"})
-      {:ok, %{category_id: 1, refundable: false}}
+      {:ok, %{category_id: 1}}
 
       iex> predict_transaction_attributes(%{})
       {:error, "Transaction must have datetime, value, and reason fields"}
@@ -178,10 +178,10 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
-  Creates a transaction with predicted category and refundable status.
+  Creates a transaction with predicted category.
 
-  If the transaction doesn't have a category_id or refundable field set,
-  it attempts to predict these values using the ML model.
+  If the transaction doesn't have a category_id set,
+  it attempts to predict this value using the ML model.
 
   ## Examples
 
@@ -193,12 +193,11 @@ defmodule CashLens.Transactions do
     # Check if category_id is missing
     if is_nil(attrs[:category_id]) or is_nil(attrs["category_id"]) do
       case predict_transaction_attributes(attrs) do
-        {:ok, %{category_id: category_id, refundable: refundable}} ->
+        {:ok, %{category_id: category_id}} ->
           # Merge predictions with attrs
           attrs =
             attrs
             |> Map.put_new(:category_id, category_id)
-            |> Map.put_new(:refundable, refundable)
 
           create_transaction(attrs)
 

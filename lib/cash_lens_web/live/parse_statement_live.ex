@@ -11,6 +11,8 @@ defmodule CashLensWeb.ParseStatementLive do
   alias CashLens.Repo
   alias CashLens.ML.TransactionClassifier
 
+  @text_reason_to_remove ["Pagamento de Boleto - "]
+
   @impl true
   def mount(_params, _session, socket) do
     statements = list_statement_files()
@@ -33,7 +35,7 @@ defmodule CashLensWeb.ParseStatementLive do
        new_category_name: nil,
        new_category_transaction_index: nil,
        transactions: nil,
-     retrain: false
+       retrain: false
      )}
   end
 
@@ -86,7 +88,6 @@ defmodule CashLensWeb.ParseStatementLive do
       |> assign(
         selected_account: selected_account,
         show_account_modal: false,
-      retrain: true
       )
 
     handle_event("parse_file", nil, socket)
@@ -106,7 +107,9 @@ defmodule CashLensWeb.ParseStatementLive do
       |> parser_module.parse
       |> Enum.filter(fn transaction -> !Reasons.should_ignore_reason(transaction.reason) end)
       |> Enum.map(fn transaction ->
-        Map.put(transaction, :account, selected_account)
+        transaction
+        |> Map.put(:account, selected_account)
+        |> Map.put(:reason, clear_reason(transaction.reason))
       end)
 
     # Check for duplicates in the database and within the parsed transactions
@@ -115,31 +118,32 @@ defmodule CashLensWeb.ParseStatementLive do
       |> Enum.with_index()
       |> Enum.map(fn {transaction, index} ->
         # Check if transaction exists in database
-        exists = Repo.exists?(
-          from(t in Transaction,
-            where:
-              t.reason == ^transaction.reason and
-                t.datetime == ^transaction.datetime and
-                t.value == ^transaction.value
-          )
-        ) || Enum.with_index(parsed_transactions)
-          |> Enum.any?(fn {t, i} ->
-            i != index &&
-            t.reason == transaction.reason &&
-            t.datetime == transaction.datetime &&
-            t.value == transaction.value
-          end)
+        exists =
+          Repo.exists?(
+            from(t in Transaction,
+              where:
+                t.reason == ^transaction.reason and
+                  t.datetime == ^transaction.datetime and
+                  t.value == ^transaction.value
+            )
+          ) ||
+            Enum.with_index(parsed_transactions)
+            |> Enum.any?(fn {t, i} ->
+              i != index &&
+                t.reason == transaction.reason &&
+                t.datetime == transaction.datetime &&
+                t.value == transaction.value
+            end)
 
         # Mark as existing if it exists in DB or is duplicated in the list
         transaction = Map.put(transaction, :exists, exists)
 
         # Predict category and refundable status using ML model
         case TransactionClassifier.predict(transaction) do
-          {:ok, %{category_id: category_id, refundable: refundable}} ->
-            IO.inspect({category_id, refundable})
+          {:ok, %{category_id: category_id}} ->
             transaction
             |> Map.put(:category, Categories.get_category!(category_id))
-            |> Map.put(:refundable, refundable)
+
           {:error, _reason} ->
             # If prediction fails, return transaction without predictions
             transaction
@@ -169,7 +173,8 @@ defmodule CashLensWeb.ParseStatementLive do
          assign(socket,
            show_new_category_modal: true,
            new_category_transaction_index: index,
-           new_category_name: ""
+           new_category_name: "",
+         retrain: true,
          )}
 
       _ ->
@@ -247,6 +252,7 @@ defmodule CashLensWeb.ParseStatementLive do
   def handle_event("save_transaction", %{"index" => index_str}, socket) do
     index = String.to_integer(index_str)
     transactions = socket.assigns.transactions
+    IO.inspect(socket.assigns.retrain, label: "RETRAINED")
 
     transaction =
       transactions
@@ -261,10 +267,15 @@ defmodule CashLensWeb.ParseStatementLive do
     case Transactions.create_transaction(transaction_attrs) do
       {:ok, _transaction} ->
         if socket.assigns.retrain, do: TransactionClassifier.train_model()
+
         {
           :noreply,
           socket
-          |> put_flash(:info, "Transaction saved successfully" <> (if socket.assigns.retrain, do: ". Retrained", else: ""))
+          |> put_flash(
+            :info,
+            "Transaction saved successfully" <>
+              if(socket.assigns.retrain, do: ". Retrained", else: "")
+          )
           |> assign(transactions: List.delete_at(transactions, index), retrain: false)
         }
 
@@ -276,6 +287,7 @@ defmodule CashLensWeb.ParseStatementLive do
   @impl true
   def handle_event("ignore_transaction", %{"index" => index_str}, socket) do
     index = String.to_integer(index_str)
+
     {
       :noreply,
       socket
@@ -283,6 +295,7 @@ defmodule CashLensWeb.ParseStatementLive do
       |> assign(transactions: List.delete_at(socket.assigns.transactions, index))
     }
   end
+
   @impl true
   def handle_event("ignore_reason", %{"reason" => reason, "index" => index_str}, socket) do
     case Reasons.create_reason(%{reason: reason, ignore: true}) do
@@ -332,6 +345,13 @@ defmodule CashLensWeb.ParseStatementLive do
         size: File.stat!(path).size,
         last_modified: File.stat!(path).mtime |> NaiveDateTime.from_erl!()
       }
+    end)
+  end
+
+  defp clear_reason(reason) do
+    @text_reason_to_remove
+    |> Enum.reduce(reason, fn reason_to_remove, acc ->
+      String.replace(acc, reason_to_remove, "")
     end)
   end
 
