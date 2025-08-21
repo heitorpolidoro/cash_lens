@@ -87,7 +87,7 @@ defmodule CashLensWeb.ParseStatementLive do
       socket
       |> assign(
         selected_account: selected_account,
-        show_account_modal: false,
+        show_account_modal: false
       )
 
     handle_event("parse_file", nil, socket)
@@ -174,7 +174,7 @@ defmodule CashLensWeb.ParseStatementLive do
            show_new_category_modal: true,
            new_category_transaction_index: index,
            new_category_name: "",
-         retrain: true,
+         retrain: true
          )}
 
       _ ->

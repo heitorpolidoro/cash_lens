@@ -1,11 +1,13 @@
-# Script for populating the database. You can run it as:
-#
-#     mix run priv/repo/seeds.exs
-#
-# Inside the script, you can read and write to any of your
-# repositories directly:
-#
-#     CashLens.Repo.insert!(%CashLens.SomeSchema{})
-#
-# We recommend using the bang functions (`insert!`, `update!`
-# and so on) as they will fail if something goes wrong.
+alias CashLens.Repo
+alias CashLens.Categories.Category
+
+categories = [
+  %{name: "Transfer"},
+  %{name: "Adjust"}
+]
+
+Enum.each(categories, fn category_attrs ->
+  %Category{}
+  |> Category.changeset(category_attrs)
+  |> Repo.insert!()
+end)
