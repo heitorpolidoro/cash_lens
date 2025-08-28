@@ -5,6 +5,7 @@ defmodule CashLensWeb.ParseStatementLive do
   alias CashLens.Parsers
   alias CashLens.Accounts
   alias CashLens.Categories
+  alias CashLens.Categories.Category
   alias CashLens.Transactions
   alias CashLens.Reasons
   alias CashLens.Transactions.Transaction
@@ -19,6 +20,15 @@ defmodule CashLensWeb.ParseStatementLive do
     parsers = Parsers.list_parsers()
     accounts = Accounts.list_accounts()
     categories = Categories.list_categories()
+
+    special_categories = %{
+      transfer:
+        Repo.one(
+          from(c in Category,
+            where: c.name == "Transfer"
+          )
+        )
+    }
 
     {:ok,
      assign(socket,
@@ -35,7 +45,8 @@ defmodule CashLensWeb.ParseStatementLive do
        new_category_name: nil,
        new_category_transaction_index: nil,
        transactions: nil,
-       retrain: false
+       retrain: false,
+       special_categories: special_categories
      )}
   end
 
@@ -252,7 +263,6 @@ defmodule CashLensWeb.ParseStatementLive do
   def handle_event("save_transaction", %{"index" => index_str}, socket) do
     index = String.to_integer(index_str)
     transactions = socket.assigns.transactions
-    IO.inspect(socket.assigns.retrain, label: "RETRAINED")
 
     transaction =
       transactions
@@ -422,7 +432,11 @@ defmodule CashLensWeb.ParseStatementLive do
           <% end %>
         </div>
       </div>
-      <.transactions_table transactions={@transactions} categories={@categories} />
+      <.transactions_table
+        transactions={@transactions}
+        categories={@categories}
+        special_categories={@special_categories}
+      />
 
       <.parser_modal
         show_parser_modal={@show_parser_modal}

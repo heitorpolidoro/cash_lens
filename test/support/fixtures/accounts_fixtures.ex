@@ -8,12 +8,13 @@ defmodule CashLens.AccountsFixtures do
   Generate a account.
   """
   def account_fixture(attrs \\ %{}) do
+    unique_id = System.unique_integer([:positive])
+
     {:ok, account} =
       attrs
       |> Enum.into(%{
-        bank_name: "some bank_name",
-        name: "some name",
-        parser: "some parser",
+        bank_name: "bank_name_#{unique_id}",
+        name: "account_name_#{unique_id}",
         type: "checking"
       })
       |> CashLens.Accounts.create_account()

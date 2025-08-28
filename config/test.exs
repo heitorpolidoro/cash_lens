@@ -6,10 +6,11 @@ import Config
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
 config :cash_lens, CashLens.Repo,
-  username: "postgres",
-  password: "postgres",
+  username: "your-postgres-user",
+  password: "your-postgres-password",
   hostname: "localhost",
   database: "cash_lens_test#{System.get_env("MIX_TEST_PARTITION")}",
+  port: 5454,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 
