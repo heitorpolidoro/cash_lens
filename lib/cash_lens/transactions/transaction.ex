@@ -1,5 +1,6 @@
 defmodule CashLens.Transactions.Transaction do
   use Ecto.Schema
+  use QueryBuilder
   import Ecto.Changeset
 
   schema "transactions" do

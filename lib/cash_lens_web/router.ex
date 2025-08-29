@@ -20,7 +20,8 @@ defmodule CashLensWeb.Router do
     get "/", PageController, :home
     resources "/accounts", AccountController
     resources "/categories", CategoryController
-    resources "/transactions", TransactionController
+    resources "/transactions", TransactionController, only: [:show, :new, :create, :edit, :update, :delete]
+    live "/transactions", TransactionsLive, :index
     resources "/reasons", ReasonController
 
     live "/parse-statement", ParseStatementLive, :index

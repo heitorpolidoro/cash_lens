@@ -60,7 +60,8 @@ defmodule CashLens.MixProject do
       {:bandit, "~> 1.5"},
       {:dotenv, "~> 3.1", only: [:dev, :test]},
       {:nimble_csv, "~> 1.2"},
-      {:timex, "~> 3.7"}
+      {:timex, "~> 3.7"},
+      {:query_builder, "~> 1.4"}
     ]
   end
 

@@ -26,6 +26,13 @@ defmodule CashLens.Transactions do
     |> Repo.preload([:account, :category])
   end
 
+  def filter_transactions(filter) do
+    Transaction
+    |> QueryBuilder.where([{:value, :lt, -1000}])
+    |> Repo.all()
+    |> Repo.preload([:account, :category])
+  end
+
   @doc """
   Gets a single transaction.
 
@@ -153,7 +160,9 @@ defmodule CashLens.Transactions do
         # Reload the model in the worker after training
         CashLens.ML.ModelWorker.reload_model()
         result
-      error -> error
+
+      error ->
+        error
     end
   end
 

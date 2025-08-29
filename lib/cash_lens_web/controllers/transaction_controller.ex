@@ -4,10 +4,10 @@ defmodule CashLensWeb.TransactionController do
   alias CashLens.Transactions
   alias CashLens.Transactions.Transaction
 
-  def index(conn, _params) do
-    transactions = Transactions.list_transactions()
-    render(conn, :index, transactions: transactions)
-  end
+#  def index(conn, _params) do
+#    transactions = Transactions.list_transactions()
+#    render(conn, :index, transactions: transactions)
+#  end
 
   def new(conn, _params) do
     changeset = Transactions.change_transaction(%Transaction{datetime: DateTime.utc_now()})
