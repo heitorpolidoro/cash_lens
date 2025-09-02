@@ -177,26 +177,27 @@ defmodule CashLensWeb.ParseStatementLive do
     # Parse the value to get category_id and index
     index = String.to_integer(index_str)
 
-    case category_str do
-      "new" ->
-        # Show the new category modal
-        {:noreply,
-         assign(socket,
-           show_new_category_modal: true,
-           new_category_transaction_index: index,
-           new_category_name: "",
-         retrain: true
-         )}
+    socket =
+      case category_str do
+        "new" ->
+          # Show the new category modal
+          assign(socket,
+            show_new_category_modal: true,
+            new_category_transaction_index: index,
+            new_category_name: ""
+          )
 
-      _ ->
-        updated_transactions =
-          socket.assigns.transactions
-          |> List.update_at(index, fn transaction ->
-            %{transaction | category_id: String.to_integer(category_str)}
-          end)
+        _ ->
+          updated_transactions =
+            socket.assigns.transactions
+            |> List.update_at(index, fn transaction ->
+              %{transaction | category_id: String.to_integer(category_str)}
+            end)
 
-        {:noreply, assign(socket, transactions: updated_transactions)}
-    end
+          assign(socket, transactions: updated_transactions)
+      end
+
+    {:noreply, assign(socket, retrain: true)}
   end
 
   @impl true
