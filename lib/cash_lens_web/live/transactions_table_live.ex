@@ -31,7 +31,7 @@ defmodule CashLensWeb.TransactionsTableLive do
     filter = Map.take(socket.assigns, [:selected_date])
 
     transactions =
-      Transactions.filter_transactions(filter)
+      Transactions.find_transactions(filter, preload: true)
 
     assign(socket, transactions: transactions)
   end
@@ -49,7 +49,7 @@ defmodule CashLensWeb.TransactionsTableLive do
           {Calendar.strftime(transaction.datetime, "%Y-%m-%d %H:%M")}
         </:col>
         <:col :let={transaction} label="Account">{transaction.account.name}</:col>
-        <:col :let={transaction} label="Value">{transaction.value}</:col>
+        <:col :let={transaction} label="Amount">{transaction.amount}</:col>
         <:col :let={transaction} label="Reason">{transaction.reason || "-"}</:col>
         <:col :let={transaction} label="Category">
           {if transaction.category, do: transaction.category.name, else: "-"}

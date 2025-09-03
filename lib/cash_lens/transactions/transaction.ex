@@ -5,7 +5,7 @@ defmodule CashLens.Transactions.Transaction do
 
   schema "transactions" do
     field :datetime, :utc_datetime
-    field :value, :decimal
+    field :amount, :decimal
     field :reason, :string
     field :refundable, :boolean, default: false
 
@@ -18,8 +18,8 @@ defmodule CashLens.Transactions.Transaction do
   @doc false
   def changeset(transaction, attrs) do
     transaction
-    |> cast(attrs, [:datetime, :value, :reason, :refundable, :account_id, :category_id])
-    |> validate_required([:datetime, :value, :account_id, :category_id])
+    |> cast(attrs, [:datetime, :amount, :reason, :refundable, :account_id, :category_id])
+    |> validate_required([:datetime, :amount, :account_id, :category_id])
     |> foreign_key_constraint(:account_id)
     |> foreign_key_constraint(:category_id)
   end

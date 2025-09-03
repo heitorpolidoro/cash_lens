@@ -23,6 +23,7 @@ defmodule CashLensWeb.Router do
     resources "/transactions", TransactionController, only: [:show, :new, :create, :edit, :update, :delete]
     live "/transactions", TransactionsLive, :index
     resources "/reasons", ReasonController
+    resources "/transfers", TransferController
 
     live "/parse-statement", ParseStatementLive, :index
   end

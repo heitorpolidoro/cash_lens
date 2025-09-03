@@ -10,7 +10,7 @@
 <.list>
   <:item title="Date">{Calendar.strftime(@transaction.datetime, "%Y-%m-%d %H:%M")}</:item>
   <:item title="Account">{@transaction.account.name}</:item>
-  <:item title="Value">{@transaction.value}</:item>
+  <:item title="Amount">{@transaction.amount}</:item>
   <:item title="Reason">{@transaction.reason || "-"}</:item>
   <:item title="Category">{if @transaction.category, do: @transaction.category.name, else: "-"}</:item>
   <:item title="Refundable">{if @transaction.refundable, do: "Yes", else: "No"}</:item>

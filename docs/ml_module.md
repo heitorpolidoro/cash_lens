@@ -39,7 +39,7 @@ The ML module can predict the category and refundable status for new transaction
 # Predict category and refundable status for a transaction
 transaction = %{
   datetime: DateTime.utc_now(),
-  value: Decimal.new("-75.50"),
+  amount: Decimal.new("-75.50"),
   reason: "Grocery shopping"
 }
 
@@ -55,7 +55,7 @@ When creating a new transaction, you can use the `create_transaction_with_predic
 # Create a transaction with automatic categorization
 transaction = %{
   datetime: DateTime.utc_now(),
-  value: Decimal.new("-75.50"),
+  amount: Decimal.new("-75.50"),
   reason: "Grocery shopping",
   account_id: 1
 }

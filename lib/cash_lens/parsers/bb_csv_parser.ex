@@ -41,7 +41,7 @@ defmodule CashLens.Parsers.BBCSVParser do
   def parse(file_stream) do
     file_stream
       |> Parser.parse_stream
-      |> Enum.map(fn [date, _, reason, _, _doc, value, _] ->
+      |> Enum.map(fn [date, _, reason, _, _doc, amount, _] ->
       # Parse the date string to a NaiveDateTime
       naive_date = Timex.parse!(date, "{0D}/{0M}/{YYYY}")
 
@@ -51,7 +51,7 @@ defmodule CashLens.Parsers.BBCSVParser do
       %Transaction{
         datetime: updated_date,
         reason: updated_reason,
-        value: String.to_float(value),
+        amount: String.to_float(amount),
         account: nil,
         category: nil
       } |> Map.from_struct()

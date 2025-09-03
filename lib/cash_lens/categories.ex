@@ -35,7 +35,23 @@ defmodule CashLens.Categories do
       ** (Ecto.NoResultsError)
 
   """
-  def get_category!(id), do: Repo.get!(Category, id)
+  def get_category!(id) do
+    case :persistent_term.get(:categories, %{})[id] do
+      nil ->
+        load_categories()
+        :persistent_term.get(:categories, %{})[id] || Repo.get!(Category, id)
+      category -> category
+    end
+  end
+
+  def load_categories do
+    categories =
+      Category
+      |> Repo.all()
+      |> Map.new(fn c -> {c.id, c} end)
+
+    :persistent_term.put(:categories, categories)
+  end
 
   @doc """
   Creates a category.

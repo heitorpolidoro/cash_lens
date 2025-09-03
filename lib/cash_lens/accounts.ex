@@ -102,6 +102,9 @@ defmodule CashLens.Accounts do
     Account.changeset(account, attrs)
   end
 
+  def to_str(nil) do
+    "-"
+  end
   def to_str(%Account{} = account) do
     "#{account.bank_name} - #{account.name}"
   end

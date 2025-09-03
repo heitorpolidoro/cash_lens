@@ -69,6 +69,6 @@ defmodule CashLensWeb.TransactionController do
   end
 
   def to_str(transaction) do
-    "#{transaction.datetime} - #{transaction.value}"
+    "#{transaction.datetime} - #{transaction.amount}"
   end
 end

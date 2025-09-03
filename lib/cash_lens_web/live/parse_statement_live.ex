@@ -21,14 +21,7 @@ defmodule CashLensWeb.ParseStatementLive do
     accounts = Accounts.list_accounts()
     categories = Categories.list_categories()
 
-    special_categories = %{
-      transfer:
-        Repo.one(
-          from(c in Category,
-            where: c.name == "Transfer"
-          )
-        )
-    }
+    #    special_categories = Categories.get_special_categories()
 
     {:ok,
      assign(socket,
@@ -46,7 +39,7 @@ defmodule CashLensWeb.ParseStatementLive do
        new_category_transaction_index: nil,
        transactions: nil,
        retrain: false,
-       special_categories: special_categories
+       special_categories: []
      )}
   end
 
@@ -135,7 +128,7 @@ defmodule CashLensWeb.ParseStatementLive do
               where:
                 t.reason == ^transaction.reason and
                   t.datetime == ^transaction.datetime and
-                  t.value == ^transaction.value
+                  t.amount == ^transaction.amount
             )
           ) ||
             Enum.with_index(parsed_transactions)
@@ -143,22 +136,14 @@ defmodule CashLensWeb.ParseStatementLive do
               i != index &&
                 t.reason == transaction.reason &&
                 t.datetime == transaction.datetime &&
-                t.value == transaction.value
+                t.amount == transaction.amount
             end)
 
         # Mark as existing if it exists in DB or is duplicated in the list
-        transaction = Map.put(transaction, :exists, exists)
-
-        # Predict category and refundable status using ML model
-        case TransactionClassifier.predict(transaction) do
-          {:ok, %{category_id: category_id}} ->
-            transaction
-            |> Map.put(:category, Categories.get_category!(category_id))
-
-          {:error, _reason} ->
-            # If prediction fails, return transaction without predictions
-            transaction
-        end
+        transaction =
+          transaction
+          |> Map.put(:exists, exists)
+          |> Transactions.set_category_with_prediction()
       end)
 
     {:noreply,
@@ -271,13 +256,20 @@ defmodule CashLensWeb.ParseStatementLive do
 
     transaction_attrs =
       transaction
-      |> Map.take([:datetime, :value, :reason, :refundable, :category_id])
+      |> Map.take([:datetime, :amount, :reason, :refundable, :category_id])
       |> Map.put(:account_id, transaction.account.id)
       |> Map.put(:category_id, transaction.category_id || transaction.category.id)
 
     case Transactions.create_transaction(transaction_attrs) do
       {:ok, _transaction} ->
-        if socket.assigns.retrain, do: TransactionClassifier.train_model()
+        transactions =
+          if socket.assigns.retrain do
+            TransactionClassifier.train_model()
+            Transactions.set_category_with_prediction(transactions)
+          else
+            transactions
+          end
+          |> List.delete_at(index)
 
         {
           :noreply,
@@ -287,7 +279,7 @@ defmodule CashLensWeb.ParseStatementLive do
             "Transaction saved successfully" <>
               if(socket.assigns.retrain, do: ". Retrained", else: "")
           )
-          |> assign(transactions: List.delete_at(transactions, index), retrain: false)
+          |> assign(transactions: transactions, retrain: false)
         }
 
       {:error, changeset} ->
@@ -606,12 +598,12 @@ defmodule CashLensWeb.ParseStatementLive do
             <div class="text-right">
               <span class={
                 cond do
-                  transaction.value > 0 -> "text-blue-600"
-                  transaction.value < 0 -> "text-red-600"
+                  transaction.amount > 0 -> "text-blue-600"
+                  transaction.amount < 0 -> "text-red-600"
                   true -> ""
                 end
               }>
-                {format_currency(transaction.value)}
+                {format_currency(transaction.amount)}
               </span>
             </div>
           </:col>

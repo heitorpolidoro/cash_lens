@@ -67,13 +67,13 @@ defmodule CashLens.ML.TransactionClassifier do
   @doc """
   Predicts category_id for a transaction.
 
-  Takes a transaction map or struct with at least :datetime, :value, and :reason fields.
+  Takes a transaction map or struct with at least :datetime, :amount, and :reason fields.
   Returns `{:ok, %{category_id: id}}` if successful,
   or `{:error, reason}` if prediction failed.
   """
-  def predict(%{datetime: datetime, value: value, reason: reason} = _transaction) do
+  def predict(%{datetime: datetime, amount: amount, reason: reason} = _transaction) do
     with {:ok, model} <- load_model(),
-         features <- extract_features(datetime, value, reason) do
+         features <- extract_features(datetime, amount, reason) do
       # Make prediction using the model (simplified implementation)
       prediction = predict_with_model(model, features)
       {:ok, prediction}
@@ -83,7 +83,7 @@ defmodule CashLens.ML.TransactionClassifier do
   end
 
   def predict(_transaction) do
-    {:error, "Transaction must have datetime, value, and reason fields"}
+    {:error, "Transaction must have datetime, amount, and reason fields"}
   end
 
   # Private functions
@@ -91,7 +91,7 @@ defmodule CashLens.ML.TransactionClassifier do
   defp prepare_training_data(transactions) do
     features =
       Enum.map(transactions, fn t ->
-        extract_features(t.datetime, t.value, t.reason)
+        extract_features(t.datetime, t.amount, t.reason)
       end)
 
     labels =
@@ -102,20 +102,20 @@ defmodule CashLens.ML.TransactionClassifier do
     {features, labels}
   end
 
-  defp extract_features(datetime, value, reason) do
+  defp extract_features(datetime, amount, reason) do
     # Extract numerical features from datetime
     day_of_week = datetime.day
     month = datetime.month
     day_of_month = datetime.day
 
-    #     Convert value to float
-    value_float =
-      if is_struct(value, Decimal) do
-        Decimal.to_float(value)
+    #     Convert amount to float
+    amount_float =
+      if is_struct(amount, Decimal) do
+        Decimal.to_float(amount)
       else
-        value
+        amount
       end
-    IO.inspect({value, value_float})
+    IO.inspect({amount, amount_float})
 
     # Extract features from reason (simplified)
     # In a real implementation, you would use NLP techniques
@@ -127,7 +127,7 @@ defmodule CashLens.ML.TransactionClassifier do
       day_of_week: day_of_week,
       month: month,
       day_of_month: day_of_month,
-      value: value_float,
+      amount: amount_float,
       reason_length: reason_length,
       reason_words: reason_words
     }
@@ -146,14 +146,14 @@ defmodule CashLens.ML.TransactionClassifier do
         category_data =
           Map.get(acc, category_id, %{
             count: 0,
-            total_value: 0,
+            total_amount: 0,
             reason_patterns: %{}
           })
 
         # Update statistics
         updated_data = %{
           count: category_data.count + 1,
-          total_value: category_data.total_value + feature.value,
+          total_amount: category_data.total_amount + feature.amount,
           reason_patterns: update_reason_patterns(category_data.reason_patterns, feature)
         }
 
@@ -177,14 +177,14 @@ defmodule CashLens.ML.TransactionClassifier do
     # This is a simplified implementation
     # In a real implementation, you would use the trained model to make predictions
 
-    # Find the most likely category based on value and other features
+    # Find the most likely category based on amount and other features
     {category_id, _category_data} =
       Enum.max_by(model.category_stats, fn {_id, data} ->
-        # Simple scoring based on value similarity
-        value_similarity = 1 / (1 + abs(features.value - data.total_value / data.count))
+        # Simple scoring based on amount similarity
+        amount_similarity = 1 / (1 + abs(features.amount - data.total_amount / data.count))
 
         # You would use more sophisticated scoring in a real implementation
-        value_similarity
+        amount_similarity
       end)
 
     %{category_id: category_id}

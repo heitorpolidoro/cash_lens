@@ -1,0 +1,28 @@
+<.header>
+  Listing Transfers
+  <:actions>
+    <.link href={~p"/transfers/new"}>
+      <.button>New Transfer</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table id="transfers" rows={@transfers} row_click={&JS.navigate(~p"/transfers/#{&1}")}>
+  <:col :let={transfer} label="Amount">{if transfer.from, do: Decimal.negate(transfer.from.amount), else: transfer.to.amount}</:col>
+  <:col :let={transfer} label="From">{if transfer.from, do: Accounts.to_str(transfer.from.account), else: "-"}</:col>
+  <:col :let={transfer} label="To">{if transfer.to, do: Accounts.to_str(transfer.to.account), else: "-"}</:col>
+  <:action :let={transfer}>
+    <div class="sr-only">
+      <.link navigate={~p"/transfers/#{transfer}"}>Show</.link>
+    </div>
+    <.link navigate={~p"/transfers/#{transfer}/edit"}>Edit</.link>
+  </:action>
+  <:action :let={transfer}>
+    <.link phx-click={show_modal("confirm-modal-#{transfer.id}")}>
+      Delete
+    </.link>
+    <.confirm_modal id={"confirm-modal-#{transfer.id}"} on_confirm={~p"/transfers/#{transfer.id}"} method="delete">
+      Are you sure you want to delete this item?
+    </.confirm_modal>
+  </:action>
+</.table>

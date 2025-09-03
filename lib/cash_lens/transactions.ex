@@ -9,7 +9,9 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.Transaction
   alias CashLens.Accounts.Account
   alias CashLens.Categories.Category
+  alias CashLens.Categories
   alias CashLens.ML.TransactionClassifier
+  alias CashLens.Transfers
 
   @doc """
   Returns the list of transactions.
@@ -26,11 +28,17 @@ defmodule CashLens.Transactions do
     |> Repo.preload([:account, :category])
   end
 
-  def filter_transactions(filter) do
-    Transaction
-    |> QueryBuilder.where([{:value, :lt, -1000}])
-    |> Repo.all()
-    |> Repo.preload([:account, :category])
+  def find_transactions(filters, preload \\ false) do
+    transactions =
+      Transaction
+      |> QueryBuilder.where(filters)
+      |> Repo.all()
+
+    if preload do
+      Repo.preload(transactions, [:account, :category])
+    else
+      transactions
+    end
   end
 
   @doc """
@@ -66,13 +74,30 @@ defmodule CashLens.Transactions do
 
   """
   def create_transaction(attrs \\ %{}) do
-    %Transaction{}
-    |> Transaction.changeset(attrs)
-    |> Repo.insert()
-    |> case do
-      {:ok, transaction} -> {:ok, Repo.preload(transaction, [:account, :category])}
-      error -> error
+    {resp, transaction} =
+      %Transaction{}
+      |> Transaction.changeset(attrs)
+      |> Repo.insert()
+      |> case do
+        {:ok, transaction} -> {:ok, Repo.preload(transaction, [:account, :category])}
+        error -> error
+      end
+
+    case transaction.category.name do
+      "Transfer" ->
+        case find_transactions({:amount, Decimal.negate(transaction.amount)}) do
+          [] ->
+            Transfers.create_transfer_from_transaction(transaction)
+
+          [transfer_transaction] ->
+            Transfers.update_transfer_from_transaction(transfer_transaction, transaction)
+
+          transfer_transactions ->
+            raise "Multiple transfer transactions found"
+        end
     end
+
+    {resp, transaction}
   end
 
   @doc """
@@ -166,57 +191,23 @@ defmodule CashLens.Transactions do
     end
   end
 
-  @doc """
-  Predicts category for a transaction.
-
-  Takes a transaction map or struct with at least :datetime, :value, and :reason fields.
-  Returns `{:ok, %{category_id: id}}` if successful,
-  or `{:error, reason}` if prediction failed.
-
-  ## Examples
-
-      iex> predict_transaction_attributes(%{datetime: ~U[2025-08-19 10:00:00Z], value: Decimal.new("123.45"), reason: "Grocery shopping"})
-      {:ok, %{category_id: 1}}
-
-      iex> predict_transaction_attributes(%{})
-      {:error, "Transaction must have datetime, value, and reason fields"}
-
-  """
-  def predict_transaction_attributes(transaction) do
-    TransactionClassifier.predict(transaction)
+  def set_category_with_prediction(transactions) when is_list(transactions) do
+    Enum.map(transactions, &set_category_with_prediction/1)
   end
 
-  @doc """
-  Creates a transaction with predicted category.
+  def set_category_with_prediction(transaction) do
+    case TransactionClassifier.predict(transaction) do
+      {:ok, %{category_id: category_id}} ->
+        transaction
+        |> Map.put(:category, Categories.get_category!(category_id))
 
-  If the transaction doesn't have a category_id set,
-  it attempts to predict this value using the ML model.
+      {:error, reason} ->
+        Logger.error(
+          "Prediction failed for transaction: #{inspect(transaction)}\n#{inspect(reason)}"
+        )
 
-  ## Examples
-
-      iex> create_transaction_with_prediction(%{datetime: ~U[2025-08-19 10:00:00Z], value: Decimal.new("123.45"), reason: "Grocery shopping", account_id: 1})
-      {:ok, %Transaction{}}
-
-  """
-  def create_transaction_with_prediction(attrs) do
-    # Check if category_id is missing
-    if is_nil(attrs[:category_id]) or is_nil(attrs["category_id"]) do
-      case predict_transaction_attributes(attrs) do
-        {:ok, %{category_id: category_id}} ->
-          # Merge predictions with attrs
-          attrs =
-            attrs
-            |> Map.put_new(:category_id, category_id)
-
-          create_transaction(attrs)
-
-        {:error, _reason} ->
-          # Proceed without predictions
-          create_transaction(attrs)
-      end
-    else
-      # Category is already set, proceed normally
-      create_transaction(attrs)
+        # If prediction fails, return transaction without predictions
+        transaction
     end
   end
 end

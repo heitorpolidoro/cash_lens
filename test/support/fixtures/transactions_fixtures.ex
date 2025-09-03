@@ -19,7 +19,7 @@ defmodule CashLens.TransactionsFixtures do
       attrs
       |> Enum.into(%{
         datetime: DateTime.utc_now(),
-        value: Decimal.new("100.00"),
+        amount: Decimal.new("100.00"),
         reason: "some reason",
         refundable: false,
         account_id: account.id,

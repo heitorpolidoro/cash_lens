@@ -1,0 +1,19 @@
+<.header>
+  Transfer
+  <:actions>
+    <.link href={~p"/transfers/#{@transfer}/edit"}>
+      <.button>Edit transfer</.button>
+    </.link>
+    <.link href={~p"/transfers/#{@transfer}"} method="delete" data-confirm="Are you sure?">
+      <.button>Delete transfer</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Name">{@transfer.name}</:item>
+  <:item title="Bank name">{@transfer.bank_name}</:item>
+  <:item title="Type">{Helper.format_atom_title(@transfer.type)}</:item>
+</.list>
+
+<.back navigate={~p"/transfers"}>Back to transfers</.back>

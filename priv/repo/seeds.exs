@@ -18,7 +18,7 @@ Enum.each(categories, fn category_attrs ->
 end)
 
 accounts = [
-  %{name: "Conta Corrente", bank_name: "Banco do Brasil"}
+  %{name: "Conta Corrente", bank_name: "Banco do Brasil", type: "checking"}
 ]
 
 Enum.each(accounts, fn account_attrs ->
@@ -30,7 +30,6 @@ Enum.each(accounts, fn account_attrs ->
     Ecto.ConstraintError -> :already_exists
   end
 end)
-
 
 categories = [
   %{name: "Fuel"},
