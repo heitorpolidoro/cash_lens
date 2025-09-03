@@ -83,6 +83,7 @@ defmodule CashLens.Transactions do
         error -> error
       end
 
+
     case transaction.category.name do
       "Transfer" ->
         case find_transactions({:amount, Decimal.negate(transaction.amount)}) do
@@ -95,6 +96,9 @@ defmodule CashLens.Transactions do
           transfer_transactions ->
             raise "Multiple transfer transactions found"
         end
+
+      _ ->
+        :ok
     end
 
     {resp, transaction}

@@ -115,7 +115,6 @@ defmodule CashLens.ML.TransactionClassifier do
       else
         amount
       end
-    IO.inspect({amount, amount_float})
 
     # Extract features from reason (simplified)
     # In a real implementation, you would use NLP techniques

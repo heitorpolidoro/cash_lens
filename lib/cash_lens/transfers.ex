@@ -73,6 +73,14 @@ defmodule CashLens.Transfers do
   end
 
   def update_transfer_from_transaction(from_transaction, to_transaction) do
+    if Decimal.gt?(from_transaction.amount, 0) do
+      _update_transfer_from_transaction(to_transaction, from_transaction)
+    else
+      _update_transfer_from_transaction(from_transaction, to_transaction)
+    end
+  end
+
+  defp _update_transfer_from_transaction(from_transaction, to_transaction) do
     transfer =
       from(t in Transfer,
         where: t.from_id == ^from_transaction.id or t.to_id == ^to_transaction.id

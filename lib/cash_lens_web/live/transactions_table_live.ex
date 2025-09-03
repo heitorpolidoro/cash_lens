@@ -2,7 +2,7 @@ defmodule CashLensWeb.TransactionsTableLive do
   use CashLensWeb, :live_component
 
   alias CashLens.Transactions
-
+  alias CashLens.Helper
   @impl true
   def mount(socket) do
     transactions = Transactions.list_transactions()
@@ -17,7 +17,7 @@ defmodule CashLensWeb.TransactionsTableLive do
   @impl true
   def handle_event("date_selected", %{"date" => date_str}, socket) do
     # Parse the string into a DateTime if needed
-    {:ok, date} = Date.from_iso8601(date_str) |> IO.inspect()
+    {:ok, date} = Date.from_iso8601(date_str)
 
     {
       :noreply,
@@ -49,7 +49,19 @@ defmodule CashLensWeb.TransactionsTableLive do
           {Calendar.strftime(transaction.datetime, "%Y-%m-%d %H:%M")}
         </:col>
         <:col :let={transaction} label="Account">{transaction.account.name}</:col>
-        <:col :let={transaction} label="Amount">{transaction.amount}</:col>
+        <:col :let={transaction} label="Amount">
+          <div class="text-right">
+            <span class={
+              cond do
+                Decimal.gt?(transaction.amount, 0) -> "text-blue-600"
+                Decimal.lt?(transaction.amount, 0) -> "text-red-600"
+                true -> ""
+              end
+            }>
+              {Helper.format_currency(transaction.amount)}
+            </span>
+          </div>
+        </:col>
         <:col :let={transaction} label="Reason">{transaction.reason || "-"}</:col>
         <:col :let={transaction} label="Category">
           {if transaction.category, do: transaction.category.name, else: "-"}
