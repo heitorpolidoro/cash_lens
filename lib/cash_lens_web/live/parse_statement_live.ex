@@ -11,6 +11,7 @@ defmodule CashLensWeb.ParseStatementLive do
   alias CashLens.Transactions.Transaction
   alias CashLens.Repo
   alias CashLens.ML.TransactionClassifier
+  alias CashLens.Helper
 
   @text_reason_to_remove ["Pagamento de Boleto - "]
 
@@ -603,7 +604,7 @@ defmodule CashLensWeb.ParseStatementLive do
                   true -> ""
                 end
               }>
-                {format_currency(transaction.amount)}
+                {Helper.format_currency(transaction.amount)}
               </span>
             </div>
           </:col>
@@ -655,23 +656,4 @@ defmodule CashLensWeb.ParseStatementLive do
     Calendar.strftime(datetime, "%Y-%m-%d %H:%M")
   end
 
-  defp format_currency(value) do
-    # Format with 2 decimal places
-    formatted = :erlang.float_to_binary(abs(value), decimals: 2)
-
-    # Split into integer and decimal parts
-    [int_part, dec_part] = String.split(formatted, ".")
-
-    # Add thousand separators to integer part
-    int_with_separators =
-      int_part
-      |> String.to_charlist()
-      |> Enum.reverse()
-      |> Enum.chunk_every(3)
-      |> Enum.join(".")
-      |> String.reverse()
-
-    # Combine with comma as decimal separator
-    "R$\u00A0#{int_with_separators},#{dec_part}"
-  end
 end

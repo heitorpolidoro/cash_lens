@@ -8,7 +8,7 @@
 </.header>
 
 <.table id="transfers" rows={@transfers} row_click={&JS.navigate(~p"/transfers/#{&1}")}>
-  <:col :let={transfer} label="Amount">{if transfer.from, do: Decimal.negate(transfer.from.amount), else: transfer.to.amount}</:col>
+  <:col :let={transfer} label="Amount">{Helper.format_currency(if transfer.from, do: Decimal.negate(transfer.from.amount), else: transfer.to.amount)}</:col>
   <:col :let={transfer} label="From">{if transfer.from, do: Accounts.to_str(transfer.from.account), else: "-"}</:col>
   <:col :let={transfer} label="To">{if transfer.to, do: Accounts.to_str(transfer.to.account), else: "-"}</:col>
   <:action :let={transfer}>

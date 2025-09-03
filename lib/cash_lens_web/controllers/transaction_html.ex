@@ -1,5 +1,6 @@
 defmodule CashLensWeb.TransactionHTML do
   use CashLensWeb, :html
+  alias CashLens.Helper
 
   embed_templates "transaction_html/*"
 
