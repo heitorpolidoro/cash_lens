@@ -139,4 +139,8 @@ defmodule CashLens.Transfers do
   def change_transfer(%Transfer{} = transfer, attrs \\ %{}) do
     Transfer.changeset(transfer, attrs)
   end
+
+  def get_pending_transfers_count do
+    Repo.aggregate(from(t in Transfer, where: is_nil(t.from_id) or is_nil(t.to_id)), :count, :id)
+  end
 end
