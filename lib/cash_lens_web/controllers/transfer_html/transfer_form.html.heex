@@ -2,9 +2,9 @@
   <.error :if={@changeset.action}>
     Oops, something went wrong! Please check the errors below.
   </.error>
-  <.input field={f[:name]} type="text" label="Name" />
-  <.input field={f[:bank_name]} type="text" label="Bank name" />
-  <.input field={f[:type]} type="select" label="Type" options={Enum.map(Transfer.valid_types, fn t -> {Helper.format_atom_title(t), t} end)} />
+  #TODO
+  <.input field={f[:from_id]} type="text" label="From" />
+  <.input field={f[:to_id]} type="text" label="To" />
   <:actions>
     <.button type="submit">Save Transfer</.button>
   </:actions>

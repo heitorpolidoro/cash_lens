@@ -38,7 +38,7 @@ defmodule CashLens.Transfers do
   """
   def get_transfer!(id) do
     Repo.get!(Transfer, id)
-    |> Repo.preload([:from, :to])
+    |> Repo.preload(from: [:account], to: [:account])
   end
 
   @doc """

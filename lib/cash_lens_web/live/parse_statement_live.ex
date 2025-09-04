@@ -407,7 +407,7 @@ defmodule CashLensWeb.ParseStatementLive do
                         {format_size(statement.size)}
                       </td>
                       <td class="whitespace-nowrap px-3 py-4 text-sm text-zinc-500">
-                        {format_date(statement.last_modified)}
+                        {Helper.format_date(statement.last_modified)}
                       </td>
                       <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                         <button
@@ -651,9 +651,5 @@ defmodule CashLensWeb.ParseStatementLive do
   defp format_size(size) when size < 1024, do: "#{size} B"
   defp format_size(size) when size < 1024 * 1024, do: "#{Float.round(size / 1024, 2)} KB"
   defp format_size(size), do: "#{Float.round(size / (1024 * 1024), 2)} MB"
-
-  defp format_date(datetime) do
-    Calendar.strftime(datetime, "%Y-%m-%d %H:%M")
-  end
 
 end

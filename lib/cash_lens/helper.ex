@@ -52,4 +52,10 @@ defmodule CashLens.Helper do
 
     "R$\u00A0#{int_with_separators},#{dec_part}"
   end
+
+  def format_date(datetime) do
+    Calendar.strftime(datetime, "%Y-%m-%d %H:%M")
+  end
+
+
 end
