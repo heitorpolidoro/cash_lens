@@ -1,11 +1,9 @@
-from unicodedata import category
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any
 from datetime import datetime
 import os
-import pickle
 
 from catboost import CatBoostClassifier
 import pandas as pd
@@ -93,6 +91,18 @@ def train(req: TrainRequest):
     # CatBoost can handle categorical features; mark 'reason' as categorical
     cat_features = [X.columns.get_loc("reason")]
     model.set_params(loss_function="MultiClass", verbose=False, random_seed=42)
+
+    # Feature weights per column as requested
+    feature_weight_map = {
+        "weekday": 1.0,
+        "day": 0.5,
+        "time_minute": 1.0,
+        "amount": 1.0,
+        "reason": 10.0,
+    }
+    feature_weights = [feature_weight_map[col] for col in X.columns]
+
+    model.set_params(feature_weights=feature_weights)
     model.fit(X, y, cat_features=cat_features)
 
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)

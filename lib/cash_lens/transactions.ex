@@ -186,16 +186,11 @@ defmodule CashLens.Transactions do
 
   def set_category_with_prediction(transaction) do
     case TransactionClassifier.predict(transaction) do
-      {:ok, %{category_id: nil}} ->
-        # No predicted category, return transaction unchanged
-        transaction
-
-      {:ok, %{category_id: category_id}} when is_integer(category_id) ->
+      {:ok, %{category_id: category_id}} ->
         transaction
         |> Map.put(:category, Categories.get_category!(category_id))
 
       {:error, reason} ->
-        require Logger
         Logger.error(
           "Prediction failed for transaction: #{inspect(transaction)}\n#{inspect(reason)}"
         )
