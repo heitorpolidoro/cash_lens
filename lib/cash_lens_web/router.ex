@@ -20,12 +20,26 @@ defmodule CashLensWeb.Router do
     get "/", PageController, :home
     resources "/accounts", AccountController
     resources "/categories", CategoryController
-    resources "/transactions", TransactionController, only: [:show, :new, :create, :edit, :update, :delete]
+
+    resources "/transactions", TransactionController,
+      only: [:show, :new, :create, :edit, :update, :delete]
+
     live "/transactions", TransactionsLive, :index
     resources "/reasons", ReasonController
-    resources "/transfers", TransferController
 
     live "/parse-statement", ParseStatementLive, :index
+  end
+
+  scope "/transfers/automatic_transfers", CashLensWeb do
+    pipe_through :browser
+
+    resources "/", AutomaticTransferController
+  end
+
+  scope "/transfers", CashLensWeb do
+    pipe_through :browser
+
+    resources "/", TransferController
   end
 
   # Other scopes may use custom stacks.

@@ -5,6 +5,11 @@
       <.button>New Transfer</.button>
     </.link>
   </:actions>
+  <:actions>
+    <.link href={~p"/transfers/automatic_transfers"}>
+      <.button>Automatic Transfers</.button>
+    </.link>
+  </:actions>
 </.header>
 
 <.table id="transfers" rows={@transfers} row_click={&JS.navigate(~p"/transfers/#{&1}")}>

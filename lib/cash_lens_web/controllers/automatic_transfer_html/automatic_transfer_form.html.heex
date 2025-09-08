@@ -1,0 +1,10 @@
+<.simple_form :let={f} for={@changeset} action={@action}>
+  <.error :if={@changeset.action}>
+    Oops, something went wrong! Please check the errors below.
+  </.error>
+  <.input field={f[:from_id]} type="select" options={[{"-- Select Account --", ""}] ++ @accounts} label="From" />
+  <.input field={f[:to_id]} type="select" options={[{"-- Select Account --", ""}] ++ @accounts} label="To" />
+  <:actions>
+    <.button type="submit">Save Transfer</.button>
+  </:actions>
+</.simple_form>

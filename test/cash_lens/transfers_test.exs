@@ -35,6 +35,7 @@ defmodule CashLens.TransfersTest do
     end
 
     test "create_transfer/1 with valid data creates a transfer" do
+      account = account_fixture()
       from_transaction = transaction_fixture(%{account_id: account.id, amount: Decimal.new("-100.00")})
       to_transaction = transaction_fixture(%{account_id: account.id, amount: Decimal.new("100.00")})
 
@@ -68,6 +69,7 @@ defmodule CashLens.TransfersTest do
 
     test "update_transfer/2 with valid data updates the transfer" do
       transfer = transfer_fixture()
+      account = account_fixture()
       from_transaction = transaction_fixture(%{account_id: account.id, amount: Decimal.new("-200.00")})
       to_transaction = transaction_fixture(%{account_id: account.id, amount: Decimal.new("200.00")})
 

@@ -71,9 +71,9 @@ defmodule CashLens.ML.TransactionClassifier do
   Returns `{:ok, %{category_id: id}}` if successful,
   or `{:error, reason}` if prediction failed.
   """
-  def predict(%{datetime: datetime, amount: amount, reason: reason} = _transaction) do
+  def predict(transaction) do
     with {:ok, model} <- load_model(),
-         features <- extract_features(datetime, amount, reason) do
+         features <- extract_features(transaction) do
       # Make prediction using the model (simplified implementation)
       prediction = predict_with_model(model, features)
       {:ok, prediction}
@@ -89,24 +89,19 @@ defmodule CashLens.ML.TransactionClassifier do
   # Private functions
 
   defp prepare_training_data(transactions) do
-    features =
-      Enum.map(transactions, fn t ->
-        extract_features(t.datetime, t.amount, t.reason)
-      end)
-
-    labels =
-      Enum.map(transactions, fn t ->
-        %{category_id: t.category_id}
-      end)
-
-    {features, labels}
+    Enum.reduce(transactions, {[], []}, fn {features, labels}, transaction ->
+      features_transaction = extract_features(transaction)
+      {features ++ [features_transaction], labels ++ [%{category_id: transaction.category_id}]}
+    end)
   end
 
-  defp extract_features(datetime, amount, reason) do
+  defp extract_features(%{datetime: datetime, amount: amount, reason: reason}) do
     # Extract numerical features from datetime
-    day_of_week = datetime.day
+    day_of_week = Date.day_of_week(datetime)
     month = datetime.month
     day_of_month = datetime.day
+    hour = datetime.hour
+    minute = datetime.minute
 
     #     Convert amount to float
     amount_float =
@@ -118,17 +113,17 @@ defmodule CashLens.ML.TransactionClassifier do
 
     # Extract features from reason (simplified)
     # In a real implementation, you would use NLP techniques
-    reason_length = if is_nil(reason), do: 0, else: String.length(reason)
-    reason_words = if is_nil(reason), do: 0, else: length(String.split(reason))
+    reason_hash = :erlang.phash2(reason)
 
     # Return feature vector
     %{
       day_of_week: day_of_week,
-      month: month,
       day_of_month: day_of_month,
+      month: month,
+      hour: hour,
+      minute: minute,
       amount: amount_float,
-      reason_length: reason_length,
-      reason_words: reason_words
+      reason_hash: reason_hash
     }
   end
 

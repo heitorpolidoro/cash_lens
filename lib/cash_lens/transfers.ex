@@ -61,7 +61,7 @@ defmodule CashLens.Transfers do
 
   def create_transfer_from_transaction(transaction) do
     attrs =
-      if transaction.amount > 0 do
+      if Decimal.gt?(transaction.amount, 0) do
         %{to_id: transaction.id}
       else
         %{from_id: transaction.id}

@@ -11,6 +11,7 @@ defmodule CashLens.TransfersFixtures do
   Generate a transfer.
   """
   def transfer_fixture(attrs \\ %{}) do
+    account = AccountsFixtures.account_fixture()
     from_transaction = TransactionsFixtures.transaction_fixture(%{account_id: account.id, amount: Decimal.new("-100.00")})
     to_transaction = TransactionsFixtures.transaction_fixture(%{account_id: account.id, amount: Decimal.new("100.00")})
 

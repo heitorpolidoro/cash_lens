@@ -156,13 +156,6 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
-  Returns a list of accounts for select options.
-  """
-  def list_accounts_for_select do
-    Repo.all(from a in Account, select: {a.name, a.id}, order_by: a.name)
-  end
-
-  @doc """
   Returns a list of categories for select options.
   """
   def list_categories_for_select do

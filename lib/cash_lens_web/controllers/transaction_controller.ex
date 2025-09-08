@@ -3,15 +3,11 @@ defmodule CashLensWeb.TransactionController do
 
   alias CashLens.Transactions
   alias CashLens.Transactions.Transaction
-
-#  def index(conn, _params) do
-#    transactions = Transactions.list_transactions()
-#    render(conn, :index, transactions: transactions)
-#  end
+  alias CashLens.Accounts
 
   def new(conn, _params) do
     changeset = Transactions.change_transaction(%Transaction{datetime: DateTime.utc_now()})
-    accounts = Transactions.list_accounts_for_select()
+    accounts = Accounts.list_accounts_for_select()
     categories = Transactions.list_categories_for_select()
     render(conn, :new, changeset: changeset, accounts: accounts, categories: categories)
   end
@@ -24,7 +20,7 @@ defmodule CashLensWeb.TransactionController do
         |> redirect(to: ~p"/transactions")
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        accounts = Transactions.list_accounts_for_select()
+        accounts = Accounts.list_accounts_for_select()
         categories = Transactions.list_categories_for_select()
         render(conn, :new, changeset: changeset, accounts: accounts, categories: categories)
     end
@@ -38,7 +34,7 @@ defmodule CashLensWeb.TransactionController do
   def edit(conn, %{"id" => id}) do
     transaction = Transactions.get_transaction!(id)
     changeset = Transactions.change_transaction(transaction)
-    accounts = Transactions.list_accounts_for_select()
+    accounts = Accounts.list_accounts_for_select()
     categories = Transactions.list_categories_for_select()
     render(conn, :edit, transaction: transaction, changeset: changeset, accounts: accounts, categories: categories)
   end
@@ -53,7 +49,7 @@ defmodule CashLensWeb.TransactionController do
         |> redirect(to: ~p"/transactions")
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        accounts = Transactions.list_accounts_for_select()
+        accounts = Accounts.list_accounts_for_select()
         categories = Transactions.list_categories_for_select()
         render(conn, :edit, transaction: transaction, changeset: changeset, accounts: accounts, categories: categories)
     end
