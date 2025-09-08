@@ -115,6 +115,9 @@ defmodule CashLensWeb.ParseStatementLive do
         transaction
         |> Map.put(:account, selected_account)
         |> Map.put(:reason, clear_reason(transaction.reason))
+        |> Transactions.set_category_with_prediction()
+        |> Map.put(:refundable, false)
+
       end)
 
     # Check for duplicates in the database and within the parsed transactions
@@ -141,10 +144,7 @@ defmodule CashLensWeb.ParseStatementLive do
             end)
 
         # Mark as existing if it exists in DB or is duplicated in the list
-        transaction =
-          transaction
-          |> Map.put(:exists, exists)
-          |> Transactions.set_category_with_prediction()
+        transaction = Map.put(transaction, :exists, exists)
       end)
 
     {:noreply,

@@ -26,7 +26,6 @@ case Transactions.train_classification_model() do
       datetime: DateTime.utc_now(),
       value: Decimal.new("-75.50"),
       reason: "Supermarket shopping",
-      refundable: false,
       account_id: account.id,
       category_id: category1.id
     })
@@ -35,7 +34,6 @@ case Transactions.train_classification_model() do
       datetime: DateTime.utc_now(),
       value: Decimal.new("-120.00"),
       reason: "Movie tickets and dinner",
-      refundable: false,
       account_id: account.id,
       category_id: category2.id
     })
@@ -44,7 +42,6 @@ case Transactions.train_classification_model() do
       datetime: DateTime.utc_now(),
       value: Decimal.new("-82.30"),
       reason: "Grocery store",
-      refundable: false,
       account_id: account.id,
       category_id: category1.id
     })

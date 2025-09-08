@@ -4,7 +4,7 @@ This document describes the machine learning module for transaction classificati
 
 ## Overview
 
-The ML module provides functionality to automatically categorize transactions and predict whether they are refundable based on their attributes. This helps users by:
+The ML module provides functionality to automatically categorize transactions based on their attributes. This helps users by:
 
 1. Reducing manual categorization work
 2. Ensuring consistent categorization of similar transactions
@@ -21,7 +21,7 @@ The ML module consists of the following components:
 
 ### Model Training
 
-The model is trained using existing transaction data from the database. It learns to associate transaction attributes (datetime, value, reason) with categories and refundable status.
+The model is trained using existing transaction data from the database. It learns to associate transaction attributes (datetime, value, reason) with categories.
 
 ```elixir
 # Train the model
@@ -30,7 +30,7 @@ CashLens.Transactions.train_classification_model()
 
 ### Prediction
 
-The ML module can predict the category and refundable status for new transactions:
+The ML module can predict the category and for new transactions:
 
 ```elixir
 # Predict category and refundable status for a transaction

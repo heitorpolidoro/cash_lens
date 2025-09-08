@@ -84,8 +84,8 @@ def train(req: TrainRequest):
     start = datetime.now()
     k = req.k or K_DEFAULT
     df = load_transactions(k)
-    if df.empty:
-        raise HTTPException(status_code=400, detail="No transactions to train")
+    if len(df) < 2:
+        raise HTTPException(status_code=400, detail="No enough transactions to train")
     X = build_features(df)
     y = df["category_id"].astype(int)
 

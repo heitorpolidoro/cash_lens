@@ -34,6 +34,9 @@ defmodule CashLens.ML.TransactionClassifier do
          {:ok, decoded} <- Jason.decode(resp_body) do
       {:ok, decoded}
     else
+      {:ok, %Finch.Response{status: 400}} ->
+        {:ok, "No enough transactions to train"}
+
       {:ok, %Finch.Response{status: status, body: resp_body}} ->
         {:error, "Training failed with status #{status}: #{resp_body}"}
 
@@ -46,7 +49,8 @@ defmodule CashLens.ML.TransactionClassifier do
   Predicts category_id for a transaction via the Python API.
 
   Accepts a map or struct with :datetime (DateTime), :amount (Decimal|number), :reason (string).
-  Returns {:ok, %{category_id: integer}} or {:error, reason}.
+  Returns {:ok, %{category_id: integer | nil}} or {:error, reason}.
+  - category_id: nil when the /predict endpoint responds with 404 (no prediction available).
   """
   def predict(%{datetime: dt, amount: amount, reason: reason}) do
     with {:ok, iso_dt} <- to_iso8601(dt),
@@ -56,6 +60,11 @@ defmodule CashLens.ML.TransactionClassifier do
          {:ok, %{"category_id" => category_id}} <- Jason.decode(resp_body) do
       {:ok, %{category_id: category_id}}
     else
+      {:ok, %Finch.Response{status: 404}} ->
+        # If the Python service cannot predict (e.g., model/category not found),
+        # return a successful response with nil category_id as per requirement.
+        {:ok, %{category_id: nil}}
+
       {:ok, %Finch.Response{status: status, body: resp_body}} ->
         {:error, "Prediction failed with status #{status}: #{resp_body}"}
 
@@ -72,7 +81,6 @@ defmodule CashLens.ML.TransactionClassifier do
     headers = [{"content-type", "application/json"}]
     body = Jason.encode!(body_map)
     req = Finch.build(method, url, headers, body)
-    IO.inspect(req)
     Finch.request(req, CashLens.Finch)
   end
 

@@ -17,7 +17,6 @@ case TransactionClassifier.predict(transaction) do
   {:ok, prediction} ->
     IO.puts("Prediction successful!")
     IO.puts("Predicted category_id: #{prediction.category_id}")
-    IO.puts("Predicted refundable: #{prediction.refundable}")
 
   {:error, reason} ->
     IO.puts("Prediction failed: #{reason}")

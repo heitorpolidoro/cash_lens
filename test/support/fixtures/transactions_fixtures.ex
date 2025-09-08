@@ -21,7 +21,6 @@ defmodule CashLens.TransactionsFixtures do
         datetime: DateTime.utc_now(),
         amount: Decimal.new("100.00"),
         reason: "some reason",
-        refundable: false,
         account_id: account.id,
         category_id: category.id
       })

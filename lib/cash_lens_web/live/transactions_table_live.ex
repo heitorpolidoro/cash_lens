@@ -66,9 +66,6 @@ defmodule CashLensWeb.TransactionsTableLive do
         <:col :let={transaction} label="Category">
           {if transaction.category, do: transaction.category.name, else: "-"}
         </:col>
-        <:col :let={transaction} label="Refundable">
-          {if transaction.refundable, do: "Yes", else: "No"}
-        </:col>
 
         <:action :let={transaction}>
           <div class="sr-only">
