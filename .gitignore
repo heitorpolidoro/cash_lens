@@ -39,7 +39,7 @@ npm-debug.log
 .env
 
 /priv/ml_models/*
-/ai_model/catboost_info/learn/events.out.tfevents
-/ai_model/catboost_info/learn_error.tsv
-/ai_model/catboost_info/time_left.tsv
-/ai_model/catboost_info/catboost_training.json
+/ml/catboost_info/learn/events.out.tfevents
+/ml/catboost_info/learn_error.tsv
+/ml/catboost_info/time_left.tsv
+/ml/catboost_info/catboost_training.json

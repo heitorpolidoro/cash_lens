@@ -95,3 +95,6 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Python ML service base URL used by CashLens.ML.TransactionClassifier
+config :cash_lens, :python_ml_base_url, System.get_env("PYTHON_ML_BASE_URL", "http://localhost:8000")

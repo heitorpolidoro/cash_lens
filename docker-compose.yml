@@ -14,7 +14,7 @@ services:
       - cash_lens_network
 
   app:
-    container_name: cash_lens_app
+    container_name: app
     build:
       context: .
       dockerfile: Dockerfile
@@ -28,6 +28,8 @@ services:
       PORT: 4000
       # Force Phoenix to bind to all interfaces
       PHX_BIND_IP: "0.0.0.0"
+      # ML Service base URL (used by CashLens.ML.TransactionClassifier)
+      PYTHON_ML_BASE_URL: "http://ml:8000"
       # Google OAuth Configuration
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
@@ -50,18 +52,20 @@ services:
     networks:
       - cash_lens_network
 
-  ai_model:
-    container_name: cash_lens_ml_service
+  ml:
+    container_name: ml
     build:
       context: .
-      dockerfile: ai_model/Dockerfile
+      dockerfile: ml/Dockerfile
     environment:
       POSTGRES_USER: your-postgres-user
       POSTGRES_PASSWORD: your-postgres-password
       POSTGRES_HOST: postgres
       POSTGRES_DB: cash_lens
       POSTGRES_PORT: 5432
-      PY_MODEL_PATH: /app/priv/ml_models/catboost_transaction_classifier.cbm
+      PY_MODEL_PATH: /app/ml/ml_models/catboost_transaction_classifier.cbm
+    volumes:
+      - .:/app
     ports:
       - "8000:8000"
     depends_on:

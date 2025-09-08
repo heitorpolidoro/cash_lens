@@ -8,7 +8,6 @@ defmodule CashLens.Repo.Migrations.CreateTransactions do
       add :reason, :string
       add :account_id, references(:accounts, on_delete: :restrict), null: false
       add :category_id, references(:categories, on_delete: :restrict)
-      add :refundable, :bool, default: false, null: false
 
       timestamps(type: :utc_datetime)
     end

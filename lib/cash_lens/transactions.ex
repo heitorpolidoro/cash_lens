@@ -177,15 +177,7 @@ defmodule CashLens.Transactions do
 
   """
   def train_classification_model do
-    case TransactionClassifier.train_model() do
-      {:ok, _message} = result ->
-        # Reload the model in the worker after training
-        CashLens.ML.ModelWorker.reload_model()
-        result
-
-      error ->
-        error
-    end
+    TransactionClassifier.train_model()
   end
 
   def set_category_with_prediction(transactions) when is_list(transactions) do

@@ -1,199 +1,93 @@
 defmodule CashLens.ML.TransactionClassifier do
   @moduledoc """
-  Machine learning module for transaction classification.
+  Thin client to the Python ML API for transaction classification.
 
-  This module provides functionality to:
-  - Train a supervised classification model using transaction data
-  - Save the trained model to disk
-  - Load a previously trained model
-  - Predict category for new transactions
-
-  The model uses transaction datetime, value, and reason as input features
-  to predict category_id.
+  Exposes only two functions:
+  - train_model/1 (optionally pass k: integer to limit training rows)
+  - predict/1 (expects a map/struct with :datetime, :amount, :reason)
   """
 
-  alias CashLens.Transactions.Transaction
-  alias CashLens.Repo
-  import Ecto.Query
+  require Logger
 
-  # Define the path where the model will be saved
-  @model_path "priv/ml_models/transaction_classifier.model"
+  @python_base_url Application.compile_env(:cash_lens, :python_ml_base_url, "http://localhost:8000")
 
   @doc """
-  Trains a new classification model using transaction data from the database.
+  Trains (or retrains) the classification model via the Python API.
 
-  Returns `:ok` if training was successful, or `{:error, reason}` if it failed.
+  Options:
+  - :k -> integer, optional (number of recent rows to train on)
+
+  Returns {:ok, map} on success, {:error, reason} on failure.
   """
-  def train_model do
-    # Fetch all transactions with their categories
-    transactions =
-      Transaction
-      |> where([t], not is_nil(t.category_id))
-      |> Repo.all()
-      |> Repo.preload(:category)
-
-    if Enum.empty?(transactions) do
-      {:error, "No transactions with categories found for training"}
-    else
-      # Extract features and labels
-      {features, labels} = prepare_training_data(transactions)
-
-      # Train the model (simplified implementation)
-      model = train_classifier(features, labels)
-
-      # Save the trained model
-      save_model(model)
-    end
-  end
-
-  @doc """
-  Loads a previously trained model from disk.
-
-  Returns `{:ok, model}` if successful, or `{:error, reason}` if it failed.
-  """
-  def load_model do
-    if File.exists?(@model_path) do
-      try do
-        model = @model_path |> File.read!() |> :erlang.binary_to_term()
-        {:ok, model}
-      rescue
-        e -> {:error, "Failed to load model: #{inspect(e)}"}
-      end
-    else
-      {:error, "Model file not found at #{@model_path}"}
-    end
-  end
-
-  @doc """
-  Predicts category_id for a transaction.
-
-  Takes a transaction map or struct with at least :datetime, :amount, and :reason fields.
-  Returns `{:ok, %{category_id: id}}` if successful,
-  or `{:error, reason}` if prediction failed.
-  """
-  def predict(transaction) do
-    with {:ok, model} <- load_model(),
-         features <- extract_features(transaction) do
-      # Make prediction using the model (simplified implementation)
-      prediction = predict_with_model(model, features)
-      {:ok, prediction}
-    else
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  def predict(_transaction) do
-    {:error, "Transaction must have datetime, amount, and reason fields"}
-  end
-
-  # Private functions
-
-  defp prepare_training_data(transactions) do
-    Enum.reduce(transactions, {[], []}, fn {features, labels}, transaction ->
-      features_transaction = extract_features(transaction)
-      {features ++ [features_transaction], labels ++ [%{category_id: transaction.category_id}]}
-    end)
-  end
-
-  defp extract_features(%{datetime: datetime, amount: amount, reason: reason}) do
-    # Extract numerical features from datetime
-    day_of_week = Date.day_of_week(datetime)
-    month = datetime.month
-    day_of_month = datetime.day
-    hour = datetime.hour
-    minute = datetime.minute
-
-    #     Convert amount to float
-    amount_float =
-      if is_struct(amount, Decimal) do
-        Decimal.to_float(amount)
-      else
-        amount
+  def train_model(opts \\ %{}) when is_map(opts) do
+    body =
+      case Map.get(opts, :k) do
+        nil -> %{}
+        k when is_integer(k) and k > 0 -> %{k: k}
+        other ->
+          Logger.warning("Ignoring invalid :k for train_model: #{inspect(other)}")
+          %{}
       end
 
-    # Extract features from reason (simplified)
-    # In a real implementation, you would use NLP techniques
-    reason_hash = :erlang.phash2(reason)
+    with {:ok, %Finch.Response{status: status, body: resp_body}} when status in 200..299 <-
+           request(:post, "/train", body),
+         {:ok, decoded} <- Jason.decode(resp_body) do
+      {:ok, decoded}
+    else
+      {:ok, %Finch.Response{status: status, body: resp_body}} ->
+        {:error, "Training failed with status #{status}: #{resp_body}"}
 
-    # Return feature vector
-    %{
-      day_of_week: day_of_week,
-      day_of_month: day_of_month,
-      month: month,
-      hour: hour,
-      minute: minute,
-      amount: amount_float,
-      reason_hash: reason_hash
-    }
-  end
-
-  defp train_classifier(features, labels) do
-    # This is a simplified implementation
-    # In a real implementation, you would use a proper ML algorithm
-    # For now, we'll just create a simple model based on patterns in the data
-
-    # Group transactions by category_id and calculate statistics
-    category_stats =
-      Enum.reduce(Enum.zip(features, labels), %{}, fn {feature, label}, acc ->
-        category_id = label.category_id
-
-        category_data =
-          Map.get(acc, category_id, %{
-            count: 0,
-            total_amount: 0,
-            reason_patterns: %{}
-          })
-
-        # Update statistics
-        updated_data = %{
-          count: category_data.count + 1,
-          total_amount: category_data.total_amount + feature.amount,
-          reason_patterns: update_reason_patterns(category_data.reason_patterns, feature)
-        }
-
-        Map.put(acc, category_id, updated_data)
-      end)
-
-    # Create a simple model with category statistics
-    %{
-      category_stats: category_stats,
-      trained_at: DateTime.utc_now()
-    }
-  end
-
-  defp update_reason_patterns(patterns, _feature) do
-    # This is a simplified implementation
-    # In a real implementation, you would use more sophisticated NLP techniques
-    patterns
-  end
-
-  defp predict_with_model(model, features) do
-    # This is a simplified implementation
-    # In a real implementation, you would use the trained model to make predictions
-
-    # Find the most likely category based on amount and other features
-    {category_id, _category_data} =
-      Enum.max_by(model.category_stats, fn {_id, data} ->
-        # Simple scoring based on amount similarity
-        amount_similarity = 1 / (1 + abs(features.amount - data.total_amount / data.count))
-
-        # You would use more sophisticated scoring in a real implementation
-        amount_similarity
-      end)
-
-    %{category_id: category_id}
-  end
-
-  defp save_model(model) do
-    # Ensure directory exists
-    File.mkdir_p!(Path.dirname(@model_path))
-
-    # Serialize and save the model
-    serialized_model = :erlang.term_to_binary(model)
-
-    case File.write(@model_path, serialized_model) do
-      :ok -> {:ok, "Model saved successfully"}
-      {:error, reason} -> {:error, "Failed to save model: #{inspect(reason)}"}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
+
+  @doc """
+  Predicts category_id for a transaction via the Python API.
+
+  Accepts a map or struct with :datetime (DateTime), :amount (Decimal|number), :reason (string).
+  Returns {:ok, %{category_id: integer}} or {:error, reason}.
+  """
+  def predict(%{datetime: dt, amount: amount, reason: reason}) do
+    with {:ok, iso_dt} <- to_iso8601(dt),
+         {:ok, amount_f} <- to_float(amount),
+         {:ok, %Finch.Response{status: status, body: resp_body}} when status in 200..299 <-
+           request(:post, "/predict", %{datetime: iso_dt, amount: amount_f, reason: reason}),
+         {:ok, %{"category_id" => category_id}} <- Jason.decode(resp_body) do
+      {:ok, %{category_id: category_id}}
+    else
+      {:ok, %Finch.Response{status: status, body: resp_body}} ->
+        {:error, "Prediction failed with status #{status}: #{resp_body}"}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def predict(_), do: {:error, "Transaction must have datetime, amount, and reason fields"}
+
+  # Internal HTTP helper using Finch
+  defp request(method, path, body_map) do
+    url = @python_base_url <> path
+    headers = [{"content-type", "application/json"}]
+    body = Jason.encode!(body_map)
+    req = Finch.build(method, url, headers, body)
+    IO.inspect(req)
+    Finch.request(req, CashLens.Finch)
+  end
+
+  # Utilities
+  defp to_iso8601(%DateTime{} = dt), do: {:ok, DateTime.to_iso8601(dt)}
+  defp to_iso8601(%NaiveDateTime{} = ndt) do
+    case DateTime.from_naive(ndt, "Etc/UTC") do
+      {:ok, dt} -> {:ok, DateTime.to_iso8601(dt)}
+      {:error, _} = err -> err
+    end
+  end
+
+  defp to_iso8601(other), do: {:error, "Invalid datetime: #{inspect(other)}"}
+
+  defp to_float(%Decimal{} = d), do: {:ok, Decimal.to_float(d)}
+  defp to_float(n) when is_integer(n) or is_float(n), do: {:ok, n * 1.0}
+  defp to_float(other), do: {:error, "Invalid amount: #{inspect(other)}"}
 end

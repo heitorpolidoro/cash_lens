@@ -14,8 +14,6 @@ defmodule CashLens.Application do
       {Phoenix.PubSub, name: CashLens.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: CashLens.Finch},
-      # Start the ML model worker for transaction classification
-      CashLens.ML.ModelWorker,
       # Start to serve requests, typically the last entry
       CashLensWeb.Endpoint
     ]

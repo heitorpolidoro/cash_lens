@@ -19,18 +19,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy only requirements first to leverage Docker layer caching
-COPY ai_model/requirements.txt /app/requirements.txt
+COPY ml/requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && pip install -r /app/requirements.txt
 
 # Copy application code
-COPY ai_model /app/ai_model
-COPY priv/ml_models /app/priv/ml_models
+COPY ml /app/ml
 
 # Default environment
-ENV PY_SERVICE_PORT=8000 \
-    PY_MODEL_PATH=/app/priv/ml_models/catboost_transaction_classifier.cbm
+ENV PY_SERVICE_PORT=8000
 
 EXPOSE 8000
 
 # Run the FastAPI app with Uvicorn
-CMD ["uvicorn", "ai_model.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "ml.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

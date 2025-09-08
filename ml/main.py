@@ -10,7 +10,7 @@ import pickle
 from catboost import CatBoostClassifier
 import pandas as pd
 
-MODEL_PATH = os.environ.get("PY_MODEL_PATH", "priv/ml_models/catboost_transaction_classifier.cbm")
+MODEL_PATH = os.environ.get("PY_MODEL_PATH", "ml/ml_models/catboost_transaction_classifier.cbm")
 K_DEFAULT = int(os.environ.get("PY_TRAIN_K", "1000"))
 
 app = FastAPI(title="CashLens ML Service", version="0.1.0")

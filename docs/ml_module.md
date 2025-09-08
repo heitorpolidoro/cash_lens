@@ -15,7 +15,6 @@ The ML module provides functionality to automatically categorize transactions an
 The ML module consists of the following components:
 
 1. **TransactionClassifier** (`CashLens.ML.TransactionClassifier`) - Core module that handles training, saving, loading, and prediction
-2. **ModelWorker** (`CashLens.ML.ModelWorker`) - GenServer that loads the model on application startup
 3. **Transactions Context Integration** - Functions in the Transactions context that use the ML module
 
 ## Features
@@ -28,8 +27,6 @@ The model is trained using existing transaction data from the database. It learn
 # Train the model
 CashLens.Transactions.train_classification_model()
 ```
-
-The model is automatically saved after training and loaded by the ModelWorker.
 
 ### Prediction
 
@@ -84,7 +81,6 @@ The ML module includes robust error handling:
 
 - If no model exists, predictions will fail gracefully
 - If training fails, appropriate error messages are returned
-- The ModelWorker will retry loading the model if it fails initially
 
 ## Best Practices
 

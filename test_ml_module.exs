@@ -3,7 +3,6 @@
 
 alias CashLens.Transactions
 alias CashLens.ML.TransactionClassifier
-alias CashLens.ML.ModelWorker
 
 IO.puts("=== Testing ML Module Functionality ===\n")
 
