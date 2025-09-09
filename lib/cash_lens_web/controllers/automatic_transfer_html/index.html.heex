@@ -8,8 +8,8 @@
 </.header>
 
 <.table id="automatic_transfers" rows={@automatic_transfers} row_click={&JS.navigate(~p"/transfers/automatic_transfers/#{&1}")}>
-  <:col :let={automatic_transfers} label="From">{automatic_transfers.from_id}</:col>
-  <:col :let={automatic_transfers} label="To">{automatic_transfers.from_id}</:col>
+  <:col :let={automatic_transfers} label="From">{Accounts.to_str(automatic_transfers.from)}</:col>
+  <:col :let={automatic_transfers} label="To">{Accounts.to_str(automatic_transfers.to)}</:col>
   <:action :let={automatic_transfers}>
     <div class="sr-only">
       <.link navigate={~p"/transfers/automatic_transfers/#{automatic_transfers.id}"}>Show</.link>

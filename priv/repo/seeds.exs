@@ -18,7 +18,8 @@ Enum.each(categories, fn category_attrs ->
 end)
 
 accounts = [
-  %{name: "Conta Corrente", bank_name: "Banco do Brasil", type: "checking"}
+  %{name: "Conta Corrente", bank_name: "Banco do Brasil", type: "checking"},
+  %{name: "BB Rende Fácil", bank_name: "Banco do Brasil", type: "savings"}
 ]
 
 Enum.each(accounts, fn account_attrs ->

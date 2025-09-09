@@ -4,7 +4,6 @@ defmodule CashLensWeb.AutomaticTransferController do
   alias CashLens.AutomaticTransfers
   alias CashLens.AutomaticTransfers.AutomaticTransfer
   alias CashLens.Accounts
-  alias CashLens.Accounts.Account
 
   def index(conn, _params) do
     automatic_transfers = AutomaticTransfers.list_automatic_transfers()
@@ -13,8 +12,8 @@ defmodule CashLensWeb.AutomaticTransferController do
 
   def new(conn, _params) do
     changeset = AutomaticTransfers.change_automatic_transfer(%AutomaticTransfer{})
-    accounts = Accounts.list_accounts_for_select() |> IO.inspect()
-    render(conn, :new, changeset: changeset, accounts: accounts) |> IO.inspect()
+    accounts = Accounts.list_accounts_for_select()
+    render(conn, :new, changeset: changeset, accounts: accounts)
   end
 
   def create(conn, %{"automatic_transfer" => automatic_transfer_params}) do

@@ -17,7 +17,7 @@ defmodule CashLensWeb.TransactionsTableLive do
   @impl true
   def handle_event("date_selected", %{"date" => date_str}, socket) do
     # Parse the string into a DateTime if needed
-    {:ok, date} = Date.from_iso8601(date_str)
+    {:ok, _date} = Date.from_iso8601(date_str)
 
     {
       :noreply,

@@ -5,7 +5,6 @@ defmodule CashLensWeb.ParseStatementLive do
   alias CashLens.Parsers
   alias CashLens.Accounts
   alias CashLens.Categories
-  alias CashLens.Categories.Category
   alias CashLens.Transactions
   alias CashLens.Reasons
   alias CashLens.Transactions.Transaction
@@ -144,7 +143,7 @@ defmodule CashLensWeb.ParseStatementLive do
             end)
 
         # Mark as existing if it exists in DB or is duplicated in the list
-        transaction = Map.put(transaction, :exists, exists)
+        Map.put(transaction, :exists, exists)
       end)
 
     {:noreply,
@@ -260,6 +259,7 @@ defmodule CashLensWeb.ParseStatementLive do
       |> Map.take([:datetime, :amount, :reason, :refundable, :category_id])
       |> Map.put(:account_id, transaction.account.id)
       |> Map.put(:category_id, transaction.category_id || transaction.category.id)
+      |> Map.put(:category, transaction.category || Categories.get_category!(transaction.category_id))
 
     case Transactions.create_transaction(transaction_attrs) do
       {:ok, _transaction} ->

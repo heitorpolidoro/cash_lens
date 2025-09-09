@@ -5,6 +5,7 @@ defmodule CashLensWeb.SidebarComponent do
 
   def sidebar(assigns) do
     assigns = assign(assigns, pending_transfers_count: Transfers.get_pending_transfers_count())
+
     ~H"""
     <aside
       id="sidebar"
@@ -35,11 +36,13 @@ defmodule CashLensWeb.SidebarComponent do
             class="flex items-center px-4 py-2 text-sm font-medium text-zinc-900 rounded-md hover:bg-zinc-100"
           >
             <.icon name="hero-arrows-right-left-mini" class="h-5 w-5 mr-3" /> Transfers
-            <span class="ml-2 inline-flex items-center justify-center
+            <%= if @pending_transfers_count > 0 do %>
+              <span class="ml-2 inline-flex items-center justify-center
                 px-2 py-0.5 text-xs font-bold leading-none
                 text-white bg-red-600 rounded-full">
-              {@pending_transfers_count}
-            </span>
+                {@pending_transfers_count}
+              </span>
+            <% end %>
           </a>
 
           <a

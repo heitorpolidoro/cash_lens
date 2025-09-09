@@ -1,7 +1,5 @@
 defmodule CashLensWeb.AutomaticTransferHTML do
   use CashLensWeb, :html
-  alias CashLens.Transfers.Transfer
-  alias CashLens.Helper
   alias CashLens.Accounts
 
   embed_templates "automatic_transfer_html/*"

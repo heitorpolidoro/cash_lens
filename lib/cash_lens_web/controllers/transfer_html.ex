@@ -1,6 +1,5 @@
 defmodule CashLensWeb.TransferHTML do
   use CashLensWeb, :html
-  alias CashLens.Transfers.Transfer
   alias CashLens.Helper
   alias CashLens.Accounts
 

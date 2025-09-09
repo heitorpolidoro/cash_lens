@@ -2,16 +2,17 @@ defmodule CashLens.Transactions do
   @moduledoc """
   The Transactions context.
   """
+  require Logger
 
   import Ecto.Query, warn: false
   alias CashLens.Repo
 
   alias CashLens.Transactions.Transaction
-  alias CashLens.Accounts.Account
   alias CashLens.Categories.Category
   alias CashLens.Categories
   alias CashLens.ML.TransactionClassifier
   alias CashLens.Transfers
+  alias CashLens.AutomaticTransfers
 
   @doc """
   Returns the list of transactions.
@@ -61,47 +62,51 @@ defmodule CashLens.Transactions do
     |> Repo.preload([:account, :category])
   end
 
-  @doc """
-  Creates a transaction.
+  defp do_create_transaction(attrs) do
+    %Transaction{}
+    |> Transaction.changeset(attrs)
+    |> Repo.insert()
+    |> case do
+      {:ok, transaction} -> {:ok, Repo.preload(transaction, [:account, :category])}
+      error -> error
+    end
+  end
 
-  ## Examples
+  def create_transaction(%{category: %{name: "Transfer"}} = attrs) do
+    with {:ok, transaction} <- do_create_transaction(attrs) do
 
-      iex> create_transaction(%{field: value})
-      {:ok, %Transaction{}}
+      case find_transactions({:amount, Decimal.negate(transaction.amount)}) do
+        [] ->
+          if account = AutomaticTransfers.find_automatic_transfer_account_to!(transaction.account) do
+            # TODO treat then return error
+            {:ok, other_transaction} =
+              do_create_transaction(%{
+                Map.from_struct(transaction)
+                | account_id: account.id,
+                  amount: Decimal.negate(transaction.amount)
+              })
 
-      iex> create_transaction(%{field: bad_value})
-      {:error, %Ecto.Changeset{}}
+            Transfers.create_transfer_from_transactions(transaction, other_transaction)
+          else
+            Transfers.create_transfer_from_transactions(transaction, nil)
+          end
 
-  """
-  def create_transaction(attrs \\ %{}) do
-    {resp, transaction} =
-      %Transaction{}
-      |> Transaction.changeset(attrs)
-      |> Repo.insert()
-      |> case do
-        {:ok, transaction} -> {:ok, Repo.preload(transaction, [:account, :category])}
-        error -> error
+        [transfer_transaction] ->
+          Transfers.update_transfer_from_transactions(transfer_transaction, transaction)
+
+        _transfer_transactions ->
+          raise "Multiple transfer transactions found"
       end
 
-
-    case transaction.category.name do
-      "Transfer" ->
-        case find_transactions({:amount, Decimal.negate(transaction.amount)}) do
-          [] ->
-            Transfers.create_transfer_from_transaction(transaction)
-
-          [transfer_transaction] ->
-            Transfers.update_transfer_from_transaction(transfer_transaction, transaction)
-
-          transfer_transactions ->
-            raise "Multiple transfer transactions found"
-        end
-
-      _ ->
-        :ok
+      {:ok, transaction}
+    else
+      {:error, reason} ->
+        {:error, reason}
     end
+  end
 
-    {resp, transaction}
+  def create_transaction(attrs) do
+    do_create_transaction(attrs)
   end
 
   @doc """

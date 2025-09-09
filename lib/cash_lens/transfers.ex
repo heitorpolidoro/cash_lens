@@ -59,20 +59,16 @@ defmodule CashLens.Transfers do
     |> Repo.insert()
   end
 
-  def create_transfer_from_transaction(transaction) do
-    attrs =
-      if Decimal.gt?(transaction.amount, 0) do
-        %{to_id: transaction.id}
-      else
-        %{from_id: transaction.id}
-      end
-
-    %Transfer{}
-    |> Transfer.changeset(attrs)
-    |> Repo.insert()
+  def create_transfer_from_transactions(from_transaction, to_transaction) do
+    if Decimal.lt?(from_transaction.amount, 0) do
+      %{from_id: from_transaction.id, to_id: to_transaction && to_transaction.id}
+    else
+      %{to_id: from_transaction.id, from_id: to_transaction && to_transaction.id}
+    end
+    |> create_transfer
   end
 
-  def update_transfer_from_transaction(from_transaction, to_transaction) do
+  def update_transfer_from_transactions(from_transaction, to_transaction) do
     if Decimal.gt?(from_transaction.amount, 0) do
       _update_transfer_from_transaction(to_transaction, from_transaction)
     else

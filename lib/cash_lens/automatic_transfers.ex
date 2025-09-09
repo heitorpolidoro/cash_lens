@@ -41,6 +41,29 @@ defmodule CashLens.AutomaticTransfers do
     |> Repo.preload([:from, :to])
   end
 
+  def find_automatic_transfer_by_account!(account) do
+    case Repo.one(
+           from(at in AutomaticTransfer,
+             where: at.from_id == ^account.id or at.to_id == ^account.id
+           )
+         ) do
+      nil -> nil
+      automatic_transfer -> Repo.preload(automatic_transfer, [:from, :to])
+    end
+  end
+
+  def find_automatic_transfer_account_to!(account_from) do
+    case find_automatic_transfer_by_account!(account_from) do
+      nil ->
+        nil
+
+      automatic_transfer ->
+        if automatic_transfer.from_id == account_from.id,
+          do: automatic_transfer.to,
+          else: automatic_transfer.from
+    end
+  end
+
   @doc """
   Creates a automatic_transfer.
 
@@ -57,40 +80,6 @@ defmodule CashLens.AutomaticTransfers do
     %AutomaticTransfer{}
     |> AutomaticTransfer.changeset(attrs)
     |> Repo.insert()
-  end
-
-  def create_automatic_transfer_from_transaction(transaction) do
-    attrs =
-      if Decimal.gt?(transaction.amount, 0) do
-        %{to_id: transaction.id}
-      else
-        %{from_id: transaction.id}
-      end
-
-    %AutomaticTransfer{}
-    |> AutomaticTransfer.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  def update_automatic_transfer_from_transaction(from_transaction, to_transaction) do
-    if Decimal.gt?(from_transaction.amount, 0) do
-      _update_automatic_transfer_from_transaction(to_transaction, from_transaction)
-    else
-      _update_automatic_transfer_from_transaction(from_transaction, to_transaction)
-    end
-  end
-
-  defp _update_automatic_transfer_from_transaction(from_transaction, to_transaction) do
-    automatic_transfer =
-      from(t in AutomaticTransfer,
-        where: t.from_id == ^from_transaction.id or t.to_id == ^to_transaction.id
-      )
-      |> Repo.one()
-
-    update_automatic_transfer(automatic_transfer, %{
-      from_id: from_transaction.id,
-      to_id: to_transaction.id
-    })
   end
 
   @doc """
@@ -139,5 +128,4 @@ defmodule CashLens.AutomaticTransfers do
   def change_automatic_transfer(%AutomaticTransfer{} = automatic_transfer, attrs \\ %{}) do
     AutomaticTransfer.changeset(automatic_transfer, attrs)
   end
-
 end
