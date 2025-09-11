@@ -17,7 +17,7 @@ defmodule CashLensWeb.Router do
   scope "/", CashLensWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", HomeLive, :index
     resources "/accounts", AccountController
     resources "/categories", CategoryController
 
