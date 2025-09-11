@@ -66,7 +66,7 @@ defmodule CashLens.Parsers.BBCSVParser do
 
   ## Examples
 
-      iex> parse_reason_with_date("Compra com Cartão - 03/01 15:43 M REIS VARAIS E UTIL", ~N[2025-01-05 00:00:00])
+      iex> parse_reason_with_date("03/01 15:43 M REIS VARAIS E UTIL", ~N[2025-01-05 00:00:00])
       {~U[2025-01-03 15:43:00Z], "M REIS VARAIS E UTIL"}
 
       iex> parse_reason_with_date("Regular reason", ~N[2025-01-05 00:00:00])
@@ -74,7 +74,7 @@ defmodule CashLens.Parsers.BBCSVParser do
 
   """
   def parse_reason_with_date(reason, original_date) do
-    case Regex.run(~r/^Compra com Cartão - (\d{2})\/(\d{2}) (\d{2}):(\d{2}) (.+)$/, reason) do
+    case Regex.run(~r/(\d{2})\/(\d{2}) (\d{2}):(\d{2}) (.+)$/, reason) do
       [_, day, month, hour, minute, actual_reason] ->
         # Create a new date with the day, month from the reason, but year from original date
         # Also include the time (hour and minute)

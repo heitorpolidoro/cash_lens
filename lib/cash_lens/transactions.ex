@@ -74,7 +74,6 @@ defmodule CashLens.Transactions do
 
   def create_transaction(%{category: %{name: "Transfer"}} = attrs) do
     with {:ok, transaction} <- do_create_transaction(attrs) do
-
       case find_transactions({:amount, Decimal.negate(transaction.amount)}) do
         [] ->
           if account = AutomaticTransfers.find_automatic_transfer_account_to!(transaction.account) do
@@ -90,6 +89,8 @@ defmodule CashLens.Transactions do
           else
             Transfers.create_transfer_from_transactions(transaction, nil)
           end
+
+          Logger.info("Transfer created: #{inspect(transaction)}")
 
         [transfer_transaction] ->
           Transfers.update_transfer_from_transactions(transfer_transaction, transaction)

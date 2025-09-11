@@ -1,10 +1,12 @@
 alias CashLens.Repo
 alias CashLens.Accounts.Account
 alias CashLens.Categories.Category
+alias CashLens.AutomaticTransfers.AutomaticTransfer
 
 categories = [
   %{name: "Transfer"},
-  %{name: "Adjust"}
+  %{name: "Adjust"},
+  %{name: "Undefined"}
 ]
 
 Enum.each(categories, fn category_attrs ->
@@ -34,7 +36,12 @@ end)
 
 categories = [
   %{name: "Fuel"},
-  %{name: "Education"}
+  %{name: "Education"},
+  %{name: "House"},
+  %{name: "Food"},
+  %{name: "Market"},
+  %{name: "Toll"},
+  %{name: "Tax"}
 ]
 
 Enum.each(categories, fn category_attrs ->
@@ -46,3 +53,11 @@ Enum.each(categories, fn category_attrs ->
     Ecto.ConstraintError -> :already_exists
   end
 end)
+
+try do
+  %AutomaticTransfer{}
+  |> AutomaticTransfer.changeset(%{from_id: 2, to_id: 1})
+  |> Repo.insert()
+rescue
+  Ecto.ConstraintError -> :already_exists
+end

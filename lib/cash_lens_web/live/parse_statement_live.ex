@@ -1,18 +1,13 @@
 defmodule CashLensWeb.ParseStatementLive do
   use CashLensWeb, :live_view
-  import Ecto.Query
 
   alias CashLens.Parsers
   alias CashLens.Accounts
   alias CashLens.Categories
   alias CashLens.Transactions
   alias CashLens.Reasons
-  alias CashLens.Transactions.Transaction
-  alias CashLens.Repo
   alias CashLens.ML.TransactionClassifier
   alias CashLens.Helper
-
-  @text_reason_to_remove ["Pagamento de Boleto - "]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -21,14 +16,13 @@ defmodule CashLensWeb.ParseStatementLive do
     accounts = Accounts.list_accounts()
     categories = Categories.list_categories()
 
-    #    special_categories = Categories.get_special_categories()
-
     {:ok,
-     assign(socket,
+     socket
+     |> assign(
        statements: statements,
        parsers: parsers,
        accounts: accounts,
-       categories: categories,
+       categories: Enum.sort_by(categories, & &1.name),
        show_parser_modal: false,
        show_account_modal: false,
        show_new_category_modal: false,
@@ -37,10 +31,12 @@ defmodule CashLensWeb.ParseStatementLive do
        selected_account: nil,
        new_category_name: nil,
        new_category_transaction_index: nil,
-       transactions: nil,
        retrain: false,
-       special_categories: []
-     )}
+       loading_message: ""
+     )
+     |> assign_async(:transactions, fn ->
+       {:ok, %{transactions: nil}}
+     end)}
   end
 
   @impl true
@@ -103,54 +99,12 @@ defmodule CashLensWeb.ParseStatementLive do
     parser_module = socket.assigns.selected_parser
     selected_account = socket.assigns.selected_account
 
-    # Read file with latin1 encoding
-    parsed_transactions =
-      statement.path
-      |> File.stream!()
-      |> Stream.map(&:unicode.characters_to_binary(&1, :latin1))
-      |> parser_module.parse
-      |> Enum.filter(fn transaction -> !Reasons.should_ignore_reason(transaction.reason) end)
-      |> Enum.map(fn transaction ->
-        transaction
-        |> Map.put(:account, selected_account)
-        |> Map.put(:reason, clear_reason(transaction.reason))
-        |> Transactions.set_category_with_prediction()
-        |> Map.put(:refundable, false)
-
-      end)
-
-    # Check for duplicates in the database and within the parsed transactions
-    transactions =
-      parsed_transactions
-      |> Enum.with_index()
-      |> Enum.map(fn {transaction, index} ->
-        # Check if transaction exists in database
-        exists =
-          Repo.exists?(
-            from(t in Transaction,
-              where:
-                t.reason == ^transaction.reason and
-                  t.datetime == ^transaction.datetime and
-                  t.amount == ^transaction.amount
-            )
-          ) ||
-            Enum.with_index(parsed_transactions)
-            |> Enum.any?(fn {t, i} ->
-              i != index &&
-                t.reason == transaction.reason &&
-                t.datetime == transaction.datetime &&
-                t.amount == transaction.amount
-            end)
-
-        # Mark as existing if it exists in DB or is duplicated in the list
-        Map.put(transaction, :exists, exists)
-      end)
-
     {:noreply,
-     assign(socket,
-       show_parser_modal: false,
-       transactions: transactions
-     )}
+     socket
+     |> assign(show_parser_modal: false, loading_message: "Parsing...")
+     |> start_async(:predict_transactions, fn ->
+       Parsers.parse_file(statement, parser_module, selected_account)
+     end)}
   end
 
   @impl true
@@ -174,12 +128,14 @@ defmodule CashLensWeb.ParseStatementLive do
 
         _ ->
           updated_transactions =
-            socket.assigns.transactions
+            socket.assigns.transactions.result
             |> List.update_at(index, fn transaction ->
               %{transaction | category_id: String.to_integer(category_str)}
             end)
 
-          assign(socket, transactions: updated_transactions)
+          assign_async(socket, :transactions, fn ->
+            {:ok, %{transactions: updated_transactions}}
+          end)
       end
 
     {:noreply, assign(socket, retrain: true)}
@@ -203,7 +159,7 @@ defmodule CashLensWeb.ParseStatementLive do
         index = socket.assigns.new_category_transaction_index
 
         updated_transactions =
-          socket.assigns.transactions
+          socket.assigns.transactions.result
           |> List.update_at(index, fn transaction ->
             %{transaction | category: category}
           end)
@@ -212,12 +168,15 @@ defmodule CashLensWeb.ParseStatementLive do
         updated_categories = [category | socket.assigns.categories]
 
         {:noreply,
-         assign(socket,
-           transactions: updated_transactions,
-           categories: updated_categories,
+         socket
+         |> assign(
+           categories: Enum.sort_by(updated_categories, & &1.name),
            show_new_category_modal: false,
            retrain: true
-         )}
+         )
+         |> assign_async(:transactions, fn ->
+           {:ok, %{transactions: updated_transactions}}
+         end)}
 
       {:error, _changeset} ->
         # Show an error message
@@ -242,13 +201,16 @@ defmodule CashLensWeb.ParseStatementLive do
         %{transaction | refundable: refundable == "true"}
       end)
 
-    {:noreply, assign(socket, transactions: updated_transactions)}
+    {:noreply,
+     assign_async(socket, :transactions, fn ->
+       {:ok, %{transactions: updated_transactions}}
+     end)}
   end
 
   @impl true
   def handle_event("save_transaction", %{"index" => index_str}, socket) do
     index = String.to_integer(index_str)
-    transactions = socket.assigns.transactions
+    transactions = socket.assigns.transactions.result
 
     transaction =
       transactions
@@ -259,18 +221,15 @@ defmodule CashLensWeb.ParseStatementLive do
       |> Map.take([:datetime, :amount, :reason, :refundable, :category_id])
       |> Map.put(:account_id, transaction.account.id)
       |> Map.put(:category_id, transaction.category_id || transaction.category.id)
-      |> Map.put(:category, transaction.category || Categories.get_category!(transaction.category_id))
+      |> Map.put(
+        :category,
+        transaction.category || Categories.get_category!(transaction.category_id)
+      )
 
     case Transactions.create_transaction(transaction_attrs) do
       {:ok, _transaction} ->
-        transactions =
-          if socket.assigns.retrain do
-            TransactionClassifier.train_model()
-            Transactions.set_category_with_prediction(transactions)
-          else
-            transactions
-          end
-          |> List.delete_at(index)
+        retrain = socket.assigns.retrain
+        transactions = List.delete_at(transactions, index)
 
         {
           :noreply,
@@ -278,9 +237,22 @@ defmodule CashLensWeb.ParseStatementLive do
           |> put_flash(
             :info,
             "Transaction saved successfully" <>
-              if(socket.assigns.retrain, do: ". Retrained", else: "")
+              if(retrain, do: ". Retrained", else: "")
           )
-          |> assign(transactions: transactions, retrain: false)
+          |> assign(
+            retrain: false,
+            loading_message: "Training the model..."
+          )
+          |> assign_async(:transactions, fn ->
+            {:ok, %{transactions: transactions}}
+          end)
+          |> start_async(:predict_transactions, fn ->
+            if retrain do
+              TransactionClassifier.train_model()
+            end
+
+            transactions
+          end)
         }
 
       {:error, changeset} ->
@@ -292,11 +264,16 @@ defmodule CashLensWeb.ParseStatementLive do
   def handle_event("ignore_transaction", %{"index" => index_str}, socket) do
     index = String.to_integer(index_str)
 
+    transactions = socket.assigns.transactions.result
+
     {
       :noreply,
       socket
       |> put_flash(:info, "Transaction ignored successfully")
-      |> assign(transactions: List.delete_at(socket.assigns.transactions, index))
+      |> assign(loading_message: "Ignoring transaction...")
+      |> assign_async(:transactions, fn ->
+        {:ok, %{transactions: List.delete_at(transactions, index)}}
+      end)
     }
   end
 
@@ -305,11 +282,14 @@ defmodule CashLensWeb.ParseStatementLive do
     case Reasons.create_reason(%{reason: reason, ignore: true}) do
       {:ok, _reason} ->
         index = String.to_integer(index_str)
+        transactions = socket.assigns.transactions.result
 
         {
           :noreply,
           socket
-          |> assign(transactions: List.delete_at(socket.assigns.transactions, index))
+          |> assign_async(:transactions, fn ->
+            {:ok, %{transactions: List.delete_at(transactions, index)}}
+          end)
           |> put_flash(:info, "Reason '#{reason}' added to ignore list")
         }
 
@@ -319,6 +299,16 @@ defmodule CashLensWeb.ParseStatementLive do
   end
 
   # Get all errors as a single string
+  @impl true
+  def handle_async(:predict_transactions, {:ok, transactions}, socket) do
+    {:noreply,
+     socket
+     |> assign(loading_message: "Predicting categories...")
+     |> assign_async(:transactions, fn ->
+       {:ok, %{transactions: Transactions.set_category_with_prediction(transactions)}}
+     end)}
+  end
+
   def changeset_errors_to_string(changeset) do
     changeset
     |> Ecto.Changeset.traverse_errors(fn {msg, opts} ->
@@ -352,16 +342,27 @@ defmodule CashLensWeb.ParseStatementLive do
     end)
   end
 
-  defp clear_reason(reason) do
-    @text_reason_to_remove
-    |> Enum.reduce(reason, fn reason_to_remove, acc ->
-      String.replace(acc, reason_to_remove, "")
-    end)
-  end
-
   @impl true
   def render(assigns) do
     ~H"""
+    <%= if @transactions.loading do %>
+      <div class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center">
+        <div class="flex items-center gap-3 text-white text-lg">
+          <svg
+            class="animate-spin h-6 w-6 text-white"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+            </circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z">
+            </path>
+          </svg>
+          {@loading_message}
+        </div>
+      </div>
+    <% end %>
     <div class="mx-auto py-8 px-4 sm:px-6 lg:px-8">
       <h1 class="text-2xl font-semibold text-zinc-900 mb-6">Parse Statement</h1>
 
@@ -427,9 +428,8 @@ defmodule CashLensWeb.ParseStatementLive do
         </div>
       </div>
       <.transactions_table
-        transactions={@transactions}
+        transactions={@transactions.result}
         categories={@categories}
-        special_categories={@special_categories}
       />
 
       <.parser_modal
@@ -651,5 +651,4 @@ defmodule CashLensWeb.ParseStatementLive do
   defp format_size(size) when size < 1024, do: "#{size} B"
   defp format_size(size) when size < 1024 * 1024, do: "#{Float.round(size / 1024, 2)} KB"
   defp format_size(size), do: "#{Float.round(size / (1024 * 1024), 2)} MB"
-
 end
