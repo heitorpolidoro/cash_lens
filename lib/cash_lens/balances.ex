@@ -28,6 +28,20 @@ defmodule CashLens.Balances do
     |> Repo.preload([:account])
   end
 
+  def create_or_update_balance(attrs) do
+    if balance =
+         Repo.one(
+           from(b in Balance,
+             where: b.account_id == ^attrs.account_id and b.month == ^attrs.month,
+             select: b
+           )
+         ) do
+      update_balance(balance, attrs)
+    else
+      create_balance()
+    end
+  end
+
   def create_balance(attrs \\ %{}) do
     %Balance{}
     |> Balance.changeset(attrs)
@@ -85,7 +99,7 @@ defmodule CashLens.Balances do
       balance = Decimal.add(total_in, total_out)
       starting_value = 0
 
-      create_balance(%{
+      create_or_update_balance(%{
         month: DateTime.to_date(month),
         # TODO
         starting_value: starting_value,
@@ -96,7 +110,6 @@ defmodule CashLens.Balances do
         final_value: Decimal.add(starting_value, balance),
         account_id: account.id
       })
-
     end)
 
     #    start_date = DateTime.new!(Date.new!(year, month, 1), Time.new!(0, 0, 0), "Etc/UTC")

@@ -34,7 +34,7 @@ defmodule CashLensWeb.BalanceController do
       {:ok, balance} ->
         conn
         |> put_flash(:info, "Balance updated successfully.")
-        |> redirect(to: ~p"/balances/#{balance}")
+        |> redirect(to: ~p"/balances")
 
       {:error, %Ecto.Changeset{} = changeset} ->
         accounts = Accounts.list_accounts_for_select()
