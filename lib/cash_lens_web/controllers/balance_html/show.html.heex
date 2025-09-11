@@ -1,0 +1,21 @@
+<.header>
+  Balance Details
+  <:actions>
+    <.link href={~p"/balances/#{@balance}/edit"}>
+      <.button>Edit balance</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Month"><%= Calendar.strftime(@balance.month, "%Y-%m") %></:item>
+  <:item title="Account"><%= @balance.account && @balance.account.name %></:item>
+  <:item title="Starting Value"><%= Helper.format_currency(@balance.starting_value) %></:item>
+  <:item title="Total In"><%= Helper.format_currency(@balance.total_in) %></:item>
+  <:item title="Total Out"><%= Helper.format_currency(@balance.total_out) %></:item>
+  <:item title="Balance"><%= Helper.format_currency(@balance.balance) %></:item>
+  <:item title="Interest"><%= Helper.format_currency(@balance.interest) %></:item>
+  <:item title="Final Value"><%= Helper.format_currency(@balance.final_value) %></:item>
+</.list>
+
+<.back navigate={~p"/balances"}>Back to balances</.back>

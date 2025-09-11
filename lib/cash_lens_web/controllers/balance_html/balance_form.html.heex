@@ -1,0 +1,13 @@
+<.simple_form :let={f} for={@changeset} action={@action}>
+  <.input field={f[:month]} type="date" label="Month" />
+  <.input field={f[:account_id]} type="select" label="Account" options={@accounts} />
+  <.input field={f[:starting_value]} type="number" label="Starting Value" step="0.01" />
+  <.input field={f[:total_in]} type="number" label="Total In" step="0.01" />
+  <.input field={f[:total_out]} type="number" label="Total Out" step="0.01" />
+  <.input field={f[:balance]} type="number" label="Balance" step="0.01" />
+  <.input field={f[:interest]} type="number" label="Interest" step="0.01" />
+  <.input field={f[:final_value]} type="number" label="Final Value" step="0.01" />
+  <:actions>
+    <.button>Save Balance</.button>
+  </:actions>
+</.simple_form>

@@ -69,7 +69,7 @@ defmodule CashLens.Transfers do
   end
 
   def update_transfer_from_transactions(from_transaction, to_transaction) do
-    if Decimal.gt?(from_transaction.amount, 0) do
+    if Decimal.gte?(from_transaction.amount, 0) do
       _update_transfer_from_transaction(to_transaction, from_transaction)
     else
       _update_transfer_from_transaction(from_transaction, to_transaction)

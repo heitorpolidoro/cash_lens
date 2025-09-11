@@ -4,7 +4,7 @@ defmodule CashLens.Transactions do
   """
   require Logger
 
-  import Ecto.Query, warn: false
+  import Ecto.Query
   alias CashLens.Repo
 
   alias CashLens.Transactions.Transaction
@@ -29,17 +29,22 @@ defmodule CashLens.Transactions do
     |> Repo.preload([:account, :category])
   end
 
-  def find_transactions(filters, preload \\ false) do
-    transactions =
-      Transaction
-      |> QueryBuilder.where(filters)
-      |> Repo.all()
+  # TODO
+  def find_transactions(filters, group_by \\ nil, preload \\ false) do
+    transactions = QueryBuilder.where(Transaction, filters)
 
-    if preload do
-      Repo.preload(transactions, [:account, :category])
+    if is_nil(group_by) do
+      QueryBuilder.group_by(transactions, group_by)
     else
       transactions
     end
+
+    if preload do
+      QueryBuilder.preload(transactions, [:account, :category])
+    else
+      transactions
+    end
+    |> Repo.all()
   end
 
   @doc """
@@ -204,5 +209,21 @@ defmodule CashLens.Transactions do
         # If prediction fails, return transaction without predictions
         transaction
     end
+  end
+
+  def list_transactions_grouped_by_account(account, year, month) do
+    # Create start and end dates for the month
+    start_date = DateTime.new!(Date.new!(year, month, 1), Time.new!(0, 0, 0), "Etc/UTC")
+
+    end_date =
+      Date.new!(year, month, 1)
+      |> Date.end_of_month()
+      |> DateTime.new!(Time.new!(23, 59, 59), "Etc/UTC")
+
+    from(t in Transaction,
+      where: t.datetime >= ^start_date and t.datetime <= ^end_date and t.account == ^account,
+      preload: [:account, :category]
+    )
+    |> Repo.all()
   end
 end

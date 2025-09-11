@@ -27,7 +27,12 @@ defmodule CashLensWeb.Router do
     live "/transactions", TransactionsLive, :index
     resources "/reasons", ReasonController
 
+    resources "/balances", BalanceController
+
     live "/parse-statement", ParseStatementLive, :index
+
+    resources "/balances", BalanceController, only: [:index, :show, :edit, :update]
+    post "/balances/:id/recalculate", BalanceController, :recalculate
   end
 
   scope "/transfers/automatic_transfers", CashLensWeb do
