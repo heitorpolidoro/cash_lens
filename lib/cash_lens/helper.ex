@@ -1,6 +1,25 @@
 defmodule CashLens.Helper do
   @moduledoc false
 
+  @doc """
+  Returns a Tailwind text color class for a numeric or Decimal value.
+  - Blue when value >= 0
+  - Red when value < 0
+  Accepts Decimal, integer, or float.
+  """
+  def amount_color_class(value) do
+    value = if Code.ensure_loaded?(Decimal) and match?(%Decimal{}, value) do
+      Decimal.to_float(value)
+      else
+      value
+    end
+    cond do
+      value > 0 -> "text-blue-600"
+      value < 0 -> "text-red-600"
+      true -> "text-gray-600"
+    end
+  end
+
   def format_atom_title(atom) when is_atom(atom) do
     atom
     |> Atom.to_string()

@@ -51,9 +51,7 @@ defmodule CashLensWeb.TransactionsTableLive do
         <:col :let={transaction} label="Account">{transaction.account.name}</:col>
         <:col :let={transaction} label="Amount">
           <div class="text-right">
-            <span class={
-              if Decimal.gte?(transaction.amount, 0), do: "text-blue-600", else: "text-red-600"
-            }>
+            <span class={Helper.amount_color_class(transaction.amount)}>
               {Helper.format_currency(transaction.amount)}
             </span>
           </div>
