@@ -1,6 +1,8 @@
 defmodule CashLensWeb.ParseStatementLive do
   use CashLensWeb, :live_view
 
+  import Phoenix.LiveView.AsyncResult
+
   alias CashLens.Parsers
   alias CashLens.Accounts
   alias CashLens.Categories
@@ -32,11 +34,9 @@ defmodule CashLensWeb.ParseStatementLive do
        new_category_name: nil,
        new_category_transaction_index: nil,
        retrain: false,
-       loading_message: ""
-     )
-     |> assign_async(:transactions, fn ->
-       {:ok, %{transactions: nil}}
-     end)}
+       loading_message: "",
+       transactions: ok(nil)
+     )}
   end
 
   @impl true
@@ -133,9 +133,7 @@ defmodule CashLensWeb.ParseStatementLive do
               %{transaction | category_id: String.to_integer(category_str)}
             end)
 
-          assign_async(socket, :transactions, fn ->
-            {:ok, %{transactions: updated_transactions}}
-          end)
+          assign(socket, :transactions, ok(updated_transactions))
       end
 
     {:noreply, assign(socket, retrain: true)}
@@ -172,11 +170,9 @@ defmodule CashLensWeb.ParseStatementLive do
          |> assign(
            categories: Enum.sort_by(updated_categories, & &1.name),
            show_new_category_modal: false,
-           retrain: true
-         )
-         |> assign_async(:transactions, fn ->
-           {:ok, %{transactions: updated_transactions}}
-         end)}
+           retrain: true,
+           transactions: ok(updated_transactions)
+         )}
 
       {:error, _changeset} ->
         # Show an error message
@@ -201,10 +197,7 @@ defmodule CashLensWeb.ParseStatementLive do
         %{transaction | refundable: refundable == "true"}
       end)
 
-    {:noreply,
-     assign_async(socket, :transactions, fn ->
-       {:ok, %{transactions: updated_transactions}}
-     end)}
+    {:noreply, assign(socket, :transactions, ok(updated_transactions))}
   end
 
   @impl true
@@ -241,17 +234,20 @@ defmodule CashLensWeb.ParseStatementLive do
           )
           |> assign(
             retrain: false,
-            loading_message: "Training the model..."
+            transactions: ok(transactions)
           )
-          |> assign_async(:transactions, fn ->
-            {:ok, %{transactions: transactions}}
-          end)
-          |> start_async(:predict_transactions, fn ->
+          |> then(fn socket ->
             if retrain do
-              TransactionClassifier.train_model()
-            end
+              socket
+              |> assign(loading_message: "Training the model...")
+              |> start_async(:predict_transactions, fn ->
+                TransactionClassifier.train_model()
 
-            transactions
+                transactions
+              end)
+            else
+              socket
+            end
           end)
         }
 
@@ -264,16 +260,13 @@ defmodule CashLensWeb.ParseStatementLive do
   def handle_event("ignore_transaction", %{"index" => index_str}, socket) do
     index = String.to_integer(index_str)
 
-    transactions = socket.assigns.transactions.result
+    transactions = List.delete_at(socket.assigns.transactions.result, index)
 
     {
       :noreply,
       socket
       |> put_flash(:info, "Transaction ignored successfully")
-      |> assign(loading_message: "Ignoring transaction...")
-      |> assign_async(:transactions, fn ->
-        {:ok, %{transactions: List.delete_at(transactions, index)}}
-      end)
+      |> assign(transactions: ok(transactions))
     }
   end
 
@@ -282,14 +275,12 @@ defmodule CashLensWeb.ParseStatementLive do
     case Reasons.create_reason(%{reason: reason, ignore: true}) do
       {:ok, _reason} ->
         index = String.to_integer(index_str)
-        transactions = socket.assigns.transactions.result
+        transactions = List.delete_at(socket.assigns.transactions.result, index)
 
         {
           :noreply,
           socket
-          |> assign_async(:transactions, fn ->
-            {:ok, %{transactions: List.delete_at(transactions, index)}}
-          end)
+          |> assign(transactions: ok(transactions))
           |> put_flash(:info, "Reason '#{reason}' added to ignore list")
         }
 
@@ -303,7 +294,10 @@ defmodule CashLensWeb.ParseStatementLive do
   def handle_async(:predict_transactions, {:ok, transactions}, socket) do
     {:noreply,
      socket
-     |> assign(loading_message: "Predicting categories...")
+     |> assign(
+       loading_message: "Predicting categories...",
+       transactions: ok(transactions)
+     )
      |> assign_async(:transactions, fn ->
        {:ok, %{transactions: Transactions.set_category_with_prediction(transactions)}}
      end)}
@@ -427,10 +421,7 @@ defmodule CashLensWeb.ParseStatementLive do
           <% end %>
         </div>
       </div>
-      <.transactions_table
-        transactions={@transactions.result}
-        categories={@categories}
-      />
+      <.transactions_table transactions={@transactions.result} categories={@categories} />
 
       <.parser_modal
         show_parser_modal={@show_parser_modal}
