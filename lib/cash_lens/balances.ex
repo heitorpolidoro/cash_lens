@@ -28,6 +28,7 @@ defmodule CashLens.Balances do
   - final_value: Decimal sum of final values for the month
   """
   def monthly_summary do
+    # TODO select which accounts
     from(b in Balance,
       group_by: b.month,
       order_by: b.month,
@@ -70,6 +71,7 @@ defmodule CashLens.Balances do
     %Balance{}
     |> Balance.changeset(attrs)
     |> Repo.insert()
+    |> broadcast_balance_change(:balance_created)
   end
 
   @doc """
@@ -90,6 +92,7 @@ defmodule CashLens.Balances do
       {:ok, balance} -> {:ok, Repo.preload(balance, [:account])}
       error -> error
     end
+    |> broadcast_balance_change(:balance_updated)
   end
 
   def delete_balance(%Balance{} = balance) do
@@ -144,4 +147,13 @@ defmodule CashLens.Balances do
     #      |> DateTime.new!(Time.new!(23, 59, 59), "Etc/UTC")
     #
   end
+
+  # Add this helper function
+  defp broadcast_balance_change({:ok, balance} = result, event) do
+    Phoenix.PubSub.broadcast(CashLens.PubSub, "balance_updates", {:balance_updated, %{balance: balance, event: event}})
+    result
+  end
+
+  defp broadcast_balance_change({:error, _} = error, _event), do: error
+
 end

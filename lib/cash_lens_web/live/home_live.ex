@@ -17,6 +17,11 @@ defmodule CashLensWeb.HomeLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    # Subscribe to balance updates
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(CashLens.PubSub, "balance_updates")
+    end
+
     chart = build_balance_chart()
     {:ok, assign(socket, balance_chart: chart)}
   end
@@ -51,7 +56,13 @@ defmodule CashLensWeb.HomeLive do
       type: :bar,
       adapter: LiveCharts.Adapter.ApexCharts,
       options: %{
+        tooltip: %{enabled: true},
+        chart: %{height: 340},
+
         xaxis: %{categories: labels},
+        plotOptions: %{
+          bar: %{dataLabels: %{position: "top"}}
+        },
         legend: %{position: "bottom"},
         dataLabels: %{
           enabled: true,
@@ -60,14 +71,8 @@ defmodule CashLensWeb.HomeLive do
           },
           offsetY: -20
         },
-        plotOptions: %{
-          bar: %{dataLabels: %{position: "top"}}
-        },
         stroke: %{width: [0, 0, 0, 2]},
         markers: %{size: [0, 0, 0, 3]},
-        tooltip: %{enabled: true},
-        #      yaxis: [%{labels: %{formatter: fn val -> val end}}],
-        chart: %{height: 360},
         colors: @chart_colors
       },
       series: [
@@ -78,6 +83,15 @@ defmodule CashLensWeb.HomeLive do
         %{name: "Total", data: series_final, type: "line"}
       ]
     })
+  end
+
+  # Handle the broadcast message and rebuild the chart
+  @impl true
+  def handle_info({:balance_updated, _changes}, socket) do
+    # TODO try to update the values instead of rebuilding the chart
+    # This is a naive approach, it rebuilds the entire chart
+    chart = build_balance_chart()
+    {:noreply, assign(socket, balance_chart: chart)}
   end
 
   @impl true

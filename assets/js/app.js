@@ -48,7 +48,7 @@ const CustomApexHook = {
     config.dataLabels.formatter = currency_formatter;
     config.tooltip = config.tooltip || {}
     config.tooltip.y = {formatter: currency_formatter};
-    console.log("config", config.markers)
+    console.log("config", config)
     return config
   },
 }
