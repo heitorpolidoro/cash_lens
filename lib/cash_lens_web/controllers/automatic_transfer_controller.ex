@@ -20,7 +20,10 @@ defmodule CashLensWeb.AutomaticTransferController do
     case AutomaticTransfers.create_automatic_transfer(automatic_transfer_params) do
       {:ok, automatic_transfer} ->
         conn
-        |> put_flash(:info, "AutomaticTransfer '#{to_str(automatic_transfer)}' created successfully.")
+        |> put_flash(
+          :info,
+          "AutomaticTransfer '#{to_str(automatic_transfer)}' created successfully."
+        )
         |> redirect(to: ~p"/transfers/automatic_transfers")
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -36,20 +39,35 @@ defmodule CashLensWeb.AutomaticTransferController do
   def edit(conn, %{"id" => id}) do
     automatic_transfer = AutomaticTransfers.get_automatic_transfer!(id)
     changeset = AutomaticTransfers.change_automatic_transfer(automatic_transfer)
-    render(conn, :edit, automatic_transfer: automatic_transfer, changeset: changeset, accounts: nil)
+
+    render(conn, :edit,
+      automatic_transfer: automatic_transfer,
+      changeset: changeset,
+      accounts: nil
+    )
   end
 
   def update(conn, %{"id" => id, "automatic_transfer" => automatic_transfer_params}) do
     automatic_transfer = AutomaticTransfers.get_automatic_transfer!(id)
 
-    case AutomaticTransfers.update_automatic_transfer(automatic_transfer, automatic_transfer_params) do
+    case AutomaticTransfers.update_automatic_transfer(
+           automatic_transfer,
+           automatic_transfer_params
+         ) do
       {:ok, automatic_transfer} ->
         conn
-        |> put_flash(:info, "AutomaticTransfer '#{to_str(automatic_transfer)}' updated successfully.")
+        |> put_flash(
+          :info,
+          "AutomaticTransfer '#{to_str(automatic_transfer)}' updated successfully."
+        )
         |> redirect(to: ~p"/transfers/automatic_transfers")
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        render(conn, :edit, automatic_transfer: automatic_transfer, changeset: changeset, accounts: nil)
+        render(conn, :edit,
+          automatic_transfer: automatic_transfer,
+          changeset: changeset,
+          accounts: nil
+        )
     end
   end
 
@@ -64,6 +82,6 @@ defmodule CashLensWeb.AutomaticTransferController do
 
   def to_str(automatic_transfer) do
     "AutomaticTransfer ##{automatic_transfer.id}"
-#    "#{transfer.bank_name} - #{transfer.name}"
+    #    "#{transfer.bank_name} - #{transfer.name}"
   end
 end

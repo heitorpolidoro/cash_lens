@@ -104,7 +104,7 @@ defmodule CashLens.Reasons do
 
   def should_ignore_reason(reason_text) do
     from(r in Reason, where: r.reason == ^reason_text and r.ignore == true)
-      |> Repo.one()
+    |> Repo.one()
   end
 
   def to_str(%Reason{} = reason) do

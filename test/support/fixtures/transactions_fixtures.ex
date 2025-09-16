@@ -12,8 +12,11 @@ defmodule CashLens.TransactionsFixtures do
   Generate a transaction.
   """
   def transaction_fixture(attrs \\ %{}) do
-    account = attrs[:account_id] && %{id: attrs[:account_id]} || AccountsFixtures.account_fixture()
-    category = attrs[:category_id] && %{id: attrs[:category_id]} || CategoriesFixtures.category_fixture()
+    account =
+      (attrs[:account_id] && %{id: attrs[:account_id]}) || AccountsFixtures.account_fixture()
+
+    category =
+      (attrs[:category_id] && %{id: attrs[:category_id]}) || CategoriesFixtures.category_fixture()
 
     {:ok, transaction} =
       attrs

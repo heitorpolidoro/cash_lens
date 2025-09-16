@@ -18,7 +18,9 @@ defmodule CashLens.Accounts.Account do
     |> cast(attrs, [:name, :bank_name, :type])
     |> validate_required([:name, :bank_name, :type])
     |> unique_constraint([:name, :bank_name])
-    |> validate_inclusion(:type, Enum.map(@valid_types, &to_string/1), message: "must be one of: #{inspect(@valid_types)}")
+    |> validate_inclusion(:type, Enum.map(@valid_types, &to_string/1),
+      message: "must be one of: #{inspect(@valid_types)}"
+    )
   end
 
   def valid_types() do

@@ -9,7 +9,11 @@ defmodule CashLens.ML.TransactionClassifier do
 
   require Logger
 
-  @python_base_url Application.compile_env(:cash_lens, :python_ml_base_url, "http://localhost:8000")
+  @python_base_url Application.compile_env(
+                     :cash_lens,
+                     :python_ml_base_url,
+                     "http://localhost:8000"
+                   )
 
   @doc """
   Trains (or retrains) the classification model via the Python API.
@@ -22,8 +26,12 @@ defmodule CashLens.ML.TransactionClassifier do
   def train_model(opts \\ %{}) when is_map(opts) do
     body =
       case Map.get(opts, :k) do
-        nil -> %{}
-        k when is_integer(k) and k > 0 -> %{k: k}
+        nil ->
+          %{}
+
+        k when is_integer(k) and k > 0 ->
+          %{k: k}
+
         other ->
           Logger.warning("Ignoring invalid :k for train_model: #{inspect(other)}")
           %{}
@@ -77,6 +85,7 @@ defmodule CashLens.ML.TransactionClassifier do
 
   # Utilities
   defp to_iso8601(%DateTime{} = dt), do: {:ok, DateTime.to_iso8601(dt)}
+
   defp to_iso8601(%NaiveDateTime{} = ndt) do
     case DateTime.from_naive(ndt, "Etc/UTC") do
       {:ok, dt} -> {:ok, DateTime.to_iso8601(dt)}

@@ -27,6 +27,7 @@ defmodule ParserNoDBTest do
 
   defp test_string_input do
     IO.puts("\n=== Testing string input ===")
+
     content = """
     Date,Description,Amount
     2023-01-01,Grocery Store,-50.00
@@ -66,6 +67,7 @@ defmodule ParserNoDBTest do
     transactions = CashLens.Parsers.BBCSVParser.parse(csv_stream)
 
     IO.puts("Parsed transactions:")
+
     Enum.each(transactions, fn transaction ->
       IO.puts("Date: #{inspect(transaction.datetime)}")
       IO.puts("Reason: #{transaction.reason}")
@@ -77,14 +79,18 @@ defmodule ParserNoDBTest do
     special_case = Enum.at(transactions, 1)
     IO.puts("\nVerifying special case:")
     IO.puts("Expected date: 2025-01-03")
-    IO.puts("Actual date: #{special_case.datetime.year}-#{pad(special_case.datetime.month)}-#{pad(special_case.datetime.day)}")
+
+    IO.puts(
+      "Actual date: #{special_case.datetime.year}-#{pad(special_case.datetime.month)}-#{pad(special_case.datetime.day)}"
+    )
+
     IO.puts("Expected reason: M REIS VARAIS E UTIL")
     IO.puts("Actual reason: #{special_case.reason}")
 
     if special_case.datetime.year == 2025 &&
-       special_case.datetime.month == 1 &&
-       special_case.datetime.day == 3 &&
-       special_case.reason == "M REIS VARAIS E UTIL" do
+         special_case.datetime.month == 1 &&
+         special_case.datetime.day == 3 &&
+         special_case.reason == "M REIS VARAIS E UTIL" do
       IO.puts("\n✅ Special case handling is working correctly!")
     else
       IO.puts("\n❌ Special case handling is NOT working correctly!")

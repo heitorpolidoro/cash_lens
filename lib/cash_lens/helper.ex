@@ -8,11 +8,13 @@ defmodule CashLens.Helper do
   Accepts Decimal, integer, or float.
   """
   def amount_color_class(value) do
-    value = if Code.ensure_loaded?(Decimal) and match?(%Decimal{}, value) do
-      Decimal.to_float(value)
+    value =
+      if Code.ensure_loaded?(Decimal) and match?(%Decimal{}, value) do
+        Decimal.to_float(value)
       else
-      value
-    end
+        value
+      end
+
     cond do
       value > 0 -> "text-blue-600"
       value < 0 -> "text-red-600"
@@ -75,6 +77,4 @@ defmodule CashLens.Helper do
   def format_date(datetime) do
     Calendar.strftime(datetime, "%Y-%m-%d %H:%M")
   end
-
-
 end

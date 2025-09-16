@@ -261,27 +261,35 @@ defmodule CashLensWeb.CoreComponents do
     assigns = assign(assigns, :variant_class, button_class(assigns.variant))
 
     ~H"""
-    <button
-      type={@type}
-      class={[@variant_class, @class]}
-      disabled={@disabled}
-      {@rest}
-    >
-      <%= render_slot(@inner_block) %>
+    <button type={@type} class={[@variant_class, @class]} disabled={@disabled} {@rest}>
+      {render_slot(@inner_block)}
     </button>
     """
   end
 
-  defp button_class("primary"), do: "bg-black hover:bg-black text-white font-semibold py-2 px-4 rounded"
-  defp button_class("secondary"), do: "bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded"
-  defp button_class("danger"), do: "bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
-  defp button_class("success"), do: "bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded"
-  defp button_class("outline"), do: "border border-gray-400 text-gray-800 py-2 px-4 rounded hover:bg-gray-100"
+  defp button_class("primary"),
+    do: "bg-black hover:bg-black text-white font-semibold py-2 px-4 rounded"
+
+  defp button_class("secondary"),
+    do: "bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded"
+
+  defp button_class("danger"),
+    do: "bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
+
+  defp button_class("success"),
+    do: "bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded"
+
+  defp button_class("outline"),
+    do: "border border-gray-400 text-gray-800 py-2 px-4 rounded hover:bg-gray-100"
+
   defp button_class("ghost"), do: "bg-transparent text-gray-800 py-2 px-4 hover:bg-gray-100"
   defp button_class("link"), do: "text-black underline hover:text-black"
-  defp button_class("disabled"), do: "bg-gray-300 text-gray-500 cursor-not-allowed py-2 px-4 rounded"
-  defp button_class(_), do: "bg-black text-white py-2 px-4 rounded" # fallback
 
+  defp button_class("disabled"),
+    do: "bg-gray-300 text-gray-500 cursor-not-allowed py-2 px-4 rounded"
+
+  # fallback
+  defp button_class(_), do: "bg-black text-white py-2 px-4 rounded"
 
   @doc """
   Renders an input with label and error messages.
@@ -513,7 +521,7 @@ defmodule CashLensWeb.CoreComponents do
     assigns =
       with %{rows: %Phoenix.LiveView.LiveStream{}} <- assigns do
         assigns
-          |> assign(row_id: assigns.row_id || fn {id, _item} -> id end)
+        |> assign(row_id: assigns.row_id || fn {id, _item} -> id end)
       end
       |> assign(row_class: assigns[:row_class] || fn _ -> "" end)
 

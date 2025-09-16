@@ -21,7 +21,16 @@ defmodule CashLens.Balances.Balance do
   @doc false
   def changeset(balance, attrs) do
     balance
-    |> cast(attrs, [:month, :account_id, :starting_value, :total_in, :total_out, :balance, :interest, :final_value])
+    |> cast(attrs, [
+      :month,
+      :account_id,
+      :starting_value,
+      :total_in,
+      :total_out,
+      :balance,
+      :interest,
+      :final_value
+    ])
     |> validate_required([:month, :account_id])
     |> foreign_key_constraint(:account_id)
     |> unique_constraint([:account_id, :month], name: :unique_account_month)

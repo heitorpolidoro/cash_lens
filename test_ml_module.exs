@@ -8,9 +8,11 @@ IO.puts("=== Testing ML Module Functionality ===\n")
 
 # Test model training
 IO.puts("Testing model training...")
+
 case Transactions.train_classification_model() do
   {:ok, message} ->
     IO.puts("✅ Training successful: #{message}")
+
   {:error, reason} ->
     IO.puts("❌ Training failed: #{reason}")
     IO.puts("This is expected if there are no categorized transactions in the database.")
@@ -19,7 +21,9 @@ case Transactions.train_classification_model() do
     # Create sample transactions for training if none exist
     {:ok, category1} = CashLens.Categories.create_category(%{name: "Groceries"})
     {:ok, category2} = CashLens.Categories.create_category(%{name: "Entertainment"})
-    {:ok, account} = CashLens.Accounts.create_account(%{name: "Test Account", balance: Decimal.new("1000.00")})
+
+    {:ok, account} =
+      CashLens.Accounts.create_account(%{name: "Test Account", balance: Decimal.new("1000.00")})
 
     # Create sample transactions
     Transactions.create_transaction(%{
@@ -48,9 +52,11 @@ case Transactions.train_classification_model() do
 
     # Try training again
     IO.puts("\nRetrying training with sample data...")
+
     case Transactions.train_classification_model() do
       {:ok, message} ->
         IO.puts("✅ Training successful: #{message}")
+
       {:error, reason} ->
         IO.puts("❌ Training still failed: #{reason}")
     end
@@ -58,17 +64,20 @@ end
 
 # Test model loading
 IO.puts("\nTesting model loading...")
+
 case TransactionClassifier.load_model() do
   {:ok, model} ->
     IO.puts("✅ Model loaded successfully")
     IO.puts("   Model was trained at: #{model.trained_at}")
     IO.puts("   Number of categories in model: #{map_size(model.category_stats)}")
+
   {:error, reason} ->
     IO.puts("❌ Model loading failed: #{reason}")
 end
 
 # Test prediction
 IO.puts("\nTesting prediction...")
+
 test_transaction = %{
   datetime: DateTime.utc_now(),
   value: Decimal.new("-80.00"),
@@ -82,9 +91,11 @@ case Transactions.predict_transaction_attributes(test_transaction) do
 
     # Get the category name
     category = CashLens.Repo.get(CashLens.Categories.Category, prediction.category_id)
+
     if category do
       IO.puts("   Category name: #{category.name}")
     end
+
   {:error, reason} ->
     IO.puts("❌ Prediction failed: #{reason}")
 end
@@ -106,6 +117,7 @@ case Transactions.create_transaction_with_prediction(test_transaction) do
     IO.puts("   Transaction ID: #{transaction.id}")
     IO.puts("   Category ID: #{transaction.category_id}")
     IO.puts("   Category name: #{transaction.category.name}")
+
   {:error, changeset} ->
     IO.puts("❌ Transaction creation failed:")
     IO.inspect(changeset.errors)

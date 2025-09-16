@@ -8,11 +8,15 @@
 </.header>
 
 <.table id="reasons" rows={@reasons} row_click={&JS.navigate(~p"/reasons/#{&1}")}>
-  <:col :let={reason} label="Reason"><%= reason.reason %></:col>
-  <:col :let={reason} label="Category"><%= if reason.category, do: reason.category.name, else: "-" %></:col>
-  <:col :let={reason} label="Refundable"><%= if reason.refundable, do: "Yes", else: "No" %></:col>
-  <:col :let={reason} label="Ignore"><%= if reason.ignore, do: "Yes", else: "No" %></:col>
-  <:col :let={reason} label="Parent"><%= if reason.parent, do: reason.parent.reason, else: "-" %></:col>
+  <:col :let={reason} label="Reason">{reason.reason}</:col>
+  <:col :let={reason} label="Category">
+    {if reason.category, do: reason.category.name, else: "-"}
+  </:col>
+  <:col :let={reason} label="Refundable">{if reason.refundable, do: "Yes", else: "No"}</:col>
+  <:col :let={reason} label="Ignore">{if reason.ignore, do: "Yes", else: "No"}</:col>
+  <:col :let={reason} label="Parent">
+    {if reason.parent, do: reason.parent.reason, else: "-"}
+  </:col>
   <:action :let={reason}>
     <div class="sr-only">
       <.link navigate={~p"/reasons/#{reason}"}>Show</.link>
@@ -21,10 +25,14 @@
   </:action>
   <:action :let={reason}>
     <.link phx-click={show_modal("confirm-modal-#{reason.id}")}>
-    Delete
-  </.link>
-<.confirm_modal id={"confirm-modal-#{reason.id}"} on_confirm={~p"/reasons/#{reason.id}"} method="delete">
-Are you sure you want to delete this item?
-</.confirm_modal>
+      Delete
+    </.link>
+    <.confirm_modal
+      id={"confirm-modal-#{reason.id}"}
+      on_confirm={~p"/reasons/#{reason.id}"}
+      method="delete"
+    >
+      Are you sure you want to delete this item?
+    </.confirm_modal>
   </:action>
 </.table>

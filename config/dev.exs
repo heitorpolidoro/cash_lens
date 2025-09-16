@@ -9,6 +9,7 @@ config :cash_lens, CashLens.Repo,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #
@@ -17,16 +18,22 @@ config :cash_lens, CashLens.Repo,
 # to bundle .js and .css sources.
 
 # Configure the endpoint
-bind_ip = case System.get_env("PHX_BIND_IP") do
-  "0.0.0.0" -> {0, 0, 0, 0}
-  nil -> {127, 0, 0, 1}  # Default to localhost for local development
-  ip_string ->
-    # Parse custom IP if provided
-    ip_string
-    |> String.split(".")
-    |> Enum.map(&String.to_integer/1)
-    |> List.to_tuple()
-end
+bind_ip =
+  case System.get_env("PHX_BIND_IP") do
+    "0.0.0.0" ->
+      {0, 0, 0, 0}
+
+    # Default to localhost for local development
+    nil ->
+      {127, 0, 0, 1}
+
+    ip_string ->
+      # Parse custom IP if provided
+      ip_string
+      |> String.split(".")
+      |> Enum.map(&String.to_integer/1)
+      |> List.to_tuple()
+  end
 
 config :cash_lens, CashLensWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
@@ -97,4 +104,6 @@ config :phoenix_live_view,
 config :swoosh, :api_client, false
 
 # Python ML service base URL used by CashLens.ML.TransactionClassifier
-config :cash_lens, :python_ml_base_url, System.get_env("PYTHON_ML_BASE_URL", "http://localhost:8000")
+config :cash_lens,
+       :python_ml_base_url,
+       System.get_env("PYTHON_ML_BASE_URL", "http://localhost:8000")

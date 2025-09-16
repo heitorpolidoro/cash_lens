@@ -36,7 +36,13 @@ defmodule CashLensWeb.TransactionController do
     changeset = Transactions.change_transaction(transaction)
     accounts = Accounts.list_accounts_for_select()
     categories = Transactions.list_categories_for_select()
-    render(conn, :edit, transaction: transaction, changeset: changeset, accounts: accounts, categories: categories)
+
+    render(conn, :edit,
+      transaction: transaction,
+      changeset: changeset,
+      accounts: accounts,
+      categories: categories
+    )
   end
 
   def update(conn, %{"id" => id, "transaction" => transaction_params}) do
@@ -51,7 +57,13 @@ defmodule CashLensWeb.TransactionController do
       {:error, %Ecto.Changeset{} = changeset} ->
         accounts = Accounts.list_accounts_for_select()
         categories = Transactions.list_categories_for_select()
-        render(conn, :edit, transaction: transaction, changeset: changeset, accounts: accounts, categories: categories)
+
+        render(conn, :edit,
+          transaction: transaction,
+          changeset: changeset,
+          accounts: accounts,
+          categories: categories
+        )
     end
   end
 

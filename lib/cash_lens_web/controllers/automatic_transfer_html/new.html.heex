@@ -2,6 +2,10 @@
   New Transfer
 </.header>
 
-<.automatic_transfer_form changeset={@changeset} action={~p"/transfers/automatic_transfers"} accounts={@accounts}/>
+<.automatic_transfer_form
+  changeset={@changeset}
+  action={~p"/transfers/automatic_transfers"}
+  accounts={@accounts}
+/>
 
 <.back navigate={~p"/transfers/automatic_transfers"}>Back to transfers</.back>

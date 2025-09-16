@@ -3,6 +3,11 @@
   <:subtitle>Update transaction details.</:subtitle>
 </.header>
 
-<.transaction_form changeset={@changeset} action={~p"/transactions/#{@transaction}"} accounts={@accounts} categories={@categories} />
+<.transaction_form
+  changeset={@changeset}
+  action={~p"/transactions/#{@transaction}"}
+  accounts={@accounts}
+  categories={@categories}
+/>
 
 <.back navigate={~p"/transactions"}>Back to transactions</.back>

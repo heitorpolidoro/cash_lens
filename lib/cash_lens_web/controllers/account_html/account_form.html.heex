@@ -4,7 +4,12 @@
   </.error>
   <.input field={f[:name]} type="text" label="Name" />
   <.input field={f[:bank_name]} type="text" label="Bank name" />
-  <.input field={f[:type]} type="select" label="Type" options={Enum.map(Account.valid_types, fn t -> {Helper.format_atom_title(t), t} end)} />
+  <.input
+    field={f[:type]}
+    type="select"
+    label="Type"
+    options={Enum.map(Account.valid_types(), fn t -> {Helper.format_atom_title(t), t} end)}
+  />
   <:actions>
     <.button type="submit">Save Account</.button>
   </:actions>

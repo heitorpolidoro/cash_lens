@@ -4,6 +4,17 @@ defmodule CashLensWeb.HomeLive do
   alias CashLens.Balances
   alias LiveCharts
 
+  @chart_colors [
+    # Green
+    "#52965C",
+    # Red
+    "#D9534F",
+    # Orange
+    "#F0AD4E",
+    # Blue
+    "#3468B3"
+  ]
+
   @impl true
   def mount(_params, _session, socket) do
     chart = build_balance_chart()
@@ -42,26 +53,22 @@ defmodule CashLensWeb.HomeLive do
       options: %{
         xaxis: %{categories: labels},
         legend: %{position: "bottom"},
-        dataLabels: %{enabled: true, style: %{colors: [
-                                                "#52965C", # Green
-                                                "#D9534F", # Red
-                                                "#F0AD4E", # Orange
-                                                "#3468B3"  # Blue
-        ]}, offsetY: -20},
-      plotOptions: %{
-bar: %{dataLabels: %{position: "top" } }
-      },
+        dataLabels: %{
+          enabled: true,
+          style: %{
+            colors: @chart_colors
+          },
+          offsetY: -20
+        },
+        plotOptions: %{
+          bar: %{dataLabels: %{position: "top"}}
+        },
         stroke: %{width: [0, 0, 0, 2]},
         markers: %{size: [0, 0, 0, 3]},
-      tooltip: %{ enabled: true,
-        },
-#      yaxis: [%{labels: %{formatter: fn val -> val end}}],
-        chart: %{height: 360}, colors: [
-                                 "#52965C", # Green
-                                 "#D9534F", # Red
-                                 "#F0AD4E", # Orange
-                                 "#3468B3"  # Blue
-      ]
+        tooltip: %{enabled: true},
+        #      yaxis: [%{labels: %{formatter: fn val -> val end}}],
+        chart: %{height: 360},
+        colors: @chart_colors
       },
       series: [
         %{name: "Total In", data: series_in},
@@ -71,7 +78,6 @@ bar: %{dataLabels: %{position: "top" } }
         %{name: "Total", data: series_final, type: "line"}
       ]
     })
-
   end
 
   @impl true

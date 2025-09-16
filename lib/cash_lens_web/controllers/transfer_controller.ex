@@ -62,6 +62,6 @@ defmodule CashLensWeb.TransferController do
 
   def to_str(transfer) do
     "Transfer ##{transfer.id}"
-#    "#{transfer.bank_name} - #{transfer.name}"
+    #    "#{transfer.bank_name} - #{transfer.name}"
   end
 end

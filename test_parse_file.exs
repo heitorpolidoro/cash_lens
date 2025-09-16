@@ -13,6 +13,7 @@ transaction = %{
 
 # Test the prediction function
 IO.puts("Testing transaction prediction...")
+
 case TransactionClassifier.predict(transaction) do
   {:ok, prediction} ->
     IO.puts("Prediction successful!")

@@ -11,10 +11,22 @@
 </.header>
 
 <.list>
-  <:item title="Amount">{Helper.format_currency(if @transfer.from, do: Decimal.negate(@transfer.from.amount), else: @transfer.to.amount)}</:item>
-  <:item title="Date">{Helper.format_date(if @transfer.from, do: @transfer.from.datetime, else: @transfer.to.datetime)}</:item>
-  <:item title="From">{if @transfer.from, do: Accounts.to_str(@transfer.from.account), else: "-"}</:item>
-  <:item title="To">{if @transfer.to, do: Accounts.to_str(@transfer.to.account), else: "-"}</:item>
+  <:item title="Amount">
+    {Helper.format_currency(
+      if @transfer.from, do: Decimal.negate(@transfer.from.amount), else: @transfer.to.amount
+    )}
+  </:item>
+  <:item title="Date">
+    {Helper.format_date(
+      if @transfer.from, do: @transfer.from.datetime, else: @transfer.to.datetime
+    )}
+  </:item>
+  <:item title="From">
+    {if @transfer.from, do: Accounts.to_str(@transfer.from.account), else: "-"}
+  </:item>
+  <:item title="To">
+    {if @transfer.to, do: Accounts.to_str(@transfer.to.account), else: "-"}
+  </:item>
 </.list>
 
 <.back navigate={~p"/transfers"}>Back to transfers</.back>

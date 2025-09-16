@@ -6,7 +6,12 @@
   <.input field={f[:account_id]} type="select" options={@accounts} label="Account" />
   <.input field={f[:amount]} type="number" step="0.01" label="amount" />
   <.input field={f[:reason]} type="text" label="Reason" />
-  <.input field={f[:category_id]} type="select" options={[{"-- Select Category --", ""}] ++ @categories} label="Category" />
+  <.input
+    field={f[:category_id]}
+    type="select"
+    options={[{"-- Select Category --", ""}] ++ @categories}
+    label="Category"
+  />
   <:actions>
     <.button type="submit">Save Transaction</.button>
   </:actions>

@@ -26,7 +26,7 @@ defmodule CurrencyFormatTest do
     test_cases = [
       {1234.56, "R$\u00A01.234,56"},
       {0.99, "R$\u00A00,99"},
-      {1000000.00, "R$\u00A01.000.000,00"},
+      {1_000_000.00, "R$\u00A01.000.000,00"},
       {22321.43, "R$\u00A022.321,43"},
       {1.23, "R$\u00A01,23"}
     ]
@@ -35,6 +35,7 @@ defmodule CurrencyFormatTest do
 
     Enum.each(test_cases, fn {input, expected} ->
       result = format_currency(input)
+
       if result == expected do
         IO.puts("✓ #{input} -> #{result}")
       else

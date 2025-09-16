@@ -24,6 +24,7 @@ defmodule DateParsingTest do
 
       # Print the results
       IO.puts("\nParsed transactions:")
+
       Enum.each(transactions, fn transaction ->
         IO.puts("Date: #{inspect(transaction.datetime)} (#{typeof(transaction.datetime)})")
         IO.puts("Reason: #{transaction.reason}")
@@ -32,10 +33,14 @@ defmodule DateParsingTest do
       end)
 
       # Verify time inclusion for the special case
-      special_case = Enum.at(transactions, 2)  # "Compra com Cartão - 03/01 15:43 M REIS VARAIS E UTIL"
+      # "Compra com Cartão - 03/01 15:43 M REIS VARAIS E UTIL"
+      special_case = Enum.at(transactions, 2)
       IO.puts("\nVerifying time inclusion:")
       IO.puts("Expected time: 15:43")
-      IO.puts("Actual time: #{pad(special_case.datetime.hour)}:#{pad(special_case.datetime.minute)}")
+
+      IO.puts(
+        "Actual time: #{pad(special_case.datetime.hour)}:#{pad(special_case.datetime.minute)}"
+      )
 
       if special_case.datetime.hour == 15 && special_case.datetime.minute == 43 do
         IO.puts("✅ Time is correctly included in the datetime!")

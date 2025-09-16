@@ -40,7 +40,9 @@ defmodule CashLens.Categories do
       nil ->
         load_categories()
         :persistent_term.get(:categories, %{})[id] || Repo.get!(Category, id)
-      category -> category
+
+      category ->
+        category
     end
   end
 

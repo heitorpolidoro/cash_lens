@@ -36,8 +36,12 @@ defmodule CashLens.TransfersTest do
 
     test "create_transfer/1 with valid data creates a transfer" do
       account = account_fixture()
-      from_transaction = transaction_fixture(%{account_id: account.id, amount: Decimal.new("-100.00")})
-      to_transaction = transaction_fixture(%{account_id: account.id, amount: Decimal.new("100.00")})
+
+      from_transaction =
+        transaction_fixture(%{account_id: account.id, amount: Decimal.new("-100.00")})
+
+      to_transaction =
+        transaction_fixture(%{account_id: account.id, amount: Decimal.new("100.00")})
 
       valid_attrs = %{
         from_id: from_transaction.id,
@@ -70,15 +74,21 @@ defmodule CashLens.TransfersTest do
     test "update_transfer/2 with valid data updates the transfer" do
       transfer = transfer_fixture()
       account = account_fixture()
-      from_transaction = transaction_fixture(%{account_id: account.id, amount: Decimal.new("-200.00")})
-      to_transaction = transaction_fixture(%{account_id: account.id, amount: Decimal.new("200.00")})
+
+      from_transaction =
+        transaction_fixture(%{account_id: account.id, amount: Decimal.new("-200.00")})
+
+      to_transaction =
+        transaction_fixture(%{account_id: account.id, amount: Decimal.new("200.00")})
 
       update_attrs = %{
         from_id: from_transaction.id,
         to_id: to_transaction.id
       }
 
-      assert {:ok, %Transfer{} = updated_transfer} = Transfers.update_transfer(transfer, update_attrs)
+      assert {:ok, %Transfer{} = updated_transfer} =
+               Transfers.update_transfer(transfer, update_attrs)
+
       assert updated_transfer.account_id == account.id
       assert updated_transfer.from_id == from_transaction.id
       assert updated_transfer.to_id == to_transaction.id

@@ -12,32 +12,32 @@
   <:col :let={balance} label="Account">{balance.account.name}</:col>
   <:col :let={balance} label="Starting">
     <span class={Helper.amount_color_class(balance.starting_value)}>
-    {Helper.format_currency(balance.starting_value)}
+      {Helper.format_currency(balance.starting_value)}
     </span>
   </:col>
   <:col :let={balance} label="In">
     <span class={Helper.amount_color_class(balance.total_in)}>
-    {Helper.format_currency(balance.total_in)}
+      {Helper.format_currency(balance.total_in)}
     </span>
   </:col>
   <:col :let={balance} label="Out">
     <span class={Helper.amount_color_class(balance.total_out)}>
-    {Helper.format_currency(balance.total_out)}
+      {Helper.format_currency(balance.total_out)}
     </span>
   </:col>
   <:col :let={balance} label="Balance">
     <span class={Helper.amount_color_class(balance.balance)}>
-    {Helper.format_currency(balance.balance)}
+      {Helper.format_currency(balance.balance)}
     </span>
   </:col>
   <:col :let={balance} label="Interest">
     <span class={Helper.amount_color_class(balance.interest)}>
-    {Helper.format_currency(balance.interest)}
+      {Helper.format_currency(balance.interest)}
     </span>
   </:col>
   <:col :let={balance} label="Final">
     <span class={Helper.amount_color_class(balance.final_value)}>
-    {Helper.format_currency(balance.final_value)}
+      {Helper.format_currency(balance.final_value)}
     </span>
   </:col>
   <:action :let={balance}>
@@ -50,9 +50,12 @@
     <.link phx-click={show_modal("confirm-modal-#{balance.id}")}>
       Delete
     </.link>
-    <.confirm_modal id={"confirm-modal-#{balance.id}"} on_confirm={~p"/balances/#{balance.id}"} method="delete">
+    <.confirm_modal
+      id={"confirm-modal-#{balance.id}"}
+      on_confirm={~p"/balances/#{balance.id}"}
+      method="delete"
+    >
       Are you sure you want to delete this item?
     </.confirm_modal>
   </:action>
-
 </.table>

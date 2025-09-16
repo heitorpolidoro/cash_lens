@@ -3,8 +3,18 @@ defmodule CashLensWeb.AccountControllerTest do
 
   import CashLens.AccountsFixtures
 
-  @create_attrs %{name: "some name", type: "some type", bank_name: "some bank_name", parser: "some parser"}
-  @update_attrs %{name: "some updated name", type: "some updated type", bank_name: "some updated bank_name", parser: "some updated parser"}
+  @create_attrs %{
+    name: "some name",
+    type: "some type",
+    bank_name: "some bank_name",
+    parser: "some parser"
+  }
+  @update_attrs %{
+    name: "some updated name",
+    type: "some updated type",
+    bank_name: "some updated bank_name",
+    parser: "some updated parser"
+  }
   @invalid_attrs %{name: nil, type: nil, bank_name: nil, parser: nil}
 
   describe "index" do

@@ -40,8 +40,8 @@ defmodule CashLens.Parsers.BBCSVParser do
 
   def parse(file_stream) do
     file_stream
-      |> Parser.parse_stream
-      |> Enum.map(fn [date, _, reason, _, _doc, amount, _] ->
+    |> Parser.parse_stream()
+    |> Enum.map(fn [date, _, reason, _, _doc, amount, _] ->
       # Parse the date string to a NaiveDateTime
       naive_date = Timex.parse!(date, "{0D}/{0M}/{YYYY}")
 
@@ -54,7 +54,8 @@ defmodule CashLens.Parsers.BBCSVParser do
         amount: String.to_float(amount),
         account: nil,
         category: nil
-      } |> Map.from_struct()
+      }
+      |> Map.from_struct()
     end)
   end
 
@@ -78,12 +79,14 @@ defmodule CashLens.Parsers.BBCSVParser do
       [_, day, month, hour, minute, actual_reason] ->
         # Create a new date with the day, month from the reason, but year from original date
         # Also include the time (hour and minute)
-        updated_naive_date = %{original_date |
-          day: String.to_integer(day),
-          month: String.to_integer(month),
-          hour: String.to_integer(hour),
-          minute: String.to_integer(minute)
+        updated_naive_date = %{
+          original_date
+          | day: String.to_integer(day),
+            month: String.to_integer(month),
+            hour: String.to_integer(hour),
+            minute: String.to_integer(minute)
         }
+
         updated_utc_date = DateTime.from_naive!(updated_naive_date, "Etc/UTC")
         {updated_utc_date, String.trim(actual_reason)}
 
@@ -92,5 +95,4 @@ defmodule CashLens.Parsers.BBCSVParser do
         {DateTime.from_naive!(original_date, "Etc/UTC"), reason}
     end
   end
-
 end

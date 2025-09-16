@@ -14,7 +14,12 @@ defmodule CashLensWeb.ReasonController do
     changeset = Reasons.change_reason(%Reason{})
     categories = Categories.list_categories()
     parent_reasons = Reasons.list_reasons()
-    render(conn, :new, changeset: changeset, categories: categories, parent_reasons: parent_reasons)
+
+    render(conn, :new,
+      changeset: changeset,
+      categories: categories,
+      parent_reasons: parent_reasons
+    )
   end
 
   def create(conn, %{"reason" => reason_params}) do
@@ -27,7 +32,12 @@ defmodule CashLensWeb.ReasonController do
       {:error, %Ecto.Changeset{} = changeset} ->
         categories = Categories.list_categories()
         parent_reasons = Reasons.list_reasons()
-        render(conn, :new, changeset: changeset, categories: categories, parent_reasons: parent_reasons)
+
+        render(conn, :new,
+          changeset: changeset,
+          categories: categories,
+          parent_reasons: parent_reasons
+        )
     end
   end
 
@@ -41,7 +51,13 @@ defmodule CashLensWeb.ReasonController do
     changeset = Reasons.change_reason(reason)
     categories = Categories.list_categories()
     parent_reasons = Reasons.list_reasons() |> Enum.filter(fn r -> r.id != reason.id end)
-    render(conn, :edit, reason: reason, changeset: changeset, categories: categories, parent_reasons: parent_reasons)
+
+    render(conn, :edit,
+      reason: reason,
+      changeset: changeset,
+      categories: categories,
+      parent_reasons: parent_reasons
+    )
   end
 
   def update(conn, %{"id" => id, "reason" => reason_params}) do
@@ -56,7 +72,13 @@ defmodule CashLensWeb.ReasonController do
       {:error, %Ecto.Changeset{} = changeset} ->
         categories = Categories.list_categories()
         parent_reasons = Reasons.list_reasons() |> Enum.filter(fn r -> r.id != reason.id end)
-        render(conn, :edit, reason: reason, changeset: changeset, categories: categories, parent_reasons: parent_reasons)
+
+        render(conn, :edit,
+          reason: reason,
+          changeset: changeset,
+          categories: categories,
+          parent_reasons: parent_reasons
+        )
     end
   end
 

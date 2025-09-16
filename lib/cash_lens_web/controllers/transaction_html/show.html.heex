@@ -12,7 +12,9 @@
   <:item title="Account">{@transaction.account.name}</:item>
   <:item title="Amount">{Helper.format_currency(@transaction.amount)}</:item>
   <:item title="Reason">{@transaction.reason || "-"}</:item>
-  <:item title="Category">{if @transaction.category, do: @transaction.category.name, else: "-"}</:item>
+  <:item title="Category">
+    {if @transaction.category, do: @transaction.category.name, else: "-"}
+  </:item>
 </.list>
 
 <.back navigate={~p"/transactions"}>Back to transactions</.back>

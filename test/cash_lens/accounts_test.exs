@@ -21,7 +21,12 @@ defmodule CashLens.AccountsTest do
     end
 
     test "create_account/1 with valid data creates a account" do
-      valid_attrs = %{name: "some name", type: "checking", bank_name: "some bank_name", parser: "some parser"}
+      valid_attrs = %{
+        name: "some name",
+        type: "checking",
+        bank_name: "some bank_name",
+        parser: "some parser"
+      }
 
       assert {:ok, %Account{} = account} = Accounts.create_account(valid_attrs)
       assert account.name == "some name"
@@ -36,7 +41,13 @@ defmodule CashLens.AccountsTest do
 
     test "update_account/2 with valid data updates the account" do
       account = account_fixture()
-      update_attrs = %{name: "some updated name", type: "credit_card", bank_name: "some updated bank_name", parser: "some updated parser"}
+
+      update_attrs = %{
+        name: "some updated name",
+        type: "credit_card",
+        bank_name: "some updated bank_name",
+        parser: "some updated parser"
+      }
 
       assert {:ok, %Account{} = account} = Accounts.update_account(account, update_attrs)
       assert account.name == "some updated name"

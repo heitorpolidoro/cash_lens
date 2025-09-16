@@ -1,5 +1,5 @@
 <.header>
-  Reason <%= @reason.id %>
+  Reason {@reason.id}
   <:subtitle>This is a reason record from your database.</:subtitle>
   <:actions>
     <.link href={~p"/reasons/#{@reason}/edit"}>
@@ -9,11 +9,11 @@
 </.header>
 
 <.list>
-  <:item title="Reason"><%= @reason.reason %></:item>
-  <:item title="Category"><%= if @reason.category, do: @reason.category.name, else: "-" %></:item>
-  <:item title="Refundable"><%= if @reason.refundable, do: "Yes", else: "No" %></:item>
-  <:item title="Ignore"><%= if @reason.ignore, do: "Yes", else: "No" %></:item>
-  <:item title="Parent"><%= if @reason.parent, do: @reason.parent.reason, else: "-" %></:item>
+  <:item title="Reason">{@reason.reason}</:item>
+  <:item title="Category">{if @reason.category, do: @reason.category.name, else: "-"}</:item>
+  <:item title="Refundable">{if @reason.refundable, do: "Yes", else: "No"}</:item>
+  <:item title="Ignore">{if @reason.ignore, do: "Yes", else: "No"}</:item>
+  <:item title="Parent">{if @reason.parent, do: @reason.parent.reason, else: "-"}</:item>
 </.list>
 
 <.back navigate={~p"/reasons"}>Back to reasons</.back>
