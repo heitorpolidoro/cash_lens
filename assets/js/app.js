@@ -22,10 +22,46 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
+import LiveCharts from "live_charts"
+
+const currency_formatter = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format;
+// const currency_formatter = function (val) { return `R$ ${val}` };
+// Override the default ApexCharts hook to inject dataLabels.formatter
+const BaseApexHook = LiveCharts.Hooks["LiveCharts.Hooks.ApexCharts"]
+const CustomApexHook = {
+  ...BaseApexHook,
+  // Inject our formatter at config parsing time, then let the base hook render the chart
+  getConfig() {
+    // Delegate to the base hook's getConfig to keep its parsing/cleanup behavior
+    const baseGetConfig = BaseApexHook && typeof BaseApexHook.getConfig === "function"
+      ? BaseApexHook.getConfig
+      : function () {
+          const cfg = JSON.parse(this.el.dataset.chart || "{}")
+          delete this.el.dataset.chart
+          return cfg
+        }
+    const config = baseGetConfig.call(this)
+    config.dataLabels = config.dataLabels || {}
+    config.dataLabels.formatter = currency_formatter;
+    config.tooltip = config.tooltip || {}
+    config.tooltip.y = {formatter: currency_formatter};
+    console.log("config", config.markers)
+    return config
+  },
+}
+
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
-  params: {_csrf_token: csrfToken}
+  params: {_csrf_token: csrfToken},
+  hooks: {
+    ...LiveCharts.Hooks,
+    // Override only the ApexCharts hook
+    "LiveCharts.Hooks.ApexCharts": CustomApexHook,
+  },
 })
 
 // Show progress bar on live navigation and form submits

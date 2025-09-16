@@ -61,7 +61,8 @@ defmodule CashLens.MixProject do
       {:dotenv, "~> 3.1", only: [:dev, :test]},
       {:nimble_csv, "~> 1.2"},
       {:timex, "~> 3.7"},
-      {:query_builder, "~> 1.4"}
+      {:query_builder, "~> 1.4"},
+      {:live_charts, "~> 0.4"}
     ]
   end
 

@@ -19,6 +19,30 @@ defmodule CashLens.Balances do
   end
 
   @doc """
+  Returns monthly aggregated balances across all accounts, grouped by month.
+  Each item contains:
+  - month: date (first day of month)
+  - total_in: Decimal sum of all totals_in for the month
+  - total_out: Decimal sum (likely negative) of totals_out for the month
+  - balance: Decimal net balance for the month
+  - final_value: Decimal sum of final values for the month
+  """
+  def monthly_summary do
+    from(b in Balance,
+      group_by: b.month,
+      order_by: b.month,
+      select: %{
+        month: b.month,
+        total_in: sum(b.total_in),
+        total_out: sum(b.total_out),
+        balance: sum(b.balance),
+        final_value: sum(b.final_value)
+      }
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   Gets a single balance.
   Raises if not found.
   """
