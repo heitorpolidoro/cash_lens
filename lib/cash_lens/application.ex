@@ -14,6 +14,8 @@ defmodule CashLens.Application do
       {Phoenix.PubSub, name: CashLens.PubSub},
       # Start the Finch HTTP client for sending emails
       {Finch, name: CashLens.Finch},
+      # TransferManager listens for transaction updates
+      CashLens.TransferManager,
       # Start to serve requests, typically the last entry
       CashLensWeb.Endpoint
     ]

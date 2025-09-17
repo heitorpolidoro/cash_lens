@@ -7,6 +7,7 @@ defmodule CashLens.Categories do
   alias CashLens.Repo
 
   alias CashLens.Categories.Category
+  alias CashLens.Transactions.Transaction
 
   @doc """
   Returns the list of categories.
@@ -118,5 +119,30 @@ defmodule CashLens.Categories do
   """
   def change_category(%Category{} = category, attrs \\ %{}) do
     Category.changeset(category, attrs)
+  end
+
+  def monthly_summary do
+    # TODO select which accounts
+    from(t in Transaction,
+      join: c in assoc(t, :category),
+      where: c.name != "Transfer",
+      select: %{
+        month: fragment("date_trunc('month', ?)", t.datetime),
+        category: c,
+        total: -sum(t.amount)
+      },
+      group_by: [fragment("date_trunc('month', ?)", t.datetime), c.id],
+      order_by: [fragment("date_trunc('month', ?)", t.datetime)]
+    )
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn item, acc ->
+      info = Map.get(acc, item.month, %{})
+      category_name = item.category.name
+      month_info = Map.put(info, category_name, item.total)
+
+      acc
+      |> Map.put(item.month, month_info)
+      |> Map.update(:categories, [category_name], fn x -> x ++ [category_name] end)
+    end)
   end
 end

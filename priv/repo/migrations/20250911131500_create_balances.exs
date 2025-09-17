@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLens.Repo.Migrations.CreateBalances do
   use Ecto.Migration
 

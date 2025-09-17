@@ -2,7 +2,6 @@ defmodule CashLensWeb.BalanceController do
   use CashLensWeb, :controller
 
   alias CashLens.Balances
-  alias CashLens.Balances.Balance
   alias CashLens.Accounts
 
   def index(conn, _params) do
@@ -31,7 +30,7 @@ defmodule CashLensWeb.BalanceController do
     balance = Balances.get_balance!(id)
 
     case Balances.update_balance(balance, balance_params) do
-      {:ok, balance} ->
+      {:ok, _balance} ->
         conn
         |> put_flash(:info, "Balance updated successfully.")
         |> redirect(to: ~p"/balances")
@@ -51,7 +50,7 @@ defmodule CashLensWeb.BalanceController do
     |> redirect(to: ~p"/balances")
   end
 
-  def recalculate(conn) do
+  def recalculate(_conn) do
     #    balance = Balances.get_balance!(id)
     #
     #    case Balances.recalculate_balance(balance) do

@@ -41,3 +41,4 @@ npm-debug.log
 /ml/ml_models/*
 /ml/catboost_info/*
 /catboost_info/*
+/cash_lens.iml

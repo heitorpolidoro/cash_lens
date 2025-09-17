@@ -150,10 +150,14 @@ defmodule CashLens.Balances do
 
   # Add this helper function
   defp broadcast_balance_change({:ok, balance} = result, event) do
-    Phoenix.PubSub.broadcast(CashLens.PubSub, "balance_updates", {:balance_updated, %{balance: balance, event: event}})
+    Phoenix.PubSub.broadcast(
+      CashLens.PubSub,
+      "balance_updates",
+      {:balance_updated, %{balance: balance, event: event}}
+    )
+
     result
   end
 
   defp broadcast_balance_change({:error, _} = error, _event), do: error
-
 end

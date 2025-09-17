@@ -1,3 +1,4 @@
+# TODO Review
 import Config
 # Configure your database
 config :cash_lens, CashLens.Repo,

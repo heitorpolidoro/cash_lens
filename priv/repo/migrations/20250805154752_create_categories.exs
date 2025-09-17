@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLens.Repo.Migrations.CreateCategories do
   use Ecto.Migration
 

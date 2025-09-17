@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLens.Repo.Migrations.CreateAutomaticTransferTable do
   use Ecto.Migration
 

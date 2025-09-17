@@ -33,11 +33,11 @@ defmodule CashLens.Transactions do
   def find_transactions(filters, group_by \\ nil, preload \\ false) do
     transactions = QueryBuilder.where(Transaction, filters)
 
-    if is_nil(group_by) do
-      QueryBuilder.group_by(transactions, group_by)
-    else
-      transactions
-    end
+    #    if is_nil(group_by) do
+    #      QueryBuilder.group_by(transactions, group_by)
+    #    else
+    #      transactions
+    #    end
 
     if preload do
       QueryBuilder.preload(transactions, [:account, :category])
@@ -68,6 +68,43 @@ defmodule CashLens.Transactions do
   end
 
   defp do_create_transaction(attrs) do
+  end
+
+  #  defp create_transaction2(%{category: %{name: "Transfer"}} = attrs) do
+  #    with {:ok, transaction} <- do_create_transaction(attrs) do
+  #      case find_transactions({:amount, Decimal.negate(transaction.amount)}) do
+  #        [] ->
+  #          if account = AutomaticTransfers.find_automatic_transfer_account_to!(transaction.account) do
+  #            # TODO treat then return error
+  #            {:ok, other_transaction} =
+  #              do_create_transaction(%{
+  #                Map.from_struct(transaction)
+  #                | account_id: account.id,
+  #                  amount: Decimal.negate(transaction.amount)
+  #              })
+  #
+  #            Transfers.create_transfer_from_transactions(transaction, other_transaction)
+  #          else
+  #            Transfers.create_transfer_from_transactions(transaction, nil)
+  #          end
+  #
+  #          Logger.info("Transfer created: #{inspect(transaction)}")
+  #
+  #        [transfer_transaction] ->
+  #          Transfers.update_transfer_from_transactions(transfer_transaction, transaction)
+  #
+  #        _transfer_transactions ->
+  #          raise "Multiple transfer transactions found"
+  #      end
+  #
+  #      {:ok, transaction}
+  #    else
+  #      {:error, reason} ->
+  #        {:error, reason}
+  #    end
+  #  end
+
+  def create_transaction(attrs) do
     %Transaction{}
     |> Transaction.changeset(attrs)
     |> Repo.insert()
@@ -75,44 +112,7 @@ defmodule CashLens.Transactions do
       {:ok, transaction} -> {:ok, Repo.preload(transaction, [:account, :category])}
       error -> error
     end
-  end
-
-  def create_transaction(%{category: %{name: "Transfer"}} = attrs) do
-    with {:ok, transaction} <- do_create_transaction(attrs) do
-      case find_transactions({:amount, Decimal.negate(transaction.amount)}) do
-        [] ->
-          if account = AutomaticTransfers.find_automatic_transfer_account_to!(transaction.account) do
-            # TODO treat then return error
-            {:ok, other_transaction} =
-              do_create_transaction(%{
-                Map.from_struct(transaction)
-                | account_id: account.id,
-                  amount: Decimal.negate(transaction.amount)
-              })
-
-            Transfers.create_transfer_from_transactions(transaction, other_transaction)
-          else
-            Transfers.create_transfer_from_transactions(transaction, nil)
-          end
-
-          Logger.info("Transfer created: #{inspect(transaction)}")
-
-        [transfer_transaction] ->
-          Transfers.update_transfer_from_transactions(transfer_transaction, transaction)
-
-        _transfer_transactions ->
-          raise "Multiple transfer transactions found"
-      end
-
-      {:ok, transaction}
-    else
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  def create_transaction(attrs) do
-    do_create_transaction(attrs)
+    |> broadcast_transaction_change(:transaction_created)
   end
 
   @doc """
@@ -135,6 +135,7 @@ defmodule CashLens.Transactions do
       {:ok, transaction} -> {:ok, Repo.preload(transaction, [:account, :category])}
       error -> error
     end
+    |> broadcast_transaction_change(:transaction_update)
   end
 
   @doc """
@@ -226,4 +227,18 @@ defmodule CashLens.Transactions do
     )
     |> Repo.all()
   end
+
+  defp broadcast_transaction_change({:ok, transaction} = result, event) do
+    Logger.debug("Broadcasting transaction change event: #{inspect(event)}")
+
+    Phoenix.PubSub.broadcast(
+      CashLens.PubSub,
+      "transaction_updates",
+      {event, transaction}
+    )
+
+    result
+  end
+
+  defp broadcast_transaction_change({:error, _} = error, _event), do: error
 end
