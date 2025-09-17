@@ -1,4 +1,3 @@
-# TODO Review
 defmodule CashLens.Accounts do
   @moduledoc """
   The Accounts context.
@@ -110,10 +109,21 @@ defmodule CashLens.Accounts do
     Repo.all(from a in Account, select: {a.name, a.id}, order_by: a.name)
   end
 
-  def to_str(nil) do
-    "-"
-  end
+  @doc """
+  Returns a human-readable label for an account.
 
+  - When given `nil`, returns "-".
+  - When given an `%Account{}` struct, returns "<bank_name> - <account_name>".
+
+  ## Examples
+
+      iex> to_str(nil)
+      "-"
+
+      iex> to_str(%Account{bank_name: "Acme Bank", name: "Checking"})
+      "Acme Bank - Checking"
+  """
+  def to_str(nil), do: "-"
   def to_str(%Account{} = account) do
     "#{account.bank_name} - #{account.name}"
   end

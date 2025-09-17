@@ -1,4 +1,3 @@
-# TODO Review
 defmodule CashLens.Accounts.Account do
   use Ecto.Schema
   import Ecto.Changeset
