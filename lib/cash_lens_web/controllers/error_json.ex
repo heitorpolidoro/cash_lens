@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLensWeb.ErrorJSON do
   @moduledoc """
   This module is invoked by your endpoint in case of errors on JSON requests.

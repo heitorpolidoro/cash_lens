@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLensWeb.SidebarComponent do
   use CashLensWeb, :html
 

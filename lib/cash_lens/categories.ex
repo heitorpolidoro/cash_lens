@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLens.Categories do
   @moduledoc """
   The Categories context.

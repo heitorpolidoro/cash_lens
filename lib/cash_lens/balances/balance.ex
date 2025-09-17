@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLens.Balances.Balance do
   use Ecto.Schema
   import Ecto.Changeset

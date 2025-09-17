@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLensWeb.ErrorHTML do
   @moduledoc """
   This module is invoked by your endpoint in case of errors on HTML requests.

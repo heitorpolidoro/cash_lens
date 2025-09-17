@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLens.Categories.Category do
   use Ecto.Schema
   import Ecto.Changeset

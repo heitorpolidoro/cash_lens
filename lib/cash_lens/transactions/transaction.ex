@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLens.Transactions.Transaction do
   use Ecto.Schema
   use QueryBuilder
