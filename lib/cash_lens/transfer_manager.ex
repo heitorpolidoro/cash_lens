@@ -1,3 +1,4 @@
+# TODO Review
 defmodule CashLens.TransferManager do
   @moduledoc """
   A simple GenServer that subscribes to transaction updates.
