@@ -1,4 +1,3 @@
-# TODO Review
 import Config
 
 # config/runtime.exs is executed for all environments, including
