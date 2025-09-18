@@ -1,7 +1,7 @@
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Any
+from typing import Optional, Any, List
 from datetime import datetime
 import os
 
@@ -23,6 +23,9 @@ class PredictRequest(BaseModel):
 
 class PredictResponse(BaseModel):
     category_id: int
+
+class PredictBatchResponse(BaseModel):
+    categories: list[int]
 
 # Data access via Postgres using env from docker-compose
 import psycopg2
@@ -118,25 +121,36 @@ def ensure_model_loaded() -> CatBoostClassifier:
     model.load_model(MODEL_PATH)
     return model
 
-@app.post("/predict", response_model=PredictResponse)
-def predict(req: PredictRequest):
+# @app.post("/predict", response_model=PredictResponse)
+# def predict(req: PredictRequest):
+@app.post("/predict", response_model=PredictBatchResponse)
+def predict(reqs: List[PredictRequest]):
     model = ensure_model_loaded()
-    df = pd.DataFrame([
+    # Build dataframe from list of requests
+    data = [
         {
-            "datetime": req.datetime,
-            "amount": req.amount,
-            "reason": req.reason,
+            "datetime": r.datetime,
+            "amount": r.amount,
+            "reason": r.reason,
         }
-    ])
+        for r in reqs
+    ]
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="Empty request list")
+    df = pd.DataFrame(data)
     X = build_features(df)
-    # Predict returns class index; our y were category_id labels, CatBoost returns exact labels if provided as int
-    pred = model.predict(X)
-    # pred can be shape (1,1) or array; normalize
+    preds = model.predict(X)
+    # Normalize predictions to a flat list of ints
     try:
-        val = int(pred[0])
+        import numpy as np  # noqa: F401
+        categories = pd.Series(preds).astype(int).tolist()
     except Exception:
-        val = int(pred)
-    return PredictResponse(category_id=val)
+        try:
+            # Fallback for nested/2D outputs
+            categories = [int(x) for x in (preds.reshape(-1) if hasattr(preds, "reshape") else preds)]
+        except Exception:
+            categories = [int(preds)]
+    return PredictBatchResponse(categories=categories)
 
 if __name__ == "__main__":
     import uvicorn
