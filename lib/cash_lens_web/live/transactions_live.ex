@@ -5,6 +5,7 @@ defmodule CashLensWeb.TransactionsLive do
   alias CashLens.Accounts.Account
   alias CashLens.Transactions
   alias CashLens.Parsers
+  alias CashLens.StringHelper
 
   @statement_default_path "statements"
 
@@ -59,6 +60,9 @@ defmodule CashLensWeb.TransactionsLive do
           </:col>
           <:col :let={transaction} label="Reason">
             {transaction.reason}
+          </:col>
+          <:col :let={transaction} label="Type">
+            {StringHelper.to_tittle(transaction.type)}
           </:col>
           <:col :let={transaction} label="Category">
             {transaction.category}

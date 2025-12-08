@@ -45,7 +45,7 @@ defmodule CashLens.Transactions do
         {:ok, %{transaction | _id: id}}
 
       error ->
-        error
+        map_mongo_error(error)
     end
   end
 
@@ -72,7 +72,7 @@ defmodule CashLens.Transactions do
         {:ok, transactions}
 
       error ->
-        error
+        map_mongo_error(error)
     end
   end
 
@@ -106,55 +106,41 @@ defmodule CashLens.Transactions do
     end
   end
 
-  def create_sample_transactions do
-    samples = [
+
+  @doc """
+  Ensure MongoDB indexes for the transactions collection exist.
+
+  Currently creates a unique index on `full_line` to prevent duplicates.
+  This function is idempotent and can be executed multiple times.
+  """
+  def ensure_indexes do
+    indexes = [
       %{
-        date: ~D[2024-01-15],
-        time: "10:30:00",
-        raw_reason: "COMPRA CARTAO **** 1234 SUPERMERCADO ABC",
-        reason: "Supermercado ABC",
-        category: "Alimentação",
-        amount: Decimal.new("-150.75"),
-        full_line: "15/01/2024 10:30 COMPRA CARTAO **** 1234 SUPERMERCADO ABC -150,75"
-      },
-      %{
-        date: ~D[2024-01-16],
-        time: "14:20:00",
-        raw_reason: "PIX RECEBIDO JOAO SILVA",
-        reason: "PIX João Silva",
-        category: "Transferência",
-        amount: Decimal.new("500.00"),
-        full_line: "16/01/2024 14:20 PIX RECEBIDO JOAO SILVA +500,00"
-      },
-      %{
-        date: ~D[2024-01-17],
-        time: "09:15:00",
-        raw_reason: "DEBITO AUTOMATICO ENERGIA ELETRICA",
-        reason: "Conta de Luz",
-        category: "Utilidades",
-        amount: Decimal.new("-89.32"),
-        full_line: "17/01/2024 09:15 DEBITO AUTOMATICO ENERGIA ELETRICA -89,32"
-      },
-      %{
-        date: ~D[2024-01-18],
-        time: "16:45:00",
-        raw_reason: "COMPRA CARTAO **** 5678 POSTO SHELL",
-        reason: "Posto Shell",
-        category: "Combustível",
-        amount: Decimal.new("-75.00"),
-        full_line: "18/01/2024 16:45 COMPRA CARTAO **** 5678 POSTO SHELL -75,00"
-      },
-      %{
-        date: ~D[2024-01-19],
-        time: "11:00:00",
-        raw_reason: "TED RECEBIDO EMPRESA XYZ LTDA",
-        reason: "Salário Empresa XYZ",
-        category: "Salário",
-        amount: Decimal.new("3500.00"),
-        full_line: "19/01/2024 11:00 TED RECEBIDO EMPRESA XYZ LTDA +3500,00"
+        key: %{full_line: 1},
+        name: "unique_full_line",
+        unique: true
       }
     ]
 
-    Enum.map(samples, &create_transaction/1)
+    # Best-effort index creation; log errors but don't crash app startup
+    case Mongo.create_indexes(:mongo, @collection, indexes) do
+      {:ok, _} -> :ok
+      {:error, reason} ->
+        require Logger
+        Logger.error("Failed to create indexes for #{@collection}: #{inspect(reason)}")
+        :ok
+    end
   end
+
+  defp map_mongo_error({:error, %Mongo.WriteError{write_errors: errors}}) do
+    dup? = Enum.any?(errors, fn e -> Map.get(e, "code") == 11000 end)
+
+    if dup? do
+      {:error, :duplicate_full_line}
+    else
+      {:error, %Mongo.WriteError{write_errors: errors}}
+    end
+  end
+
+  defp map_mongo_error(other), do: other
 end
