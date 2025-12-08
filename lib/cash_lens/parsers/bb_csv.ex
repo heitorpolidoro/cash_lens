@@ -5,6 +5,7 @@ defmodule CashLens.Parsers.BB_CSV do
   @name "BB CSV"
 
   alias CashLens.Transactions.Transaction
+  alias CashLens.StringHelper
   # Using standard library date parsing; no Timex dependency
 
   # Define a custom parser with comma as separator
@@ -89,11 +90,11 @@ defmodule CashLens.Parsers.BB_CSV do
           %{
             date: date,
             time: time,
-            raw_reason: raw_reason,
             reason: cleaned_reason,
+            type: detect_type(raw_reason),
             category: nil,
             amount: amount,
-            full_line: Enum.join([date_str, raw_reason, amount_str], " ")
+            full_line: Enum.join(row, " ")
           }
         end)
         |> Enum.to_list()
@@ -150,4 +151,24 @@ defmodule CashLens.Parsers.BB_CSV do
         {DateTime.from_naive!(original_date, "Etc/UTC"), reason}
     end
   end
+
+  # Detect a normalized transaction type from the raw reason string
+  defp detect_type(raw_reason) when is_binary(raw_reason) do
+    r = raw_reason |> StringHelper.normalize_no_accents() |> String.downcase() |> String.trim()
+
+    cond do
+      String.starts_with?(r, "compra com cartao") -> "debit_card"
+      String.starts_with?(r, "pix - enviado") -> "pix"
+      String.starts_with?(r, "pix periodico") -> "recurring_pix"
+      String.starts_with?(r, "pix-envio devolvido") or String.starts_with?(r, "pix - envio devolvido") ->
+        "returned_pix"
+      String.starts_with?(r, "pagamento de boleto") -> "boleto"
+      String.starts_with?(r, "pagamento de impostos") -> "taxes"
+      String.starts_with?(r, "estorno de debito") -> "debit_refund"
+      true -> nil
+    end
+  end
+
+  defp detect_type(_), do: nil
+
 end
