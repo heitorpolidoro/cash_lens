@@ -10,6 +10,7 @@ defmodule CashLens.Transactions do
   def list_transactions do
     Mongo.find(:mongo, @collection, %{})
     |> Enum.map(&document_to_struct/1)
+    |> preload_accounts
   end
 
   def get_transaction(id) do
@@ -106,7 +107,6 @@ defmodule CashLens.Transactions do
     end
   end
 
-
   @doc """
   Ensure MongoDB indexes for the transactions collection exist.
 
@@ -119,17 +119,35 @@ defmodule CashLens.Transactions do
         key: %{full_line: 1},
         name: "unique_full_line",
         unique: true
+      },
+      %{
+        key: %{account_id: 1},
+        name: "idx_account_id",
+        unique: false
       }
     ]
 
     # Best-effort index creation; log errors but don't crash app startup
     case Mongo.create_indexes(:mongo, @collection, indexes) do
-      {:ok, _} -> :ok
+      {:ok, _} ->
+        :ok
+
       {:error, reason} ->
         require Logger
         Logger.error("Failed to create indexes for #{@collection}: #{inspect(reason)}")
         :ok
     end
+  end
+
+  def preload_accounts(transactions) when is_list(transactions) do
+    accounts =
+      transactions |> Enum.map(& &1.account_id) |> Enum.uniq() |> CashLens.Accounts.list_by_ids()
+
+    Enum.map(transactions, fn transaction ->
+      account_id = transaction.account_id
+      acc = Enum.find(accounts, &(&1._id == account_id))
+      %{transaction | account: acc}
+    end)
   end
 
   defp map_mongo_error({:error, %Mongo.WriteError{write_errors: errors}}) do

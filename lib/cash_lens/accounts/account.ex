@@ -43,9 +43,5 @@ defmodule CashLens.Accounts.Account do
     }
   end
 
-  def full_name(%__MODULE__{name: name, bank: bank}) do
-    "#{bank} - #{name}"
-  end
-
   def valid_types, do: @valid_types
 end

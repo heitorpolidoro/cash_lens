@@ -3,6 +3,7 @@ defmodule CashLensWeb.TransactionsLive do
 
   alias Phoenix.LiveView.JS
   alias CashLens.Accounts.Account
+  alias CashLens.Accounts
   alias CashLens.Transactions
   alias CashLens.Parsers
   alias CashLens.StringHelper
@@ -57,6 +58,12 @@ defmodule CashLensWeb.TransactionsLive do
             <%= if transaction.time do %>
               <br />{transaction.time |> Time.from_iso8601!() |> Calendar.strftime("%H:%M")}
             <% end %>
+          </:col>
+          <:col :let={transaction} label="Account">
+            <div class="m-0 p-0 leading-tight whitespace-nowrap">
+              {transaction.account.bank}<br />
+              {transaction.account.name}
+            </div>
           </:col>
           <:col :let={transaction} label="Reason">
             {transaction.reason}

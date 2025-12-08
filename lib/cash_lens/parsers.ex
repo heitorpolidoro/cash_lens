@@ -21,7 +21,8 @@ defmodule CashLens.Parsers do
            get_parser_slug(p) == parser
          end) do
       parser ->
-        parser.parse_statement(statement)
+        # Pass the selected account to the parser so it can attach account reference
+        parser.parse_statement(statement, account)
 
       nil ->
         {:error, :parser_not_found}

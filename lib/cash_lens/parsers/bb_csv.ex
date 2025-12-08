@@ -40,7 +40,7 @@ defmodule CashLens.Parsers.BB_CSV do
   #    }
   #  end
 
-  def parse_statement(file_path) do
+  def parse_statement(file_path, account) do
     try do
       transactions =
         file_path
@@ -88,6 +88,7 @@ defmodule CashLens.Parsers.BB_CSV do
           amount = Decimal.new(String.trim(amount_str))
 
           %{
+            account_id: account._id,
             date: date,
             time: time,
             reason: cleaned_reason,
@@ -157,18 +158,31 @@ defmodule CashLens.Parsers.BB_CSV do
     r = raw_reason |> StringHelper.normalize_no_accents() |> String.downcase() |> String.trim()
 
     cond do
-      String.starts_with?(r, "compra com cartao") -> "debit_card"
-      String.starts_with?(r, "pix - enviado") -> "pix"
-      String.starts_with?(r, "pix periodico") -> "recurring_pix"
+      String.starts_with?(r, "compra com cartao") ->
+        "debit_card"
+
+      String.starts_with?(r, "pix - enviado") ->
+        "pix"
+
+      String.starts_with?(r, "pix periodico") ->
+        "recurring_pix"
+
       String.starts_with?(r, "pix-envio devolvido") or String.starts_with?(r, "pix - envio devolvido") ->
         "returned_pix"
-      String.starts_with?(r, "pagamento de boleto") -> "boleto"
-      String.starts_with?(r, "pagamento de impostos") -> "taxes"
-      String.starts_with?(r, "estorno de debito") -> "debit_refund"
-      true -> nil
+
+      String.starts_with?(r, "pagamento de boleto") ->
+        "boleto"
+
+      String.starts_with?(r, "pagamento de impostos") ->
+        "taxes"
+
+      String.starts_with?(r, "estorno de debito") ->
+        "debit_refund"
+
+      true ->
+        nil
     end
   end
 
   defp detect_type(_), do: nil
-
 end

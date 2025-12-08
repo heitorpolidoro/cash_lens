@@ -9,7 +9,11 @@ defmodule CashLens.Application do
       {Mongo, [name: :mongo, url: System.get_env("MONGODB_URL", "mongodb://mongodb:27017/cash_lens")]},
       {Redix, {System.get_env("REDIS_URL", "redis://redis:6379"), [name: :redix]}},
       # Ensure DB indexes after Mongo starts
-      {Task, fn -> CashLens.Transactions.ensure_indexes() end},
+      {Task,
+       fn ->
+         CashLens.Transactions.ensure_indexes()
+         CashLens.Accounts.ensure_indexes()
+       end},
       CashLensWeb.Endpoint
     ]
 
