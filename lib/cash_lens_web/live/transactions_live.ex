@@ -11,28 +11,37 @@ defmodule CashLensWeb.TransactionsLive do
 
   @statement_default_path "statements"
 
+  # Private helper: list unique categories used by transactions
+  # Moved from Category.list_categories/0 for local use in this live view
+  defp list_categories do
+    Category.list_categories()
+    |> Enum.map(&StringHelper.to_tittle/1)
+    |> IO.inspect()
+  end
+
   @impl true
   def mount(_params, _session, socket) do
     transactions = Transactions.list_transactions()
     parsers = CashLens.Parsers.list_parsers()
-    accounts = CashLens.Accounts.list_accounts() |> Enum.map(&serialize_account/1)
-    categories = Category.list_categories()
+    accounts = CashLens.Accounts.list_accounts()
+    categories = list_categories()
 
     {:ok,
      assign(socket,
        page_title: "Transactions",
        transactions: transactions,
-        accounts: accounts,
-        parsers: parsers,
+       accounts: accounts,
+       parsers: parsers,
        categories: categories,
-        step: :select_statement,
-        selected_statement: nil,
+       only_uncategorized: false,
+       step: :select_statement,
+       selected_statement: nil,
        selected_parser: nil,
        editing_new_category_for: nil,
        cat_query_by_id: %{},
-       cat_suggestions_by_id: %{},
-       cat_open_for: nil
-     )}
+        cat_suggestions_by_id: %{},
+        cat_open_for: nil
+      )}
   end
 
   @impl true
@@ -42,6 +51,13 @@ defmodule CashLensWeb.TransactionsLive do
       <.header>
         Transactions
         <:actions>
+          <.button phx-click="toggle_uncategorized">
+            <%= if @only_uncategorized do %>
+              Show All
+            <% else %>
+              Show Uncategorized
+            <% end %>
+          </.button>
           <.button phx-click={show_modal("import_statement_modal")}>Import Statement</.button>
         </:actions>
       </.header>
@@ -57,7 +73,7 @@ defmodule CashLensWeb.TransactionsLive do
       <div class="mt-8">
         <.table
           id="transactions"
-          rows={@transactions}
+          rows={if @only_uncategorized, do: Enum.filter(@transactions, fn t -> t.category in [nil, ""] end), else: @transactions}
           row_class={fn transaction -> if Decimal.negative?(transaction.amount), do: "bg-red-50", else: "bg-green-50" end}
         >
           <:col :let={transaction} label="Date">
@@ -85,45 +101,51 @@ defmodule CashLensWeb.TransactionsLive do
                 <input
                   type="text"
                   class="input"
-                  name="q"
-                  value={Map.get(@cat_query_by_id, BSON.ObjectId.encode!(transaction._id), transaction.category || "")}
+                  name="category"
+                  value={Map.get(@cat_query_by_id, BSON.ObjectId.encode!(transaction._id), StringHelper.to_tittle(transaction.category || ""))}
                   placeholder="Search or add category"
                   phx-debounce="300"
                 />
               </form>
 
               <%= if @cat_open_for == BSON.ObjectId.encode!(transaction._id) do %>
-                <% q = Map.get(@cat_query_by_id, BSON.ObjectId.encode!(transaction._id), "") %>
+                <% category = Map.get(@cat_query_by_id, BSON.ObjectId.encode!(transaction._id), "") %>
                 <% suggestions = Map.get(@cat_suggestions_by_id, BSON.ObjectId.encode!(transaction._id), []) %>
                 <div class="absolute z-10 mt-10 w-64 max-h-56 overflow-auto bg-white border rounded shadow">
                   <%= for cat <- suggestions do %>
-                    <button type="button"
-                            class="block w-full text-left px-3 py-2 hover:bg-gray-100"
-                            phx-click="choose_category"
-                            phx-value-id={BSON.ObjectId.encode!(transaction._id)}
-                            phx-value-category={cat}>
+                    <button
+                      type="button"
+                      class="block w-full text-left px-3 py-2 hover:bg-gray-100"
+                      phx-click="choose_category"
+                      phx-value-id={BSON.ObjectId.encode!(transaction._id)}
+                      phx-value-category={cat}
+                    >
                       {cat}
                     </button>
                   <% end %>
-                  <button type="button"
-                          class="block w-full text-left px-3 py-2 hover:bg-gray-100 border-t"
-                          phx-click="add_new_category"
-                          phx-value-id={BSON.ObjectId.encode!(transaction._id)}
-                          phx-value-q={q}>
-                    + add {q}
+                  <button
+                    type="button"
+                    class="block w-full text-left px-3 py-2 hover:bg-gray-100 border-t"
+                    phx-click="choose_category"
+                    phx-value-id={BSON.ObjectId.encode!(transaction._id)}
+                    phx-value-category={category}
+                  >
+                    + add {StringHelper.to_tittle(category)}
                   </button>
                 </div>
               <% end %>
             </div>
           </:col>
           <:col :let={transaction} label="Amount">
-            <span class={if Decimal.negative?(transaction.amount), do: "text-red-600", else: "text-green-600"}>
-              {Number.Currency.number_to_currency(Decimal.abs(transaction.amount),
-                unit: "R$ ",
-                delimiter: ".",
-                separator: ","
-              )}
-            </span>
+            <div class="m-0 p-0 leading-tight whitespace-nowrap">
+              <span class={if Decimal.negative?(transaction.amount), do: "text-red-600", else: "text-green-600"}>
+                {Number.Currency.number_to_currency(Decimal.abs(transaction.amount),
+                  unit: "R$ ",
+                  delimiter: ".",
+                  separator: ","
+                )}
+              </span>
+            </div>
           </:col>
         </.table>
       </div>
@@ -180,14 +202,14 @@ defmodule CashLensWeb.TransactionsLive do
             rows={@accounts}
             row_click={
               fn account ->
-                JS.push("account_selected", value: %{account: account.id})
+                JS.push("account_selected", value: %{account: BSON.ObjectId.encode!(account._id)})
                 |> hide_modal("import_statement_modal")
               end
             }
             row_id={& &1.name}
           >
             <:col :let={account} label="Parser">
-              {Account.full_name(account)}
+              {Accounts.full_name(account)}
             </:col>
           </.table>
       <% end %>
@@ -210,7 +232,7 @@ defmodule CashLensWeb.TransactionsLive do
     account =
       socket.assigns.accounts
       |> Enum.find(fn account ->
-        account.id == account_id
+        BSON.ObjectId.encode!(account._id) == account_id
       end)
 
     %{selected_statement: selected_statement, selected_parser: selected_parser} = socket.assigns
@@ -221,7 +243,7 @@ defmodule CashLensWeb.TransactionsLive do
           Transactions.create_transactions(transactions)
 
           socket
-          |> assign(transactions: Transactions.list_transactions(), categories: Category.list_categories())
+          |> assign(transactions: Transactions.list_transactions(), categories: list_categories(), only_uncategorized: true)
           |> put_flash(:info, "Transactions imported successfully!")
 
         {:error, error} ->
@@ -237,14 +259,14 @@ defmodule CashLensWeb.TransactionsLive do
   end
 
   @impl true
-  def handle_event("category_type", %{"transaction_id" => id, "q" => q}, socket) do
-    q = q |> to_string() |> String.trim()
-    suggestions = if q == "", do: [], else: Category.search_categories(q, 10)
+  def handle_event("category_type", %{"transaction_id" => id, "category" => category}, socket) do
+    category = category |> to_string() |> String.trim()
+    suggestions = if category == "", do: [], else: Category.search_categories(category, 10) |> Enum.map(&StringHelper.to_tittle/1)
 
     {:noreply,
      socket
      |> assign(
-       cat_query_by_id: Map.put(socket.assigns.cat_query_by_id, id, q),
+       cat_query_by_id: Map.put(socket.assigns.cat_query_by_id, id, category),
        cat_suggestions_by_id: Map.put(socket.assigns.cat_suggestions_by_id, id, suggestions),
        cat_open_for: id
      )}
@@ -252,26 +274,6 @@ defmodule CashLensWeb.TransactionsLive do
 
   @impl true
   def handle_event("choose_category", %{"id" => id, "category" => category}, socket) do
-    case Transactions.update_transaction(id, %{category: category}) do
-      {:ok, _trx} ->
-        {:noreply,
-         socket
-         |> assign(
-           transactions: Transactions.list_transactions(),
-           categories: Category.list_categories(),
-           cat_query_by_id: Map.delete(socket.assigns.cat_query_by_id, id),
-           cat_suggestions_by_id: Map.delete(socket.assigns.cat_suggestions_by_id, id),
-           cat_open_for: nil,
-           editing_new_category_for: nil
-         )}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to update category")}
-    end
-  end
-
-  @impl true
-  def handle_event("add_new_category", %{"id" => id, "q" => category}, socket) do
     category = category |> to_string() |> String.trim()
 
     if category == "" do
@@ -283,7 +285,7 @@ defmodule CashLensWeb.TransactionsLive do
            socket
            |> assign(
              transactions: Transactions.list_transactions(),
-             categories: Category.list_categories(),
+             categories: list_categories(),
              cat_query_by_id: Map.delete(socket.assigns.cat_query_by_id, id),
              cat_suggestions_by_id: Map.delete(socket.assigns.cat_suggestions_by_id, id),
              cat_open_for: nil,
@@ -296,7 +298,8 @@ defmodule CashLensWeb.TransactionsLive do
     end
   end
 
-  defp serialize_account(account) do
-    Map.put(account, :id, BSON.ObjectId.encode!(account._id))
+  @impl true
+  def handle_event("toggle_uncategorized", _params, socket) do
+    {:noreply, assign(socket, :only_uncategorized, !socket.assigns.only_uncategorized)}
   end
 end

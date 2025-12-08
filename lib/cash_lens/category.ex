@@ -13,7 +13,7 @@ defmodule CashLens.Category do
   def list_categories do
     case Mongo.distinct(:mongo, @collection, "category", %{}) do
       {:ok, values} when is_list(values) ->
-        values
+        (values ++ ["Transfer"])
         |> Enum.reject(&is_nil/1)
         |> Enum.map(&to_string/1)
         |> Enum.map(&String.trim/1)

@@ -36,4 +36,11 @@ defmodule CashLens.StringHelper do
   end
 
   def to_tittle(str), do: str
+
+  @spec to_snake_case(binary) :: binary
+  def to_snake_case(input) do
+    input
+    |> String.downcase()
+    |> String.replace(~r/\s+/, "_")
+  end
 end
