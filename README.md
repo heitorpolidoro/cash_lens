@@ -1,18 +1,65 @@
 # CashLens
 
-To start your Phoenix server:
+Aplicação Phoenix LiveView com suporte para MongoDB, Redis e serviço ML em Python.
 
-  * Run `mix setup` to install and setup dependencies
-  * Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+## Requisitos
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+- Elixir 1.18.4+ 
+- Erlang/OTP 28+
+- MongoDB (localhost:27017)
+- Redis (localhost:6379)
+- Python 3.12+ (para ML)
 
-Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
+**OU**
 
-## Learn more
+- Docker & Docker Compose
 
-  * Official website: https://www.phoenixframework.org/
-  * Guides: https://hexdocs.pm/phoenix/overview.html
-  * Docs: https://hexdocs.pm/phoenix
-  * Forum: https://elixirforum.com/c/phoenix-forum
-  * Source: https://github.com/phoenixframework/phoenix
+## Instalação
+
+### Local
+```bash
+mix deps.get
+mix compile
+
+# Para o serviço ML
+cd ml
+pip install -r requirements.txt
+```
+
+### Docker
+```bash
+docker-compose up --build
+```
+
+## Executar
+
+### Local
+```bash
+./start.sh
+# ou
+mix phx.server
+
+# Serviço ML (separado)
+cd ml && uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Docker
+```bash
+./docker-start.sh
+# ou
+docker-compose up
+```
+
+Acesse: 
+- Aplicação: http://localhost:4000
+- ML Service: http://localhost:8000/docs
+
+## Funcionalidades
+
+- ✅ Phoenix LiveView
+- ✅ MongoDB (mongodb_driver)
+- ✅ Redis (redix)
+- ✅ Interface para testar conexões
+- ✅ Dashboard básico
+- ✅ Docker Compose
+- ✅ Serviço ML (FastAPI + CatBoost)

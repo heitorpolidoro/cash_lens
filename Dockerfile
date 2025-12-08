@@ -1,52 +1,18 @@
-FROM elixir:1.18-alpine
+FROM elixir:1.18.4-otp-28-alpine
 
-# Install build dependencies
-RUN apk add --no-cache  \
-    build-base  \
-    git  \
-    inotify-tools \
-    netcat-openbsd \
-    npm  \
-    python3
+RUN apk add --no-cache build-base git
 
-# Set environment variables
-ENV MIX_ENV=dev \
-    PORT=4000 \
-    # Enable code reloading
-    PHX_SERVER=true \
-    # Disable build cache for development
-    ERL_AFLAGS="-kernel shell_history enabled"
-
-# Create app directory and copy the Elixir project into it
 WORKDIR /app
 
-# Copy mix.exs and mix.lock files to install dependencies
-#COPY mix.exs mix.lock ./
-
-# Install hex package manager and rebar
+COPY mix.exs mix.lock ./
 RUN mix local.hex --force && \
-    mix local.rebar --force
+    mix local.rebar --force && \
+    mix deps.get && \
+    mix deps.compile
 
-# Install mix dependencies
-#RUN mix deps.get
-
-# Copy the rest of the application code
 COPY . .
+RUN mix compile
 
-# Update dependencies to ensure lock file is in sync
-# Install and setup assets
-RUN mix deps.get && \
-  mix assets.setup && \
-  mix assets.deploy && \
-  mix esbuild.install && \
-  mix tailwind.install
-
-# Expose port
 EXPOSE 4000
 
-# Copy the entrypoint script and make it executable
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
-# Set the default command to run the startup script
-CMD ["/app/entrypoint.sh"]
+CMD ["mix", "phx.server"]

@@ -1,4 +1,3 @@
-# TODO Review
 defmodule CashLensWeb.Router do
   use CashLensWeb, :router
 
@@ -19,54 +18,20 @@ defmodule CashLensWeb.Router do
     pipe_through :browser
 
     live "/", HomeLive, :index
-    resources "/accounts", AccountController
-    resources "/categories", CategoryController
+    live "/dashboard", DashboardLive, :dashboard
+    live "/transactions", TransactionsLive, :transactions
+    live "/accounts", AccountsLive, :accounts
 
-    resources "/transactions", TransactionController,
-      only: [:show, :new, :create, :edit, :update, :delete]
-
-    live "/transactions", TransactionsLive, :index
-    resources "/reasons", ReasonController
-
-    resources "/balances", BalanceController
-
-    live "/parse-statement", ParseStatementLive, :index
-
-    resources "/balances", BalanceController, only: [:index, :show, :edit, :update]
-    post "/balances/:id/recalculate", BalanceController, :recalculate
+    get "/.well-known/*path", PageController, :well_known
   end
 
-  scope "/transfers/automatic_transfers", CashLensWeb do
-    pipe_through :browser
-
-    resources "/", AutomaticTransferController
-  end
-
-  scope "/transfers", CashLensWeb do
-    pipe_through :browser
-
-    resources "/", TransferController
-  end
-
-  # Other scopes may use custom stacks.
-  # scope "/api", CashLensWeb do
-  #   pipe_through :api
-  # end
-
-  # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:cash_lens, :dev_routes) do
-    # If you want to use the LiveDashboard in production, you should put
-    # it behind authentication and allow only admins to access it.
-    # If your application does not have an admins-only section yet,
-    # you can use Plug.BasicAuth to set up some basic authentication
-    # as long as you are also using SSL (which you should anyway).
     import Phoenix.LiveDashboard.Router
 
     scope "/dev" do
       pipe_through :browser
 
       live_dashboard "/dashboard", metrics: CashLensWeb.Telemetry
-      forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
   end
 end

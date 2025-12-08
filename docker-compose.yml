@@ -1,81 +1,58 @@
 services:
-  postgres:
-    container_name: postgres-db
-    image: postgres:latest
-    environment:
-      POSTGRES_USER: your-postgres-user
-      POSTGRES_PASSWORD: your-postgres-password
-      POSTGRES_DB: cash_lens
+  mongodb:
+    image: mongo:7
+    container_name: cash_lens_mongo
     ports:
-      - "5454:5432"
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: cash_lens
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-    networks:
-      - cash_lens_network
+      - mongo_data:/data/db
 
-  app:
-    container_name: app
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      # Database Configuration
-      POSTGRES_USER: your-postgres-user
-      POSTGRES_PASSWORD: your-postgres-password
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: cash_lens
-      POSTGRES_PORT: 5432
-      PORT: 4000
-      # Force Phoenix to bind to all interfaces
-      PHX_BIND_IP: "0.0.0.0"
-      # ML Service base URL (used by CashLens.ML.TransactionClassifier)
-      PYTHON_ML_BASE_URL: "http://ml:8000"
-      # Google OAuth Configuration
-      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
-      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
-      # Phoenix Configuration
-      SECRET_KEY_BASE: "${SECRET_KEY_BASE}"
-      # LiveView Configuration
-      LIVE_VIEW_SIGNING_SALT: "${LIVE_VIEW_SIGNING_SALT}"
-      # Allowed Google Account SUB
-      ALLOWED_GOOGLE_SUB: "${ALLOWED_GOOGLE_SUB}"
-      # Version
-      VERSION: "${VERSION}"
+  redis:
+    image: redis:7-alpine
+    container_name: cash_lens_redis
     ports:
-      - "4000:4000"
+      - "6379:6379"
     volumes:
-      - .:/app:cached
-      - /app/deps
-      - /app/_build
-    depends_on:
-      - postgres
-    networks:
-      - cash_lens_network
+      - redis_data:/data
 
   ml:
-    container_name: ml
     build:
       context: .
       dockerfile: ml/Dockerfile
-    environment:
-      POSTGRES_USER: your-postgres-user
-      POSTGRES_PASSWORD: your-postgres-password
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: cash_lens
-      POSTGRES_PORT: 5432
-      PY_MODEL_PATH: /app/ml/ml_models/catboost_transaction_classifier.cbm
-    volumes:
-      - .:/app
+    container_name: cash_lens_ml
     ports:
       - "8000:8000"
+    environment:
+      - PY_SERVICE_PORT=8000
+      - MONGODB_URL=mongodb://mongodb:27017/cash_lens
     depends_on:
-      - postgres
-    networks:
-      - cash_lens_network
+      - mongodb
+    volumes:
+      - ./ml:/app/ml
+      - ml_models:/app/ml/ml_models
+
+  app:
+    build: .
+    container_name: cash_lens_app
+    ports:
+      - "4000:4000"
+    environment:
+      - PHX_SERVER=true
+      - MIX_ENV=dev
+      - SECRET_KEY_BASE=your_secret_key_base_here_change_in_production_must_be_at_least_64_bytes_long_for_security
+      - MONGODB_URL=mongodb://mongodb:27017/cash_lens
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+      - ml
+    volumes:
+      - .:/app
+    working_dir: /app
 
 volumes:
-  postgres-data:
-
-networks:
-  cash_lens_network:
-    driver: bridge
+  mongo_data:
+  redis_data:
+  ml_models:

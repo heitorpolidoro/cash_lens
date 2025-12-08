@@ -1,130 +1,78 @@
 defmodule CashLens.Accounts do
   @moduledoc """
-  The Accounts context.
+  Context for managing accounts
   """
-
-  import Ecto.Query, warn: false
-  alias CashLens.Repo
 
   alias CashLens.Accounts.Account
 
-  @doc """
-  Returns the list of accounts.
+  @collection "accounts"
 
-  ## Examples
-
-      iex> list_accounts()
-      [%Account{}, ...]
-
-  """
   def list_accounts do
-    Repo.all(Account)
+    Mongo.find(:mongo, @collection, %{})
+    |> Enum.map(&document_to_struct/1)
   end
 
-  @doc """
-  Gets a single account.
-
-  Raises `Ecto.NoResultsError` if the Account does not exist.
-
-  ## Examples
-
-      iex> get_account!(123)
-      %Account{}
-
-      iex> get_account!(456)
-      ** (Ecto.NoResultsError)
-
-  """
-  def get_account!(id), do: Repo.get!(Account, id)
-
-  @doc """
-  Creates a account.
-
-  ## Examples
-
-      iex> create_account(%{field: value})
-      {:ok, %Account{}}
-
-      iex> create_account(%{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def create_account(attrs \\ %{}) do
-    %Account{}
-    |> Account.changeset(attrs)
-    |> Repo.insert()
+  def get_account(id) do
+    case Mongo.find_one(:mongo, @collection, %{_id: BSON.ObjectId.decode!(id)}) do
+      nil -> {:error, :not_found}
+      doc -> {:ok, document_to_struct(doc)}
+    end
   end
 
-  @doc """
-  Updates a account.
+  defp document_to_struct(doc) do
+    atomized =
+      for {key, val} <- doc, into: %{} do
+        atom_key = if is_binary(key), do: String.to_atom(key), else: key
+        {atom_key, val}
+      end
 
-  ## Examples
-
-      iex> update_account(account, %{field: new_value})
-      {:ok, %Account{}}
-
-      iex> update_account(account, %{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def update_account(%Account{} = account, attrs) do
-    account
-    |> Account.changeset(attrs)
-    |> Repo.update()
+    struct(Account, atomized)
   end
 
-  @doc """
-  Deletes a account.
+  def create_account(attrs) do
+    account = Account.new(attrs)
 
-  ## Examples
+    doc =
+      account
+      |> Map.from_struct()
+      |> Map.reject(fn {_key, value} -> is_nil(value) end)
 
-      iex> delete_account(account)
-      {:ok, %Account{}}
+    case Mongo.insert_one(:mongo, @collection, doc) do
+      {:ok, %{inserted_id: id}} ->
+        {:ok, %{account | _id: id}}
 
-      iex> delete_account(account)
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def delete_account(%Account{} = account) do
-    Repo.delete(account)
+      error ->
+        error
+    end
   end
 
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking account changes.
+  def update_account(id, attrs) do
+    updates = %{
+      "$set" => Map.merge(attrs, %{updated_at: DateTime.utc_now()})
+    }
 
-  ## Examples
+    case Mongo.update_one(:mongo, @collection, %{_id: BSON.ObjectId.decode!(id)}, updates) do
+      {:ok, %{matched_count: 1}} ->
+        get_account(id)
 
-      iex> change_account(account)
-      %Ecto.Changeset{data: %Account{}}
+      {:ok, %{matched_count: 0}} ->
+        {:error, :not_found}
 
-  """
-  def change_account(%Account{} = account, attrs \\ %{}) do
-    Account.changeset(account, attrs)
+      error ->
+        error
+    end
   end
 
-  @doc """
-  Returns a list of accounts for select options.
-  """
-  def list_accounts_for_select do
-    Repo.all(from a in Account, select: {a.name, a.id}, order_by: a.name)
-  end
+  def delete_account(id) do
+    case Mongo.delete_one(:mongo, @collection, %{_id: BSON.ObjectId.decode!(id)}) do
+      {:ok, %{deleted_count: 1}} ->
+        :ok
 
-  @doc """
-  Returns a human-readable label for an account.
+      {:ok, %{deleted_count: 0}} ->
+        {:error, :not_found}
 
-  - When given `nil`, returns "-".
-  - When given an `%Account{}` struct, returns "<bank_name> - <account_name>".
-
-  ## Examples
-
-      iex> to_str(nil)
-      "-"
-
-      iex> to_str(%Account{bank_name: "Acme Bank", name: "Checking"})
-      "Acme Bank - Checking"
-  """
-  def to_str(nil), do: "-"
-  def to_str(%Account{} = account) do
-    "#{account.bank_name} - #{account.name}"
+      error ->
+        error
+    end
   end
 end

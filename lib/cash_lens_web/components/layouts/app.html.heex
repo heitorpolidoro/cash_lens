@@ -1,34 +1,46 @@
-<header class="px-4 sm:px-6 lg:px-8">
-  <div class="flex items-center justify-between border-b border-zinc-100 py-3 text-sm">
-    <div class="flex items-center gap-4">
-      <a href="/">
-        <img src={~p"/images/logo.png"} width="36" />
-      </a>
-      <p class="rounded-full px-2 font-medium leading-6">
-        CA$H LEN$
-      </p>
+<div class="flex h-screen bg-gray-100">
+  <!-- Sidebar -->
+  <div class="w-64 bg-white shadow-lg">
+    <div class="p-4">
+      <img src="/images/horizontal_logo.png" alt="CashLens" class="h-8 w-auto" />
     </div>
-    <div class="flex items-center gap-4 font-semibold leading-6 text-zinc-900">
-      <p class="text-sm text-zinc-600">
-        v{Application.spec(:phoenix, :vsn)}
-      </p>
-    </div>
+    <nav class="mt-8">
+      <.menu_item
+        title="Home"
+        icon="hero-home"
+        url="/"
+        live_action={:index}
+        current_action={assigns[:live_action]}
+      />
+      <.menu_item
+        title="Dashboard"
+        icon="hero-chart-bar"
+        url="/dashboard"
+        live_action={:dashboard}
+        current_action={assigns[:live_action]}
+      />
+      <.menu_item
+        title="Transactions"
+        icon="hero-banknotes"
+        url="/transactions"
+        live_action={:transactions}
+        current_action={assigns[:live_action]}
+      />
+      <.menu_item
+        title="Accounts"
+        icon="hero-building-library"
+        url="/accounts"
+        live_action={:accounts}
+        current_action={assigns[:live_action]}
+      />
+    </nav>
   </div>
-</header>
-
-<div class="flex min-h-screen">
-  <!-- Import the mobile menu button and sidebar components -->
-  <.mobile_menu_button />
-  <.sidebar />
   
-<!-- Main Content -->
-  <main class="flex-1 px-4 py-8 sm:px-6 lg:px-8 w-full">
-    <div class="mx-auto">
+<!-- Main content -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
       <.flash_group flash={@flash} />
       {@inner_content}
-    </div>
-  </main>
+    </main>
+  </div>
 </div>
-
-<!-- Import the sidebar JavaScript -->
-<.sidebar_js />

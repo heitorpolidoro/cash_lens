@@ -1,12 +1,13 @@
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Any, List
+from typing import Optional, List
 from datetime import datetime
 import os
 
 from catboost import CatBoostClassifier
 import pandas as pd
+from pymongo import MongoClient
 
 MODEL_PATH = os.environ.get("PY_MODEL_PATH", "ml/ml_models/catboost_transaction_classifier.cbm")
 K_DEFAULT = int(os.environ.get("PY_TRAIN_K", "1000"))
@@ -21,81 +22,63 @@ class PredictRequest(BaseModel):
     amount: float
     reason: str
 
-class PredictResponse(BaseModel):
-    category_id: int
-
 class PredictBatchResponse(BaseModel):
     categories: list[int]
 
-# Data access via Postgres using env from docker-compose
-import psycopg2
-
-def get_db_conn():
-    return psycopg2.connect(
-        dbname=os.getenv("POSTGRES_DB", "cash_lens"),
-        user=os.getenv("POSTGRES_USER", "your-postgres-user"),
-        password=os.getenv("POSTGRES_PASSWORD", "your-postgres-password"),
-        host=os.getenv("POSTGRES_HOST", "localhost"),
-        port=int(os.getenv("POSTGRES_PORT", "5454")),
-    )
-
+def get_mongo_client():
+    mongo_url = os.getenv("MONGODB_URL", "mongodb://mongodb:27017/cash_lens")
+    return MongoClient(mongo_url)
 
 def load_transactions(k: int):
-    rows = get_transactions(k)
-    # rows: list of tuples
-    cols = ["datetime", "amount", "reason", "category_id"]
-    df = pd.DataFrame(rows, columns=cols)
+    client = get_mongo_client()
+    db = client.cash_lens
+    
+    # Get transactions with category_id
+    transactions = list(db.transactions.find(
+        {"category_id": {"$exists": True, "$ne": None}},
+        {"datetime": 1, "amount": 1, "reason": 1, "category_id": 1}
+    ).sort("datetime", -1).limit(k))
+    
+    if not transactions:
+        return pd.DataFrame()
+    
+    # Convert to DataFrame
+    df = pd.DataFrame(transactions)
+    client.close()
     return df
 
-
-def get_transactions(k: int) -> Any:
-    sql = """
-          SELECT t.datetime, t.amount, t.reason, t.category_id
-          FROM transactions t
-          WHERE t.category_id IS NOT NULL
-          ORDER BY t.datetime DESC
-              LIMIT %s \
-          """
-    with get_db_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, (k,))
-            rows = cur.fetchall()
-    return rows
-
-
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
-    dt = pd.to_datetime(df["datetime"], utc=True)
+    if df.empty:
+        return pd.DataFrame()
+    
+    dt = pd.to_datetime(df["datetime"])
     df_feat = pd.DataFrame()
     df_feat["weekday"] = dt.dt.weekday
     df_feat["day"] = dt.dt.day
     df_feat["time_minute"] = dt.dt.hour * 60 + dt.dt.minute
-    # amount as float
-    df_feat["amount"] = df["amount"].astype(float)
-    # reason as text categorical
+    df_feat["amount"] = pd.to_numeric(df["amount"], errors='coerce').fillna(0)
     df_feat["reason"] = df["reason"].fillna("")
     return df_feat
 
-
 def get_model() -> CatBoostClassifier:
-    model = CatBoostClassifier()
-    return model
+    return CatBoostClassifier()
 
 @app.post("/train")
 def train(req: TrainRequest):
     start = datetime.now()
     k = req.k or K_DEFAULT
     df = load_transactions(k)
+    
     if len(df) < 2:
-        raise HTTPException(status_code=400, detail="No enough transactions to train")
+        raise HTTPException(status_code=400, detail="Not enough transactions to train")
+    
     X = build_features(df)
     y = df["category_id"].astype(int)
 
     model = get_model()
-    # CatBoost can handle categorical features; mark 'reason' as categorical
     cat_features = [X.columns.get_loc("reason")]
     model.set_params(loss_function="MultiClass", verbose=False, random_seed=42)
 
-    # Feature weights per column as requested
     feature_weight_map = {
         "weekday": 1.0,
         "day": 0.5,
@@ -104,15 +87,19 @@ def train(req: TrainRequest):
         "reason": 10.0,
     }
     feature_weights = [feature_weight_map[col] for col in X.columns]
-
     model.set_params(feature_weights=feature_weights)
     model.fit(X, y, cat_features=cat_features)
 
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     model.save_model(MODEL_PATH)
     score = model.score(X, y)
-    return {"status": "ok", "trained_on": len(df), "accuracy": score, "time": datetime.now() - start}
-
+    
+    return {
+        "status": "ok", 
+        "trained_on": len(df), 
+        "accuracy": score, 
+        "time": str(datetime.now() - start)
+    }
 
 def ensure_model_loaded() -> CatBoostClassifier:
     if not os.path.exists(MODEL_PATH):
@@ -121,12 +108,10 @@ def ensure_model_loaded() -> CatBoostClassifier:
     model.load_model(MODEL_PATH)
     return model
 
-# @app.post("/predict", response_model=PredictResponse)
-# def predict(req: PredictRequest):
 @app.post("/predict", response_model=PredictBatchResponse)
 def predict(reqs: List[PredictRequest]):
     model = ensure_model_loaded()
-    # Build dataframe from list of requests
+    
     data = [
         {
             "datetime": r.datetime,
@@ -135,22 +120,30 @@ def predict(reqs: List[PredictRequest]):
         }
         for r in reqs
     ]
+    
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="Empty request list")
+    
     df = pd.DataFrame(data)
     X = build_features(df)
     preds = model.predict(X)
-    # Normalize predictions to a flat list of ints
+    
     try:
-        import numpy as np  # noqa: F401
         categories = pd.Series(preds).astype(int).tolist()
     except Exception:
-        try:
-            # Fallback for nested/2D outputs
-            categories = [int(x) for x in (preds.reshape(-1) if hasattr(preds, "reshape") else preds)]
-        except Exception:
-            categories = [int(preds)]
+        categories = [int(x) for x in (preds.reshape(-1) if hasattr(preds, "reshape") else preds)]
+    
     return PredictBatchResponse(categories=categories)
+
+@app.get("/health")
+def health():
+    try:
+        client = get_mongo_client()
+        client.admin.command('ping')
+        client.close()
+        return {"status": "ok", "mongodb": "connected"}
+    except Exception as e:
+        return {"status": "error", "mongodb": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

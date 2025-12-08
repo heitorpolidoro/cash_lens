@@ -1,26 +1,48 @@
-# TODO Review
 defmodule CashLens.Transactions.Transaction do
-  use Ecto.Schema
-  use QueryBuilder
-  import Ecto.Changeset
+  @moduledoc """
+  Transaction model for MongoDB
+  """
 
-  schema "transactions" do
-    field :datetime, :utc_datetime
-    field :amount, :decimal
-    field :reason, :string
+  defstruct [
+    :_id,
+    :date,
+    :time,
+    :raw_reason,
+    :reason,
+    :category,
+    :amount,
+    :full_line,
+    :inserted_at,
+    :updated_at
+  ]
 
-    belongs_to :account, CashLens.Accounts.Account
-    belongs_to :category, CashLens.Categories.Category
+  @type t :: %__MODULE__{
+          _id: BSON.ObjectId.t() | nil,
+          date: Date.t() | nil,
+          time: Time.t() | nil,
+          raw_reason: String.t() | nil,
+          reason: String.t() | nil,
+          category: String.t() | nil,
+          amount: Decimal.t() | nil,
+          full_line: String.t() | nil,
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
+        }
 
-    timestamps(type: :utc_datetime)
-  end
+  def new(attrs \\ %{}) do
+    now = DateTime.utc_now()
 
-  @doc false
-  def changeset(transaction, attrs) do
-    transaction
-    |> cast(attrs, [:datetime, :amount, :reason, :account_id, :category_id])
-    |> validate_required([:datetime, :amount, :account_id, :category_id])
-    |> foreign_key_constraint(:account_id)
-    |> foreign_key_constraint(:category_id)
+    %__MODULE__{
+      _id: Map.get(attrs, :_id),
+      date: Map.get(attrs, :date),
+      time: Map.get(attrs, :time),
+      raw_reason: Map.get(attrs, :raw_reason),
+      reason: Map.get(attrs, :reason),
+      category: Map.get(attrs, :category),
+      amount: Map.get(attrs, :amount),
+      full_line: Map.get(attrs, :full_line),
+      inserted_at: Map.get(attrs, :inserted_at, now),
+      updated_at: Map.get(attrs, :updated_at, now)
+    }
   end
 end

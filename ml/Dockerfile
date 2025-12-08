@@ -7,11 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# System dependencies for scientific stack and psycopg2
+# System dependencies for scientific stack
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
-    libpq-dev \
     libgomp1 \
     git \
     && rm -rf /var/lib/apt/lists/*

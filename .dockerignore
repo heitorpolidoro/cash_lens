@@ -1,36 +1,5 @@
-# Elixir build artifacts
-/_build/
-/doc/
-/.fetch
-erl_crash.dump
-*.ez
-*.beam
-/config/*.secret.exs
-.elixir_ls/
-
-# Node.js dependencies
-/assets/node_modules/
-
-# Local environment files
-elixir/.env
-.env.*
-
-# Git and GitHub files
+_build/
+deps/
 .git/
-.github/
-.gitignore
-
-# Editor and IDE files
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Docker files
-Dockerfile
-docker-compose.yml
-.dockerignore
-
-# Temporary files
-/tmp/
-/priv/static/
+.DS_Store
+*.log

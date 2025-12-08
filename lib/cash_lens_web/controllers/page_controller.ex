@@ -1,10 +1,7 @@
-# TODO Review
 defmodule CashLensWeb.PageController do
   use CashLensWeb, :controller
 
-  def home(conn, _params) do
-    # The home page is often custom made,
-    # so skip the default app layout.
-    render(conn, :home)
+  def well_known(conn, _params) do
+    send_resp(conn, 204, "")
   end
 end
