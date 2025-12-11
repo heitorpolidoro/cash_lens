@@ -8,6 +8,7 @@ defmodule CashLensWeb.TransactionsLive do
   alias CashLens.Parsers
   alias CashLens.StringHelper
   alias CashLens.Category
+  alias CashLens.DateUtils
 
   @statement_default_path "statements"
 
@@ -77,6 +78,8 @@ defmodule CashLensWeb.TransactionsLive do
           row_class={fn transaction -> if Decimal.negative?(transaction.amount), do: "bg-red-50", else: "bg-green-50" end}
         >
           <:col :let={transaction} label="Date">
+      {DateUtils.day_name(transaction.date)}
+            <br />
             {Calendar.strftime(transaction.date, "%d/%m/%Y")}
             <%= if transaction.time do %>
               <br />{transaction.time |> Time.from_iso8601!() |> Calendar.strftime("%H:%M")}
@@ -281,6 +284,7 @@ defmodule CashLensWeb.TransactionsLive do
     else
       case Transactions.update_transaction(id, %{category: category}) do
         {:ok, _trx} ->
+          Phoenix.PubSub.broadcast(CashLens.PubSub, "dashboard_updates", :update_charts)
           {:noreply,
            socket
            |> assign(

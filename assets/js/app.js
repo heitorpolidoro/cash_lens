@@ -50,10 +50,13 @@ Hooks.PieChart = {
     updated() {
         if (!this.chart) return
         const payload = this.el.dataset.chart ? JSON.parse(this.el.dataset.chart) : {labels: [], data: [], totals: []}
+        const colors = payload.labels.map((_, i) => `hsl(${(i * 36) % 360} 70% 55%)`)
         this.chart.data.labels = payload.labels
         this.chart.data.datasets[0].data = payload.data
+        this.chart.data.datasets[0].backgroundColor = colors
         this.payloadTotals = payload.totals || []
         this.chart.update()
+        this.chart.resize()
     },
     destroyed() {
         this.chart && this.chart.destroy()
@@ -100,6 +103,7 @@ Hooks.LineChart = {
     updated() {
         if (!this.chart) return
         const payload = this.el.dataset.chart ? JSON.parse(this.el.dataset.chart) : {labels: [], datasets: []}
+
         this.chart.data.labels = payload.labels
         this.chart.data.datasets = (payload.datasets || []).map((ds, i) => ({
             label: ds.label,
@@ -110,6 +114,7 @@ Hooks.LineChart = {
             fill: false
         }))
         this.chart.update()
+        this.chart.resize()
     },
     destroyed() {
         this.chart && this.chart.destroy()
