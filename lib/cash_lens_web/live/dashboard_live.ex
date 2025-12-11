@@ -3,6 +3,7 @@ defmodule CashLensWeb.DashboardLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    if connected?(socket), do: Phoenix.PubSub.subscribe(CashLens.PubSub, "dashboard_updates")
     {:ok,
      assign(socket,
        page_title: "Dashboard",
@@ -42,6 +43,12 @@ defmodule CashLensWeb.DashboardLive do
     {:noreply, assign(socket, pie_chart: pie, line_chart: line)}
   end
 
+  @impl true
+  def handle_info(:update_charts, socket) do
+    {pie, line} = load_charts()
+    {:noreply, assign(socket, pie_chart: pie, line_chart: line)}
+  end
+
   defp load_charts do
     txs = CashLens.Transactions.list_transactions()
       |> Stream.filter(& &1.category)
@@ -67,7 +74,8 @@ defmodule CashLensWeb.DashboardLive do
 
         {cat, sum}
       end)
-      |> Enum.sort_by(fn {cat, _} -> cat end)
+      |> Enum.sort_by(fn {_, sum} -> sum end)
+      |> Enum.reverse()
 
     totals = Enum.map(totals_by_cat, fn {_cat, dec} -> decimal_to_float(dec) end)
     total_sum = Enum.sum(totals)
