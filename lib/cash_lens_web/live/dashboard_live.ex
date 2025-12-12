@@ -4,6 +4,7 @@ defmodule CashLensWeb.DashboardLive do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Phoenix.PubSub.subscribe(CashLens.PubSub, "dashboard_updates")
+
     {:ok,
      assign(socket,
        page_title: "Dashboard",
@@ -22,14 +23,21 @@ defmodule CashLensWeb.DashboardLive do
         <div class="bg-white p-4 rounded-lg shadow">
           <h3 class="font-semibold mb-4">Percentual por Categoria (Todo o período)</h3>
           <div class="mx-auto max-w-xl h-72">
-            <canvas id="pie-categories" class="w-full h-full" phx-hook="PieChart" data-chart={Jason.encode!(@pie_chart)}></canvas>
+            <canvas id="pie-categories" class="w-full h-full" phx-hook="PieChart" data-chart={Jason.encode!(@pie_chart)}>
+            </canvas>
           </div>
         </div>
 
         <div class="bg-white p-4 rounded-lg shadow">
           <h3 class="font-semibold mb-4">Soma por Categoria por Mês</h3>
           <div class="mx-auto max-w-5xl h-96">
-            <canvas id="line-categories-month" class="w-full h-full" phx-hook="LineChart" data-chart={Jason.encode!(@line_chart)}></canvas>
+            <canvas
+              id="line-categories-month"
+              class="w-full h-full"
+              phx-hook="LineChart"
+              data-chart={Jason.encode!(@line_chart)}
+            >
+            </canvas>
           </div>
         </div>
       </div>
@@ -50,12 +58,13 @@ defmodule CashLensWeb.DashboardLive do
   end
 
   defp load_charts do
-    txs = CashLens.Transactions.list_transactions()
+    txs =
+      CashLens.Transactions.list_transactions()
       |> Stream.filter(& &1.category)
-    |> Stream.reject(fn t -> t.category == "Transfer" end)
-    |> Enum.map(fn t ->
-    %{t | amount: Decimal.negate(t.amount)}
-    end)
+      |> Stream.reject(fn t -> t.category == "Transfer" end)
+      |> Enum.map(fn t ->
+        %{t | amount: Decimal.negate(t.amount)}
+      end)
 
     pie = build_pie_chart(txs)
     line = build_line_chart(txs)
@@ -79,6 +88,7 @@ defmodule CashLensWeb.DashboardLive do
 
     totals = Enum.map(totals_by_cat, fn {_cat, dec} -> decimal_to_float(dec) end)
     total_sum = Enum.sum(totals)
+
     data =
       if total_sum > 0 do
         Enum.map(totals, fn v -> Float.round(v * 100.0 / total_sum, 2) end)
@@ -86,10 +96,11 @@ defmodule CashLensWeb.DashboardLive do
         Enum.map(totals, fn _ -> 0.0 end)
       end
 
-    labels = Enum.zip(totals_by_cat, data)
+    labels =
+      Enum.zip(totals_by_cat, data)
       |> Enum.map(fn {{label, _}, percentage} ->
         "#{label} (#{percentage}%)"
-    end)
+      end)
 
     %{labels: labels, data: data, totals: totals}
   end

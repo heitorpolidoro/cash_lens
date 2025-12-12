@@ -3,7 +3,7 @@ defmodule CashLens.DateUtils do
   @day_names [
     "Monday",
     "Tuesday",
-  "Wednesday",
+    "Wednesday",
     "Thursday",
     "Friday",
     "Saturday",
