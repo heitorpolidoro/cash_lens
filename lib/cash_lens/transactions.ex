@@ -127,15 +127,10 @@ defmodule CashLens.Transactions do
       }
     ]
 
-    # Best-effort index creation; log errors but don't crash app startup
-    case Mongo.create_indexes(:mongo, @collection, indexes) do
-      {:ok, _} ->
-        :ok
-
-      {:error, reason} ->
-        require Logger
-        Logger.error("Failed to create indexes for #{@collection}: #{inspect(reason)}")
-        :ok
+    with {:error, reason} <- Mongo.create_indexes(:mongo, @collection, indexes) do
+      require Logger
+      Logger.error("Failed to create indexes for #{@collection}: #{inspect(reason)}")
+      :ok
     end
   end
 

@@ -1,0 +1,24 @@
+FROM ollama/ollama
+
+# Set environment variables
+ENV OLLAMA_HOST=0.0.0.0
+
+# Create startup script
+RUN echo '#!/bin/bash\n\
+# Start Ollama server in background\n\
+ollama serve &\n\
+\n\
+# Wait for server to be ready\n\
+echo "Waiting for Ollama server to start..."\n\
+sleep 10\n\
+\n\
+# Pull the model\n\
+echo "Pulling mistral model..."\n\
+ollama pull mistral\n\
+\n\
+# Keep server running\n\
+wait' > /start.sh && chmod +x /start.sh
+
+EXPOSE 11434
+
+ENTRYPOINT ["/bin/bash", "/start.sh"]

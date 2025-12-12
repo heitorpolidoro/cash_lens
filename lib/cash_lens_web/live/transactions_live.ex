@@ -30,6 +30,7 @@ defmodule CashLensWeb.TransactionsLive do
     {:ok,
      assign(socket,
        page_title: "Transactions",
+       path: @statement_default_path,
        transactions: transactions,
        accounts: accounts,
        parsers: parsers,
@@ -40,9 +41,9 @@ defmodule CashLensWeb.TransactionsLive do
        selected_parser: nil,
        editing_new_category_for: nil,
        cat_query_by_id: %{},
-        cat_suggestions_by_id: %{},
-        cat_open_for: nil
-      )}
+       cat_suggestions_by_id: %{},
+       cat_open_for: nil
+     )}
   end
 
   @impl true
@@ -69,16 +70,19 @@ defmodule CashLensWeb.TransactionsLive do
         selected_parser={@selected_parser}
         accounts={@accounts}
         parsers={@parsers}
+      path={@path}
       />
 
       <div class="mt-8">
         <.table
           id="transactions"
-          rows={if @only_uncategorized, do: Enum.filter(@transactions, fn t -> t.category in [nil, ""] end), else: @transactions}
+          rows={
+            if @only_uncategorized, do: Enum.filter(@transactions, fn t -> t.category in [nil, ""] end), else: @transactions
+          }
           row_class={fn transaction -> if Decimal.negative?(transaction.amount), do: "bg-red-50", else: "bg-green-50" end}
         >
           <:col :let={transaction} label="Date">
-      {DateUtils.day_name(transaction.date)}
+            {DateUtils.day_name(transaction.date)}
             <br />
             {Calendar.strftime(transaction.date, "%d/%m/%Y")}
             <%= if transaction.time do %>
@@ -105,7 +109,13 @@ defmodule CashLensWeb.TransactionsLive do
                   type="text"
                   class="input"
                   name="category"
-                  value={Map.get(@cat_query_by_id, BSON.ObjectId.encode!(transaction._id), StringHelper.to_tittle(transaction.category || ""))}
+                  value={
+                    Map.get(
+                      @cat_query_by_id,
+                      BSON.ObjectId.encode!(transaction._id),
+                      StringHelper.to_tittle(transaction.category || "")
+                    )
+                  }
                   placeholder="Search or add category"
                   phx-debounce="300"
                 />
@@ -157,14 +167,7 @@ defmodule CashLensWeb.TransactionsLive do
   end
 
   def import_statement_modal(assigns) do
-    path = @statement_default_path
-
-    statements =
-      path
-      |> File.ls!()
-      |> Enum.map(fn filename ->
-        %{name: filename, path: Path.join(path, filename), id: Base.encode64(filename)}
-      end)
+    statements = list_files(assigns.path)
 
     assigns =
       assigns
@@ -178,6 +181,7 @@ defmodule CashLensWeb.TransactionsLive do
       <h2 class="font-semibold">{@step |> Atom.to_string() |> Recase.to_title()}</h2>
       <%= case @step do %>
         <% :select_statement -> %>
+          <p>{@path}</p>
           <.table
             id="statements"
             rows={@statements}
@@ -222,7 +226,13 @@ defmodule CashLensWeb.TransactionsLive do
 
   @impl true
   def handle_event("statement_selected", %{"filename" => filename}, socket) do
-    {:noreply, assign(socket, selected_statement: filename, step: :select_parser)}
+    case File.stat!(filename).type do
+      :directory ->
+        {:noreply, assign(socket, path: filename)}
+
+      _ ->
+        {:noreply, assign(socket, selected_statement: filename, step: :select_parser)}
+    end
   end
 
   @impl true
@@ -246,7 +256,11 @@ defmodule CashLensWeb.TransactionsLive do
           Transactions.create_transactions(transactions)
 
           socket
-          |> assign(transactions: Transactions.list_transactions(), categories: list_categories(), only_uncategorized: true)
+          |> assign(
+            transactions: Transactions.list_transactions(),
+            categories: list_categories(),
+            only_uncategorized: true
+          )
           |> put_flash(:info, "Transactions imported successfully!")
 
         {:error, error} ->
@@ -264,7 +278,9 @@ defmodule CashLensWeb.TransactionsLive do
   @impl true
   def handle_event("category_type", %{"transaction_id" => id, "category" => category}, socket) do
     category = category |> to_string() |> String.trim()
-    suggestions = if category == "", do: [], else: Category.search_categories(category, 10) |> Enum.map(&StringHelper.to_tittle/1)
+
+    suggestions =
+      if category == "", do: [], else: Category.search_categories(category, 10) |> Enum.map(&StringHelper.to_tittle/1)
 
     {:noreply,
      socket
@@ -285,6 +301,7 @@ defmodule CashLensWeb.TransactionsLive do
       case Transactions.update_transaction(id, %{category: category}) do
         {:ok, _trx} ->
           Phoenix.PubSub.broadcast(CashLens.PubSub, "dashboard_updates", :update_charts)
+
           {:noreply,
            socket
            |> assign(
@@ -305,5 +322,14 @@ defmodule CashLensWeb.TransactionsLive do
   @impl true
   def handle_event("toggle_uncategorized", _params, socket) do
     {:noreply, assign(socket, :only_uncategorized, !socket.assigns.only_uncategorized)}
+  end
+
+  defp list_files(path) do
+    path
+    |> File.ls!()
+    |> Enum.reject(fn filename -> String.starts_with?(filename, ".") end)
+    |> Enum.map(fn filename ->
+      %{name: filename, path: Path.join(path, filename), id: Base.encode64(filename)}
+    end)
   end
 end
