@@ -43,3 +43,12 @@ npm-debug.log
 /catboost_info/*
 /cash_lens.iml
 /statements/
+
+# Universal
+.DS_Store
+.vscode/
+*.log
+*.swo
+*.swp
+*.swn
+

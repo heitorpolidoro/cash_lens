@@ -1,5 +1,24 @@
+# Docker specific
+Dockerfile*
+.dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Elixir build artifacts
 _build/
 deps/
-.git/
-.DS_Store
+
+# Logs and environment files
 *.log
+.env*
+
+# Test files
+
+# Misc
+.DS_Store
+.idea/
+.vscode/
+npm-debug.log*
+erl_crash.dump
