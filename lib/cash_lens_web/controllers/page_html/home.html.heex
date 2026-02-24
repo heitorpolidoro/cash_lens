@@ -1,0 +1,103 @@
+<div class="py-6 space-y-8">
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <h1 class="text-3xl font-bold text-base-content">Dashboard Financeiro</h1>
+    <div class="flex gap-2">
+      <button class="btn btn-primary btn-sm">
+        <.icon name="hero-plus-circle" class="size-4 mr-1" />
+        Novo Lançamento
+      </button>
+      <button class="btn btn-outline btn-sm">
+        <.icon name="hero-arrow-up-tray" class="size-4 mr-1" />
+        Importar Extrato
+      </button>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Card de Saldo Total -->
+    <div class="stats shadow bg-base-100 border border-base-300">
+      <div class="stat">
+        <div class="stat-title">Saldo Total</div>
+        <div class="stat-value text-primary font-black text-2xl">R$ 12.450,00</div>
+        <div class="stat-desc">↗︎ 400 (22%) em relação ao mês anterior</div>
+      </div>
+    </div>
+
+    <!-- Card de Receitas -->
+    <div class="stats shadow bg-base-100 border border-base-300">
+      <div class="stat">
+        <div class="stat-title">Receitas (Mês)</div>
+        <div class="stat-value text-success font-black text-2xl">R$ 5.200,00</div>
+        <div class="stat-desc">Previsão: R$ 6.000,00</div>
+      </div>
+    </div>
+
+    <!-- Card de Despesas -->
+    <div class="stats shadow bg-base-100 border border-base-300">
+      <div class="stat">
+        <div class="stat-title">Despesas (Mês)</div>
+        <div class="stat-value text-error font-black text-2xl">R$ 3.150,00</div>
+        <div class="stat-desc">75% do orçamento utilizado</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Seção de Contas -->
+    <div class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="card-title text-base-content">Minhas Contas</h2>
+          <a href="/accounts" class="link link-primary text-sm no-underline hover:underline">Ver todas</a>
+        </div>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300">
+            <div class="flex items-center gap-4">
+              <div class="avatar placeholder">
+                <div class="bg-primary text-primary-content rounded-full w-10">
+                  <span>Nu</span>
+                </div>
+              </div>
+              <div>
+                <p class="font-bold">Nubank</p>
+                <p class="text-xs opacity-60">Conta Corrente</p>
+              </div>
+            </div>
+            <p class="font-black">R$ 8.200,00</p>
+          </div>
+          <div class="flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300">
+            <div class="flex items-center gap-4">
+              <div class="avatar placeholder">
+                <div class="bg-blue-600 text-white rounded-full w-10">
+                  <span>It</span>
+                </div>
+              </div>
+              <div>
+                <p class="font-bold">Itaú</p>
+                <p class="text-xs opacity-60">Investimentos</p>
+              </div>
+            </div>
+            <p class="font-black text-base-content">R$ 4.250,00</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção de Transações Recentes -->
+    <div class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="card-title text-base-content font-bold">Transações Recentes</h2>
+          <a href="#" class="link link-primary text-sm no-underline hover:underline">Ver extrato</a>
+        </div>
+        <div class="flex flex-col items-center justify-center py-10 opacity-40">
+           <.icon name="hero-document-magnifying-glass" class="size-12 mb-2" />
+           <p class="text-sm">Nenhuma transação recente encontrada.</p>
+           <button class="btn btn-link btn-xs mt-2 text-primary no-underline hover:underline">
+             Importar novo extrato
+           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,68 @@
+<div class="drawer">
+  <input id="my-drawer" type="checkbox" class="drawer-toggle" />
+  <div class="drawer-content flex flex-col min-h-screen bg-base-200">
+    <!-- Navbar -->
+    <div class="w-full navbar bg-base-100 border-b border-base-300 shadow-sm sticky top-0 z-30">
+      <div class="flex-none lg:hidden">
+        <label for="my-drawer" aria-label="open sidebar" class="btn btn-square btn-ghost">
+          <.icon name="hero-bars-3" class="size-6" />
+        </label>
+      </div>
+      <div class="flex-1 px-2 mx-2">
+        <a href="/" class="flex items-center gap-2">
+          <span class="text-xl font-black tracking-tight text-primary">CashLens</span>
+        </a>
+      </div>
+      <div class="flex-none hidden lg:block">
+        <ul class="menu menu-horizontal font-bold gap-2">
+          <li><a href="/" class="rounded-lg hover:bg-base-200 transition-all">Dashboard</a></li>
+          <li><a href="/accounts" class="rounded-lg hover:bg-base-200 transition-all">Contas</a></li>
+          <li><a href="#" class="rounded-lg hover:bg-base-200 transition-all">Transações</a></li>
+        </ul>
+      </div>
+      <div class="flex-none gap-4 ml-4">
+        <div class="avatar placeholder">
+          <div class="bg-neutral text-neutral-content rounded-full w-8">
+            <span class="text-xs">U</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="p-4 sm:p-8 flex-grow">
+      <div class="mx-auto max-w-6xl">
+        <.flash_group flash={@flash} />
+        <%= if assigns[:inner_content] do %>
+          <%= @inner_content %>
+        <% else %>
+          {render_slot(@inner_block)}
+        <% end %>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer footer-center p-4 bg-base-100 text-base-content border-t border-base-300 opacity-50 text-xs">
+      <aside>
+        <p>CashLens Finance © 2026 - Controle Financeiro Inteligente</p>
+      </aside>
+    </footer>
+  </div>
+
+  <!-- Sidebar para Mobile -->
+  <div class="drawer-side z-40">
+    <label for="my-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+    <ul class="menu p-4 w-80 min-h-full bg-base-100">
+      <li class="mb-4">
+        <div class="flex items-center gap-2 px-2 py-4 border-b border-base-300">
+          <span class="text-xl font-black text-primary">CashLens</span>
+        </div>
+      </li>
+      <li><a href="/" class="font-bold"><.icon name="hero-home" class="size-5 mr-2" />Dashboard</a></li>
+      <li><a href="/accounts" class="font-bold"><.icon name="hero-credit-card" class="size-5 mr-2" />Contas</a></li>
+      <li><a href="#" class="font-bold"><.icon name="hero-arrows-right-left" class="size-5 mr-2" />Transações</a></li>
+      <div class="divider"></div>
+      <li><a href="#" class="opacity-50"><.icon name="hero-cog-6-tooth" class="size-5 mr-2" />Configurações</a></li>
+    </ul>
+  </div>
+</div>
