@@ -8,6 +8,7 @@ defmodule CashLens.Transactions.Transaction do
     field :date, :date
     field :description, :string
     field :amount, :decimal
+    field :transfer_key, Ecto.UUID
     belongs_to :account, CashLens.Accounts.Account
     belongs_to :category, CashLens.Categories.Category
 
@@ -17,7 +18,7 @@ defmodule CashLens.Transactions.Transaction do
   @doc false
   def changeset(transaction, attrs) do
     transaction
-    |> cast(attrs, [:date, :description, :amount, :category_id, :account_id])
+    |> cast(attrs, [:date, :description, :amount, :category_id, :account_id, :transfer_key])
     |> validate_required([:date, :description, :amount, :account_id])
   end
 end

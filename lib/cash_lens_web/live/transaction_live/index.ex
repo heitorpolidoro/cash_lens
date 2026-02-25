@@ -91,8 +91,11 @@ defmodule CashLensWeb.TransactionLive.Index do
                   {format_currency(transaction.amount)}
                 </td>
                 <td>
-                  <div class="badge badge-outline text-[10px] uppercase opacity-70">
-                    {if transaction.category, do: transaction.category.name, else: "Pendente"}
+                  <div class="flex items-center gap-1">
+                    <div class="badge badge-outline text-[10px] uppercase opacity-70">
+                      {if transaction.category, do: transaction.category.name, else: "Pendente"}
+                    </div>
+                    <.icon :if={transaction.transfer_key} name="hero-link" class="size-3 text-primary" title="Pareada" />
                   </div>
                 </td>
                 <td class="text-xs opacity-60">

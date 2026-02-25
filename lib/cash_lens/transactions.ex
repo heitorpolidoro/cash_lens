@@ -131,9 +131,17 @@ defmodule CashLens.Transactions do
 
   """
   def create_transaction(attrs) do
-    %Transaction{}
-    |> Transaction.changeset(attrs)
-    |> Repo.insert()
+    result = 
+      %Transaction{}
+      |> Transaction.changeset(attrs)
+      |> Repo.insert()
+
+    case result do
+      {:ok, transaction} -> 
+        CashLens.Transactions.TransferMatcher.match_transfer(transaction)
+        {:ok, transaction}
+      error -> result
+    end
   end
 
   @doc """
