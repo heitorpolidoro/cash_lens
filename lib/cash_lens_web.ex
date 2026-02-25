@@ -86,6 +86,7 @@ defmodule CashLensWeb do
       import Phoenix.HTML
       # Core UI components
       import CashLensWeb.CoreComponents
+      import CashLensWeb.Formatters
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

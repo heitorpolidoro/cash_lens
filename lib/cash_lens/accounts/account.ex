@@ -7,7 +7,7 @@ defmodule CashLens.Accounts.Account do
   schema "accounts" do
     field :name, :string
     field :bank, :string
-    field :balance, :decimal
+    field :balance, :decimal, default: 0
     field :color, :string
     field :icon, :string
 
@@ -18,6 +18,6 @@ defmodule CashLens.Accounts.Account do
   def changeset(account, attrs) do
     account
     |> cast(attrs, [:name, :bank, :balance, :color, :icon])
-    |> validate_required([:name, :bank, :balance, :color, :icon])
+    |> validate_required([:name, :bank, :balance])
   end
 end

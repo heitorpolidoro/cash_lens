@@ -2,14 +2,14 @@
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <h1 class="text-3xl font-bold text-base-content">Dashboard Financeiro</h1>
     <div class="flex gap-2">
-      <button class="btn btn-primary btn-sm">
+      <.link href={~p"/transactions/new"} class="btn btn-primary btn-sm">
         <.icon name="hero-plus-circle" class="size-4 mr-1" />
         Novo Lançamento
-      </button>
-      <button class="btn btn-outline btn-sm">
+      </.link>
+      <.link href={~p"/transactions"} class="btn btn-outline btn-sm">
         <.icon name="hero-arrow-up-tray" class="size-4 mr-1" />
         Importar Extrato
-      </button>
+      </.link>
     </div>
   </div>
 
@@ -18,7 +18,7 @@
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title">Saldo Total</div>
-        <div class="stat-value text-primary font-black text-2xl">R$ 12.450,00</div>
+        <div class="stat-value text-primary font-black text-2xl">{format_currency(12450.00)}</div>
         <div class="stat-desc">↗︎ 400 (22%) em relação ao mês anterior</div>
       </div>
     </div>
@@ -27,8 +27,8 @@
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title">Receitas (Mês)</div>
-        <div class="stat-value text-success font-black text-2xl">R$ 5.200,00</div>
-        <div class="stat-desc">Previsão: R$ 6.000,00</div>
+        <div class="stat-value text-success font-black text-2xl">{format_currency(5200.00)}</div>
+        <div class="stat-desc">Previsão: {format_currency(6000.00)}</div>
       </div>
     </div>
 
@@ -36,7 +36,7 @@
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title">Despesas (Mês)</div>
-        <div class="stat-value text-error font-black text-2xl">R$ 3.150,00</div>
+        <div class="stat-value text-error font-black text-2xl">{format_currency(3150.00)}</div>
         <div class="stat-desc">75% do orçamento utilizado</div>
       </div>
     </div>
@@ -63,7 +63,7 @@
                 <p class="text-xs opacity-60">Conta Corrente</p>
               </div>
             </div>
-            <p class="font-black">R$ 8.200,00</p>
+            <p class="font-black">{format_currency(8200.00)}</p>
           </div>
           <div class="flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300">
             <div class="flex items-center gap-4">
@@ -77,7 +77,7 @@
                 <p class="text-xs opacity-60">Investimentos</p>
               </div>
             </div>
-            <p class="font-black text-base-content">R$ 4.250,00</p>
+            <p class="font-black text-base-content">{format_currency(4250.00)}</p>
           </div>
         </div>
       </div>
@@ -93,9 +93,9 @@
         <div class="flex flex-col items-center justify-center py-10 opacity-40">
            <.icon name="hero-document-magnifying-glass" class="size-12 mb-2" />
            <p class="text-sm">Nenhuma transação recente encontrada.</p>
-           <button class="btn btn-link btn-xs mt-2 text-primary no-underline hover:underline">
+           <.link href={~p"/transactions"} class="btn btn-link btn-xs mt-2 text-primary no-underline hover:underline">
              Importar novo extrato
-           </button>
+           </.link>
         </div>
       </div>
     </div>

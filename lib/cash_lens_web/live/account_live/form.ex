@@ -7,24 +7,23 @@ defmodule CashLensWeb.AccountLive.Form do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <.header>
-        {@page_title}
-        <:subtitle>Use este formulário para gerenciar os dados da sua conta bancária.</:subtitle>
-      </.header>
+    <.header>
+      {@page_title}
+      <:subtitle>Use este formulário para gerenciar os dados da sua conta bancária.</:subtitle>
+    </.header>
 
-      <.form for={@form} id="account-form" phx-change="validate" phx-submit="save">
-        <.input field={@form[:name]} type="text" label="Nome" />
-        <.input field={@form[:bank]} type="text" label="Banco" />
-        <.input field={@form[:balance]} type="number" label="Saldo" step="any" />
-        <.input field={@form[:color]} type="text" label="Cor (Hex)" />
-        <.input field={@form[:icon]} type="text" label="Ícone" />
-        <footer>
-          <.button phx-disable-with="Salvando..." variant="primary">Salvar Conta</.button>
-          <.button navigate={return_path(@return_to, @account)}>Cancelar</.button>
-        </footer>
-      </.form>
-    </Layouts.app>
+          <.form for={@form} id="account-form" phx-change="validate" phx-submit="save">
+            <.input field={@form[:name]} type="text" label="Nome" />
+            <.input field={@form[:bank]} type="text" label="Banco" />
+            <.input field={@form[:balance]} type="number" label="Saldo Inicial" step="any" />
+            <.input field={@form[:color]} type="text" label="Cor (opcional)" />
+            <.input field={@form[:icon]} type="text" label="Ícone (opcional)" />
+            <footer>
+    
+        <.button phx-disable-with="Salvando..." variant="primary">Salvar Conta</.button>
+        <.button navigate={return_path(@return_to, @account)}>Cancelar</.button>
+      </footer>
+    </.form>
     """
   end
 

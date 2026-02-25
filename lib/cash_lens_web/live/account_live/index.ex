@@ -6,42 +6,42 @@ defmodule CashLensWeb.AccountLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <.header>
-        Listando Contas
-        <:actions>
-          <.button variant="primary" navigate={~p"/accounts/new"}>
-            <.icon name="hero-plus" /> Nova Conta
+    <.header>
+      Listando Contas
+      <:actions>
+        <.link navigate={~p"/accounts/new"}>
+          <.button variant="primary">
+            <.icon name="hero-plus" class="mr-1" /> Nova Conta
           </.button>
-        </:actions>
-      </.header>
+        </.link>
+      </:actions>
+    </.header>
 
-      <.table
-        id="accounts"
-        rows={@streams.accounts}
-        row_click={fn {_id, account} -> JS.navigate(~p"/accounts/#{account}") end}
-      >
-        <:col :let={{_id, account}} label="Nome">{account.name}</:col>
-        <:col :let={{_id, account}} label="Banco">{account.bank}</:col>
-        <:col :let={{_id, account}} label="Saldo">{account.balance}</:col>
-        <:col :let={{_id, account}} label="Cor">{account.color}</:col>
-        <:col :let={{_id, account}} label="Ícone">{account.icon}</:col>
-        <:action :let={{_id, account}}>
-          <div class="sr-only">
-            <.link navigate={~p"/accounts/#{account}"}>Exibir</.link>
-          </div>
-          <.link navigate={~p"/accounts/#{account}/edit"}>Editar</.link>
-        </:action>
-        <:action :let={{id, account}}>
-          <.link
-            phx-click={JS.push("delete", value: %{id: account.id}) |> hide("##{id}")}
-            data-confirm="Tem certeza que deseja excluir esta conta?"
-          >
-            Excluir
-          </.link>
-        </:action>
-      </.table>
-    </Layouts.app>
+    <.table
+      id="accounts"
+      rows={@streams.accounts}
+      row_click={fn {_id, account} -> JS.navigate(~p"/accounts/#{account}") end}
+    >
+      <:col :let={{_id, account}} label="Nome">{account.name}</:col>
+      <:col :let={{_id, account}} label="Banco">{account.bank}</:col>
+      <:col :let={{_id, account}} label="Saldo">{format_currency(account.balance)}</:col>
+      <:col :let={{_id, account}} label="Cor">{account.color}</:col>
+      <:col :let={{_id, account}} label="Ícone">{account.icon}</:col>
+      <:action :let={{_id, account}}>
+        <div class="sr-only">
+          <.link navigate={~p"/accounts/#{account}"}>Exibir</.link>
+        </div>
+        <.link navigate={~p"/accounts/#{account}/edit"}>Editar</.link>
+      </:action>
+      <:action :let={{id, account}}>
+        <.link
+          phx-click={JS.push("delete", value: %{id: account.id}) |> hide("##{id}")}
+          data-confirm="Tem certeza que deseja excluir esta conta?"
+        >
+          Excluir
+        </.link>
+      </:action>
+    </.table>
     """
   end
 

@@ -19,12 +19,17 @@ defmodule CashLensWeb.Router do
 
     get "/", PageController, :home
 
-    live "/accounts", AccountLive.Index, :index
-    live "/accounts/new", AccountLive.Index, :new
-    live "/accounts/:id/edit", AccountLive.Index, :edit
+    live_session :default, layout: {CashLensWeb.Layouts, :app} do
+      live "/accounts", AccountLive.Index, :index
+      live "/accounts/new", AccountLive.Form, :new
+      live "/accounts/:id", AccountLive.Show, :show
+      live "/accounts/:id/edit", AccountLive.Form, :edit
 
-    live "/accounts/:id", AccountLive.Show, :show
-    live "/accounts/:id/show/edit", AccountLive.Show, :edit
+      live "/transactions", TransactionLive.Index, :index
+      live "/transactions/new", TransactionLive.Form, :new
+      live "/transactions/:id", TransactionLive.Show, :show
+      live "/transactions/:id/edit", TransactionLive.Form, :edit
+    end
   end
 
   # Other scopes may use custom stacks.
