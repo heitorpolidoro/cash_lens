@@ -12,15 +12,29 @@ defmodule CashLensWeb.AccountLive.Form do
       <:subtitle>Use este formulário para gerenciar os dados da sua conta bancária.</:subtitle>
     </.header>
 
-          <.form for={@form} id="account-form" phx-change="validate" phx-submit="save">
-            <.input field={@form[:name]} type="text" label="Nome" />
-            <.input field={@form[:bank]} type="text" label="Banco" />
-            <.input field={@form[:balance]} type="number" label="Saldo Inicial" step="any" />
-            <.input field={@form[:color]} type="text" label="Cor (opcional)" />
-            <.input field={@form[:icon]} type="text" label="Ícone (opcional)" />
-            <footer>
-    
-        <.button phx-disable-with="Salvando..." variant="primary">Salvar Conta</.button>
+                <.form for={@form} id="account-form" phx-change="validate" phx-submit="save">
+                  <.input field={@form[:name]} type="text" label="Nome" />
+                  <.input field={@form[:bank]} type="text" label="Banco" />
+                  <.input field={@form[:balance]} type="number" label="Saldo Inicial" step="any" />
+                  <.input field={@form[:color]} type="text" label="Cor (opcional)" />
+                  
+                  <div class="flex items-end gap-4">
+                    <div class="flex-1">
+                      <.input field={@form[:icon]} type="text" label="URL do Ícone (opcional)" />
+                    </div>
+                    <div class="avatar pb-2">
+                      <div class="w-12 rounded-full border border-base-300 bg-base-200 flex items-center justify-center overflow-hidden">
+                        <%= if @form[:icon].value && @form[:icon].value != "" do %>
+                          <img src={@form[:icon].value} />
+                        <% else %>
+                          <.icon name="hero-photo" class="size-6 opacity-20" />
+                        <% end %>
+                      </div>
+                    </div>
+                  </div>
+          
+                  <footer>
+                  <.button phx-disable-with="Salvando..." variant="primary">Salvar Conta</.button>
         <.button navigate={return_path(@return_to, @account)}>Cancelar</.button>
       </footer>
     </.form>

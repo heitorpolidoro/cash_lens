@@ -22,11 +22,23 @@ defmodule CashLensWeb.AccountLive.Index do
       rows={@streams.accounts}
       row_click={fn {_id, account} -> JS.navigate(~p"/accounts/#{account}") end}
     >
+      <:col :let={{_id, account}} label="Ícone">
+        <div class="avatar">
+          <div class="w-8 rounded-full bg-base-300">
+            <%= if account.icon && account.icon != "" do %>
+              <img src={account.icon} />
+            <% else %>
+              <div class="flex items-center justify-center h-full w-full bg-primary text-primary-content text-[10px] font-bold">
+                {String.slice(account.bank || account.name, 0..1)}
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </:col>
       <:col :let={{_id, account}} label="Nome">{account.name}</:col>
       <:col :let={{_id, account}} label="Banco">{account.bank}</:col>
       <:col :let={{_id, account}} label="Saldo">{format_currency(account.balance)}</:col>
       <:col :let={{_id, account}} label="Cor">{account.color}</:col>
-      <:col :let={{_id, account}} label="Ícone">{account.icon}</:col>
       <:action :let={{_id, account}}>
         <div class="sr-only">
           <.link navigate={~p"/accounts/#{account}"}>Exibir</.link>

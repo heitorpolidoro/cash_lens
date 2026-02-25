@@ -22,6 +22,13 @@ defmodule CashLens.Accounts do
   end
 
   @doc """
+  Calculates the total balance across all accounts.
+  """
+  def get_total_balance do
+    Repo.aggregate(Account, :sum, :balance) || Decimal.new("0")
+  end
+
+  @doc """
   Gets a single account.
 
   Raises `Ecto.NoResultsError` if the Account does not exist.
