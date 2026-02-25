@@ -17,15 +17,55 @@ defmodule CashLens.Transactions do
       [%Transaction{}, ...]
 
   """
-  def list_transactions do
-    Repo.all(from t in Transaction, order_by: [desc: t.date, desc: t.inserted_at])
+  @doc """
+  Returns the list of transactions based on filters.
+  """
+  def list_transactions(filters \\ %{}) do
+    Transaction
+    |> join_associations()
+    |> filter_by_account(filters["account_id"])
+    |> filter_by_category(filters["category_id"])
+    |> filter_by_description(filters["search"])
+    |> filter_by_date(filters["date"])
+    |> filter_by_amount(filters["amount"])
+    |> order_by([t], desc: t.date, desc: t.inserted_at)
+    |> Repo.all()
+  end
+
+  defp join_associations(query) do
+    query
+    |> preload([:category, :account])
+  end
+
+  defp filter_by_date(query, nil), do: query
+  defp filter_by_date(query, ""), do: query
+  defp filter_by_date(query, date), do: where(query, date: ^date)
+
+  defp filter_by_amount(query, nil), do: query
+  defp filter_by_amount(query, ""), do: query
+  defp filter_by_amount(query, amount) do
+    where(query, amount: ^amount)
+  end
+
+  defp filter_by_account(query, nil), do: query
+  defp filter_by_account(query, ""), do: query
+  defp filter_by_account(query, account_id), do: where(query, account_id: ^account_id)
+
+  defp filter_by_category(query, nil), do: query
+  defp filter_by_category(query, ""), do: query
+  defp filter_by_category(query, category_id), do: where(query, category_id: ^category_id)
+
+  defp filter_by_description(query, nil), do: query
+  defp filter_by_description(query, ""), do: query
+  defp filter_by_description(query, search) do
+    where(query, [t], ilike(t.description, ^"%#{search}%"))
   end
 
   @doc """
   Lists the most recent transactions with a limit.
   """
   def list_recent_transactions(limit \\ 5) do
-    Repo.all(from t in Transaction, order_by: [desc: t.date, desc: t.inserted_at], limit: ^limit)
+    Repo.all(from t in Transaction, order_by: [desc: t.date, desc: t.inserted_at], limit: ^limit, preload: [:category])
   end
 
   @doc """
@@ -38,7 +78,10 @@ defmodule CashLens.Transactions do
     last_of_month = Date.end_of_month(target_date)
 
     query = from t in Transaction,
-      where: t.date >= ^first_of_month and t.date <= ^last_of_month
+      left_join: c in assoc(t, :category),
+      where: t.date >= ^first_of_month and t.date <= ^last_of_month,
+      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+      select: t
 
     transactions = Repo.all(query)
 
@@ -73,7 +116,7 @@ defmodule CashLens.Transactions do
       ** (Ecto.NoResultsError)
 
   """
-  def get_transaction!(id), do: Repo.get!(Transaction, id)
+  def get_transaction!(id), do: Repo.get!(Transaction, id) |> Repo.preload(:category)
 
   @doc """
   Creates a transaction.

@@ -2,6 +2,8 @@ defmodule CashLensWeb.TransactionLive.Index do
   use CashLensWeb, :live_view
 
   alias CashLens.Transactions
+  alias CashLens.Accounts
+  alias CashLens.Categories
   alias CashLens.Parsers.Ingestor
 
   @impl true
@@ -11,6 +13,9 @@ defmodule CashLensWeb.TransactionLive.Index do
       <.header>
         Transações
         <:actions>
+          <button phx-click="open_import" class="btn btn-outline">
+            <.icon name="hero-arrow-up-tray" class="mr-1" /> Importar Extrato
+          </button>
           <.link navigate={~p"/transactions/new"}>
             <.button variant="primary">
               <.icon name="hero-plus" class="mr-1" /> Nova Transação
@@ -19,88 +24,151 @@ defmodule CashLensWeb.TransactionLive.Index do
         </:actions>
       </.header>
 
-      <!-- Área de Importação -->
-      <div class="card bg-base-100 border border-base-300 shadow-sm">
-        <div class="card-body">
-          <h2 class="card-title text-sm uppercase opacity-50 mb-4">Importar Extrato</h2>
-          
-          <form id="upload-form" phx-submit="save_import" phx-change="validate_import" class="space-y-6">
-            <!-- PASSO 1: Selecionar Arquivo -->
-            <div class="form-control w-full">
-              <label class="label"><span class="label-text font-bold text-primary">1. Selecione o arquivo CSV</span></label>
-              <div class="flex items-center justify-center border-2 border-dashed border-base-300 rounded-xl py-8 bg-base-200/30 hover:bg-base-200 transition-colors" phx-drop-target={@uploads.statement.ref}>
-                <label class="cursor-pointer text-center w-full">
-                  <div :if={Enum.empty?(@uploads.statement.entries)}>
-                    <.icon name="hero-cloud-arrow-up" class="size-8 opacity-20 mb-2" />
-                    <p class="text-xs opacity-60 font-medium">Arraste ou clique para selecionar</p>
+      <!-- Tabela com Filtros no Cabeçalho -->
+      <div class="overflow-x-auto bg-base-100 rounded-2xl border border-base-300 shadow-sm">
+        <form id="filter-form" phx-change="filter">
+          <table class="table table-zebra w-full text-xs">
+            <thead class="bg-base-200/50">
+              <tr>
+                <th class="w-32">
+                  <div class="flex flex-col gap-1">
+                    <span>Data</span>
+                    <input type="date" name="date" value={@filters["date"]} 
+                           class="input input-bordered input-xs font-normal w-full" />
                   </div>
-                  <.live_file_input upload={@uploads.statement} class="hidden" />
-                  
-                  <%= for entry <- @uploads.statement.entries do %>
-                    <div class="flex items-center justify-center gap-2 text-blue-600 font-bold">
-                      <.icon name="hero-check-circle" class="size-5" />
-                      <span>{entry.client_name}</span>
-                    </div>
-                  <% end %>
-                </label>
-              </div>
-            </div>
-
-            <!-- PASSO 2: Selecionar Conta -->
-            <div :if={Enum.any?(@uploads.statement.entries)} class="form-control w-full space-y-2">
-              <label class="label"><span class="label-text font-bold text-primary">2. Selecione a Conta de Destino</span></label>
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <%= for account <- @accounts do %>
-                  <label class="label cursor-pointer flex items-center gap-3 p-4 bg-base-100 border border-base-300 rounded-xl hover:bg-base-200 transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-                    <input type="radio" name="account_id" value={account.id} class="radio radio-primary" required />
-                    <div class="flex flex-col">
-                      <span class="font-bold text-sm">{account.name}</span>
-                      <span class="text-xs opacity-60">{account.bank}</span>
-                    </div>
-                  </label>
-                <% end %>
-              </div>
-            </div>
-
-            <!-- Botão de Ação -->
-            <div :if={Enum.any?(@uploads.statement.entries)} class="flex justify-end pt-4 border-t border-base-200">
-              <button type="submit" class="btn btn-primary" phx-disable-with="Importando...">
-                Confirmar e Importar
-              </button>
-            </div>
-          </form>
-        </div>
+                </th>
+                <th>
+                  <div class="flex flex-col gap-1">
+                    <span>Descrição</span>
+                    <input type="text" name="search" value={@filters["search"]} placeholder="Buscar..." 
+                           class="input input-bordered input-xs font-normal w-full" phx-debounce="300" />
+                  </div>
+                </th>
+                <th class="w-32 text-right">
+                  <div class="flex flex-col gap-1">
+                    <span>Valor</span>
+                    <input type="number" name="amount" value={@filters["amount"]} placeholder="0.00" step="any"
+                           class="input input-bordered input-xs font-normal w-full text-right" phx-debounce="300" />
+                  </div>
+                </th>
+                <th class="w-40">
+                  <div class="flex flex-col gap-1">
+                    <span>Categoria</span>
+                    <select name="category_id" class="select select-bordered select-xs font-normal w-full">
+                      <option value="">Todas</option>
+                      <%= for category <- @categories do %>
+                        <option value={category.id} selected={@filters["category_id"] == category.id}>{category.name}</option>
+                      <% end %>
+                    </select>
+                  </div>
+                </th>
+                <th class="w-40">
+                  <div class="flex flex-col gap-1">
+                    <span>Conta</span>
+                    <select name="account_id" class="select select-bordered select-xs font-normal w-full">
+                      <option value="">Todas</option>
+                      <%= for account <- @accounts do %>
+                        <option value={account.id} selected={@filters["account_id"] == account.id}>{account.name}</option>
+                      <% end %>
+                    </select>
+                  </div>
+                </th>
+                <th class="w-16">
+                  <div class="flex flex-col gap-1 items-center">
+                    <span class="opacity-0">Reset</span>
+                    <button type="button" phx-click="clear_filters" class="btn btn-ghost btn-xs text-error p-0" title="Limpar filtros">
+                      <.icon name="hero-x-circle" class="size-4" />
+                    </button>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="transactions" phx-update="stream">
+              <tr :for={{id, transaction} <- @streams.transactions} id={id} class="hover group border-b border-base-200">
+                <td class="whitespace-nowrap font-medium">{format_date(transaction.date)}</td>
+                <td class="max-w-md truncate">{transaction.description}</td>
+                <td class={"text-right font-bold #{if Decimal.lt?(transaction.amount, 0), do: "text-error", else: "text-success"}"}>
+                  {format_currency(transaction.amount)}
+                </td>
+                <td>
+                  <div class="badge badge-outline text-[10px] uppercase opacity-70">
+                    {if transaction.category, do: transaction.category.name, else: "Pendente"}
+                  </div>
+                </td>
+                <td class="text-xs opacity-60">
+                  {if transaction.account, do: transaction.account.name, else: "..."}
+                </td>
+                <td class="text-right">
+                  <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <.link navigate={~p"/transactions/#{transaction}/edit"} class="btn btn-ghost btn-xs px-1">
+                      <.icon name="hero-pencil" class="size-3" />
+                    </.link>
+                    <button phx-click={JS.push("delete", value: %{id: transaction.id}) |> hide("##{id}")} 
+                            data-confirm="Excluir?" class="btn btn-ghost btn-xs text-error px-1">
+                      <.icon name="hero-trash" class="size-3" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </form>
       </div>
-
-              <.table
-                id="transactions"
-                rows={@streams.transactions}
-                row_click={fn {_id, transaction} -> JS.navigate(~p"/transactions/#{transaction}") end}
-              >
-                <:col :let={{_id, transaction}} label="Data">{format_date(transaction.date)}</:col>
-                <:col :let={{_id, transaction}} label="Descrição">{transaction.description}</:col>
-                <:col :let={{_id, transaction}} label="Valor">
-                  <span class={if Decimal.lt?(transaction.amount, 0), do: "text-error font-bold", else: "text-success font-bold"}>
-                    {format_currency(transaction.amount)}
-                  </span>
-                </:col>
-                <:col :let={{_id, transaction}} label="Categoria">
-      
-          <div class="badge badge-outline opacity-70">{transaction.category || "Pendente"}</div>
-        </:col>
-        <:action :let={{_id, transaction}}>
-          <.link navigate={~p"/transactions/#{transaction}/edit"}>Editar</.link>
-        </:action>
-        <:action :let={{id, transaction}}>
-          <.link
-            phx-click={JS.push("delete", value: %{id: transaction.id}) |> hide("##{id}")}
-            data-confirm="Deseja excluir esta transação?"
-          >
-            Excluir
-          </.link>
-        </:action>
-      </.table>
     </div>
+
+    <!-- Modal de Importação -->
+    <.modal :if={@show_import_modal} id="import-modal" show on_cancel={JS.push("close_import")}>
+      <div class="p-2">
+        <h2 class="text-2xl font-black mb-6">Importar Extrato</h2>
+        
+        <form id="upload-form" phx-submit="save_import" phx-change="validate_import" class="space-y-8">
+          <!-- PASSO 1: Selecionar Arquivo -->
+          <div class="form-control w-full">
+            <label class="label"><span class="label-text font-black text-lg">1. Selecione o arquivo CSV</span></label>
+            <div class="flex items-center justify-center border-4 border-dashed border-base-300 rounded-3xl py-12 bg-base-200/30 hover:bg-base-200 transition-all cursor-pointer" phx-drop-target={@uploads.statement.ref}>
+              <label class="cursor-pointer text-center w-full">
+                <div :if={Enum.empty?(@uploads.statement.entries)}>
+                  <.icon name="hero-document-plus" class="size-16 opacity-10 mb-4" />
+                  <p class="text-sm opacity-40 font-bold uppercase tracking-widest">Arraste ou clique para selecionar</p>
+                </div>
+                <.live_file_input upload={@uploads.statement} class="hidden" />
+                
+                <%= for entry <- @uploads.statement.entries do %>
+                  <div class="flex flex-col items-center justify-center gap-2 text-primary">
+                    <.icon name="hero-check-badge" class="size-16 animate-bounce" />
+                    <span class="text-lg font-black">{entry.client_name}</span>
+                  </div>
+                <% end %>
+              </label>
+            </div>
+          </div>
+
+          <!-- PASSO 2: Selecionar Conta -->
+          <div :if={Enum.any?(@uploads.statement.entries)} class="form-control w-full space-y-4 animate-in slide-in-from-bottom-4 duration-500">
+            <label class="label"><span class="label-text font-black text-lg">2. Para qual conta vai esse dinheiro?</span></label>
+            <div class="grid grid-cols-1 gap-3">
+              <%= for account <- @accounts do %>
+                <label class="flex items-center gap-4 p-4 border-2 border-base-300 rounded-2xl cursor-pointer hover:bg-base-200 transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:checked]:ring-4 has-[:checked]:ring-primary/10">
+                  <input type="radio" name="account_id" value={account.id} class="radio radio-primary radio-lg" required />
+                  <div class="flex flex-col">
+                    <span class="font-black text-lg">{account.name}</span>
+                    <span class="text-sm opacity-50 font-medium tracking-wide">{account.bank}</span>
+                  </div>
+                </label>
+              <% end %>
+            </div>
+          </div>
+
+          <!-- Botão de Ação -->
+          <div :if={Enum.any?(@uploads.statement.entries)} class="flex justify-end pt-6">
+            <button type="submit" class="btn btn-primary btn-lg w-full rounded-2xl shadow-xl shadow-primary/20" phx-disable-with="Processando tudo...">
+              <.icon name="hero-bolt" class="size-5 mr-2" />
+              Finalizar e Importar
+            </button>
+          </div>
+        </form>
+      </div>
+    </.modal>
     """
   end
 
@@ -109,9 +177,39 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Transações")
-     |> assign(:accounts, CashLens.Accounts.list_accounts())
+     |> assign(:show_import_modal, false)
+     |> assign(:accounts, Accounts.list_accounts())
+     |> assign(:categories, Categories.list_categories())
+     |> assign(:filters, %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => ""})
      |> stream(:transactions, Transactions.list_transactions())
      |> allow_upload(:statement, accept: ~w(.csv), max_entries: 1)}
+  end
+
+  @impl true
+  def handle_event("open_import", _params, socket) do
+    {:noreply, assign(socket, :show_import_modal, true)}
+  end
+
+  @impl true
+  def handle_event("close_import", _params, socket) do
+    {:noreply, assign(socket, :show_import_modal, false)}
+  end
+
+  @impl true
+  def handle_event("filter", params, socket) do
+    {:noreply,
+     socket
+     |> assign(:filters, params)
+     |> stream(:transactions, Transactions.list_transactions(params), reset: true)}
+  end
+
+  @impl true
+  def handle_event("clear_filters", _params, socket) do
+    filters = %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => ""}
+    {:noreply,
+     socket
+     |> assign(:filters, filters)
+     |> stream(:transactions, Transactions.list_transactions(filters), reset: true)}
   end
 
   @impl true
@@ -121,47 +219,34 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("save_import", %{"account_id" => account_id}, socket) do
-    IO.puts("Starting import for account: #{account_id}")
-    
     consume_uploaded_entries(socket, :statement, fn %{path: path}, entry ->
       content = File.read!(path)
-      
-      content = 
-        if String.valid?(content), do: content, else: :unicode.characters_to_binary(content, :latin1, :utf8)
+      content = if String.valid?(content), do: content, else: :unicode.characters_to_binary(content, :latin1, :utf8)
       
       case Ingestor.parse(content, entry.client_name) do
-        {:error, reason} ->
-          IO.puts("Parser error: #{reason}")
-          {:postpone, reason}
-          
+        {:error, reason} -> {:postpone, reason}
         transactions_data ->
-          IO.puts("Parsed #{length(transactions_data)} transactions.")
-          
-          results = Enum.map(transactions_data, fn data ->
-            params = Map.put(data, :account_id, account_id)
-            case Transactions.create_transaction(params) do
-              {:ok, tx} -> {:ok, tx}
-              {:error, changeset} -> 
-                IO.inspect(changeset.errors, label: "Transaction creation failed")
-                {:error, changeset}
-            end
+          Enum.each(transactions_data, fn data ->
+            data
+            |> Map.put(:account_id, account_id)
+            |> CashLens.Transactions.AutoCategorizer.categorize()
+            |> Transactions.create_transaction()
           end)
-          
-          {:ok, results}
+          {:ok, :done}
       end
     end)
 
     {:noreply,
      socket
-     |> put_flash(:info, "Processamento concluído!")
-     |> stream(:transactions, Transactions.list_transactions(), reset: true)}
+     |> assign(:show_import_modal, false)
+     |> put_flash(:info, "Importação concluída com sucesso!")
+     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters), reset: true)}
   end
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
     transaction = Transactions.get_transaction!(id)
     {:ok, _} = Transactions.delete_transaction(transaction)
-
     {:noreply, stream_delete(socket, :transactions, transaction)}
   end
 end

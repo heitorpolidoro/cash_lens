@@ -3,12 +3,33 @@ defmodule CashLensWeb.PageController do
 
   alias CashLens.Accounts
   alias CashLens.Transactions
+  alias CashLens.Accounting
 
   def home(conn, _params) do
-    total_balance = Accounts.get_total_balance()
+    # Get latest balances per account
+    latest_balances = Accounting.list_latest_balances()
+    
+    # Get all accounts to find those without a balance yet
+    all_accounts = Accounts.list_accounts()
+    
+    # Map accounts to their latest data (Balance final_balance or Account balance)
+    accounts_with_data = Enum.map(all_accounts, fn account ->
+      balance = Enum.find(latest_balances, &(&1.account_id == account.id))
+      
+      %{
+        name: account.name,
+        bank: account.bank,
+        color: account.color,
+        icon: account.icon,
+        display_balance: if(balance, do: balance.final_balance, else: account.balance)
+      }
+    end)
+
+    total_balance = 
+      accounts_with_data
+      |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
+
     summary = Transactions.get_monthly_summary()
-    accounts = Accounts.list_accounts()
-    recent_transactions = Transactions.list_recent_transactions(5)
 
     month_name = 
       summary.month 
@@ -20,8 +41,7 @@ defmodule CashLensWeb.PageController do
       total_balance: total_balance,
       monthly_income: summary.income,
       monthly_expenses: summary.expenses,
-      accounts: accounts,
-      recent_transactions: recent_transactions,
+      accounts: accounts_with_data,
       summary_month: month_name
     )
   end

@@ -495,4 +495,46 @@ defmodule CashLensWeb.CoreComponents do
   def translate_errors(errors, field) when is_list(errors) do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
   end
+
+  @doc """
+  Renders a modal.
+
+  ## Examples
+
+      <.modal id="confirm-modal">
+        This is a modal.
+      </.modal>
+
+  JS commands can be passed to the `on_cancel` to configure
+  what should happen when the modal is closed.
+  """
+  attr :id, :string, required: true
+  attr :show, :boolean, default: false
+  attr :on_cancel, JS, default: %JS{}
+  slot :inner_block, required: true
+
+  def modal(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      class={["modal", @show && "modal-open"]}
+      phx-remove={JS.remove_class("modal-open", to: "##{@id}")}
+    >
+      <div class="modal-box max-w-3xl p-10 bg-base-100 border border-base-300 rounded-3xl shadow-2xl relative">
+        <button
+          phx-click={JS.exec(@on_cancel, "phx-remove") |> JS.push("close_import")}
+          type="button"
+          class="btn btn-sm btn-circle btn-ghost absolute right-4 top-4"
+          aria-label={gettext("close")}
+        >
+          <.icon name="hero-x-mark" class="size-5" />
+        </button>
+        <div id={"#{@id}-content"}>
+          {render_slot(@inner_block)}
+        </div>
+      </div>
+      <div class="modal-backdrop bg-zinc-950/20 backdrop-blur-sm" phx-click={JS.push("close_import")}></div>
+    </div>
+    """
+  end
 end

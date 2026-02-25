@@ -42,7 +42,7 @@
     </div>
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+  <div class="grid grid-cols-1 gap-8">
     <!-- Seção de Contas -->
     <div class="card bg-base-100 shadow-sm border border-base-300">
       <div class="card-body p-6">
@@ -52,9 +52,9 @@
         </div>
         <div class="space-y-3">
           <%= for account <- @accounts do %>
-            <div class="flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300">
-              <div class="flex items-center gap-4">
-                <div class="avatar">
+            <div class="flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300 gap-4">
+              <div class="flex items-center gap-4 min-w-0">
+                <div class="avatar flex-shrink-0">
                   <div class={"w-10 rounded-full bg-base-300 overflow-hidden flex items-center justify-center #{unless account.icon, do: "placeholder"}"}>
                     <%= if account.icon && account.icon != "" do %>
                       <img src={account.icon} alt={account.name} class="w-full h-full object-cover" />
@@ -65,51 +65,18 @@
                     <% end %>
                   </div>
                 </div>
-                <div>
-                  <p class="font-bold">{account.name}</p>
-                  <p class="text-xs opacity-60">{account.bank}</p>
+                <div class="min-w-0">
+                  <p class="font-bold truncate">{account.name}</p>
+                  <p class="text-xs opacity-60 truncate">{account.bank}</p>
                 </div>
               </div>
-              <p class="font-black">{format_currency(account.balance)}</p>
+              <div class="flex-1"></div> <!-- Espaçador para empurrar o saldo -->
+              <p class="font-black whitespace-nowrap text-right">{format_currency(account.display_balance)}</p>
             </div>
           <% end %>
           <div :if={Enum.empty?(@accounts)} class="text-center py-4 opacity-50 italic text-sm">
             Nenhuma conta cadastrada.
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Seção de Transações Recentes -->
-    <div class="card bg-base-100 shadow-sm border border-base-300">
-      <div class="card-body p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="card-title text-base-content font-bold">Transações Recentes</h2>
-          <a href="/transactions" class="link link-primary text-sm no-underline hover:underline">Ver extrato</a>
-        </div>
-        
-        <div :if={Enum.any?(@recent_transactions)} class="overflow-x-auto">
-          <table class="table table-xs">
-            <tbody>
-              <%= for tx <- @recent_transactions do %>
-                <tr class="hover">
-                  <td class="whitespace-nowrap font-medium">{format_date(tx.date)}</td>
-                  <td class="max-w-[150px] truncate">{tx.description}</td>
-                  <td class={"text-right font-bold #{if Decimal.lt?(tx.amount, 0), do: "text-error", else: "text-success"}"}>
-                    {format_currency(tx.amount)}
-                  </td>
-                </tr>
-              <% end %>
-            </tbody>
-          </table>
-        </div>
-
-        <div :if={Enum.empty?(@recent_transactions)} class="flex flex-col items-center justify-center py-10 opacity-40">
-           <.icon name="hero-document-magnifying-glass" class="size-12 mb-2" />
-           <p class="text-sm">Nenhuma transação recente encontrada.</p>
-           <.link href={~p"/transactions"} class="btn btn-link btn-xs mt-2 text-primary no-underline hover:underline">
-             Importar novo extrato
-           </.link>
         </div>
       </div>
     </div>

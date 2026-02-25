@@ -1,11 +1,5 @@
-# Script for populating the database. You can run it as:
-#
-#     mix run priv/repo/seeds.exs
-#
-# Inside the script, you can read and write to any of your
-# repositories directly:
-#
-#     CashLens.Repo.insert!(%CashLens.SomeSchema{})
-#
-# We recommend using the bang functions (`insert!`, `update!`
-# and so on) as they will fail if something goes wrong.
+alias CashLens.Repo
+alias CashLens.Categories.Category
+
+Repo.insert!(%Category{name: "Valor Inicial", slug: "initial_value"}, on_conflict: :nothing)
+Repo.insert!(%Category{name: "Transferência", slug: "transfer"}, on_conflict: :nothing)
