@@ -95,7 +95,13 @@ defmodule CashLensWeb.TransactionLive.Index do
                     <div class="badge badge-outline text-[10px] uppercase opacity-70">
                       {if transaction.category, do: transaction.category.name, else: "Pendente"}
                     </div>
-                    <.icon :if={transaction.transfer_key} name="hero-link" class="size-3 text-primary" title="Pareada" />
+                    <%= if transaction.category && transaction.category.slug == "transfer" do %>
+                      <%= if transaction.transfer_key do %>
+                        <.icon name="hero-link" class="size-3 text-primary" title="Transferência Pareada" />
+                      <% else %>
+                        <.icon name="hero-exclamation-triangle" class="size-3 text-warning" title="Transferência sem par encontrado" />
+                      <% end %>
+                    <% end %>
                   </div>
                 </td>
                 <td class="text-xs opacity-60">
