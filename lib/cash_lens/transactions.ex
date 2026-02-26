@@ -69,7 +69,7 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
-  Calculates monthly totals for income (positive) and expenses (negative).
+  Calculates monthly totals for income (positive) and expenses (negative), ignoring transfers.
   Defaults to the current month, or the month of the last transaction if none in current.
   """
   def get_monthly_summary(date \\ nil) do
@@ -78,7 +78,10 @@ defmodule CashLens.Transactions do
     last_of_month = Date.end_of_month(target_date)
 
     query = from t in Transaction,
-      where: t.date >= ^first_of_month and t.date <= ^last_of_month
+      left_join: c in assoc(t, :category),
+      where: t.date >= ^first_of_month and t.date <= ^last_of_month,
+      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+      select: t
 
     transactions = Repo.all(query)
 
@@ -93,6 +96,40 @@ defmodule CashLens.Transactions do
       |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
 
     %{income: income, expenses: Decimal.abs(expenses), month: target_date}
+  end
+
+  @doc """
+  Returns pure income and expenses history grouped by month, excluding transfers.
+  """
+  def get_historical_summary do
+    query = from t in Transaction,
+      left_join: c in assoc(t, :category),
+      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+      select: t
+
+    Repo.all(query)
+    |> Enum.group_by(fn t -> {t.date.year, t.date.month} end)
+    |> Enum.map(fn {{year, month}, txs} ->
+      income = 
+        txs 
+        |> Enum.filter(&Decimal.gt?(&1.amount, 0)) 
+        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
+      
+      expenses = 
+        txs 
+        |> Enum.filter(&Decimal.lt?(&1.amount, 0)) 
+        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount)) 
+        |> Decimal.abs()
+
+      %{
+        year: year,
+        month: month,
+        income: income,
+        expenses: expenses,
+        balance: Decimal.sub(income, expenses)
+      }
+    end)
+    |> Enum.sort_by(fn %{year: y, month: m} -> {y, m} end)
   end
 
   defp get_latest_transaction_date do

@@ -11,6 +11,9 @@ defmodule CashLensWeb.BalanceLive.Index do
       <.header>
         Listando Balanços
         <:actions>
+          <button phx-click="recalculate_all" class="btn btn-outline btn-warning">
+            <.icon name="hero-arrow-path-rounded-square" class="mr-1" /> Recalcular Todos
+          </button>
           <.link navigate={~p"/balances/new"}>
             <.button variant="primary">
               <.icon name="hero-plus" class="mr-1" /> Novo Balanço
@@ -176,6 +179,15 @@ defmodule CashLensWeb.BalanceLive.Index do
      socket
      |> assign(:filters, filters)
      |> stream(:balances, Accounting.list_balances(filters), reset: true)}
+  end
+
+  @impl true
+  def handle_event("recalculate_all", _params, socket) do
+    Accounting.recalculate_all_balances()
+    {:noreply,
+     socket
+     |> put_flash(:info, "Todos os balanços foram recalculados em cascata!")
+     |> stream(:balances, Accounting.list_balances(socket.assigns.filters), reset: true)}
   end
 
   @impl true

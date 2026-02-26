@@ -40,6 +40,97 @@ window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 // connect if there are any LiveViews on the page
 liveSocket.connect()
 
+// Chart.js Setup for Dashboard
+import Chart from 'chart.js/auto';
+
+document.addEventListener("DOMContentLoaded", () => {
+  const ctx = document.getElementById('balanceChart');
+  if (ctx) {
+    const rawData = ctx.getAttribute('data-history');
+    if (rawData) {
+      const history = JSON.parse(rawData);
+      
+      const labels = history.map(item => `${item.month}/${item.year}`);
+      const balanceData = history.map(item => parseFloat(item.balance));
+      const incomeData = history.map(item => parseFloat(item.income));
+      const expensesData = history.map(item => parseFloat(item.expenses));
+      const finalBalanceData = history.map(item => parseFloat(item.final_balance));
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Saldo Final (Acumulado)',
+              data: finalBalanceData,
+              borderColor: 'rgb(59, 130, 246)', // Blue
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              borderWidth: 3,
+              fill: true,
+              tension: 0.4
+            },
+            {
+              label: 'Entradas',
+              data: incomeData,
+              borderColor: 'rgb(34, 197, 94)', // Green
+              borderWidth: 2,
+              borderDash: [5, 5],
+              tension: 0.4
+            },
+            {
+              label: 'Saídas',
+              data: expensesData,
+              borderColor: 'rgb(239, 68, 68)', // Red
+              borderWidth: 2,
+              borderDash: [5, 5],
+              tension: 0.4
+            },
+            {
+              label: 'Balanço do Mês (Líquido)',
+              type: 'bar',
+              data: balanceData,
+              backgroundColor: balanceData.map(val => val >= 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'),
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  let label = context.dataset.label || '';
+                  if (label) { label += ': '; }
+                  if (context.parsed.y !== null) {
+                    label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                  }
+                  return label;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              ticks: {
+                callback: function(value, index, values) {
+                  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value);
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+});
+
 // expose liveSocket on window for web console debug logs and latency simulation:
 // >> liveSocket.enableDebug()
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session

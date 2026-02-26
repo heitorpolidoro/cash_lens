@@ -9,6 +9,24 @@ defmodule CashLensWeb.PageController do
     # Get latest balances per account
     latest_balances = Accounting.list_latest_balances()
     
+    # Get historical data for the chart
+    historical_balances = Accounting.get_historical_balances()
+    historical_summary = Transactions.get_historical_summary()
+
+    historical = Enum.map(historical_balances, fn hb ->
+      summary = Enum.find(historical_summary, &(&1.year == hb.year and &1.month == hb.month)) || %{income: 0, expenses: 0, balance: 0}
+      %{
+        year: hb.year,
+        month: hb.month,
+        final_balance: hb.final_balance,
+        income: summary.income,
+        expenses: summary.expenses,
+        balance: summary.balance
+      }
+    end)
+    
+    chart_data = Jason.encode!(historical)
+    
     # Get all accounts to find those without a balance yet
     all_accounts = Accounts.list_accounts()
     
@@ -42,7 +60,8 @@ defmodule CashLensWeb.PageController do
       monthly_income: summary.income,
       monthly_expenses: summary.expenses,
       accounts: accounts_with_data,
-      summary_month: month_name
+      summary_month: month_name,
+      chart_data: chart_data
     )
   end
 

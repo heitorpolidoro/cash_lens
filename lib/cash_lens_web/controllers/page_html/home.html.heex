@@ -42,6 +42,16 @@
     </div>
   </div>
 
+  <!-- Evolução Financeira (Gráfico) -->
+  <div class="card bg-base-100 shadow-sm border border-base-300">
+    <div class="card-body p-6">
+      <h2 class="card-title text-base-content mb-4">Evolução Financeira</h2>
+      <div class="w-full h-80">
+        <canvas id="balanceChart" data-history={@chart_data}></canvas>
+      </div>
+    </div>
+  </div>
+
   <div class="grid grid-cols-1 gap-8">
     <!-- Seção de Contas -->
     <div class="card bg-base-100 shadow-sm border border-base-300">
