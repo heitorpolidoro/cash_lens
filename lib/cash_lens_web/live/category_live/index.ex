@@ -25,12 +25,12 @@ defmodule CashLensWeb.CategoryLive.Index do
       >
         <:col :let={{_id, category}} label="Nome">{category.name}</:col>
         <:col :let={{_id, category}} label="Slug">{category.slug}</:col>
-        <:action :let={{_id, category}}>
-          <div class="flex gap-2">
-            <.link navigate={~p"/categories/#{category}/edit"} class="btn btn-ghost btn-xs">Editar</.link>
-            <button phx-click="confirm_delete" phx-value-id={category.id} class="btn btn-ghost btn-xs text-error">Excluir</button>
-          </div>
-        </:action>
+      <:action :let={{_id, category}}>
+        <div class="flex gap-2">
+          <.link navigate={~p"/categories/#{category}/edit"} class="btn btn-ghost btn-xs" phx-click-stop>Editar</.link>
+          <button phx-click="confirm_delete" phx-value-id={category.id} phx-click-stop class="btn btn-ghost btn-xs text-error">Excluir</button>
+        </div>
+      </:action>
       </.table>
     </div>
 

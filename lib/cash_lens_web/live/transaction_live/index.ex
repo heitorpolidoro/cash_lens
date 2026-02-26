@@ -61,13 +61,15 @@ defmodule CashLensWeb.TransactionLive.Index do
                   </div>
                 </td>
                 <td class="text-xs opacity-60">{if transaction.account, do: transaction.account.name, else: "..."}</td>
-                <td class="text-right">
-                  <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <.link navigate={~p"/transactions/#{transaction}/edit"} class="btn btn-ghost btn-xs px-1"><.icon name="hero-pencil" class="size-3" /></.link>
-                    <button phx-click="confirm_delete" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-error px-1"><.icon name="hero-trash" class="size-3" /></button>
-                  </div>
-                </td>
-              </tr>
+                                                <td class="text-right">
+                                                  <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <.link navigate={~p"/transactions/#{transaction}/edit"} class="btn btn-ghost btn-xs px-1" phx-click-stop><.icon name="hero-pencil" class="size-3" /></.link>
+                                                                                            <button type="button" phx-click="confirm_delete" phx-value-id={transaction.id} phx-click-stop class="btn btn-ghost btn-xs text-error px-1">
+                                                                                              <.icon name="hero-trash" class="size-3" />
+                                                                                            </button>
+                                                                                                                          </div>
+                                                </td>
+                                              </tr>
             </tbody>
           </table>
         </form>

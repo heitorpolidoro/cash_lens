@@ -18,43 +18,55 @@ defmodule CashLensWeb.AccountLive.Index do
         </:actions>
       </.header>
 
-      <.table
-        id="accounts"
-        rows={@streams.accounts}
-        row_click={fn {_id, account} -> JS.navigate(~p"/accounts/#{account}") end}
-      >
-        <:col :let={{_id, account}} label="Ícone">
-          <div class="avatar">
-            <div class="w-8 rounded-full bg-base-300">
-              <%= if account.icon && account.icon != "" do %>
-                <img src={account.icon} />
-              <% else %>
-                <div class="flex items-center justify-center h-full w-full bg-primary text-primary-content text-[10px] font-bold uppercase">
-                  {String.slice(account.bank || account.name, 0..1)}
+      <div class="overflow-x-auto bg-base-100 rounded-2xl border border-base-300 shadow-sm">
+        <table class="table table-zebra w-full text-xs">
+          <thead class="bg-base-200/50">
+            <tr>
+              <th class="w-16 text-center">Ícone</th>
+              <th>Nome</th>
+              <th>Banco</th>
+              <th class="text-center">Importa?</th>
+              <th class="w-16"></th>
+            </tr>
+          </thead>
+          <tbody id="accounts" phx-update="stream">
+            <tr :for={{id, account} <- @streams.accounts} id={id} class="hover group border-b border-base-200">
+              <td class="text-center">
+                <div class="avatar mx-auto">
+                  <div class="w-8 rounded-full bg-base-300">
+                    <%= if account.icon && account.icon != "" do %>
+                      <img src={account.icon} />
+                    <% else %>
+                      <div class="flex items-center justify-center h-full w-full bg-primary text-primary-content text-[10px] font-bold uppercase">
+                        {String.slice(account.bank || account.name, 0..1)}
+                      </div>
+                    <% end %>
+                  </div>
                 </div>
-              <% end %>
-            </div>
+              </td>
+              <td class="font-bold">{account.name}</td>
+              <td class="opacity-70">{account.bank}</td>
+              <td class="text-center">
+                <%= if account.accepts_import do %>
+                  <.icon name="hero-check-circle" class="size-5 text-success mx-auto" />
+                <% else %>
+                  <.icon name="hero-x-circle" class="size-5 text-base-300 mx-auto" />
+                <% end %>
+              </td>
+        <td class="text-right">
+          <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <.link navigate={~p"/accounts/#{account}/edit"} class="btn btn-ghost btn-xs px-1" phx-click-stop>
+              <.icon name="hero-pencil" class="size-3" />
+            </.link>
+            <button phx-click="confirm_delete" phx-value-id={account.id} phx-click-stop class="btn btn-ghost btn-xs text-error px-1">
+              <.icon name="hero-trash" class="size-3" />
+            </button>
           </div>
-        </:col>
-        <:col :let={{_id, account}} label="Nome">{account.name}</:col>
-        <:col :let={{_id, account}} label="Banco">{account.bank}</:col>
-        <:col :let={{_id, account}} label="Saldo">{format_currency(account.balance)}</:col>
-        <:col :let={{_id, account}} label="Importa?">
-          <div class="flex justify-center">
-            <%= if account.accepts_import do %>
-              <.icon name="hero-check-circle" class="size-5 text-success" title="Aceita importação" />
-            <% else %>
-              <.icon name="hero-x-circle" class="size-5 text-base-300" title="Manual/Automático apenas" />
-            <% end %>
-          </div>
-        </:col>
-        <:action :let={{_id, account}}>
-          <div class="flex gap-2">
-            <.link navigate={~p"/accounts/#{account}/edit"} class="btn btn-ghost btn-xs">Editar</.link>
-            <button phx-click="confirm_delete" phx-value-id={account.id} class="btn btn-ghost btn-xs text-error">Excluir</button>
-          </div>
-        </:action>
-      </.table>
+        </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Modal de Confirmação -->

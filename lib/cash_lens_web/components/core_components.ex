@@ -522,7 +522,7 @@ defmodule CashLensWeb.CoreComponents do
     >
       <div class="modal-box max-w-3xl p-10 bg-base-100 border border-base-300 rounded-3xl shadow-2xl relative">
         <button
-          phx-click={JS.exec(@on_cancel, "phx-remove") |> JS.push("close_import")}
+          phx-click={JS.exec(@on_cancel, "phx-remove")}
           type="button"
           class="btn btn-sm btn-circle btn-ghost absolute right-4 top-4"
           aria-label={gettext("close")}
@@ -533,7 +533,7 @@ defmodule CashLensWeb.CoreComponents do
           {render_slot(@inner_block)}
         </div>
       </div>
-      <div class="modal-backdrop bg-zinc-950/20 backdrop-blur-sm" phx-click={JS.push("close_import")}></div>
+      <div class="modal-backdrop bg-zinc-950/20 backdrop-blur-sm" phx-click={JS.exec(@on_cancel, "phx-remove")}></div>
     </div>
     """
   end
