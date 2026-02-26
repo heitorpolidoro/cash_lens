@@ -16,9 +16,18 @@ defmodule CashLensWeb.AccountLive.Form do
                   <.input field={@form[:name]} type="text" label="Nome" />
                   <.input field={@form[:bank]} type="text" label="Banco" />
                   <.input field={@form[:balance]} type="number" label="Saldo Inicial" step="any" />
-                  <.input field={@form[:color]} type="text" label="Cor (opcional)" />
+                          <.input field={@form[:color]} type="text" label="Cor (opcional)" />
+                          
+                          <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-4">
+                              <input type="hidden" name="account[accepts_import]" value="false" />
+                              <input type="checkbox" name="account[accepts_import]" value="true" checked={@form[:accepts_import].value} class="checkbox checkbox-primary" />
+                              <span class="label-text font-bold">Aceita importar extratos?</span>
+                            </label>
+                          </div>
                   
-                  <div class="flex items-end gap-4">
+                          <div class="flex items-end gap-4">
+                  
                     <div class="flex-1">
                       <.input field={@form[:icon]} type="text" label="URL do Ícone (opcional)" />
                     </div>

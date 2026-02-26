@@ -45,6 +45,13 @@ defmodule CashLens.Accounts do
   def get_account!(id), do: Repo.get!(Account, id)
 
   @doc """
+  Gets an account by its exact name.
+  """
+  def get_account_by_name(name) do
+    Repo.get_by(Account, name: name)
+  end
+
+  @doc """
   Creates a account.
 
   ## Examples

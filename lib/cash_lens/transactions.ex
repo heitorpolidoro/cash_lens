@@ -78,10 +78,7 @@ defmodule CashLens.Transactions do
     last_of_month = Date.end_of_month(target_date)
 
     query = from t in Transaction,
-      left_join: c in assoc(t, :category),
-      where: t.date >= ^first_of_month and t.date <= ^last_of_month,
-      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
-      select: t
+      where: t.date >= ^first_of_month and t.date <= ^last_of_month
 
     transactions = Repo.all(query)
 
@@ -131,16 +128,21 @@ defmodule CashLens.Transactions do
 
   """
   def create_transaction(attrs) do
-    result = 
-      %Transaction{}
-      |> Transaction.changeset(attrs)
-      |> Repo.insert()
+    # Generate changeset to get the fingerprint
+    changeset = Transaction.changeset(%Transaction{}, attrs)
 
-    case result do
+    # Insert with conflict handling
+    case Repo.insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
+      {:ok, %Transaction{id: nil}} -> 
+        # This happens when on_conflict: :nothing triggers
+        {:ok, :duplicate}
+      
       {:ok, transaction} -> 
         CashLens.Transactions.TransferMatcher.match_transfer(transaction)
         {:ok, transaction}
-      error -> result
+      
+      {:error, changeset} -> 
+        {:error, changeset}
     end
   end
 
@@ -176,6 +178,13 @@ defmodule CashLens.Transactions do
   """
   def delete_transaction(%Transaction{} = transaction) do
     Repo.delete(transaction)
+  end
+
+  @doc """
+  Deletes all transactions from the database.
+  """
+  def delete_all_transactions do
+    Repo.delete_all(Transaction)
   end
 
   @doc """

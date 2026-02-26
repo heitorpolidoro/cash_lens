@@ -43,6 +43,10 @@ defmodule CashLensWeb.BalanceLive.Form do
                   </label>
                 <% end %>
               </div>
+              <div class="mt-4 flex gap-2">
+                <button type="button" phx-click="select_all" class="btn btn-ghost btn-xs text-primary">Selecionar Todas</button>
+                <button type="button" phx-click="select_none" class="btn btn-ghost btn-xs text-error">Limpar Seleção</button>
+              </div>
             </div>
 
             <div class="divider"></div>
@@ -53,18 +57,9 @@ defmodule CashLensWeb.BalanceLive.Form do
                 type="select"
                 label="2. Mês"
                 options={[
-                  {"Janeiro", 1},
-                  {"Fevereiro", 2},
-                  {"Março", 3},
-                  {"Abril", 4},
-                  {"Maio", 5},
-                  {"Junho", 6},
-                  {"Julho", 7},
-                  {"Agosto", 8},
-                  {"Setembro", 9},
-                  {"Outubro", 10},
-                  {"Novembro", 11},
-                  {"Dezembro", 12}
+                  {"Janeiro", 1}, {"Fevereiro", 2}, {"Março", 3}, {"Abril", 4},
+                  {"Maio", 5}, {"Junho", 6}, {"Julho", 7}, {"Agosto", 8},
+                  {"Setembro", 9}, {"Outubro", 10}, {"Novembro", 11}, {"Dezembro", 12}
                 ]}
               />
               <.input
@@ -119,19 +114,23 @@ defmodule CashLensWeb.BalanceLive.Form do
 
   defp apply_action(socket, :edit, %{"id" => id}) do
     balance = Accounting.get_balance!(id)
-
-    socket
-    |> assign(:page_title, "Editar Balanço")
-    |> assign(:balance, balance)
-    |> assign(:form, to_form(Accounting.change_balance(balance)))
+    socket |> assign(:page_title, "Editar Balanço") |> assign(:balance, balance) |> assign(:form, to_form(Accounting.change_balance(balance)))
   end
 
   defp apply_action(socket, :new, _params) do
     now = Date.utc_today()
+    socket |> assign(:page_title, "Gerar Balanços Mensais") |> assign(:form, to_form(%{"month" => now.month, "year" => now.year}))
+  end
 
-    socket
-    |> assign(:page_title, "Gerar Balanços Mensais")
-    |> assign(:form, to_form(%{"month" => now.month, "year" => now.year}))
+  @impl true
+  def handle_event("select_all", _params, socket) do
+    ids = Enum.map(socket.assigns.accounts, & &1.id)
+    {:noreply, assign(socket, :selected_account_ids, ids)}
+  end
+
+  @impl true
+  def handle_event("select_none", _params, socket) do
+    {:noreply, assign(socket, :selected_account_ids, [])}
   end
 
   @impl true
@@ -153,48 +152,23 @@ defmodule CashLensWeb.BalanceLive.Form do
     save_balance(socket, socket.assigns.live_action, params)
   end
 
-  # Save logic for NEW (Auto Generation)
   defp save_balance(socket, :new, %{"account_ids" => account_ids, "month" => month, "year" => year}) do
     month = if is_binary(month), do: String.to_integer(month), else: month
     year = if is_binary(year), do: String.to_integer(year), else: year
-
-    results =
-      Enum.map(account_ids, fn account_id ->
-        Accounting.calculate_monthly_balance(account_id, year, month)
-      end)
-
-    if Enum.all?(results, &match?({:ok, _}, &1)) do
-      {:noreply,
-       socket
-       |> put_flash(:info, "Balanços gerados com sucesso!")
-       |> push_navigate(to: ~p"/balances")}
-    else
-      {:noreply, put_flash(socket, :error, "Erro ao gerar alguns balanços.")}
-    end
+    Enum.each(account_ids, fn id -> Accounting.calculate_monthly_balance(id, year, month) end)
+    {:noreply, socket |> put_flash(:info, "Balanços gerados!") |> push_navigate(to: ~p"/balances")}
   end
 
-  defp save_balance(socket, :new, _params) do
-    {:noreply, put_flash(socket, :error, "Selecione ao menos uma conta.")}
-  end
+  defp save_balance(socket, :new, _params), do: {:noreply, put_flash(socket, :error, "Selecione ao menos uma conta.")}
 
-  # Save logic for EDIT (Manual Update)
   defp save_balance(socket, :edit, %{"balance" => balance_params}) do
     case Accounting.update_balance(socket.assigns.balance, balance_params) do
-      {:ok, _balance} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Balanço atualizado com sucesso!")
-         |> push_navigate(to: ~p"/balances")}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, form: to_form(changeset))}
+      {:ok, _} -> {:noreply, socket |> put_flash(:info, "Balanço atualizado!") |> push_navigate(to: ~p"/balances")}
+      {:error, %Ecto.Changeset{} = changeset} -> {:noreply, assign(socket, form: to_form(changeset))}
     end
   end
 
   defp translate_month_num(num) do
-    Enum.at(
-      ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"],
-      num - 1
-    )
+    Enum.at(["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"], num - 1)
   end
 end

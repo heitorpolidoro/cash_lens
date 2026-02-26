@@ -13,7 +13,7 @@ services:
 
   app:
     build: .
-    command: /bin/sh -c "mix deps.get && mix ecto.setup && mix phx.server"
+    command: /bin/sh -c "mix deps.get && mix phx.server"
     volumes:
       - .:/app
     ports:

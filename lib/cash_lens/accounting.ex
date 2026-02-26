@@ -18,10 +18,8 @@ defmodule CashLens.Accounting do
 
     # 1. Get transactions for the specific month
     query = from t in Transaction,
-      left_join: c in assoc(t, :category),
       where: t.account_id == ^account_id,
-      where: t.date >= ^first_of_month and t.date <= ^last_of_month,
-      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"]
+      where: t.date >= ^first_of_month and t.date <= ^last_of_month
 
     transactions = Repo.all(query)
 
