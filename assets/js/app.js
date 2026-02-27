@@ -29,7 +29,32 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {
+    ...colocatedHooks,
+    DirectoryUpload: {
+      mounted() {
+        this.el.addEventListener("change", e => {
+          // Find the real Phoenix live file input by its unique attribute
+          const liveInput = document.querySelector('input[data-phx-hook="Phoenix.LiveFileUpload"]');
+          
+          if (!liveInput) {
+            console.error("Phoenix live file input not found!");
+            return;
+          }
+          
+          const dt = new DataTransfer();
+          Array.from(e.target.files).forEach(file => {
+            if (file.name.toLowerCase().endsWith('.csv')) {
+              dt.items.add(file);
+            }
+          });
+
+          liveInput.files = dt.files;
+          liveInput.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+      }
+    }
+  },
 })
 
 // Show progress bar on live navigation and form submits

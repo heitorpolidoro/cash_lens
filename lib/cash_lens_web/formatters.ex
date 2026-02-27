@@ -44,4 +44,12 @@ defmodule CashLensWeb.Formatters do
       _ -> date_string
     end
   end
+
+  @doc """
+  Formats a Time struct as HH:MM.
+  """
+  def format_time(nil), do: ""
+  def format_time(%Time{} = time) do
+    Time.truncate(time, :second) |> Time.to_string() |> String.slice(0..4)
+  end
 end

@@ -202,6 +202,17 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
+  Quickly updates the category of a transaction by ID.
+  """
+  def update_transaction_category(id, category_id) do
+    transaction = get_transaction!(id)
+    
+    transaction
+    |> Ecto.Changeset.change(category_id: category_id)
+    |> Repo.update()
+  end
+
+  @doc """
   Deletes a transaction.
 
   ## Examples

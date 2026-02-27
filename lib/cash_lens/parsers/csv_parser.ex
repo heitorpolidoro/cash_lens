@@ -24,8 +24,12 @@ defmodule CashLens.Parsers.CSVParser do
     if Decimal.eq?(amount_decimal, 0) or String.contains?(description_up, ["SALDO", "S A L D O"]) do
       nil
     else
+      # Extract better date and time from description if available
+      {final_date, final_time} = extract_metadata(description, parse_date(date))
+
       %{
-        date: parse_date(date),
+        date: final_date,
+        time: final_time,
         description: description,
         amount: amount_decimal
       }
@@ -34,8 +38,11 @@ defmodule CashLens.Parsers.CSVParser do
 
   # Nubank: Data, Valor, Identificador, Descrição
   defp parse_row([date, amount, _id, description | _], :nubank) do
+    {final_date, final_time} = extract_metadata(description, parse_date(date))
+    
     %{
-      date: parse_date(date),
+      date: final_date,
+      time: final_time,
       description: description,
       amount: parse_amount(amount)
     }
@@ -43,14 +50,48 @@ defmodule CashLens.Parsers.CSVParser do
 
   # Generic: Date, Description, Amount
   defp parse_row([date, description, amount | _rest], :generic) do
+    {final_date, final_time} = extract_metadata(description, parse_date(date))
+
     %{
-      date: parse_date(date),
+      date: final_date,
+      time: final_time,
       description: description,
       amount: parse_amount(amount)
     }
   end
 
   defp parse_row(_, _), do: nil
+
+  @doc """
+  Extracts date (DD/MM) and time (HH:MM) from a string if they exist.
+  Returns {date, time}.
+  """
+  def extract_metadata(text, base_date) do
+    # Regex for DD/MM
+    date_match = Regex.run(~r/(\d{2})\/(\d{2})/, text)
+    # Regex for HH:MM
+    time_match = Regex.run(~r/(\d{2}):(\d{2})/, text)
+
+    final_date = 
+      case date_match do
+        [_, d, m] -> 
+          # Use current year or year from base_date
+          Date.new!(base_date.year, String.to_integer(m), String.to_integer(d))
+        _ -> base_date
+      end
+
+    final_time =
+      case time_match do
+        [_, h, m] -> 
+          case Time.new(String.to_integer(h), String.to_integer(m), 0) do
+            {:ok, time} -> time
+            _ -> nil
+          end
+        _ -> nil
+      end
+
+    {final_date, final_time}
+  end
 
   defp parse_date(date_string) do
     date_string = String.trim(date_string || "")
@@ -71,7 +112,6 @@ defmodule CashLens.Parsers.CSVParser do
   end
 
   defp parse_amount(amount_string) do
-    # Remove any non-numeric characters EXCEPT for minus, dot and comma
     clean_string =
       (amount_string || "")
       |> String.trim()
