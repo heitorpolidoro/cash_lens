@@ -99,15 +99,19 @@ defmodule CashLens.Accounting do
   defp get_previous_period(year, month), do: {year, month - 1}
 
   @doc """
-  Returns the list of all balances based on filters.
+  Returns the list of all balances based on filters and pagination.
   """
-  def list_balances(filters \\ %{}) do
+  def list_balances(filters \\ %{}, page \\ 1, page_size \\ 20) do
+    offset = (page - 1) * page_size
+
     Balance
     |> filter_by_account(filters["account_id"])
     |> filter_by_month(filters["month"])
     |> filter_by_year(filters["year"])
     |> order_by([b], desc: b.year, desc: b.month)
     |> preload([:account])
+    |> limit(^page_size)
+    |> offset(^offset)
     |> Repo.all()
   end
 

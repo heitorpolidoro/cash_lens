@@ -18,9 +18,11 @@ defmodule CashLens.Transactions do
 
   """
   @doc """
-  Returns the list of transactions based on filters.
+  Returns the list of transactions based on filters and pagination.
   """
-  def list_transactions(filters \\ %{}) do
+  def list_transactions(filters \\ %{}, page \\ 1, page_size \\ 50) do
+    offset = (page - 1) * page_size
+
     Transaction
     |> join_associations()
     |> filter_by_account(filters["account_id"])
@@ -29,6 +31,8 @@ defmodule CashLens.Transactions do
     |> filter_by_date(filters["date"])
     |> filter_by_amount(filters["amount"])
     |> order_by([t], desc: t.date, desc: t.inserted_at)
+    |> limit(^page_size)
+    |> offset(^offset)
     |> Repo.all()
   end
 

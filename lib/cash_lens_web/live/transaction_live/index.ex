@@ -84,51 +84,43 @@ defmodule CashLensWeb.TransactionLive.Index do
             </tbody>
           </table>
         </form>
+        
+        <!-- Sentinela para o Infinite Scroll -->
+        <div id="infinite-scroll-sentinel" phx-hook="InfiniteScroll" class="py-4 flex justify-center">
+          <div :if={not @end_of_list?} class="loading loading-spinner loading-sm text-primary opacity-20"></div>
+          <p :if={@end_of_list?} class="text-[10px] uppercase font-bold opacity-20">Fim da lista</p>
+        </div>
       </div>
     </div>
 
-    <!-- Modal de Importação em Lote -->
+    <!-- Modais omitidos para brevidade mas permanecem no arquivo real -->
     <.modal :if={@show_import_modal} id="import-modal" show on_cancel={JS.push("close_modal")}>
       <div class="p-2">
         <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter text-primary">Importar Extratos</h2>
-        
         <form id="upload-form" phx-submit="save_import" phx-change="validate_import" class="space-y-8">
           <div class="form-control w-full">
             <label class="label mb-2"><span class="label-text font-black text-lg">1. Selecione os Arquivos</span></label>
-            
             <div class="flex flex-col gap-4">
-              <!-- Dropzone Visual -->
               <div class="flex items-center justify-center border-4 border-dashed border-base-300 rounded-3xl py-10 bg-base-200/30 hover:bg-base-200 transition-all cursor-pointer relative" phx-drop-target={@uploads.statement.ref}>
                 <label class="cursor-pointer text-center w-full">
                   <div :if={Enum.empty?(@uploads.statement.entries)} class="space-y-2">
                     <.icon name="hero-folder-plus" class="size-12 opacity-10 mx-auto" />
                     <p class="text-xs opacity-40 font-bold uppercase">Clique nos botões abaixo ou arraste</p>
                     <div class="flex justify-center gap-2 mt-4">
-                      <!-- Botões que disparam os inputs ocultos via JS customizado -->
-                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "input[data-phx-hook='Phoenix.LiveFileUpload']")}>
-                        Selecionar Arquivos
-                      </button>
-                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "#file-input-dir")}>
-                        Selecionar Pasta
-                      </button>
+                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "input[data-phx-hook='Phoenix.LiveFileUpload']")}>Selecionar Arquivos</button>
+                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "#file-input-dir")}>Selecionar Pasta</button>
                     </div>
                   </div>
-                  
-                  <!-- Inputs Reais (Ocultos) -->
                   <div class="hidden">
                     <.live_file_input upload={@uploads.statement} />
                     <input type="file" id="file-input-dir" webkitdirectory directory phx-hook="DirectoryUpload" />
                   </div>
-
-                  <!-- Lista de Selecionados -->
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 px-4 max-h-48 overflow-y-auto">
                     <%= for entry <- @uploads.statement.entries do %>
                       <div class="flex items-center gap-2 bg-primary/5 text-primary p-2 rounded-xl text-[10px] border border-primary/10">
                         <.icon name="hero-check-circle" class="size-4" />
                         <span class="flex-1 text-left font-bold truncate">{entry.client_name}</span>
-                        <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="btn btn-ghost btn-xs min-h-0 h-6">
-                          <.icon name="hero-x-mark" class="size-3" />
-                        </button>
+                        <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="btn btn-ghost btn-xs min-h-0 h-6"><.icon name="hero-x-mark" class="size-3" /></button>
                       </div>
                     <% end %>
                   </div>
@@ -136,8 +128,6 @@ defmodule CashLensWeb.TransactionLive.Index do
               </div>
             </div>
           </div>
-
-          <!-- Seleção de Conta -->
           <div :if={Enum.any?(@uploads.statement.entries)} class="form-control w-full space-y-4 animate-in slide-in-from-bottom-4">
             <label class="label"><span class="label-text font-black text-lg">2. Para qual conta vão estes arquivos?</span></label>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -152,18 +142,15 @@ defmodule CashLensWeb.TransactionLive.Index do
               <% end %>
             </div>
           </div>
-
           <div :if={Enum.any?(@uploads.statement.entries)} class="flex justify-end pt-6 border-t border-base-200">
             <button type="submit" class="btn btn-primary btn-lg w-full rounded-2xl shadow-xl shadow-primary/20" phx-disable-with="Processando lote...">
-              <.icon name="hero-bolt" class="size-5 mr-2" />
-              Finalizar e Importar Tudo
+              <.icon name="hero-bolt" class="size-5 mr-2" /> Finalizar e Importar Tudo
             </button>
           </div>
         </form>
       </div>
     </.modal>
 
-    <!-- Modal de Confirmação -->
     <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
       <div class="p-4 text-center">
         <div class="w-20 h-20 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
@@ -192,10 +179,35 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:import_accounts, Enum.filter(accounts, & &1.accepts_import))
      |> assign(:categories, Categories.list_categories())
      |> assign(:filters, %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => ""})
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
      |> stream(:transactions, Transactions.list_transactions())
      |> allow_upload(:statement, accept: ~w(.csv), max_entries: 100)}
   end
 
+  @impl true
+  def handle_event("load-more", _params, socket) do
+    if socket.assigns.end_of_list? do
+      {:noreply, socket}
+    else
+      next_page = socket.assigns.page + 1
+      new_transactions = Transactions.list_transactions(socket.assigns.filters, next_page)
+      
+      {:noreply,
+       socket
+       |> assign(:page, next_page)
+       |> assign(:end_of_list?, Enum.empty?(new_transactions))
+       |> stream_insert_many(:transactions, new_transactions)}
+    end
+  end
+
+  defp stream_insert_many(socket, stream_name, items) do
+    Enum.reduce(items, socket, fn item, acc ->
+      stream_insert(acc, stream_name, item)
+    end)
+  end
+
+  # Outros eventos permanecem os mesmos...
   @impl true
   def handle_event("open_import", _params, socket), do: {:noreply, assign(socket, :show_import_modal, true)}
   @impl true
@@ -239,13 +251,23 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("filter", params, socket) do
-    {:noreply, socket |> assign(:filters, params) |> stream(:transactions, Transactions.list_transactions(params), reset: true)}
+    {:noreply,
+     socket
+     |> assign(:filters, params)
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
+     |> stream(:transactions, Transactions.list_transactions(params, 1), reset: true)}
   end
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
     filters = %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => ""}
-    {:noreply, socket |> assign(:filters, filters) |> stream(:transactions, Transactions.list_transactions(filters), reset: true)}
+    {:noreply,
+     socket
+     |> assign(:filters, filters)
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
+     |> stream(:transactions, Transactions.list_transactions(filters, 1), reset: true)}
   end
 
   @impl true
@@ -294,7 +316,9 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:show_import_modal, false)
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
      |> put_flash(:info, "Importação concluída e balanços atualizados!")
-     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
   end
 end
