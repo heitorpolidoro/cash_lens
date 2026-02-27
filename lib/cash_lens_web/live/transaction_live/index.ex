@@ -29,19 +29,44 @@ defmodule CashLensWeb.TransactionLive.Index do
 
       <!-- Tabela com Filtros -->
       <div class="overflow-x-auto bg-base-100 rounded-2xl border border-base-300 shadow-sm">
-        <form id="filter-form" phx-change="filter">
+        <form id="transaction-filters" phx-change="apply_filters">
           <table class="table table-zebra w-full text-xs">
             <thead class="bg-base-200/50">
               <tr>
                 <th class="w-40"><div class="flex flex-col gap-1"><span>Data</span><input type="date" name="date" value={@filters["date"]} class="input input-bordered input-xs font-normal w-full" /></div></th>
                 <th><div class="flex flex-col gap-1"><span>Descrição</span><input type="text" name="search" value={@filters["search"]} placeholder="Buscar..." class="input input-bordered input-xs font-normal w-full" phx-debounce="300" /></div></th>
                 <th class="w-32 text-right"><div class="flex flex-col gap-1"><span>Valor</span><input type="number" name="amount" value={@filters["amount"]} placeholder="0.00" step="any" class="input input-bordered input-xs font-normal w-full text-right" phx-debounce="300" /></div></th>
-                <th class="w-40"><div class="flex flex-col gap-1"><span>Categoria</span><select name="category_id" class="select select-bordered select-xs font-normal w-full"><option value="">Todas</option><%= for category <- @categories do %><option value={category.id} selected={@filters["category_id"] == category.id}>{category.name}</option><% end %></select></div></th>
-                <th class="w-40"><div class="flex flex-col gap-1"><span>Conta</span><select name="account_id" class="select select-bordered select-xs font-normal w-full"><option value="">Todas</option><%= for account <- @accounts do %><option value={account.id} selected={@filters["account_id"] == account.id}>{account.name}</option><% end %></select></div></th>
+                <th class="w-40">
+                  <div class="flex flex-col gap-1">
+                    <span>Categoria</span>
+                    <select name="category_id" class="select select-bordered select-xs font-normal w-full">
+                      <option value="">Todas</option>
+                      <option value="nil" selected={@filters["category_id"] == "nil"}>Pendente</option>
+                      <%= for category <- @categories do %>
+                        <option value={category.id} selected={@filters["category_id"] == category.id}>{category.name}</option>
+                      <% end %>
+                    </select>
+                  </div>
+                </th>
+                <th class="w-40">
+                  <div class="flex flex-col gap-1">
+                    <span>Conta</span>
+                    <select name="account_id" class="select select-bordered select-xs font-normal w-full">
+                      <option value="">Todas</option>
+                      <%= for account <- @accounts do %>
+                        <option value={account.id} selected={@filters["account_id"] == account.id}>{account.name}</option>
+                      <% end %>
+                    </select>
+                  </div>
+                </th>
                 <th class="w-16"><div class="flex flex-col gap-1 items-center"><span class="opacity-0">Reset</span><button type="button" phx-click="clear_filters" class="btn btn-ghost btn-xs text-error p-0"><.icon name="hero-x-circle" class="size-4" /></button></div></th>
               </tr>
             </thead>
-            <tbody id="transactions" phx-update="stream">
+          </table>
+        </form>
+
+        <table class="table table-zebra w-full text-xs border-t border-base-300">
+          <tbody id="transactions" phx-update="stream">
               <tr :for={{id, transaction} <- @streams.transactions} id={id} class="hover group border-b border-base-200">
                 <td class="whitespace-nowrap">
                   <div class="flex flex-col">
@@ -55,7 +80,7 @@ defmodule CashLensWeb.TransactionLive.Index do
                 </td>
                 <td>
                   <div class="flex items-center gap-1">
-                    <form phx-change="update_category" class="m-0 p-0">
+                    <form phx-change="update_category" class="m-0 p-0" phx-click-stop>
                       <input type="hidden" name="transaction_id" value={transaction.id} />
                       <select name="category_id" class={["select select-bordered select-xs w-36 max-w-xs font-medium uppercase text-[10px]", is_nil(transaction.category_id) && "select-warning bg-warning/10 text-warning-content"]}>
                         <option value="">Pendente</option>
@@ -83,7 +108,6 @@ defmodule CashLensWeb.TransactionLive.Index do
               </tr>
             </tbody>
           </table>
-        </form>
         
         <!-- Sentinela para o Infinite Scroll -->
         <div id="infinite-scroll-sentinel" phx-hook="InfiniteScroll" class="py-4 flex justify-center">
@@ -93,34 +117,48 @@ defmodule CashLensWeb.TransactionLive.Index do
       </div>
     </div>
 
-    <!-- Modais omitidos para brevidade mas permanecem no arquivo real -->
+    <!-- Modal de Importação em Lote -->
     <.modal :if={@show_import_modal} id="import-modal" show on_cancel={JS.push("close_modal")}>
       <div class="p-2">
         <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter text-primary">Importar Extratos</h2>
+        
         <form id="upload-form" phx-submit="save_import" phx-change="validate_import" class="space-y-8">
           <div class="form-control w-full">
             <label class="label mb-2"><span class="label-text font-black text-lg">1. Selecione os Arquivos</span></label>
+            
             <div class="flex flex-col gap-4">
+              <!-- Dropzone Visual -->
               <div class="flex items-center justify-center border-4 border-dashed border-base-300 rounded-3xl py-10 bg-base-200/30 hover:bg-base-200 transition-all cursor-pointer relative" phx-drop-target={@uploads.statement.ref}>
                 <label class="cursor-pointer text-center w-full">
                   <div :if={Enum.empty?(@uploads.statement.entries)} class="space-y-2">
                     <.icon name="hero-folder-plus" class="size-12 opacity-10 mx-auto" />
                     <p class="text-xs opacity-40 font-bold uppercase">Clique nos botões abaixo ou arraste</p>
                     <div class="flex justify-center gap-2 mt-4">
-                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "input[data-phx-hook='Phoenix.LiveFileUpload']")}>Selecionar Arquivos</button>
-                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "#file-input-dir")}>Selecionar Pasta</button>
+                      <!-- Botões que disparam os inputs ocultos via JS customizado -->
+                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "input[data-phx-hook='Phoenix.LiveFileUpload']")}>
+                        Selecionar Arquivos
+                      </button>
+                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "#file-input-dir")}>
+                        Selecionar Pasta
+                      </button>
                     </div>
                   </div>
+                  
+                  <!-- Inputs Reais (Ocultos) -->
                   <div class="hidden">
                     <.live_file_input upload={@uploads.statement} />
                     <input type="file" id="file-input-dir" webkitdirectory directory phx-hook="DirectoryUpload" />
                   </div>
+
+                  <!-- Lista de Selecionados -->
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 px-4 max-h-48 overflow-y-auto">
                     <%= for entry <- @uploads.statement.entries do %>
                       <div class="flex items-center gap-2 bg-primary/5 text-primary p-2 rounded-xl text-[10px] border border-primary/10">
                         <.icon name="hero-check-circle" class="size-4" />
                         <span class="flex-1 text-left font-bold truncate">{entry.client_name}</span>
-                        <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="btn btn-ghost btn-xs min-h-0 h-6"><.icon name="hero-x-mark" class="size-3" /></button>
+                        <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="btn btn-ghost btn-xs min-h-0 h-6">
+                          <.icon name="hero-x-mark" class="size-3" />
+                        </button>
                       </div>
                     <% end %>
                   </div>
@@ -128,6 +166,8 @@ defmodule CashLensWeb.TransactionLive.Index do
               </div>
             </div>
           </div>
+
+          <!-- Seleção de Conta -->
           <div :if={Enum.any?(@uploads.statement.entries)} class="form-control w-full space-y-4 animate-in slide-in-from-bottom-4">
             <label class="label"><span class="label-text font-black text-lg">2. Para qual conta vão estes arquivos?</span></label>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -142,15 +182,18 @@ defmodule CashLensWeb.TransactionLive.Index do
               <% end %>
             </div>
           </div>
+
           <div :if={Enum.any?(@uploads.statement.entries)} class="flex justify-end pt-6 border-t border-base-200">
             <button type="submit" class="btn btn-primary btn-lg w-full rounded-2xl shadow-xl shadow-primary/20" phx-disable-with="Processando lote...">
-              <.icon name="hero-bolt" class="size-5 mr-2" /> Finalizar e Importar Tudo
+              <.icon name="hero-bolt" class="size-5 mr-2" />
+              Finalizar e Importar Tudo
             </button>
           </div>
         </form>
       </div>
     </.modal>
 
+    <!-- Modal de Confirmação -->
     <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
       <div class="p-4 text-center">
         <div class="w-20 h-20 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
@@ -207,7 +250,6 @@ defmodule CashLensWeb.TransactionLive.Index do
     end)
   end
 
-  # Outros eventos permanecem os mesmos...
   @impl true
   def handle_event("open_import", _params, socket), do: {:noreply, assign(socket, :show_import_modal, true)}
   @impl true
@@ -250,7 +292,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_event("filter", params, socket) do
+  def handle_event("apply_filters", params, socket) do
     {:noreply,
      socket
      |> assign(:filters, params)
@@ -318,7 +360,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_import_modal, false)
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
-     |> put_flash(:info, "Importação concluída e balanços atualizados!")
+     |> put_flash(:info, "Importação concluída!")
      |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
   end
 end

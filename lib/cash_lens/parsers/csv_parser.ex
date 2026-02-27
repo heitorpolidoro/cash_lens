@@ -24,13 +24,13 @@ defmodule CashLens.Parsers.CSVParser do
     if Decimal.eq?(amount_decimal, 0) or String.contains?(description_up, ["SALDO", "S A L D O"]) do
       nil
     else
-      # Extract better date and time from description if available
-      {final_date, final_time} = extract_metadata(description, parse_date(date))
+      # Extract metadata and CLEAN description
+      {final_date, final_time, clean_description} = extract_metadata_and_clean(description, parse_date(date))
 
       %{
         date: final_date,
         time: final_time,
-        description: description,
+        description: clean_description,
         amount: amount_decimal
       }
     end
@@ -38,24 +38,24 @@ defmodule CashLens.Parsers.CSVParser do
 
   # Nubank: Data, Valor, Identificador, Descrição
   defp parse_row([date, amount, _id, description | _], :nubank) do
-    {final_date, final_time} = extract_metadata(description, parse_date(date))
+    {final_date, final_time, clean_description} = extract_metadata_and_clean(description, parse_date(date))
     
     %{
       date: final_date,
       time: final_time,
-      description: description,
+      description: clean_description,
       amount: parse_amount(amount)
     }
   end
 
   # Generic: Date, Description, Amount
   defp parse_row([date, description, amount | _rest], :generic) do
-    {final_date, final_time} = extract_metadata(description, parse_date(date))
+    {final_date, final_time, clean_description} = extract_metadata_and_clean(description, parse_date(date))
 
     %{
       date: final_date,
       time: final_time,
-      description: description,
+      description: clean_description,
       amount: parse_amount(amount)
     }
   end
@@ -63,19 +63,17 @@ defmodule CashLens.Parsers.CSVParser do
   defp parse_row(_, _), do: nil
 
   @doc """
-  Extracts date (DD/MM) and time (HH:MM) from a string if they exist.
-  Returns {date, time}.
+  Extracts date (DD/MM) and time (HH:MM) from a string and returns a cleaned version of the string.
+  Returns {date, time, clean_text}.
   """
-  def extract_metadata(text, base_date) do
-    # Regex for DD/MM
+  def extract_metadata_and_clean(text, base_date) do
+    # Regex for DD/MM and HH:MM
     date_match = Regex.run(~r/(\d{2})\/(\d{2})/, text)
-    # Regex for HH:MM
     time_match = Regex.run(~r/(\d{2}):(\d{2})/, text)
 
     final_date = 
       case date_match do
         [_, d, m] -> 
-          # Use current year or year from base_date
           Date.new!(base_date.year, String.to_integer(m), String.to_integer(d))
         _ -> base_date
       end
@@ -90,7 +88,17 @@ defmodule CashLens.Parsers.CSVParser do
         _ -> nil
       end
 
-    {final_date, final_time}
+    # CLEANING: Remove date, time, and common separators that become trailing/leading
+    clean_text = 
+      text
+      |> String.replace(~r/\d{2}\/\d{2}/, "")   # Remove DD/MM
+      |> String.replace(~r/\d{2}:\d{2}/, "")   # Remove HH:MM
+      |> String.replace(~r/^[\s\-\.]+/, "")    # Remove leading dashes/dots/spaces
+      |> String.replace(~r/[\s\-\.]+$/, "")    # Remove trailing dashes/dots/spaces
+      |> String.replace(~r/\s+/, " ")          # Normalize spaces
+      |> String.trim()
+
+    {final_date, final_time, clean_text}
   end
 
   defp parse_date(date_string) do
@@ -98,7 +106,6 @@ defmodule CashLens.Parsers.CSVParser do
     case Date.from_iso8601(date_string) do
       {:ok, date} -> date
       _ ->
-        # Try DD/MM/YYYY
         case String.split(date_string, "/") do
           [d, m, y] ->
             try do

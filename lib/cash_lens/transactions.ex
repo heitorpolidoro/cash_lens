@@ -21,6 +21,7 @@ defmodule CashLens.Transactions do
   Returns the list of transactions based on filters and pagination.
   """
   def list_transactions(filters \\ %{}, page \\ 1, page_size \\ 50) do
+    IO.inspect(filters, label: "Executing list_transactions with filters")
     offset = (page - 1) * page_size
 
     Transaction
@@ -57,6 +58,7 @@ defmodule CashLens.Transactions do
 
   defp filter_by_category(query, nil), do: query
   defp filter_by_category(query, ""), do: query
+  defp filter_by_category(query, "nil"), do: where(query, [t], is_nil(t.category_id))
   defp filter_by_category(query, category_id), do: where(query, category_id: ^category_id)
 
   defp filter_by_description(query, nil), do: query
