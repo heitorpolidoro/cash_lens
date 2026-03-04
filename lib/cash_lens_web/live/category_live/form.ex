@@ -7,56 +7,89 @@ defmodule CashLensWeb.CategoryLive.Form do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <div class="max-w-2xl mx-auto py-8">
       <.header>
         {@page_title}
-        <:subtitle>Use this form to manage category records in your database.</:subtitle>
+        <:subtitle>Organize sua hierarquia financeira e defina regras de identificação.</:subtitle>
       </.header>
 
-      <.form for={@form} id="category-form" phx-change="validate" phx-submit="save">
-        <.input field={@form[:name]} type="text" label="Name" />
-        <.input field={@form[:slug]} type="text" label="Slug" />
-        <footer>
-          <.button phx-disable-with="Saving..." variant="primary">Save Category</.button>
-          <.button navigate={return_path(@return_to, @category)}>Cancel</.button>
-        </footer>
+      <.form :let={f} for={@form} id="category-form" phx-change="validate" phx-submit="save" class="space-y-8 mt-8">
+        <div class="space-y-6 bg-base-100 p-8 rounded-3xl border border-base-300 shadow-sm">
+          <div class="grid grid-cols-1 gap-6">
+            <.input field={f[:name]} type="text" label="Nome da Categoria" placeholder="Ex: Moradia, Netflix..." required />
+          </div>
+
+          <div class="divider">Hierarquia</div>
+
+          <.input
+            field={f[:parent_id]}
+            type="select"
+            label="Categoria Pai (Opcional)"
+            options={Enum.map(@parent_options, &{CashLens.Categories.Category.full_name(&1), &1.id})}
+            prompt="Nenhuma (Categoria Principal)"
+          />
+
+          <div class="divider">Inteligência (Auto-Categorização)</div>
+
+          <.input
+            field={f[:keywords]}
+            type="textarea"
+            label="Palavras-chave (Separadas por vírgula)"
+            placeholder="Ex: UBER, 99APP, TAXI..."
+            rows="3"
+          />
+          <p class="text-[10px] opacity-50 italic">Sempre que uma transação contiver uma dessas palavras, ela será categorizada automaticamente aqui.</p>
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <.button phx-disable-with="Salvando..." class="w-full btn-primary btn-lg shadow-xl shadow-primary/20 rounded-2xl">
+            <.icon name="hero-check-circle" class="size-5 mr-2" />
+            Salvar Categoria
+          </.button>
+
+          <.link navigate={~p"/categories"} class="btn btn-ghost btn-sm">
+            <.icon name="hero-arrow-left" class="size-3 mr-1" /> Voltar para lista
+          </.link>
+        </div>
       </.form>
-    </Layouts.app>
+    </div>
     """
   end
 
   @impl true
   def mount(params, _session, socket) do
+    all_categories = Categories.list_categories()
+    
     {:ok,
      socket
-     |> assign(:return_to, return_to(params["return_to"]))
+     |> assign(:parent_options, all_categories)
      |> apply_action(socket.assigns.live_action, params)}
   end
 
-  defp return_to("show"), do: "show"
-  defp return_to(_), do: "index"
-
   defp apply_action(socket, :edit, %{"id" => id}) do
     category = Categories.get_category!(id)
+    # Filter out current category from parents to avoid self-reference
+    parents = Enum.reject(socket.assigns.parent_options, & &1.id == id)
 
     socket
-    |> assign(:page_title, "Edit Category")
+    |> assign(:page_title, "Editar Categoria")
     |> assign(:category, category)
+    |> assign(:parent_options, parents)
     |> assign(:form, to_form(Categories.change_category(category)))
   end
 
   defp apply_action(socket, :new, _params) do
-    category = %Category{}
-
     socket
-    |> assign(:page_title, "New Category")
-    |> assign(:category, category)
-    |> assign(:form, to_form(Categories.change_category(category)))
+    |> assign(:page_title, "Nova Categoria")
+    |> assign(:category, %Category{})
+    |> assign(:form, to_form(Categories.change_category(%Category{})))
   end
 
   @impl true
   def handle_event("validate", %{"category" => category_params}, socket) do
-    changeset = Categories.change_category(socket.assigns.category, category_params)
+    # Auto-generate slug from name if empty
+    params = maybe_generate_slug(category_params)
+    changeset = Categories.change_category(socket.assigns.category, params)
     {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
   end
 
@@ -66,11 +99,11 @@ defmodule CashLensWeb.CategoryLive.Form do
 
   defp save_category(socket, :edit, category_params) do
     case Categories.update_category(socket.assigns.category, category_params) do
-      {:ok, category} ->
+      {:ok, _category} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Category updated successfully")
-         |> push_navigate(to: return_path(socket.assigns.return_to, category))}
+         |> put_flash(:info, "Categoria atualizada!")
+         |> push_navigate(to: ~p"/categories")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
@@ -79,17 +112,20 @@ defmodule CashLensWeb.CategoryLive.Form do
 
   defp save_category(socket, :new, category_params) do
     case Categories.create_category(category_params) do
-      {:ok, category} ->
+      {:ok, _category} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Category created successfully")
-         |> push_navigate(to: return_path(socket.assigns.return_to, category))}
+         |> put_flash(:info, "Categoria criada com sucesso!")
+         |> push_navigate(to: ~p"/categories")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
     end
   end
 
-  defp return_path("index", _category), do: ~p"/categories"
-  defp return_path("show", category), do: ~p"/categories/#{category}"
+  defp maybe_generate_slug(%{"name" => name, "slug" => ""} = params) when name != "" do
+    slug = name |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "_")
+    Map.put(params, "slug", slug)
+  end
+  defp maybe_generate_slug(params), do: params
 end

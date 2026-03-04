@@ -13,6 +13,9 @@ defmodule CashLensWeb.TransactionLive.Index do
       <.header>
         Transações
         <:actions>
+          <button type="button" phx-click="auto_categorize_all" class="btn btn-outline btn-primary">
+            <.icon name="hero-sparkles" class="size-4 mr-1" /> Auto-Categorizar
+          </button>
           <button type="button" phx-click="confirm_delete_all" class="btn btn-error btn-outline">
             <.icon name="hero-trash" class="size-4 mr-1" /> Limpar Tudo
           </button>
@@ -29,21 +32,25 @@ defmodule CashLensWeb.TransactionLive.Index do
 
       <!-- Tabela com Filtros -->
       <div class="overflow-x-auto bg-base-100 rounded-2xl border border-base-300 shadow-sm">
-        <form id="transaction-filters" phx-change="apply_filters">
-          <table class="table table-zebra w-full text-xs">
-            <thead class="bg-base-200/50">
+        <table class="table table-zebra w-full text-xs">
+          <thead class="bg-base-200/50">
+            <form id="transaction-filters" phx-change="apply_filters" class="m-0 p-0">
               <tr>
                 <th class="w-40"><div class="flex flex-col gap-1"><span>Data</span><input type="date" name="date" value={@filters["date"]} class="input input-bordered input-xs font-normal w-full" /></div></th>
                 <th><div class="flex flex-col gap-1"><span>Descrição</span><input type="text" name="search" value={@filters["search"]} placeholder="Buscar..." class="input input-bordered input-xs font-normal w-full" phx-debounce="300" /></div></th>
                 <th class="w-32 text-right"><div class="flex flex-col gap-1"><span>Valor</span><input type="number" name="amount" value={@filters["amount"]} placeholder="0.00" step="any" class="input input-bordered input-xs font-normal w-full text-right" phx-debounce="300" /></div></th>
                 <th class="w-40">
                   <div class="flex flex-col gap-1">
-                    <span>Categoria</span>
+                    <div class="flex items-center justify-between pr-2">
+                      <span>Categoria</span>
+                      <button type="button" phx-click="toggle_pending" class={["btn btn-ghost btn-xs p-0 hover:bg-transparent", @filters["category_id"] == "nil" && "text-error animate-pulse"]} title="Filtrar pendentes">
+                        <.icon name="hero-exclamation-triangle" class="size-4" />
+                      </button>
+                    </div>
                     <select name="category_id" class="select select-bordered select-xs font-normal w-full">
                       <option value="">Todas</option>
-                      <option value="nil" selected={@filters["category_id"] == "nil"}>Pendente</option>
                       <%= for category <- @categories do %>
-                        <option value={category.id} selected={@filters["category_id"] == category.id}>{category.name}</option>
+                        <option value={category.id} selected={@filters["category_id"] == category.id}>{CashLens.Categories.Category.full_name(category)}</option>
                       <% end %>
                     </select>
                   </div>
@@ -61,104 +68,92 @@ defmodule CashLensWeb.TransactionLive.Index do
                 </th>
                 <th class="w-16"><div class="flex flex-col gap-1 items-center"><span class="opacity-0">Reset</span><button type="button" phx-click="clear_filters" class="btn btn-ghost btn-xs text-error p-0"><.icon name="hero-x-circle" class="size-4" /></button></div></th>
               </tr>
-            </thead>
-          </table>
-        </form>
+            </form>
+          </thead>
+        </table>
 
         <table class="table table-zebra w-full text-xs border-t border-base-300">
           <tbody id="transactions" phx-update="stream">
-              <tr :for={{id, transaction} <- @streams.transactions} id={id} class="hover group border-b border-base-200">
-                <td class="whitespace-nowrap">
-                  <div class="flex flex-col">
-                    <span class="font-medium text-base-content">{format_date(transaction.date)}</span>
-                    <span :if={transaction.time} class="text-[10px] opacity-50">{format_time(transaction.time)}</span>
-                  </div>
-                </td>
-                <td class="max-w-md truncate">{transaction.description}</td>
-                <td class={"text-right font-bold #{if Decimal.lt?(transaction.amount, 0), do: "text-error", else: "text-success"}"}>
-                  {format_currency(transaction.amount)}
-                </td>
-                <td>
-                  <div class="flex items-center gap-1">
-                    <form phx-change="update_category" class="m-0 p-0" phx-click-stop>
-                      <input type="hidden" name="transaction_id" value={transaction.id} />
-                      <select name="category_id" class={["select select-bordered select-xs w-36 max-w-xs font-medium uppercase text-[10px]", is_nil(transaction.category_id) && "select-warning bg-warning/10 text-warning-content"]}>
-                        <option value="">Pendente</option>
-                        <%= for category <- @categories do %>
-                          <option value={category.id} selected={transaction.category_id == category.id}>{category.name}</option>
-                        <% end %>
-                      </select>
-                    </form>
-                    <%= if transaction.category && transaction.category.slug == "transfer" do %>
-                      <%= if transaction.transfer_key do %>
-                        <.icon name="hero-link" class="size-3 text-primary" />
-                      <% else %>
-                        <.icon name="hero-exclamation-triangle" class="size-3 text-warning" />
+            <tr :for={{id, transaction} <- @streams.transactions} id={id} class="hover group border-b border-base-200">
+              <td class="whitespace-nowrap w-40">
+                <div class="flex flex-col pl-4">
+                  <span class="font-medium text-base-content">{format_date(transaction.date)}</span>
+                  <span :if={transaction.time} class="text-[10px] opacity-50">{format_time(transaction.time)}</span>
+                </div>
+              </td>
+              <td class="max-w-md py-2 px-4">
+                <div class="leading-relaxed">{transaction.description}</div>
+              </td>
+              <td class={"w-32 text-right font-bold #{if Decimal.lt?(transaction.amount, 0), do: "text-error", else: "text-success"}"}>
+                {format_currency(transaction.amount)}
+              </td>
+              <td class="w-40">
+                <div class="flex items-center gap-1">
+                  <form phx-change="update_category" class="m-0 p-0" phx-click-stop>
+                    <input type="hidden" name="transaction_id" value={transaction.id} />
+                    <select name="category_id" class={["select select-bordered select-xs w-36 font-bold uppercase text-[10px]", is_nil(transaction.category_id) && "bg-warning text-warning-content border-warning/50"]}>
+                      <option value="">Pendente</option>
+                      <option value="new" class="font-bold text-primary font-black">+ Nova Categoria...</option>
+                      <%= for category <- @categories do %>
+                        <option value={category.id} selected={transaction.category_id == category.id}>{CashLens.Categories.Category.full_name(category)}</option>
                       <% end %>
+                    </select>
+                  </form>
+                  <%= if transaction.category && transaction.category.slug == "transfer" do %>
+                    <%= if transaction.transfer_key do %>
+                      <.icon name="hero-link" class="size-3 text-primary" />
+                    <% else %>
+                      <.icon name="hero-exclamation-triangle" class="size-3 text-warning" />
                     <% end %>
-                  </div>
-                </td>
-                <td class="text-xs opacity-60">{if transaction.account, do: transaction.account.name, else: "..."}</td>
-                <td class="text-right">
-                  <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <.link navigate={~p"/transactions/#{transaction}/edit"} class="btn btn-ghost btn-xs px-1" phx-click-stop><.icon name="hero-pencil" class="size-3" /></.link>
-                    <button type="button" phx-click="confirm_delete" phx-value-id={transaction.id} phx-click-stop class="btn btn-ghost btn-xs text-error px-1"><.icon name="hero-trash" class="size-3" /></button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  <% end %>
+                </div>
+              </td>
+              <td class="w-40 text-xs opacity-60 px-4">{if transaction.account, do: transaction.account.name, else: "..."}</td>
+              <td class="w-16 text-right pr-4">
+                <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <.link navigate={~p"/transactions/#{transaction}/edit"} class="btn btn-ghost btn-xs px-1" phx-click-stop><.icon name="hero-pencil" class="size-3" /></.link>
+                  <button type="button" phx-click="confirm_delete" phx-value-id={transaction.id} phx-click-stop class="btn btn-ghost btn-xs text-error px-1"><.icon name="hero-trash" class="size-3" /></button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
         
-        <!-- Sentinela para o Infinite Scroll -->
-        <div id="infinite-scroll-sentinel" phx-hook="InfiniteScroll" class="py-4 flex justify-center">
+        <div id="infinite-scroll-sentinel" phx-hook="InfiniteScroll" class="py-4 flex justify-center border-t border-base-200">
           <div :if={not @end_of_list?} class="loading loading-spinner loading-sm text-primary opacity-20"></div>
           <p :if={@end_of_list?} class="text-[10px] uppercase font-bold opacity-20">Fim da lista</p>
         </div>
       </div>
     </div>
 
-    <!-- Modal de Importação em Lote -->
+    <!-- Modal de Importação -->
     <.modal :if={@show_import_modal} id="import-modal" show on_cancel={JS.push("close_modal")}>
       <div class="p-2">
         <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter text-primary">Importar Extratos</h2>
-        
         <form id="upload-form" phx-submit="save_import" phx-change="validate_import" class="space-y-8">
           <div class="form-control w-full">
             <label class="label mb-2"><span class="label-text font-black text-lg">1. Selecione os Arquivos</span></label>
-            
             <div class="flex flex-col gap-4">
-              <!-- Dropzone Visual -->
               <div class="flex items-center justify-center border-4 border-dashed border-base-300 rounded-3xl py-10 bg-base-200/30 hover:bg-base-200 transition-all cursor-pointer relative" phx-drop-target={@uploads.statement.ref}>
                 <label class="cursor-pointer text-center w-full">
                   <div :if={Enum.empty?(@uploads.statement.entries)} class="space-y-2">
                     <.icon name="hero-folder-plus" class="size-12 opacity-10 mx-auto" />
                     <p class="text-xs opacity-40 font-bold uppercase">Clique nos botões abaixo ou arraste</p>
                     <div class="flex justify-center gap-2 mt-4">
-                      <!-- Botões que disparam os inputs ocultos via JS customizado -->
-                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "input[data-phx-hook='Phoenix.LiveFileUpload']")}>
-                        Selecionar Arquivos
-                      </button>
-                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "#file-input-dir")}>
-                        Selecionar Pasta
-                      </button>
+                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "input[data-phx-hook='Phoenix.LiveFileUpload']")}>Selecionar Arquivos</button>
+                      <button type="button" class="btn btn-sm btn-outline border-base-300" phx-click={JS.dispatch("click", to: "#file-input-dir")}>Selecionar Pasta</button>
                     </div>
                   </div>
-                  
-                  <!-- Inputs Reais (Ocultos) -->
                   <div class="hidden">
                     <.live_file_input upload={@uploads.statement} />
                     <input type="file" id="file-input-dir" webkitdirectory directory phx-hook="DirectoryUpload" />
                   </div>
-
-                  <!-- Lista de Selecionados -->
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 px-4 max-h-48 overflow-y-auto">
                     <%= for entry <- @uploads.statement.entries do %>
                       <div class="flex items-center gap-2 bg-primary/5 text-primary p-2 rounded-xl text-[10px] border border-primary/10">
                         <.icon name="hero-check-circle" class="size-4" />
                         <span class="flex-1 text-left font-bold truncate">{entry.client_name}</span>
-                        <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="btn btn-ghost btn-xs min-h-0 h-6">
-                          <.icon name="hero-x-mark" class="size-3" />
-                        </button>
+                        <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref} class="btn btn-ghost btn-xs min-h-0 h-6"><.icon name="hero-x-mark" class="size-3" /></button>
                       </div>
                     <% end %>
                   </div>
@@ -166,8 +161,6 @@ defmodule CashLensWeb.TransactionLive.Index do
               </div>
             </div>
           </div>
-
-          <!-- Seleção de Conta -->
           <div :if={Enum.any?(@uploads.statement.entries)} class="form-control w-full space-y-4 animate-in slide-in-from-bottom-4">
             <label class="label"><span class="label-text font-black text-lg">2. Para qual conta vão estes arquivos?</span></label>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -182,18 +175,16 @@ defmodule CashLensWeb.TransactionLive.Index do
               <% end %>
             </div>
           </div>
-
           <div :if={Enum.any?(@uploads.statement.entries)} class="flex justify-end pt-6 border-t border-base-200">
             <button type="submit" class="btn btn-primary btn-lg w-full rounded-2xl shadow-xl shadow-primary/20" phx-disable-with="Processando lote...">
-              <.icon name="hero-bolt" class="size-5 mr-2" />
-              Finalizar e Importar Tudo
+              <.icon name="hero-bolt" class="size-5 mr-2" /> Finalizar e Importar Tudo
             </button>
           </div>
         </form>
       </div>
     </.modal>
 
-    <!-- Modal de Confirmação -->
+    <!-- Modal de Confirmação de Exclusão -->
     <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
       <div class="p-4 text-center">
         <div class="w-20 h-20 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
@@ -207,6 +198,63 @@ defmodule CashLensWeb.TransactionLive.Index do
         </div>
       </div>
     </.modal>
+
+    <!-- Modal de Criação Rápida de Categoria -->
+    <.modal :if={@show_quick_category_modal} id="quick-category-modal" show on_cancel={JS.push("close_modal")}>
+      <div class="p-2">
+        <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter text-primary">Nova Categoria</h2>
+        <.form :let={f} for={@category_form} id="quick-category-form" phx-submit="save_quick_category" class="space-y-6">
+          <div class="space-y-4">
+            <.input field={f[:name]} type="text" label="Nome da Categoria" placeholder="Ex: Netflix, Mercado..." required />
+            <.input
+              field={f[:parent_id]}
+              type="select"
+              label="Vincular a uma Categoria Pai? (Opcional)"
+              options={Enum.map(@categories, &{CashLens.Categories.Category.full_name(&1), &1.id})}
+              prompt="Nenhuma (Categoria Principal)"
+            />
+          </div>
+          <div class="flex justify-end pt-4">
+            <button type="submit" class="btn btn-primary btn-lg w-full rounded-2xl shadow-xl shadow-primary/20" phx-disable-with="Criando...">
+              Criar e Aplicar
+            </button>
+          </div>
+        </.form>
+      </div>
+    </.modal>
+
+    <!-- Modal de Aplicação em Massa (Same Description) -->
+    <.modal :if={@bulk_confirmation} id="bulk-modal" show on_cancel={JS.push("close_modal")}>
+      <div class="p-2">
+        <div class="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-6">
+          <.icon name="hero-rectangle-stack" class="size-8" />
+        </div>
+        <h2 class="text-2xl font-black mb-2">Aplicar em massa?</h2>
+        <p class="text-base-content/60 mb-6 text-sm">
+          Encontrei mais <strong>{length(@bulk_confirmation.items)}</strong> transações com a mesma descrição ("{@bulk_confirmation.description}").
+          Deseja aplicar a categoria <strong>{@bulk_confirmation.category_name}</strong> em todas elas?
+        </p>
+        
+        <div class="max-h-48 overflow-y-auto mb-8 border border-base-200 rounded-xl">
+          <table class="table table-xs w-full">
+            <tbody class="opacity-70">
+              <%= for item <- @bulk_confirmation.items do %>
+                <tr>
+                  <td class="font-bold">{format_date(item.date)}</td>
+                  <td>{item.description}</td>
+                  <td class="text-right">{format_currency(item.amount)}</td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button phx-click="apply_bulk_category" class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-xl shadow-primary/20">Sim, aplicar em todas</button>
+          <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">Agora não</button>
+        </div>
+      </div>
+    </.modal>
     """
   end
 
@@ -217,6 +265,10 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:page_title, "Transações")
      |> assign(:show_import_modal, false)
+     |> assign(:show_quick_category_modal, false)
+     |> assign(:bulk_confirmation, nil)
+     |> assign(:pending_transaction_id, nil)
+     |> assign(:category_form, to_form(%{"name" => ""}))
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, accounts)
      |> assign(:import_accounts, Enum.filter(accounts, & &1.accepts_import))
@@ -229,33 +281,99 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_event("load-more", _params, socket) do
-    if socket.assigns.end_of_list? do
-      {:noreply, socket}
-    else
-      next_page = socket.assigns.page + 1
-      new_transactions = Transactions.list_transactions(socket.assigns.filters, next_page)
-      
-      {:noreply,
-       socket
-       |> assign(:page, next_page)
-       |> assign(:end_of_list?, Enum.empty?(new_transactions))
-       |> stream_insert_many(:transactions, new_transactions)}
+  def handle_event("open_import", _params, socket), do: {:noreply, assign(socket, :show_import_modal, true)}
+
+  @impl true
+  def handle_event("close_modal", _params, socket) do
+    {:noreply, socket |> assign(:show_import_modal, false) |> assign(:show_quick_category_modal, false) |> assign(:confirm_modal, nil) |> assign(:bulk_confirmation, nil)}
+  end
+
+  @impl true
+  def handle_event("cancel-upload", %{"ref" => ref}, socket), do: {:noreply, cancel_upload(socket, :statement, ref)}
+
+  @impl true
+  def handle_event("update_category", %{"transaction_id" => id, "category_id" => "new"}, socket) do
+    {:noreply, socket |> assign(:show_quick_category_modal, true) |> assign(:pending_transaction_id, id) |> assign(:category_form, to_form(%{"name" => ""}))}
+  end
+
+  @impl true
+  def handle_event("update_category", %{"transaction_id" => id, "category_id" => category_id}, socket) do
+    category_id = if category_id == "", do: nil, else: category_id
+    case Transactions.update_transaction_category(id, category_id) do
+      {:ok, updated_tx} ->
+        tx = Transactions.get_transaction!(updated_tx.id)
+        
+        # SEARCH FOR BULK ITEMS (same description, no category)
+        bulk_items = if category_id do
+          Transactions.list_transactions(%{"search" => tx.description, "category_id" => "nil"})
+          |> Enum.reject(& &1.id == tx.id)
+        else
+          []
+        end
+
+        socket = if Enum.any?(bulk_items) do
+          cat = Enum.find(socket.assigns.categories, & &1.id == category_id)
+          assign(socket, :bulk_confirmation, %{
+            items: bulk_items, 
+            category_id: category_id, 
+            category_name: cat.name,
+            description: tx.description
+          })
+        else
+          socket
+        end
+
+        if matches_filters?(tx, socket.assigns.filters) do
+          {:noreply, stream_insert(socket, :transactions, tx)}
+        else
+          {:noreply, stream_delete(socket, :transactions, tx)}
+        end
+      {:error, _} -> {:noreply, put_flash(socket, :error, "Falha ao atualizar")}
     end
   end
 
-  defp stream_insert_many(socket, stream_name, items) do
-    Enum.reduce(items, socket, fn item, acc ->
-      stream_insert(acc, stream_name, item)
+  @impl true
+  def handle_event("apply_bulk_category", _params, socket) do
+    %{items: items, category_id: category_id} = socket.assigns.bulk_confirmation
+    
+    Enum.each(items, fn item ->
+      Transactions.update_transaction_category(item.id, category_id)
     end)
+
+    {:noreply,
+     socket
+     |> assign(:bulk_confirmation, nil)
+     |> put_flash(:info, "Mais #{length(items)} transações foram categorizadas!")
+     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
   end
 
   @impl true
-  def handle_event("open_import", _params, socket), do: {:noreply, assign(socket, :show_import_modal, true)}
-  @impl true
-  def handle_event("close_modal", _params, socket), do: {:noreply, socket |> assign(:show_import_modal, false) |> assign(:confirm_modal, nil)}
-  @impl true
-  def handle_event("cancel-upload", %{"ref" => ref}, socket), do: {:noreply, cancel_upload(socket, :statement, ref)}
+  def handle_event("save_quick_category", %{"name" => name, "parent_id" => parent_id}, socket) do
+    slug = name |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "_")
+    parent_id = if parent_id == "", do: nil, else: parent_id
+    case Categories.create_category(%{name: name, slug: slug, parent_id: parent_id}) do
+      {:ok, category} ->
+        Transactions.update_transaction_category(socket.assigns.pending_transaction_id, category.id)
+        tx = Transactions.get_transaction!(socket.assigns.pending_transaction_id)
+        socket = socket |> assign(:show_quick_category_modal, false) |> assign(:categories, Categories.list_categories()) |> put_flash(:info, "Categoria criada!")
+        
+        # Trigger bulk search even after quick creation
+        bulk_items = Transactions.list_transactions(%{"search" => tx.description, "category_id" => "nil"}) |> Enum.reject(& &1.id == tx.id)
+        
+        socket = if Enum.any?(bulk_items) do
+          assign(socket, :bulk_confirmation, %{items: bulk_items, category_id: category.id, category_name: category.name, description: tx.description})
+        else
+          socket
+        end
+
+        if matches_filters?(tx, socket.assigns.filters) do
+          {:noreply, stream_insert(socket, :transactions, tx)}
+        else
+          {:noreply, stream_delete(socket, :transactions, tx)}
+        end
+      {:error, _} -> {:noreply, put_flash(socket, :error, "Erro ao criar categoria.")}
+    end
+  end
 
   @impl true
   def handle_event("confirm_delete_all", _params, socket) do
@@ -283,33 +401,41 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_event("update_category", %{"transaction_id" => id, "category_id" => category_id}, socket) do
-    category_id = if category_id == "", do: nil, else: category_id
-    case Transactions.update_transaction_category(id, category_id) do
-      {:ok, updated_tx} -> {:noreply, stream_insert(socket, :transactions, Transactions.get_transaction!(updated_tx.id))}
-      {:error, _} -> {:noreply, put_flash(socket, :error, "Falha ao atualizar")}
-    end
-  end
-
-  @impl true
   def handle_event("apply_filters", params, socket) do
-    {:noreply,
-     socket
-     |> assign(:filters, params)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> stream(:transactions, Transactions.list_transactions(params, 1), reset: true)}
+    {:noreply, socket |> assign(:filters, params) |> assign(:page, 1) |> assign(:end_of_list?, false) |> stream(:transactions, Transactions.list_transactions(params, 1), reset: true)}
   end
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
     filters = %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => ""}
+    {:noreply, socket |> assign(:filters, filters) |> assign(:page, 1) |> assign(:end_of_list?, false) |> stream(:transactions, Transactions.list_transactions(filters, 1), reset: true)}
+  end
+
+  @impl true
+  def handle_event("load-more", _params, socket) do
+    if socket.assigns.end_of_list? do
+      {:noreply, socket}
+    else
+      next_page = socket.assigns.page + 1
+      new_transactions = Transactions.list_transactions(socket.assigns.filters, next_page)
+      {:noreply, socket |> assign(:page, next_page) |> assign(:end_of_list?, Enum.empty?(new_transactions)) |> stream_insert_many(:transactions, new_transactions)}
+    end
+  end
+
+  @impl true
+  def handle_event("auto_categorize_all", _params, socket) do
+    Transactions.reapply_auto_categorization()
     {:noreply,
      socket
-     |> assign(:filters, filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> stream(:transactions, Transactions.list_transactions(filters, 1), reset: true)}
+     |> put_flash(:info, "Regras de categorização aplicadas com sucesso!")
+     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+  end
+
+  @impl true
+  def handle_event("toggle_pending", _params, socket) do
+    new_category_id = if socket.assigns.filters["category_id"] == "nil", do: "", else: "nil"
+    new_filters = Map.put(socket.assigns.filters, "category_id", new_category_id)
+    {:noreply, socket |> assign(:filters, new_filters) |> assign(:page, 1) |> assign(:end_of_list?, false) |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
   end
 
   @impl true
@@ -321,7 +447,6 @@ defmodule CashLensWeb.TransactionLive.Index do
       consume_uploaded_entries(socket, :statement, fn %{path: path}, entry ->
         content = File.read!(path)
         content = if String.valid?(content), do: content, else: :unicode.characters_to_binary(content, :latin1, :utf8)
-        
         case Ingestor.parse(content, entry.client_name) do
           {:error, reason} -> {:postpone, reason}
           transactions_data ->
@@ -351,9 +476,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     |> List.flatten()
     |> Enum.reduce(MapSet.new(), fn set, acc -> MapSet.union(acc, set) end)
     |> MapSet.to_list()
-    |> Enum.each(fn {acc_id, month, year} ->
-      CashLens.Accounting.calculate_monthly_balance(acc_id, year, month)
-    end)
+    |> Enum.each(fn {acc_id, month, year} -> CashLens.Accounting.calculate_monthly_balance(acc_id, year, month) end)
 
     {:noreply,
      socket
@@ -362,5 +485,21 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:end_of_list?, false)
      |> put_flash(:info, "Importação concluída!")
      |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+  end
+
+  # Helpers
+  defp matches_filters?(tx, filters) do
+    category_match = case filters["category_id"] do
+      "" -> true
+      "nil" -> is_nil(tx.category_id)
+      id -> tx.category_id == id
+    end
+    search_match = if filters["search"] == "", do: true, else: String.contains?(String.upcase(tx.description || ""), String.upcase(filters["search"]))
+    account_match = if filters["account_id"] == "", do: true, else: tx.account_id == filters["account_id"]
+    category_match && search_match && account_match
+  end
+
+  defp stream_insert_many(socket, stream_name, items) do
+    Enum.reduce(items, socket, fn item, acc -> stream_insert(acc, stream_name, item) end)
   end
 end

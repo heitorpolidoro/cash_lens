@@ -48,6 +48,8 @@ defmodule CashLensWeb.PageController do
       |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
 
     summary = Transactions.get_monthly_summary()
+    historical_categories = Transactions.get_historical_category_summary()
+    category_data = Jason.encode!(historical_categories)
 
     month_name = 
       summary.month 
@@ -61,7 +63,8 @@ defmodule CashLensWeb.PageController do
       monthly_expenses: summary.expenses,
       accounts: accounts_with_data,
       summary_month: month_name,
-      chart_data: chart_data
+      chart_data: chart_data,
+      category_data: category_data
     )
   end
 

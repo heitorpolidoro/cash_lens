@@ -10,9 +10,11 @@ defmodule CashLensWeb.Formatters do
   def format_currency(nil), do: "R$ 0,00"
   def format_currency(amount) do
     decimal = Decimal.cast(amount) |> elem(1) |> Decimal.round(2)
+    is_negative = Decimal.lt?(decimal, 0)
+    abs_decimal = Decimal.abs(decimal)
     
     {int_part, frac_part} = 
-      decimal
+      abs_decimal
       |> Decimal.to_string(:normal)
       |> String.split(".")
       |> case do
@@ -28,7 +30,8 @@ defmodule CashLensWeb.Formatters do
       |> Enum.join(".")
       |> String.reverse()
 
-    "R$ #{formatted_int},#{frac_part}"
+    prefix = if is_negative, do: "R$ -", else: "R$ "
+    "#{prefix}#{formatted_int},#{frac_part}"
   end
 
   @doc """

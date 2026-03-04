@@ -9,19 +9,9 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.Transaction
 
   @doc """
-  Returns the list of transactions.
-
-  ## Examples
-
-      iex> list_transactions()
-      [%Transaction{}, ...]
-
-  """
-  @doc """
   Returns the list of transactions based on filters and pagination.
   """
   def list_transactions(filters \\ %{}, page \\ 1, page_size \\ 50) do
-    IO.inspect(filters, label: "Executing list_transactions with filters")
     offset = (page - 1) * page_size
 
     Transaction
@@ -71,12 +61,11 @@ defmodule CashLens.Transactions do
   Lists the most recent transactions with a limit.
   """
   def list_recent_transactions(limit \\ 5) do
-    Repo.all(from t in Transaction, order_by: [desc: t.date, desc: t.inserted_at], limit: ^limit, preload: [:category])
+    Repo.all(from t in Transaction, order_by: [desc: t.date, desc: t.inserted_at], limit: ^limit, preload: [:category, :account])
   end
 
   @doc """
   Calculates monthly totals for income (positive) and expenses (negative), ignoring transfers.
-  Defaults to the current month, or the month of the last transaction if none in current.
   """
   def get_monthly_summary(date \\ nil) do
     target_date = date || get_latest_transaction_date() || Date.utc_today()
@@ -138,68 +127,68 @@ defmodule CashLens.Transactions do
     |> Enum.sort_by(fn %{year: y, month: m} -> {y, m} end)
   end
 
+  @doc """
+  Returns expense totals grouped by month and category, excluding transfers.
+  """
+  def get_historical_category_summary do
+    query = from t in Transaction,
+      join: c in assoc(t, :category),
+      left_join: p in assoc(c, :parent),
+      where: t.amount < 0,
+      where: c.slug not in ["initial_value", "transfer"],
+      select: %{
+        year: fragment("EXTRACT(YEAR FROM ?)", t.date), 
+        month: fragment("EXTRACT(MONTH FROM ?)", t.date), 
+        category_name: c.name,
+        parent_name: p.name,
+        total: t.amount
+      }
+
+    Repo.all(query)
+    |> Enum.group_by(fn item -> 
+      year = if is_struct(item.year, Decimal), do: Decimal.to_integer(item.year), else: item.year
+      month = if is_struct(item.month, Decimal), do: Decimal.to_integer(item.month), else: item.month
+      {year, month} 
+    end)
+    |> Enum.map(fn {{year, month}, items} ->
+      categories = 
+        items 
+        |> Enum.group_by(fn i -> i.parent_name || i.category_name end)
+        |> Enum.map(fn {name, txs} -> 
+          %{name: name, total: txs |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.total)) |> Decimal.abs()}
+        end)
+      
+      %{year: year, month: month, categories: categories}
+    end)
+    |> Enum.sort_by(fn %{year: y, month: m} -> {y, m} end)
+  end
+
   defp get_latest_transaction_date do
     Repo.one(from t in Transaction, select: max(t.date))
   end
 
   @doc """
   Gets a single transaction.
-
-  Raises `Ecto.NoResultsError` if the Transaction does not exist.
-
-  ## Examples
-
-      iex> get_transaction!(123)
-      %Transaction{}
-
-      iex> get_transaction!(456)
-      ** (Ecto.NoResultsError)
-
   """
-  def get_transaction!(id), do: Repo.get!(Transaction, id) |> Repo.preload(:category)
+  def get_transaction!(id), do: Repo.get!(Transaction, id) |> Repo.preload([:category, :account])
 
   @doc """
   Creates a transaction.
-
-  ## Examples
-
-      iex> create_transaction(%{field: value})
-      {:ok, %Transaction{}}
-
-      iex> create_transaction(%{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
   """
   def create_transaction(attrs) do
-    # Generate changeset to get the fingerprint
     changeset = Transaction.changeset(%Transaction{}, attrs)
 
-    # Insert with conflict handling
     case Repo.insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
-      {:ok, %Transaction{id: nil}} -> 
-        # This happens when on_conflict: :nothing triggers
-        {:ok, :duplicate}
-      
+      {:ok, %Transaction{id: nil}} -> {:ok, :duplicate}
       {:ok, transaction} -> 
         CashLens.Transactions.TransferMatcher.match_transfer(transaction)
         {:ok, transaction}
-      
-      {:error, changeset} -> 
-        {:error, changeset}
+      {:error, changeset} -> {:error, changeset}
     end
   end
 
   @doc """
   Updates a transaction.
-
-  ## Examples
-
-      iex> update_transaction(transaction, %{field: new_value})
-      {:ok, %Transaction{}}
-
-      iex> update_transaction(transaction, %{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
   """
   def update_transaction(%Transaction{} = transaction, attrs) do
     transaction
@@ -212,45 +201,33 @@ defmodule CashLens.Transactions do
   """
   def update_transaction_category(id, category_id) do
     transaction = get_transaction!(id)
-    
-    transaction
-    |> Ecto.Changeset.change(category_id: category_id)
-    |> Repo.update()
+    transaction |> Ecto.Changeset.change(category_id: category_id) |> Repo.update()
   end
 
   @doc """
   Deletes a transaction.
-
-  ## Examples
-
-      iex> delete_transaction(transaction)
-      {:ok, %Transaction{}}
-
-      iex> delete_transaction(transaction)
-      {:error, %Ecto.Changeset{}}
-
   """
-  def delete_transaction(%Transaction{} = transaction) do
-    Repo.delete(transaction)
-  end
+  def delete_transaction(%Transaction{} = transaction), do: Repo.delete(transaction)
 
   @doc """
   Deletes all transactions from the database.
   """
-  def delete_all_transactions do
-    Repo.delete_all(Transaction)
-  end
+  def delete_all_transactions, do: Repo.delete_all(Transaction)
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for tracking transaction changes.
-
-  ## Examples
-
-      iex> change_transaction(transaction)
-      %Ecto.Changeset{data: %Transaction{}}
-
+  Reapplies auto-categorization rules to all transactions without a category.
   """
-  def change_transaction(%Transaction{} = transaction, attrs \\ %{}) do
-    Transaction.changeset(transaction, attrs)
+  def reapply_auto_categorization do
+    query = from t in Transaction, where: is_nil(t.category_id)
+    pending_transactions = Repo.all(query)
+
+    Enum.each(pending_transactions, fn tx ->
+      updates = CashLens.Transactions.AutoCategorizer.categorize(tx)
+      if updates.category_id, do: update_transaction_category(tx.id, updates.category_id)
+    end)
+
+    :ok
   end
+
+  def change_transaction(%Transaction{} = transaction, attrs \\ %{}), do: Transaction.changeset(transaction, attrs)
 end

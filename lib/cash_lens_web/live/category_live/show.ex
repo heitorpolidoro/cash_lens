@@ -6,33 +6,39 @@ defmodule CashLensWeb.CategoryLive.Show do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <div class="max-w-xl mx-auto py-8">
       <.header>
-        Category {@category.id}
-        <:subtitle>This is a category record from your database.</:subtitle>
+        Categoria: {@category.name}
+        <:subtitle>Detalhes da classificação e regras associadas.</:subtitle>
         <:actions>
-          <.button navigate={~p"/categories"}>
-            <.icon name="hero-arrow-left" />
-          </.button>
-          <.button variant="primary" navigate={~p"/categories/#{@category}/edit?return_to=show"}>
-            <.icon name="hero-pencil-square" /> Edit category
-          </.button>
+          <.link navigate={~p"/categories/#{@category}/edit"}>
+            <.button variant="primary">Editar Categoria</.button>
+          </.link>
         </:actions>
       </.header>
 
       <.list>
-        <:item title="Name">{@category.name}</:item>
+        <:item title="Nome">{@category.name}</:item>
         <:item title="Slug">{@category.slug}</:item>
+        <:item title="Categoria Pai">
+          {if @category.parent, do: @category.parent.name, else: "Principal"}
+        </:item>
+        <:item title="Palavras-chave">
+          <span class="italic opacity-60">{@category.keywords || "Nenhuma regra definida"}</span>
+        </:item>
       </.list>
-    </Layouts.app>
+
+      <div class="mt-8">
+        <.link navigate={~p"/categories"} class="text-sm font-semibold">
+          <.icon name="hero-arrow-left" class="size-3 mr-1" /> Voltar para lista
+        </.link>
+      </div>
+    </div>
     """
   end
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    {:ok,
-     socket
-     |> assign(:page_title, "Show Category")
-     |> assign(:category, Categories.get_category!(id))}
+    {:ok, assign(socket, :category, Categories.get_category!(id) |> CashLens.Repo.preload(:parent))}
   end
 end

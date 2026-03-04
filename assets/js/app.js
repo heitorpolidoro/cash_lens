@@ -168,6 +168,79 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
   }
+
+  const catCtx = document.getElementById('categoryChart');
+  if (catCtx) {
+    const rawData = catCtx.getAttribute('data-categories');
+    if (rawData) {
+      const history = JSON.parse(rawData);
+      
+      // 1. Get all unique categories across all months
+      const allCategories = [...new Set(history.flatMap(h => h.categories.map(c => c.name)))];
+      
+      // 2. Map labels (months)
+      const labels = history.map(h => `${h.month}/${h.year}`);
+      
+      // 3. Prepare datasets (one per category)
+      const colors = [
+        'rgba(59, 130, 246, 0.7)', 'rgba(16, 185, 129, 0.7)', 'rgba(245, 158, 11, 0.7)',
+        'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(236, 72, 153, 0.7)',
+        'rgba(107, 114, 128, 0.7)', 'rgba(20, 184, 166, 0.7)', 'rgba(249, 115, 22, 0.7)'
+      ];
+
+      const datasets = allCategories.map((catName, index) => {
+        return {
+          label: catName,
+          data: history.map(h => {
+            const cat = h.categories.find(c => c.name === catName);
+            return cat ? parseFloat(cat.total) : 0;
+          }),
+          backgroundColor: colors[index % colors.length],
+          borderRadius: 4
+        };
+      });
+
+      new Chart(catCtx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              filter: function(tooltipItem) {
+                // Only show items with value > 0
+                return tooltipItem.raw > 0;
+              },
+              callbacks: {
+                label: function(context) {
+                  const val = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                  return `${context.dataset.label}: ${val}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { stacked: true },
+            y: { 
+              stacked: true,
+              ticks: {
+                callback: function(value) {
+                  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value);
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  }
 });
 
 // expose liveSocket on window for web console debug logs and latency simulation:

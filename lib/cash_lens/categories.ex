@@ -18,7 +18,10 @@ defmodule CashLens.Categories do
 
   """
   def list_categories do
-    Repo.all(Category)
+    Category
+    |> order_by([c], asc: c.name)
+    |> preload([:parent])
+    |> Repo.all()
   end
 
   @doc """
