@@ -67,6 +67,68 @@ const liveSocket = new LiveSocket("/live", Socket, {
       destroyed() {
         if (this.observer) this.observer.disconnect();
       }
+    },
+    CategoryAutocomplete: {
+      mounted() {
+        const input = this.el.querySelector('input');
+        const dropdown = this.el.querySelector('.dropdown-content');
+        const list = dropdown.querySelector('ul');
+        const txId = this.el.getAttribute('data-transaction-id');
+        const categories = JSON.parse(this.el.getAttribute('data-categories'));
+
+        const renderOptions = (filter = "") => {
+          // Keep only the "New Category" option initially
+          const newOpt = list.querySelector('.new-option');
+          list.innerHTML = '';
+          list.appendChild(newOpt);
+          
+          // Update the "New Category" text
+          const newLabel = filter ? `+ Criar "${filter}"...` : "+ Nova Categoria...";
+          newOpt.querySelector('span').innerText = newLabel;
+          newOpt.onclick = () => {
+            this.pushEvent("open_quick_category", { name: filter, id: txId });
+            dropdown.classList.add('hidden');
+          };
+
+          // Filter and sort categories
+          const filtered = categories
+            .filter(c => c.name.toLowerCase().includes(filter.toLowerCase()))
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+          filtered.forEach(cat => {
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.type = "button";
+            btn.innerText = cat.name;
+            btn.className = "text-[10px] py-1 font-medium";
+            btn.onclick = () => {
+              this.pushEvent("update_category", { transaction_id: txId, category_id: cat.id });
+              dropdown.classList.add('hidden');
+              input.value = "";
+              input.placeholder = cat.name;
+            };
+            li.appendChild(btn);
+            list.appendChild(li);
+          });
+        };
+
+        input.addEventListener("focus", () => {
+          dropdown.classList.remove('hidden');
+          renderOptions(input.value);
+        });
+
+        input.addEventListener("input", (e) => {
+          renderOptions(e.target.value);
+        });
+
+        // Close when clicking outside
+        document.addEventListener("click", (e) => {
+          if (!this.el.contains(e.target)) {
+            dropdown.classList.add('hidden');
+            input.value = "";
+          }
+        });
+      }
     }
   },
 })
@@ -183,25 +245,48 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // 3. Prepare datasets (one per category)
       const colors = [
-        'rgba(59, 130, 246, 0.7)', 'rgba(16, 185, 129, 0.7)', 'rgba(245, 158, 11, 0.7)',
-        'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(236, 72, 153, 0.7)',
-        'rgba(107, 114, 128, 0.7)', 'rgba(20, 184, 166, 0.7)', 'rgba(249, 115, 22, 0.7)'
+        'rgba(59, 130, 246, 0.7)',  // Blue
+        'rgba(16, 185, 129, 0.7)',  // Green
+        'rgba(245, 158, 11, 0.7)',  // Amber
+        'rgba(239, 68, 68, 0.7)',   // Red
+        'rgba(139, 92, 246, 0.7)',  // Violet
+        'rgba(236, 72, 153, 0.7)',  // Pink
+        'rgba(20, 184, 166, 0.7)',  // Teal
+        'rgba(249, 115, 22, 0.7)',  // Orange
+        'rgba(107, 114, 128, 0.7)', // Gray
+        'rgba(14, 165, 233, 0.7)',  // Sky
+        'rgba(168, 85, 247, 0.7)',  // Purple
+        'rgba(217, 70, 239, 0.7)',  // Fuchsia
+        'rgba(244, 63, 94, 0.7)',   // Rose
+        'rgba(101, 163, 13, 0.7)',  // Lime
+        'rgba(234, 179, 8, 0.7)',   // Yellow
+        'rgba(2, 132, 199, 0.7)',   // Light Blue
+        'rgba(71, 85, 105, 0.7)',   // Slate
+        'rgba(190, 18, 60, 0.7)',   // Crimson
+        'rgba(15, 118, 110, 0.7)',  // Dark Teal
+        'rgba(67, 56, 202, 0.7)'    // Indigo
       ];
 
       const datasets = allCategories.map((catName, index) => {
+        const color = colors[index % colors.length];
         return {
           label: catName,
           data: history.map(h => {
             const cat = h.categories.find(c => c.name === catName);
             return cat ? parseFloat(cat.total) : 0;
           }),
-          backgroundColor: colors[index % colors.length],
-          borderRadius: 4
+          borderColor: color,
+          backgroundColor: color.replace('0.7', '0.1'),
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          tension: 0.3,
+          fill: false
         };
       });
 
       new Chart(catCtx, {
-        type: 'bar',
+        type: 'line',
         data: {
           labels: labels,
           datasets: datasets
@@ -209,13 +294,21 @@ document.addEventListener("DOMContentLoaded", () => {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
           plugins: {
-            legend: { position: 'bottom' },
+            legend: { 
+              position: 'bottom',
+              labels: {
+                boxWidth: 12,
+                padding: 15,
+                font: { size: 10, weight: 'bold' }
+              }
+            },
             tooltip: {
-              mode: 'index',
-              intersect: false,
               filter: function(tooltipItem) {
-                // Only show items with value > 0
                 return tooltipItem.raw > 0;
               },
               callbacks: {
@@ -227,9 +320,9 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           },
           scales: {
-            x: { stacked: true },
+            x: { grid: { display: false } },
             y: { 
-              stacked: true,
+              beginAtZero: true,
               ticks: {
                 callback: function(value) {
                   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value);
