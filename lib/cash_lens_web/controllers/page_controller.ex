@@ -14,14 +14,14 @@ defmodule CashLensWeb.PageController do
     historical_summary = Transactions.get_historical_summary()
 
     historical = Enum.map(historical_balances, fn hb ->
-      summary = Enum.find(historical_summary, &(&1.year == hb.year and &1.month == hb.month)) || %{income: 0, expenses: 0, balance: 0}
+      summary = Enum.find(historical_summary, &(&1.year == hb.year and &1.month == hb.month)) || %{income: Decimal.new("0"), expenses: Decimal.new("0"), balance: Decimal.new("0")}
       %{
         year: hb.year,
         month: hb.month,
-        final_balance: hb.final_balance,
-        income: summary.income,
-        expenses: summary.expenses,
-        balance: summary.balance
+        final_balance: Decimal.to_float(hb.final_balance),
+        income: Decimal.to_float(summary.income),
+        expenses: Decimal.to_float(summary.expenses),
+        balance: Decimal.to_float(summary.balance)
       }
     end)
     
@@ -48,7 +48,15 @@ defmodule CashLensWeb.PageController do
       |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
 
     summary = Transactions.get_monthly_summary()
-    historical_categories = Transactions.get_historical_category_summary()
+    
+    historical_categories = 
+      Transactions.get_historical_category_summary()
+      |> Enum.map(fn month_data ->
+        Map.put(month_data, :categories, Enum.map(month_data.categories, fn cat -> 
+          Map.put(cat, :total, Decimal.to_float(cat.total))
+        end))
+      end)
+
     category_data = Jason.encode!(historical_categories)
 
     month_name = 
@@ -66,6 +74,10 @@ defmodule CashLensWeb.PageController do
       chart_data: chart_data,
       category_data: category_data
     )
+  end
+
+  def chrome_devtools(conn, _params) do
+    send_resp(conn, :no_content, "")
   end
 
   defp translate_month(month) do

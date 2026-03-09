@@ -18,6 +18,7 @@ defmodule CashLensWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    get "/.well-known/appspecific/com.chrome.devtools.json", PageController, :chrome_devtools
 
     live_session :default, layout: {CashLensWeb.Layouts, :app} do
       live "/accounts", AccountLive.Index, :index
