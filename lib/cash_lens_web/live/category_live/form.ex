@@ -31,6 +31,13 @@ defmodule CashLensWeb.CategoryLive.Form do
 
           <div class="divider">Inteligência (Auto-Categorização)</div>
 
+          <.input 
+            field={f[:default_reimbursable]} 
+            type="checkbox" 
+            label="Marcar automaticamente para reembolso?" 
+          />
+          <p class="text-[10px] opacity-50 px-1 -mt-4 mb-4">Transações desta categoria nascerão com status "Pendente" de reembolso.</p>
+
           <.input
             field={f[:keywords]}
             type="textarea"
@@ -58,7 +65,9 @@ defmodule CashLensWeb.CategoryLive.Form do
 
   @impl true
   def mount(params, _session, socket) do
-    all_categories = Categories.list_categories()
+    all_categories = 
+      Categories.list_categories()
+      |> Enum.sort_by(& &1.name)
     
     {:ok,
      socket
@@ -81,8 +90,8 @@ defmodule CashLensWeb.CategoryLive.Form do
   defp apply_action(socket, :new, _params) do
     socket
     |> assign(:page_title, "Nova Categoria")
-    |> assign(:category, %Category{})
-    |> assign(:form, to_form(Categories.change_category(%Category{})))
+    |> assign(:category, %Category{default_reimbursable: false})
+    |> assign(:form, to_form(Categories.change_category(%Category{default_reimbursable: false})))
   end
 
   @impl true

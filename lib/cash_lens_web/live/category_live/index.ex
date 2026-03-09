@@ -24,6 +24,7 @@ defmodule CashLensWeb.CategoryLive.Index do
             <tr>
               <th>Nome</th>
               <th>Categoria Pai</th>
+              <th class="text-center">Reembolso?</th>
               <th>Palavras-chave (Regras)</th>
               <th class="w-16"></th>
             </tr>
@@ -36,6 +37,15 @@ defmodule CashLensWeb.CategoryLive.Index do
                   <div class="badge badge-outline opacity-60 font-medium uppercase text-[10px]">{category.parent.name}</div>
                 <% else %>
                   <span class="opacity-20">—</span>
+                <% end %>
+              </td>
+              <td class="text-center">
+                <%= if category.default_reimbursable do %>
+                  <span title="Gera reembolso automático">
+                    <.icon name="hero-banknotes" class="size-5 text-primary mx-auto" />
+                  </span>
+                <% else %>
+                  <span class="opacity-10">—</span>
                 <% end %>
               </td>
               <td class="max-w-xs truncate italic opacity-60">{category.keywords}</td>

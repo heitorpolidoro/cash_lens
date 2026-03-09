@@ -55,4 +55,19 @@ defmodule CashLensWeb.Formatters do
   def format_time(%Time{} = time) do
     Time.truncate(time, :second) |> Time.to_string() |> String.slice(0..4)
   end
+
+  @doc """
+  Returns the abbreviated weekday name in Portuguese.
+  """
+  def format_weekday(%Date{} = date) do
+    case Date.day_of_week(date) do
+      1 -> "seg"
+      2 -> "ter"
+      3 -> "qua"
+      4 -> "qui"
+      5 -> "sex"
+      6 -> "sab"
+      7 -> "dom"
+    end
+  end
 end

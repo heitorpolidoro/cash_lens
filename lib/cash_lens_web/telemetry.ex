@@ -22,12 +22,4 @@ defmodule CashLensWeb.Telemetry do
   def metrics do
     []
   end
-
-  defp periodic_measurements do
-    [
-      # A module, function and arguments to be invoked periodically.
-      # This function must call :telemetry.execute/3 and a metric must be added above.
-      # {CashLensWeb, :count_users, []}
-    ]
-  end
 end

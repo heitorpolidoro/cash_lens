@@ -2,7 +2,6 @@ defmodule CashLensWeb.BalanceLive.Form do
   use CashLensWeb, :live_view
 
   alias CashLens.Accounting
-  alias CashLens.Accounting.Balance
   alias CashLens.Accounts
 
   @impl true
@@ -18,7 +17,7 @@ defmodule CashLensWeb.BalanceLive.Form do
         </:subtitle>
       </.header>
 
-      <.form :let={f} for={@form} id="balance-form" phx-change="validate" phx-submit="save" class="space-y-8 mt-8">
+      <.form :let={_f} for={@form} id="balance-form" phx-change="validate" phx-submit="save" class="space-y-8 mt-8">
         <div class="space-y-6 bg-base-100 p-8 rounded-3xl border border-base-300 shadow-sm">
           <%= if @live_action == :new do %>
             <!-- MODO CRIAÇÃO: Seleção para Geração Automática -->

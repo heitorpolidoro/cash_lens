@@ -14,8 +14,6 @@ services:
   app:
     build: .
     command: /bin/sh -c "mix deps.get && mix phx.server"
-    volumes:
-      - .:/app
     ports:
       - "4000:4000"
     environment:
@@ -23,8 +21,12 @@ services:
       - SECRET_KEY_BASE=sY8Gq6f0Xf8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f
       - PHX_HOST=0.0.0.0
       - WATCHMAN_DISABLE=true
+    volumes:
+      - .:/app
+      - gemini_data:/root/.gemini
     depends_on:
       - db
 
 volumes:
   postgres_data:
+  gemini_data:

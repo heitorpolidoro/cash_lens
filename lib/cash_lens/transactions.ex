@@ -13,6 +13,7 @@ defmodule CashLens.Transactions do
   """
   def list_transactions(filters \\ %{}, page \\ 1, page_size \\ 50) do
     offset = (page - 1) * page_size
+    sort_order = String.to_existing_atom(filters["sort_order"] || "desc")
 
     Transaction
     |> join_associations()
@@ -21,11 +22,16 @@ defmodule CashLens.Transactions do
     |> filter_by_description(filters["search"])
     |> filter_by_date(filters["date"])
     |> filter_by_amount(filters["amount"])
-    |> order_by([t], desc: t.date, desc: t.inserted_at)
+    |> filter_by_amount_range(filters["amount_min"], filters["amount_max"])
+    |> filter_by_reimbursement_status(filters["reimbursement_status"])
+    |> order_by_date(sort_order)
     |> limit(^page_size)
     |> offset(^offset)
     |> Repo.all()
   end
+
+  defp order_by_date(query, :asc), do: order_by(query, [t], asc: t.date, asc_nulls_last: t.time, asc: t.inserted_at)
+  defp order_by_date(query, _), do: order_by(query, [t], desc: t.date, desc_nulls_last: t.time, desc: t.inserted_at)
 
   defp join_associations(query) do
     query
@@ -42,6 +48,16 @@ defmodule CashLens.Transactions do
     where(query, amount: ^amount)
   end
 
+  defp filter_by_amount_range(query, min, max) do
+    query
+    |> then(fn q -> if min, do: where(q, [t], t.amount >= ^min), else: q end)
+    |> then(fn q -> if max, do: where(q, [t], t.amount <= ^max), else: q end)
+  end
+
+  defp filter_by_reimbursement_status(query, nil), do: query
+  defp filter_by_reimbursement_status(query, ""), do: query
+  defp filter_by_reimbursement_status(query, status), do: where(query, reimbursement_status: ^status)
+
   defp filter_by_account(query, nil), do: query
   defp filter_by_account(query, ""), do: query
   defp filter_by_account(query, account_id), do: where(query, account_id: ^account_id)
@@ -49,7 +65,10 @@ defmodule CashLens.Transactions do
   defp filter_by_category(query, nil), do: query
   defp filter_by_category(query, ""), do: query
   defp filter_by_category(query, "nil"), do: where(query, [t], is_nil(t.category_id))
-  defp filter_by_category(query, category_id), do: where(query, category_id: ^category_id)
+  defp filter_by_category(query, category_id) do
+    ids = CashLens.Categories.get_category_ids_with_children(category_id)
+    where(query, [t], t.category_id in ^ids)
+  end
 
   defp filter_by_description(query, nil), do: query
   defp filter_by_description(query, ""), do: query
@@ -76,6 +95,7 @@ defmodule CashLens.Transactions do
       left_join: c in assoc(t, :category),
       where: t.date >= ^first_of_month and t.date <= ^last_of_month,
       where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+      where: is_nil(t.reimbursement_link_key),
       select: t
 
     transactions = Repo.all(query)
@@ -100,6 +120,7 @@ defmodule CashLens.Transactions do
     query = from t in Transaction,
       left_join: c in assoc(t, :category),
       where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+      where: is_nil(t.reimbursement_link_key),
       select: t
 
     Repo.all(query)
@@ -136,6 +157,7 @@ defmodule CashLens.Transactions do
       left_join: p in assoc(c, :parent),
       where: t.amount < 0,
       where: c.slug not in ["initial_value", "transfer"],
+      where: is_nil(t.reimbursement_link_key),
       select: %{
         year: fragment("EXTRACT(YEAR FROM ?)", t.date), 
         month: fragment("EXTRACT(MONTH FROM ?)", t.date), 
@@ -227,6 +249,13 @@ defmodule CashLens.Transactions do
     end)
 
     :ok
+  end
+
+  @doc """
+  Returns the count of transactions without a category.
+  """
+  def count_pending_transactions do
+    Repo.aggregate(from(t in Transaction, where: is_nil(t.category_id)), :count)
   end
 
   def change_transaction(%Transaction{} = transaction, attrs \\ %{}), do: Transaction.changeset(transaction, attrs)

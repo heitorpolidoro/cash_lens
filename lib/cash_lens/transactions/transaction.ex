@@ -10,6 +10,8 @@ defmodule CashLens.Transactions.Transaction do
     field :description, :string
     field :amount, :decimal
     field :transfer_key, Ecto.UUID
+    field :reimbursement_status, :string
+    field :reimbursement_link_key, Ecto.UUID
     field :fingerprint, :string
     belongs_to :account, CashLens.Accounts.Account
     belongs_to :category, CashLens.Categories.Category
@@ -20,7 +22,7 @@ defmodule CashLens.Transactions.Transaction do
   @doc false
   def changeset(transaction, attrs) do
     transaction
-    |> cast(attrs, [:date, :time, :description, :amount, :category_id, :account_id, :transfer_key])
+    |> cast(attrs, [:date, :time, :description, :amount, :category_id, :account_id, :transfer_key, :reimbursement_status, :reimbursement_link_key])
     |> validate_required([:date, :description, :amount, :account_id])
     |> generate_fingerprint()
     |> unique_constraint(:fingerprint)

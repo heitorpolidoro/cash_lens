@@ -10,15 +10,6 @@ defmodule CashLens.Accounts do
 
   @doc """
   Returns the list of accounts.
-
-  ## Examples
-
-      iex> list_accounts()
-      [%Account{}, ...]
-
-  """
-  @doc """
-  Returns the list of accounts.
   """
   def list_accounts do
     Repo.all(Account)

@@ -36,7 +36,15 @@ defmodule CashLens.Transactions.AutoCategorizer do
     # 3. Apply category if matched
     if matched_category do
       IO.puts("Auto-categorized '#{description}' as '#{matched_category.name}'")
-      Map.put(transaction_params, :category_id, matched_category.id)
+      
+      params = Map.put(transaction_params, :category_id, matched_category.id)
+      
+      # Auto-mark as reimbursable if category defines it
+      if matched_category.default_reimbursable do
+        Map.put(params, :reimbursement_status, "pending")
+      else
+        params
+      end
     else
       # Fallback to hardcoded special rules if any (like transfer)
       check_special_rules(transaction_params, description)

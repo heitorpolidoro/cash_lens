@@ -62,9 +62,6 @@ defmodule CashLens.Accounting do
     end
   end
 
-  @doc """
-  Returns the list of all balances.
-  """
   defp get_chained_initial_balance(account_id, year, month, first_of_month, existing_balance) do
     {prev_year, prev_month} = get_previous_period(year, month)
 

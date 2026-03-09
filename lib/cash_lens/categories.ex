@@ -38,7 +38,18 @@ defmodule CashLens.Categories do
       ** (Ecto.NoResultsError)
 
   """
-  def get_category!(id), do: Repo.get!(Category, id)
+  def get_category!(id), do: Repo.get!(Category, id) |> Repo.preload(:parent)
+
+  @doc """
+  Gets a list of IDs including the category itself and all its immediate children.
+  """
+  def get_category_ids_with_children(nil), do: []
+  def get_category_ids_with_children(category_id) do
+    child_ids = 
+      Repo.all(from c in Category, where: c.parent_id == ^category_id, select: c.id)
+    
+    [category_id | child_ids]
+  end
 
   @doc """
   Gets a single category by its slug.
@@ -63,6 +74,7 @@ defmodule CashLens.Categories do
     %Category{}
     |> Category.changeset(attrs)
     |> Repo.insert()
+    |> broadcast(:category_created)
   end
 
   @doc """
@@ -81,6 +93,7 @@ defmodule CashLens.Categories do
     category
     |> Category.changeset(attrs)
     |> Repo.update()
+    |> broadcast(:category_updated)
   end
 
   @doc """
@@ -97,7 +110,14 @@ defmodule CashLens.Categories do
   """
   def delete_category(%Category{} = category) do
     Repo.delete(category)
+    |> broadcast(:category_deleted)
   end
+
+  defp broadcast({:ok, category}, event) do
+    Phoenix.PubSub.broadcast(CashLens.PubSub, "categories", {event, category})
+    {:ok, category}
+  end
+  defp broadcast(error, _), do: error
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking category changes.

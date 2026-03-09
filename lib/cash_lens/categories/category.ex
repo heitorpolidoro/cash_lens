@@ -8,6 +8,7 @@ defmodule CashLens.Categories.Category do
     field :name, :string
     field :slug, :string
     field :keywords, :string
+    field :default_reimbursable, :boolean, default: false
     belongs_to :parent, CashLens.Categories.Category
     has_many :children, CashLens.Categories.Category, foreign_key: :parent_id
 
@@ -17,7 +18,7 @@ defmodule CashLens.Categories.Category do
   @doc false
   def changeset(category, attrs) do
     category
-    |> cast(attrs, [:name, :parent_id, :keywords])
+    |> cast(attrs, [:name, :parent_id, :keywords, :default_reimbursable])
     |> validate_required([:name])
     |> generate_slug()
     |> unique_constraint(:slug)
