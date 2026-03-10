@@ -252,6 +252,24 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
+  Unlinks all transactions sharing the same reimbursement_link_key.
+  """
+  def unlink_reimbursement_by_key(nil), do: :ok
+  def unlink_reimbursement_by_key(link_key) do
+    # 1. Restore negative transactions (expenses) to 'pending'
+    from(t in Transaction, 
+      where: t.reimbursement_link_key == ^link_key and t.amount < 0)
+    |> Repo.update_all(set: [reimbursement_status: "pending", reimbursement_link_key: nil, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)])
+
+    # 2. Clear positive transactions (credits) completely
+    from(t in Transaction, 
+      where: t.reimbursement_link_key == ^link_key and t.amount > 0)
+    |> Repo.update_all(set: [reimbursement_status: nil, reimbursement_link_key: nil, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)])
+    
+    :ok
+  end
+
+  @doc """
   Returns the count of transactions without a category.
   """
   def count_pending_transactions do

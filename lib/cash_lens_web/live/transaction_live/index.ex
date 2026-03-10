@@ -36,8 +36,9 @@ defmodule CashLensWeb.TransactionLive.Index do
       </.header>
 
       <!-- Tabela com Filtros -->
-      <div class="overflow-x-auto bg-base-100 rounded-2xl border border-base-300 shadow-sm">
-        <table class="table table-zebra w-full text-xs">
+      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm">
+        <div class="overflow-x-auto rounded-t-2xl">
+          <table class="table table-zebra w-full text-xs">
           <thead class="bg-base-200/50">
             <form id="transaction-filters" phx-change="apply_filters" class="m-0 p-0">
               <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
@@ -96,10 +97,11 @@ defmodule CashLensWeb.TransactionLive.Index do
             </form>
           </thead>
         </table>
+        </div> <!-- End of overflow-x-auto wrapper for the header -->
 
         <table class="table table-zebra w-full text-xs border-t border-base-300">
-          <tbody id="transactions" phx-update="stream">
-            <tr :for={{id, transaction} <- @streams.transactions} id={id} class="hover group border-b border-base-200">
+          <tbody id="transactions" phx-update="stream" class="overflow-visible">
+            <tr :for={{id, transaction} <- @streams.transactions} id={id} class="hover group border-b border-base-200 overflow-visible">
               <td class="whitespace-nowrap w-40">
                 <div class="flex flex-col pl-4">
                   <span class="font-medium text-base-content">{format_date(transaction.date)}</span>
@@ -117,7 +119,7 @@ defmodule CashLensWeb.TransactionLive.Index do
                       transaction.reimbursement_status == "requested" && "badge-info",
                       transaction.reimbursement_status == "pending" && "badge-warning"
                     ]}>
-                      Reembolso: {transaction.reimbursement_status}
+                      Reembolso: {CashLensWeb.Formatters.translate_reimbursement_status(transaction.reimbursement_status)}
                     </div>
                   </div>
                 </div>
@@ -128,7 +130,12 @@ defmodule CashLensWeb.TransactionLive.Index do
               <td class="w-48 overflow-visible">
                 <div class="flex items-center gap-1 relative overflow-visible">
                   <div id={"cat-select-#{transaction.id}"} phx-hook="CategoryAutocomplete" data-transaction-id={transaction.id} data-categories={Jason.encode!(Enum.map(@categories, &%{id: &1.id, name: CashLens.Categories.Category.full_name(&1)}))} class="relative w-40 overflow-visible" phx-click-stop>
-                    <input type="text" placeholder={if transaction.category, do: CashLens.Categories.Category.full_name(transaction.category), else: "Pendente"} class={["input input-bordered input-xs w-full font-bold uppercase text-[9px] cursor-pointer", is_nil(transaction.category_id) && "bg-warning text-warning-content border-warning/50"]} />
+                    <div class="flex items-center gap-1 group/cat">
+                      <input type="text" placeholder={if transaction.category, do: CashLens.Categories.Category.full_name(transaction.category), else: "Pendente"} class={["input input-bordered input-xs w-full font-bold uppercase text-[9px] cursor-pointer", is_nil(transaction.category_id) && "bg-warning text-warning-content border-warning/50"]} />
+                      <button :if={transaction.category_id} type="button" phx-click="update_category" phx-value-transaction_id={transaction.id} phx-value-category_id="" class="btn btn-ghost btn-xs p-0 text-error min-h-0 h-5 w-5 opacity-0 group-hover/cat:opacity-100 transition-opacity" title="Limpar Categoria">
+                        <.icon name="hero-x-mark" class="size-3" />
+                      </button>
+                    </div>
                     <div class="dropdown-content hidden absolute z-[100] mt-1 w-64 bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
                       <ul class="menu menu-compact p-1">
                         <li class="new-option border-b border-base-200 mb-1">
