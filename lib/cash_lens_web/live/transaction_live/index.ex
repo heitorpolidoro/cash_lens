@@ -1223,6 +1223,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> Calendar.strftime("%B") 
       |> translate_month()
 
+    socket
     |> assign(:unmatched_transfers_count, unmatched_count)
     |> assign(:summary, %{
      current_balance: current_balance,
@@ -1230,7 +1231,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      expenses: summary.expenses,
      month_name: month_name
     })
-    end
+  end
 
   defp translate_month(month) do
     months = %{
