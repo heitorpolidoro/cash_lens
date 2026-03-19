@@ -750,7 +750,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
         bulk_items = if !should_skip_bulk do
           Transactions.list_transactions(%{"search" => tx.description}) 
-          |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id))
+          |> Enum.reject(&(&1.id == tx.id or &1.category_id == category.id))
         else
           []
         end
