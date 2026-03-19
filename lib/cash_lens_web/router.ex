@@ -45,6 +45,8 @@ defmodule CashLensWeb.Router do
 
       live "/admin/db", AdminDatabaseLive, :index
       live "/admin/db/:table", AdminDatabaseLive, :show
+
+      live "/admin/automation/bulk_ignore", AutomationLive.BulkIgnore, :index
     end
   end
 

@@ -13,6 +13,11 @@ defmodule CashLensWeb.TransactionLive.Index do
       <.header>
         Transações
         <:actions>
+          <.link navigate={~p"/admin/automation/bulk_ignore"}>
+            <button class="btn btn-ghost btn-sm text-base-content/50 hover:text-primary">
+              <.icon name="hero-cog-6-tooth" class="size-4 mr-1" /> Automação
+            </button>
+          </.link>
           <.link navigate={~p"/reimbursements"}>
             <button class="btn btn-outline border-base-300 text-primary">
               <.icon name="hero-banknotes" class="size-4 mr-1" /> Reembolsos
@@ -35,6 +40,29 @@ defmodule CashLensWeb.TransactionLive.Index do
         </:actions>
       </.header>
 
+      <div class="flex items-center gap-2">
+        <button 
+          type="button" 
+          phx-click="toggle_type" 
+          phx-value-type="debit" 
+          class={["btn btn-sm", if(@filters["type"] == "debit", do: "btn-error", else: "btn-outline border-base-300")]}
+        >
+          <.icon name="hero-arrow-trending-down" class="size-4 mr-1" /> Débitos
+        </button>
+        <button 
+          type="button" 
+          phx-click="toggle_type" 
+          phx-value-type="credit" 
+          class={["btn btn-sm", if(@filters["type"] == "credit", do: "btn-success", else: "btn-outline border-base-300")]}
+        >
+          <.icon name="hero-arrow-trending-up" class="size-4 mr-1" /> Créditos
+        </button>
+        <div :if={@filters["type"] != ""} class="text-[10px] uppercase font-bold opacity-40 ml-2 flex items-center gap-1">
+          <.icon name="hero-funnel" class="size-3" />
+          Filtrando por {if @filters["type"] == "debit", do: "Débitos", else: "Créditos"}
+        </div>
+      </div>
+
       <!-- Tabela com Filtros -->
       <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm">
         <div class="overflow-x-auto rounded-t-2xl">
@@ -42,6 +70,7 @@ defmodule CashLensWeb.TransactionLive.Index do
           <thead class="bg-base-200/50">
             <form id="transaction-filters" phx-change="apply_filters" class="m-0 p-0">
               <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
+              <input type="hidden" name="type" value={@filters["type"]} />
               <tr>
                 <th class="w-40">
                   <div class="flex flex-col gap-1">
@@ -114,12 +143,12 @@ defmodule CashLensWeb.TransactionLive.Index do
                 <div class="flex flex-col">
                   <div class="leading-relaxed font-medium">{transaction.description}</div>
                   <div :if={transaction.reimbursement_status} class="flex items-center gap-1 mt-1">
-                    <div class={["badge badge-xs text-[8px] uppercase", 
+                    <div class={["badge badge-xs text-[8px] uppercase font-black", 
                       transaction.reimbursement_status == "paid" && "badge-success",
                       transaction.reimbursement_status == "requested" && "badge-info",
                       transaction.reimbursement_status == "pending" && "badge-warning"
                     ]}>
-                      Reembolso: {CashLensWeb.Formatters.translate_reimbursement_status(transaction.reimbursement_status)}
+                      {CashLensWeb.Formatters.translate_reimbursement_status(transaction.reimbursement_status, transaction.amount)}
                     </div>
                   </div>
                 </div>
@@ -197,14 +226,42 @@ defmodule CashLensWeb.TransactionLive.Index do
       <div class="p-2">
         <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-success">Vincular Reembolso</h2>
         <p class="text-xs opacity-60 mb-6">Selecione abaixo a despesa que foi coberta por este recebimento de {format_currency(@reimbursement_credit.amount)}.</p>
+        
+        <!-- Campo de Busca -->
+        <div class="mb-6">
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <.icon name="hero-magnifying-glass" class="size-4 opacity-30" />
+            </div>
+            <input 
+              type="text" 
+              placeholder="Buscar por descrição ou valor..." 
+              class="input input-bordered w-full pl-10 h-12 rounded-2xl bg-base-200 border-none focus:ring-success"
+              phx-keyup="reimbursement_search_change"
+              phx-debounce="300"
+              value={@reimbursement_search}
+            />
+          </div>
+        </div>
+
         <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
           <%= if Enum.empty?(@pending_reimbursements) do %>
             <div class="text-center py-10 opacity-40 italic">Nenhuma despesa pendente de reembolso encontrada.</div>
           <% end %>
           <%= for pending <- @pending_reimbursements do %>
-            <button type="button" phx-click="link_reimbursement" phx-value-expense-id={pending.id} class="w-full text-left flex items-center justify-between p-4 border-2 border-base-300 rounded-2xl hover:border-success hover:bg-success/5 transition-all group">
-              <div class="flex flex-col"><span class="text-[10px] font-bold uppercase opacity-50">{format_date(pending.date)} — {pending.account.name}</span><span class="font-black text-lg group-hover:text-success">{pending.description}</span></div>
-              <div class="text-right"><span class="font-black text-lg text-error">{format_currency(pending.amount)}</span><div class="text-[8px] uppercase font-bold px-2 py-0.5 bg-base-200 rounded-full mt-1">Pendente</div></div>
+            <button type="button" phx-click="link_reimbursement" phx-value-expense-id={pending.id} class={[
+              "w-full text-left flex items-center justify-between p-3 border-2 rounded-xl hover:border-success hover:bg-success/5 transition-all group",
+              if(Decimal.eq?(Decimal.abs(Decimal.round(pending.amount, 2)), Decimal.round(@reimbursement_credit.amount, 2)), do: "border-success bg-success/5 shadow-lg shadow-success/10", else: "border-base-300")
+            ]}>
+              <div class="flex flex-col">
+                <span class="text-[9px] font-bold uppercase opacity-50">{format_date(pending.date)} — {pending.account.name}</span>
+                <span class="font-black text-md group-hover:text-success">{pending.description}</span>
+                <div :if={is_nil(pending.category_id)} class="text-[8px] text-warning font-black uppercase mt-0.5">Sem Categoria</div>
+              </div>
+              <div class="text-right">
+                <span class="font-black text-md text-error">{format_currency(pending.amount)}</span>
+                <div :if={Decimal.eq?(Decimal.abs(Decimal.round(pending.amount, 2)), Decimal.round(@reimbursement_credit.amount, 2))} class="text-[8px] text-success font-black uppercase mt-0.5">Match Perfeito!</div>
+              </div>
             </button>
           <% end %>
         </div>
@@ -348,6 +405,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
      |> assign(:reimbursement_credit, nil)
+     |> assign(:reimbursement_search, "")
      |> assign(:pending_reimbursements, [])
      |> assign(:ai_result, nil)
      |> assign(:ai_loading, false)
@@ -358,7 +416,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:accounts, accounts)
      |> assign(:import_accounts, Enum.filter(accounts, & &1.accepts_import))
      |> assign(:categories, Categories.list_categories())
-     |> assign(:filters, %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => "", "sort_order" => "desc"})
+     |> assign(:filters, %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => "", "sort_order" => "desc", "type" => ""})
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
@@ -406,8 +464,17 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("open_reimbursement_link", %{"id" => id}, socket) do
     credit_tx = Transactions.get_transaction!(id)
-    pending = Transactions.list_transactions(%{"reimbursement_status" => "pending"})
-    {:noreply, socket |> assign(:show_reimbursement_modal, true) |> assign(:reimbursement_credit, credit_tx) |> assign(:pending_reimbursements, pending)}
+    {:noreply, 
+     socket 
+     |> assign(:show_reimbursement_modal, true)
+     |> assign(:reimbursement_credit, credit_tx)
+     |> assign(:reimbursement_search, "")
+     |> update_reimbursement_linker_list()}
+  end
+
+  @impl true
+  def handle_event("reimbursement_search_change", %{"value" => search}, socket) do
+    {:noreply, socket |> assign(:reimbursement_search, search) |> update_reimbursement_linker_list()}
   end
 
   @impl true
@@ -415,9 +482,29 @@ defmodule CashLensWeb.TransactionLive.Index do
     credit_tx = socket.assigns.reimbursement_credit
     expense_tx = Transactions.get_transaction!(expense_id)
     link_key = Ecto.UUID.generate()
-    {:ok, _} = Transactions.update_transaction(expense_tx, %{reimbursement_status: "paid", reimbursement_link_key: link_key})
-    {:ok, _} = Transactions.update_transaction(credit_tx, %{reimbursement_status: "paid", reimbursement_link_key: link_key})
-    {:noreply, socket |> assign(:show_reimbursement_modal, false) |> put_flash(:info, "Reembolso vinculado!") |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+
+    # Category Inheritance Logic:
+    # Use the expense category if it exists, otherwise use credit's, otherwise nil
+    final_category_id = expense_tx.category_id || credit_tx.category_id
+
+    # Update both transactions
+    {:ok, _} = Transactions.update_transaction(expense_tx, %{
+      reimbursement_status: "paid", 
+      reimbursement_link_key: link_key,
+      category_id: final_category_id
+    })
+    
+    {:ok, _} = Transactions.update_transaction(credit_tx, %{
+      reimbursement_status: "paid", 
+      reimbursement_link_key: link_key,
+      category_id: final_category_id
+    })
+
+    {:noreply, 
+     socket 
+     |> assign(:show_reimbursement_modal, false) 
+     |> put_flash(:info, "Reembolso vinculado e categorizado!") 
+     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
   end
 
   @impl true
@@ -438,7 +525,22 @@ defmodule CashLensWeb.TransactionLive.Index do
       {:ok, updated_tx} ->
         socket = assign(socket, :pending_count, Transactions.count_pending_transactions())
         tx = Transactions.get_transaction!(updated_tx.id)
-        bulk_items = if category_id, do: Transactions.list_transactions(%{"search" => tx.description}) |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id)), else: []
+        
+        # Check against database ignore patterns
+        ignore_patterns = Transactions.list_bulk_ignore_patterns()
+        should_skip_bulk = Enum.any?(ignore_patterns, fn p -> 
+          case Regex.compile(p.pattern) do
+            {:ok, re} -> Regex.run(re, tx.description || "")
+            _ -> false
+          end
+        end)
+
+        bulk_items = if category_id && !should_skip_bulk do
+          Transactions.list_transactions(%{"search" => tx.description}) 
+          |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id))
+        else
+          []
+        end
         socket = if Enum.any?(bulk_items) do
           cat = Enum.find(socket.assigns.categories, & &1.id == category_id)
           assign(socket, :bulk_confirmation, %{items: bulk_items, category_id: category_id, category_name: cat.name, description: tx.description})
@@ -459,7 +561,22 @@ defmodule CashLensWeb.TransactionLive.Index do
         Transactions.update_transaction_category(socket.assigns.pending_transaction_id, category.id)
         tx = Transactions.get_transaction!(socket.assigns.pending_transaction_id)
         socket = socket |> assign(:show_quick_category_modal, false) |> assign(:categories, Categories.list_categories()) |> assign(:pending_count, Transactions.count_pending_transactions()) |> put_flash(:info, "Categoria criada!")
-        bulk_items = Transactions.list_transactions(%{"search" => tx.description}) |> Enum.reject(&(&1.id == tx.id or &1.category_id == category.id))
+        
+        # Check against database ignore patterns
+        ignore_patterns = Transactions.list_bulk_ignore_patterns()
+        should_skip_bulk = Enum.any?(ignore_patterns, fn p -> 
+          case Regex.compile(p.pattern) do
+            {:ok, re} -> Regex.run(re, tx.description || "")
+            _ -> false
+          end
+        end)
+
+        bulk_items = if !should_skip_bulk do
+          Transactions.list_transactions(%{"search" => tx.description}) 
+          |> Enum.reject(&(&1.id == tx.id or &1.category_id == category.id))
+        else
+          []
+        end
         socket = if Enum.any?(bulk_items), do: assign(socket, :bulk_confirmation, %{items: bulk_items, category_id: category.id, category_name: category.name, description: tx.description}), else: socket
         if matches_filters?(tx, socket.assigns.filters), do: {:noreply, stream_insert(socket, :transactions, tx)}, else: {:noreply, stream_delete(socket, :transactions, tx)}
       {:error, _} -> {:noreply, put_flash(socket, :error, "Erro ao criar.")}
@@ -498,7 +615,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
-    filters = %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => "", "sort_order" => "desc"}
+    filters = %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => "", "sort_order" => "desc", "type" => ""}
     {:noreply, socket |> assign(:filters, filters) |> assign(:page, 1) |> assign(:end_of_list?, false) |> stream(:transactions, Transactions.list_transactions(filters, 1), reset: true)}
   end
 
@@ -506,6 +623,13 @@ defmodule CashLensWeb.TransactionLive.Index do
   def handle_event("toggle_pending", _params, socket) do
     new_category_id = if socket.assigns.filters["category_id"] == "nil", do: "", else: "nil"
     new_filters = Map.put(socket.assigns.filters, "category_id", new_category_id)
+    {:noreply, socket |> assign(:filters, new_filters) |> assign(:page, 1) |> assign(:end_of_list?, false) |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
+  end
+
+  @impl true
+  def handle_event("toggle_type", %{"type" => type}, socket) do
+    new_type = if socket.assigns.filters["type"] == type, do: "", else: type
+    new_filters = Map.put(socket.assigns.filters, "type", new_type)
     {:noreply, socket |> assign(:filters, new_filters) |> assign(:page, 1) |> assign(:end_of_list?, false) |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
   end
 
@@ -620,7 +744,62 @@ defmodule CashLensWeb.TransactionLive.Index do
     end
     search_match = if filters["search"] == "", do: true, else: String.contains?(String.upcase(tx.description || ""), String.upcase(filters["search"]))
     account_match = if filters["account_id"] == "", do: true, else: tx.account_id == filters["account_id"]
-    category_match && search_match && account_match
+    type_match = case filters["type"] do
+      "" -> true
+      "debit" -> Decimal.lt?(tx.amount, 0)
+      "credit" -> Decimal.gt?(tx.amount, 0)
+      _ -> true
+    end
+    category_match && search_match && account_match && type_match
+  end
+
+  defp update_reimbursement_linker_list(socket) do
+    credit_tx = socket.assigns.reimbursement_credit
+    target_amount = credit_tx.amount |> Decimal.abs() |> Decimal.round(2)
+    search = socket.assigns.reimbursement_search
+
+    # 1. EXHAUSTIVE GLOBAL SEARCH for exact value matches
+    # We query the DB directly for ANY transaction with this amount that isn't linked
+    exact_matches = 
+      Transactions.list_transactions(%{"amount" => Decimal.mult(target_amount, -1)}, 1, 100)
+      |> Enum.filter(&is_nil(&1.reimbursement_link_key))
+
+    # 2. CONTEXTUAL SEARCH (recent items or description match)
+    filters = %{"amount_max" => -0.01}
+    filters = if search != "", do: Map.put(filters, "search", search), else: filters
+    recent_items = Transactions.list_transactions(filters, 1, 500)
+
+    # Combine and deduplicate (by ID)
+    all_pending = 
+      (exact_matches ++ recent_items)
+      |> Enum.uniq_by(& &1.id)
+      |> Enum.filter(&is_nil(&1.reimbursement_link_key) && &1.reimbursement_status != "paid")
+
+    # Sort logic: 
+    # 1. Exact amount match (VALUE IS KING)
+    # 2. Non-categorized (Secondary tie-breaker)
+    # 3. Newest first
+    sorted_pending = 
+      all_pending
+      |> Enum.sort(fn a, b ->
+        amount_a = Decimal.abs(a.amount) |> Decimal.round(2)
+        amount_b = Decimal.abs(b.amount) |> Decimal.round(2)
+        target = Decimal.round(target_amount, 2)
+
+        exact_a = Decimal.eq?(amount_a, target)
+        exact_b = Decimal.eq?(amount_b, target)
+        pending_cat_a = is_nil(a.category_id)
+        pending_cat_b = is_nil(b.category_id)
+
+        cond do
+          exact_a != exact_b -> exact_a
+          pending_cat_a != pending_cat_b -> pending_cat_a
+          true -> Date.compare(a.date, b.date) != :lt
+        end
+      end)
+      |> Enum.take(50)
+
+    assign(socket, :pending_reimbursements, sorted_pending)
   end
 
   defp stream_insert_many(socket, stream_name, items) do

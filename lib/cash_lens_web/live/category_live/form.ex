@@ -29,7 +29,14 @@ defmodule CashLensWeb.CategoryLive.Form do
             prompt="Nenhuma (Categoria Principal)"
           />
 
-          <div class="divider">Inteligência (Auto-Categorização)</div>
+          <div class="divider">Configurações</div>
+
+          <.input
+            field={f[:type]}
+            type="select"
+            label="Tipo de Gasto"
+            options={[{"Fixo (Contas Obrigatórias)", "fixed"}, {"Variável (Estilo de Vida)", "variable"}]}
+          />
 
           <.input 
             field={f[:default_reimbursable]} 

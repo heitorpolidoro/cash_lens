@@ -48,16 +48,21 @@ defmodule CashLensWeb.PageController do
       |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
 
     summary = Transactions.get_monthly_summary()
-    
-    historical_categories = 
-      Transactions.get_historical_category_summary()
-      |> Enum.map(fn month_data ->
-        Map.put(month_data, :categories, Enum.map(month_data.categories, fn cat -> 
-          Map.put(cat, :total, Decimal.to_float(cat.total))
-        end))
-      end)
+    historical_categories = Transactions.get_historical_category_summary()
 
-    category_data = Jason.encode!(historical_categories)
+    fixed_data = 
+      historical_categories
+      |> Enum.map(fn month_data ->
+        Map.put(month_data, :categories, Enum.filter(month_data.categories, & &1.type == "fixed") |> Enum.map(fn cat -> Map.put(cat, :total, Decimal.to_float(cat.total)) end))
+      end)
+      |> Jason.encode!()
+
+    variable_data = 
+      historical_categories
+      |> Enum.map(fn month_data ->
+        Map.put(month_data, :categories, Enum.filter(month_data.categories, & &1.type == "variable") |> Enum.map(fn cat -> Map.put(cat, :total, Decimal.to_float(cat.total)) end))
+      end)
+      |> Jason.encode!()
 
     month_name = 
       summary.month 
@@ -72,7 +77,8 @@ defmodule CashLensWeb.PageController do
       accounts: accounts_with_data,
       summary_month: month_name,
       chart_data: chart_data,
-      category_data: category_data
+      fixed_data: fixed_data,
+      variable_data: variable_data
     )
   end
 

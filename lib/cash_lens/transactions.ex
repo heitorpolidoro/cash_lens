@@ -8,6 +8,31 @@ defmodule CashLens.Transactions do
 
   alias CashLens.Transactions.Transaction
 
+  alias CashLens.Transactions.BulkIgnorePattern
+
+  @doc """
+  Returns the list of all bulk ignore patterns.
+  """
+  def list_bulk_ignore_patterns do
+    Repo.all(from b in BulkIgnorePattern, order_by: [asc: b.pattern])
+  end
+
+  def create_bulk_ignore_pattern(attrs \\ %{}) do
+    %BulkIgnorePattern{}
+    |> BulkIgnorePattern.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def delete_bulk_ignore_pattern(%BulkIgnorePattern{} = pattern) do
+    Repo.delete(pattern)
+  end
+
+  def change_bulk_ignore_pattern(%BulkIgnorePattern{} = pattern, attrs \\ %{}) do
+    BulkIgnorePattern.changeset(pattern, attrs)
+  end
+
+  def get_bulk_ignore_pattern!(id), do: Repo.get!(BulkIgnorePattern, id)
+
   @doc """
   Returns the list of transactions based on filters and pagination.
   """
@@ -23,6 +48,7 @@ defmodule CashLens.Transactions do
     |> filter_by_date(filters["date"])
     |> filter_by_amount(filters["amount"])
     |> filter_by_amount_range(filters["amount_min"], filters["amount_max"])
+    |> filter_by_type(filters["type"])
     |> filter_by_reimbursement_status(filters["reimbursement_status"])
     |> order_by_date(sort_order)
     |> limit(^page_size)
@@ -47,6 +73,11 @@ defmodule CashLens.Transactions do
   defp filter_by_amount(query, amount) do
     where(query, amount: ^amount)
   end
+
+  defp filter_by_type(query, nil), do: query
+  defp filter_by_type(query, ""), do: query
+  defp filter_by_type(query, "debit"), do: where(query, [t], t.amount < 0)
+  defp filter_by_type(query, "credit"), do: where(query, [t], t.amount > 0)
 
   defp filter_by_amount_range(query, min, max) do
     query
@@ -163,6 +194,7 @@ defmodule CashLens.Transactions do
         month: fragment("EXTRACT(MONTH FROM ?)", t.date), 
         category_name: c.name,
         parent_name: p.name,
+        type: c.type,
         total: t.amount
       }
 
@@ -175,9 +207,9 @@ defmodule CashLens.Transactions do
     |> Enum.map(fn {{year, month}, items} ->
       categories = 
         items 
-        |> Enum.group_by(fn i -> i.parent_name || i.category_name end)
-        |> Enum.map(fn {name, txs} -> 
-          %{name: name, total: txs |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.total)) |> Decimal.abs()}
+        |> Enum.group_by(fn i -> {i.parent_name || i.category_name, i.type} end)
+        |> Enum.map(fn {{name, type}, txs} -> 
+          %{name: name, type: type, total: txs |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.total)) |> Decimal.abs()}
         end)
       
       %{year: year, month: month, categories: categories}

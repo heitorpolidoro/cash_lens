@@ -18,9 +18,11 @@ defmodule CashLens.Categories do
 
   """
   def list_categories do
-    Category
-    |> order_by([c], asc: c.name)
-    |> preload([:parent])
+    from(c in Category,
+      left_join: p in assoc(c, :parent),
+      order_by: [asc: coalesce(p.name, c.name), asc: c.name],
+      preload: [:parent]
+    )
     |> Repo.all()
   end
 

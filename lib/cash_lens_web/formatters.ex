@@ -74,9 +74,11 @@ defmodule CashLensWeb.Formatters do
   @doc """
   Translates reimbursement status to Portuguese.
   """
-  def translate_reimbursement_status(nil), do: ""
-  def translate_reimbursement_status("pending"), do: "Pendente"
-  def translate_reimbursement_status("requested"), do: "Solicitado"
-  def translate_reimbursement_status("paid"), do: "Pago"
-  def translate_reimbursement_status(other), do: String.capitalize(other)
+  def translate_reimbursement_status(nil, _amount), do: ""
+  def translate_reimbursement_status("pending", _amount), do: "Pendente"
+  def translate_reimbursement_status("requested", _amount), do: "Solicitado"
+  def translate_reimbursement_status("paid", amount) do
+    if Decimal.lt?(amount, 0), do: "Reembolso Pago", else: "Reembolso"
+  end
+  def translate_reimbursement_status(other, _amount), do: String.capitalize(other)
 end

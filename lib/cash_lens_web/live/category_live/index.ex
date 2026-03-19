@@ -23,7 +23,7 @@ defmodule CashLensWeb.CategoryLive.Index do
           <thead class="bg-base-200/50">
             <tr>
               <th>Nome</th>
-              <th>Categoria Pai</th>
+              <th>Tipo</th>
               <th class="text-center">Reembolso?</th>
               <th>Palavras-chave (Regras)</th>
               <th class="w-16"></th>
@@ -31,13 +31,18 @@ defmodule CashLensWeb.CategoryLive.Index do
           </thead>
           <tbody id="categories" phx-update="stream">
             <tr :for={{id, category} <- @streams.categories} id={id} class="hover group border-b border-base-200">
-              <td class="font-bold">{category.name}</td>
+              <td class="font-bold">{CashLens.Categories.Category.full_name(category)}</td>
               <td>
-                <%= if category.parent do %>
-                  <div class="badge badge-outline opacity-60 font-medium uppercase text-[10px]">{category.parent.name}</div>
-                <% else %>
-                  <span class="opacity-20">—</span>
-                <% end %>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    class="checkbox checkbox-secondary checkbox-xs" 
+                    checked={category.type == "fixed"}
+                    phx-click="toggle_fixed"
+                    phx-value-id={category.id}
+                  />
+                  <span class="text-[9px] font-black uppercase opacity-60">Fixo</span>
+                </label>
               </td>
               <td class="text-center">
                 <%= if category.default_reimbursable do %>
@@ -113,6 +118,19 @@ defmodule CashLensWeb.CategoryLive.Index do
          socket 
          |> assign(:confirm_modal, nil) 
          |> put_flash(:error, "Não foi possível excluir a categoria '#{category.name}'. Verifique se existem dependências.")}
+    end
+  end
+
+  @impl true
+  def handle_event("toggle_fixed", %{"id" => id}, socket) do
+    category = Categories.get_category!(id)
+    new_type = if category.type == "fixed", do: "variable", else: "fixed"
+    
+    case Categories.update_category(category, %{type: new_type}) do
+      {:ok, updated} ->
+        {:noreply, stream_insert(socket, :categories, updated)}
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Falha ao atualizar.")}
     end
   end
 end

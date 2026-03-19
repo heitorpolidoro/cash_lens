@@ -178,72 +178,79 @@ window.addEventListener("load", () => {
     }
   }
 
-  const catCtx = document.getElementById('categoryChart');
-  if (catCtx) {
-    const rawData = catCtx.getAttribute('data-categories');
-    if (rawData) {
-      const history = JSON.parse(rawData);
-      const allCategories = [...new Set(history.flatMap(h => h.categories.map(c => c.parent_name || c.name)))].sort();
-      const labels = history.map(h => `${h.month}/${h.year}`);
-      
-      const colors = [
-        'rgba(59, 130, 246, 0.7)', 'rgba(16, 185, 129, 0.7)', 'rgba(245, 158, 11, 0.7)', 
-        'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(236, 72, 153, 0.7)', 
-        'rgba(20, 184, 166, 0.7)', 'rgba(249, 115, 22, 0.7)', 'rgba(107, 114, 128, 0.7)', 
-        'rgba(14, 165, 233, 0.7)', 'rgba(168, 85, 247, 0.7)', 'rgba(217, 70, 239, 0.7)', 
-        'rgba(244, 63, 94, 0.7)', 'rgba(101, 163, 13, 0.7)', 'rgba(234, 179, 8, 0.7)', 
-        'rgba(2, 132, 199, 0.7)', 'rgba(71, 85, 105, 0.7)', 'rgba(190, 18, 60, 0.7)', 
-        'rgba(15, 118, 110, 0.7)', 'rgba(67, 56, 202, 0.7)'
-      ];
+  const initCategoryChart = (canvasId) => {
+    const el = document.getElementById(canvasId);
+    if (!el) return;
 
-      const datasets = allCategories.map((catName, index) => {
-        const color = colors[index % colors.length];
-        return {
-          label: catName,
-          data: history.map(h => {
-            const found = h.categories.filter(c => (c.parent_name || c.name) === catName);
-            return found.reduce((acc, c) => acc + c.total, 0);
-          }),
-          borderColor: color,
-          backgroundColor: color.replace('0.7', '0.1'),
-          borderWidth: 2,
-          pointRadius: 3,
-          tension: 0.3,
-          fill: false
-        };
-      });
+    const rawData = el.getAttribute('data-categories');
+    if (!rawData) return;
 
-      new Chart(catCtx, {
-        type: 'line',
-        data: { labels: labels, datasets: datasets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { size: 10, weight: 'bold' } } },
-            tooltip: {
-              itemSort: (a, b) => b.raw - a.raw,
-              filter: (item) => item.raw > 0,
-              callbacks: {
-                label: (context) => {
-                  const val = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
-                  return `${context.dataset.label}: ${val}`;
-                }
-              }
-            }
-          },
-          scales: {
-            x: { grid: { display: false } },
-            y: { 
-              beginAtZero: true,
-              ticks: {
-                callback: (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value)
+    const history = JSON.parse(rawData);
+    if (history.length === 0) return;
+
+    const allCategories = [...new Set(history.flatMap(h => h.categories.map(c => c.name)))].sort();
+    const labels = history.map(h => `${h.month}/${h.year}`);
+    
+    const colors = [
+      'rgba(59, 130, 246, 0.7)', 'rgba(16, 185, 129, 0.7)', 'rgba(245, 158, 11, 0.7)', 
+      'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(236, 72, 153, 0.7)', 
+      'rgba(20, 184, 166, 0.7)', 'rgba(249, 115, 22, 0.7)', 'rgba(107, 114, 128, 0.7)', 
+      'rgba(14, 165, 233, 0.7)', 'rgba(168, 85, 247, 0.7)', 'rgba(217, 70, 239, 0.7)', 
+      'rgba(244, 63, 94, 0.7)', 'rgba(101, 163, 13, 0.7)', 'rgba(234, 179, 8, 0.7)', 
+      'rgba(2, 132, 199, 0.7)', 'rgba(71, 85, 105, 0.7)', 'rgba(190, 18, 60, 0.7)', 
+      'rgba(15, 118, 110, 0.7)', 'rgba(67, 56, 202, 0.7)'
+    ];
+
+    const datasets = allCategories.map((catName, index) => {
+      const color = colors[index % colors.length];
+      return {
+        label: catName,
+        data: history.map(h => {
+          const found = h.categories.filter(c => c.name === catName);
+          return found.reduce((acc, c) => acc + c.total, 0);
+        }),
+        borderColor: color,
+        backgroundColor: color.replace('0.7', '0.1'),
+        borderWidth: 2,
+        pointRadius: 3,
+        tension: 0.3,
+        fill: false
+      };
+    });
+
+    new Chart(el, {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { size: 10, weight: 'bold' } } },
+          tooltip: {
+            itemSort: (a, b) => b.raw - a.raw,
+            filter: (item) => item.raw > 0,
+            callbacks: {
+              label: (context) => {
+                const val = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                return `${context.dataset.label}: ${val}`;
               }
             }
           }
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { 
+            beginAtZero: true,
+            ticks: {
+              callback: (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value)
+            }
+          }
         }
-      });
-    }
-  }
+      }
+    });
+  };
+
+  initCategoryChart('fixedChart');
+  initCategoryChart('variableChart');
 });

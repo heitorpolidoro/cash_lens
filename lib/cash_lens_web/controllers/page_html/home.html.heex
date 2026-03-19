@@ -52,15 +52,27 @@
     </div>
   </div>
 
-  <!-- Evolução por Categoria (Gráfico) -->
-  <div class="card bg-base-100 shadow-sm border border-base-300">
-    <div class="card-body p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="card-title text-base-content uppercase text-xs opacity-50 font-black">Evolução de Gastos por Categoria</h2>
-        <a href="/transactions?category_id=nil" class="text-[10px] link link-primary no-underline font-bold uppercase">Ver Pendentes</a>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Gastos Fixos (Gráfico) -->
+    <div class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-6">
+        <h2 class="card-title text-base-content uppercase text-xs opacity-50 font-black">Custo de Vida (Gastos Fixos)</h2>
+        <div class="w-full h-80">
+          <canvas id="fixedChart" data-categories={@fixed_data}></canvas>
+        </div>
       </div>
-      <div class="w-full h-80">
-        <canvas id="categoryChart" data-categories={@category_data}></canvas>
+    </div>
+
+    <!-- Gastos Variáveis (Gráfico) -->
+    <div class="card bg-base-100 shadow-sm border border-base-300">
+      <div class="card-body p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="card-title text-base-content uppercase text-xs opacity-50 font-black">Estilo de Vida (Gastos Variáveis)</h2>
+          <a href="/transactions?category_id=nil" class="text-[10px] link link-primary no-underline font-bold uppercase">Ver Pendentes</a>
+        </div>
+        <div class="w-full h-80">
+          <canvas id="variableChart" data-categories={@variable_data}></canvas>
+        </div>
       </div>
     </div>
   </div>

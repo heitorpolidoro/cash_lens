@@ -8,13 +8,15 @@ defmodule CashLens.TransactionsFixtures do
   Generate a transaction.
   """
   def transaction_fixture(attrs \\ %{}) do
+    account_id = attrs[:account_id] || CashLens.AccountsFixtures.account_fixture().id
+
     {:ok, transaction} =
       attrs
       |> Enum.into(%{
         amount: "120.5",
-        category: "some category",
         date: ~D[2026-02-23],
-        description: "some description"
+        description: "some description",
+        account_id: account_id
       })
       |> CashLens.Transactions.create_transaction()
 

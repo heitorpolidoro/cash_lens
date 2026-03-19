@@ -89,7 +89,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                         tx.reimbursement_status == "pending" && "badge-warning",
                         tx.reimbursement_status == "requested" && "badge-info"
                       ]}>
-                        {translate_reimbursement_status(tx.reimbursement_status)}
+                        {translate_reimbursement_status(tx.reimbursement_status, tx.amount)}
                       </div>
                     </td>
                     <td class="text-right font-black text-error">{format_currency(tx.amount)}</td>
@@ -137,24 +137,36 @@ defmodule CashLensWeb.ReimbursementLive.Index do
               %>
               <div class="p-4 bg-base-200/50 rounded-2xl border border-base-300 flex flex-col md:flex-row gap-6 justify-between items-center group">
                 <div class="flex-1 flex flex-col md:flex-row gap-6 items-center w-full">
+                  <!-- Lado das Despesas -->
                   <div class="flex-1 space-y-1 w-full">
                     <p class="text-[8px] font-black uppercase opacity-40">Despesas Cobertas</p>
                     <%= for ex <- expenses do %>
                       <div class="flex justify-between items-center bg-base-100 p-2 rounded-lg border border-base-300/50">
-                        <span class="text-[10px] font-bold truncate max-w-[150px]">{ex.description}</span>
+                        <div class="flex flex-col">
+                          <span class="text-[10px] font-bold truncate max-w-[150px]">{ex.description}</span>
+                          <span class="text-[8px] opacity-50 uppercase font-black">{format_date(ex.date)}</span>
+                        </div>
                         <span class="text-[10px] font-black text-error">{format_currency(ex.amount)}</span>
                       </div>
                     <% end %>
                   </div>
+
                   <div class="hidden md:block"><.icon name="hero-arrow-long-right" class="size-6 opacity-20" /></div>
+
+                  <!-- Lado do Crédito -->
                   <div class="flex-1 space-y-1 w-full">
                     <p class="text-[8px] font-black uppercase opacity-40">Recebimento do Plano</p>
                     <div :if={credit} class="flex justify-between items-center bg-success/10 p-2 rounded-lg border border-success/20">
-                      <span class="text-[10px] font-black text-success truncate max-w-[150px]">{credit.description}</span>
+                      <div class="flex flex-col">
+                        <span class="text-[10px] font-black text-success truncate max-w-[150px]">{credit.description}</span>
+                        <span class="text-[8px] text-success/60 font-black uppercase">{format_date(credit.date)}</span>
+                      </div>
                       <span class="text-[10px] font-black text-success">{format_currency(credit.amount)}</span>
                     </div>
+                    <p :if={!credit} class="text-[10px] text-warning italic">Crédito não encontrado ou excluído.</p>
                   </div>
                 </div>
+
                 <div class="flex flex-col items-end gap-2 border-t md:border-t-0 md:border-l border-base-300 pt-4 md:pt-0 md:pl-6">
                   <span class="text-[9px] font-black opacity-30 uppercase">Link: {String.slice(link_key, 0..7)}</span>
                   <button phx-click="unlink_reimbursement" phx-value-link-key={link_key} class="btn btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100 transition-opacity">
@@ -261,7 +273,6 @@ defmodule CashLensWeb.ReimbursementLive.Index do
 
   @impl true
   def handle_event("link_single_expense", %{"id" => id}, socket) do
-    # Select only this one and open linker
     new_selection = MapSet.new([id])
     
     total = 
@@ -293,36 +304,22 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   def handle_event("linker_search_change", %{"value" => search}, socket) do
     {:noreply, socket |> assign(:linker_search, search) |> update_linker_list()}
   end
+
   @impl true
   def handle_event("confirm_link", %{"credit-id" => credit_id}, socket) do
     selected_ids = socket.assigns.selected_ids
     credit = Transactions.get_transaction!(credit_id)
     link_key = Ecto.UUID.generate()
 
-    # Find the category to apply to the credit
-    # We'll take the category of the first selected expense
-    # (In most cases they share the same category like 'Saúde')
-    first_expense = 
-      socket.assigns.all_reimbursable_list
-      |> Enum.find(&MapSet.member?(selected_ids, &1.id))
-    
+    first_expense = socket.assigns.all_reimbursable_list |> Enum.find(&MapSet.member?(selected_ids, &1.id))
     cat_id = first_expense.category_id
 
-    # Link all selected expenses (keeping their original categories)
     Enum.each(selected_ids, fn id ->
       tx = Transactions.get_transaction!(id)
-      Transactions.update_transaction(tx, %{
-        reimbursement_status: "paid", 
-        reimbursement_link_key: link_key
-      })
+      Transactions.update_transaction(tx, %{reimbursement_status: "paid", reimbursement_link_key: link_key})
     end)
 
-    # Link and categorize the credit with the expense category
-    {:ok, _} = Transactions.update_transaction(credit, %{
-      reimbursement_status: "paid", 
-      reimbursement_link_key: link_key,
-      category_id: cat_id
-    })
+    {:ok, _} = Transactions.update_transaction(credit, %{reimbursement_status: "paid", reimbursement_link_key: link_key, category_id: cat_id})
 
     {:noreply, 
      socket 
@@ -364,7 +361,6 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     target_amount = socket.assigns.total_selected |> Decimal.round(2)
     search = socket.assigns.linker_search
 
-    # Fetch with search if provided
     filters = %{"amount_min" => 0.01}
     filters = if search != "", do: Map.put(filters, "search", search), else: filters
 

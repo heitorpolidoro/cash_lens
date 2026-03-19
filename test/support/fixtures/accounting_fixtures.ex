@@ -8,16 +8,19 @@ defmodule CashLens.AccountingFixtures do
   Generate a balance.
   """
   def balance_fixture(attrs \\ %{}) do
+    account_id = attrs[:account_id] || CashLens.AccountsFixtures.account_fixture().id
+
     {:ok, balance} =
       attrs
       |> Enum.into(%{
+        account_id: account_id,
         balance: "120.5",
         expenses: "120.5",
         final_balance: "120.5",
         income: "120.5",
         initial_balance: "120.5",
-        month: 42,
-        year: 42
+        month: 1,
+        year: 2026
       })
       |> CashLens.Accounting.create_balance()
 

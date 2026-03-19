@@ -23,6 +23,8 @@ services:
       - WATCHMAN_DISABLE=true
     volumes:
       - .:/app
+      - /app/_build
+      - /app/deps
       - gemini_data:/root/.gemini
     depends_on:
       - db
