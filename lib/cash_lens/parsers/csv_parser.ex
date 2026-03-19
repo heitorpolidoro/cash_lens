@@ -5,13 +5,13 @@ defmodule CashLens.Parsers.CSVParser do
   alias NimbleCSV.RFC4180, as: CSV
 
   @doc """
-  Parses a CSV string based on the detected format.
+  Parses a CSV string for Banco do Brasil format.
   """
-  def parse(csv_content, format \\ :generic) do
+  def parse(csv_content, :bb) do
     csv_content
     |> CSV.parse_string()
     |> Enum.drop(1) # Skip header
-    |> Enum.map(fn row -> parse_row(row, format) end)
+    |> Enum.map(fn row -> parse_row(row, :bb) end)
     |> Enum.reject(&is_nil/1)
   end
 
@@ -34,30 +34,6 @@ defmodule CashLens.Parsers.CSVParser do
         amount: amount_decimal
       }
     end
-  end
-
-  # Nubank: Data, Valor, Identificador, Descrição
-  defp parse_row([date, amount, _id, description | _], :nubank) do
-    {final_date, final_time, clean_description} = extract_metadata_and_clean(description, parse_date(date))
-    
-    %{
-      date: final_date,
-      time: final_time,
-      description: clean_description,
-      amount: parse_amount(amount)
-    }
-  end
-
-  # Generic: Date, Description, Amount
-  defp parse_row([date, description, amount | _rest], :generic) do
-    {final_date, final_time, clean_description} = extract_metadata_and_clean(description, parse_date(date))
-
-    %{
-      date: final_date,
-      time: final_time,
-      description: clean_description,
-      amount: parse_amount(amount)
-    }
   end
 
   defp parse_row(_, _), do: nil

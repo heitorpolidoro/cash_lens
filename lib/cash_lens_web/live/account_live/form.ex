@@ -16,7 +16,12 @@ defmodule CashLensWeb.AccountLive.Form do
                   <.input field={@form[:name]} type="text" label="Nome" />
                   <.input field={@form[:bank]} type="text" label="Banco" />
                   <.input field={@form[:balance]} type="number" label="Saldo Inicial" step="any" />
-                          <.input field={@form[:color]} type="text" label="Cor (opcional)" />
+                  
+                  <.input field={@form[:parser_type]} type="select" label="Extrator" 
+                    options={[{"Banco do Brasil (CSV)", "bb_csv"}, {"Sem Parar (PDF)", "sem_parar_pdf"}]} 
+                    prompt="Selecione um extrator" />
+
+                  <.input field={@form[:color]} type="text" label="Cor (opcional)" />
                           
                           <div class="form-control">
                             <label class="label cursor-pointer justify-start gap-4">
@@ -26,8 +31,7 @@ defmodule CashLensWeb.AccountLive.Form do
                             </label>
                           </div>
                   
-                          <div class="flex items-end gap-4">
-                  
+                  <div class="flex items-end gap-4">
                     <div class="flex-1">
                       <.input field={@form[:icon]} type="text" label="URL do Ícone (opcional)" />
                     </div>
@@ -42,11 +46,15 @@ defmodule CashLensWeb.AccountLive.Form do
                     </div>
                   </div>
           
-                  <footer>
-                  <.button phx-disable-with="Salvando..." variant="primary">Salvar Conta</.button>
-        <.button navigate={return_path(@return_to, @account)}>Cancelar</.button>
-      </footer>
-    </.form>
+                  <div class="mt-8 flex flex-col sm:flex-row gap-3">
+                    <.button phx-disable-with="Salvando..." variant="primary" class="flex-1">
+                      Salvar Conta
+                    </.button>
+                    <.button type="button" navigate={return_path(@return_to, @account)} class="btn btn-error btn-outline flex-1">
+                      Cancelar
+                    </.button>
+                  </div>
+                </.form>
     """
   end
 

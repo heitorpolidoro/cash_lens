@@ -81,4 +81,11 @@ defmodule CashLensWeb.Formatters do
     if Decimal.lt?(amount, 0), do: "Reembolso Pago", else: "Reembolso"
   end
   def translate_reimbursement_status(other, _amount), do: String.capitalize(other)
+
+  @doc """
+  Translates parser types to human readable names.
+  """
+  def translate_parser_type("bb_csv"), do: "Banco do Brasil (CSV)"
+  def translate_parser_type("sem_parar_pdf"), do: "Sem Parar (PDF)"
+  def translate_parser_type(_), do: "Não configurado"
 end

@@ -25,6 +25,7 @@ defmodule CashLensWeb.AccountLive.Index do
               <th class="w-16 text-center">Ícone</th>
               <th>Nome</th>
               <th>Banco</th>
+              <th>Extrator</th>
               <th class="text-center">Importa?</th>
               <th class="w-16"></th>
             </tr>
@@ -46,6 +47,9 @@ defmodule CashLensWeb.AccountLive.Index do
               </td>
               <td class="font-bold">{account.name}</td>
               <td class="opacity-70">{account.bank}</td>
+              <td class="opacity-70">
+                {translate_parser_type(account.parser_type)}
+              </td>
               <td class="text-center">
                 <%= if account.accepts_import do %>
                   <.icon name="hero-check-circle" class="size-5 text-success mx-auto" />

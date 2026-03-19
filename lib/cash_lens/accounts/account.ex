@@ -11,6 +11,7 @@ defmodule CashLens.Accounts.Account do
     field :color, :string
     field :icon, :string
     field :accepts_import, :boolean, default: true
+    field :parser_type, :string
 
     timestamps(type: :utc_datetime)
   end
@@ -18,7 +19,7 @@ defmodule CashLens.Accounts.Account do
   @doc false
   def changeset(account, attrs) do
     account
-    |> cast(attrs, [:name, :bank, :balance, :color, :icon, :accepts_import])
+    |> cast(attrs, [:name, :bank, :balance, :color, :icon, :accepts_import, :parser_type])
     |> validate_required([:name, :bank, :balance, :accepts_import])
   end
 end

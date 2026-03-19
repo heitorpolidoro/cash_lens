@@ -438,18 +438,24 @@ defmodule CashLensWeb.TransactionLive.Index do
             <div class="form-control w-full mb-6">
               <label class="label"><span class="label-text font-bold">1. Selecione a Conta Destino</span></label>
               <select name="account_id" class="select select-bordered w-full rounded-2xl h-12" required>
+                <option value="">Selecione uma conta</option>
                 <%= for account <- @import_accounts do %>
-                  <option value={account.id}>{account.name}</option>
+                  <option value={account.id}>{account.name} ({translate_parser_type(account.parser_type)})</option>
                 <% end %>
               </select>
             </div>
 
+            <div class="tabs tabs-boxed bg-base-200 p-1 mb-6">
+              <a class="tab tab-active">Enviar Arquivo</a>
+              <a class="tab opacity-50 cursor-not-allowed">Colar Texto (Breve)</a>
+            </div>
+
             <div class="form-control w-full mb-8">
-              <label class="label"><span class="label-text font-bold">2. Envie os arquivos (.csv)</span></label>
+              <label class="label"><span class="label-text font-bold">2. Envie o arquivo</span></label>
               <div class="p-10 border-2 border-dashed border-base-300 rounded-3xl bg-base-200/50 flex flex-col items-center justify-center group hover:border-primary transition-all cursor-pointer relative">
                 <.live_file_input upload={@uploads.statement} class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                 <.icon name="hero-cloud-arrow-up" class="size-12 opacity-20 mb-4 group-hover:text-primary group-hover:opacity-100 transition-all" />
-                <p class="text-sm font-medium opacity-40">Arraste seus arquivos ou clique para selecionar</p>
+                <p class="text-sm font-medium opacity-40">Arraste seu arquivo ou clique para selecionar</p>
               </div>
               
               <div :for={entry <- @uploads.statement.entries} class="mt-4 p-3 bg-base-100 rounded-xl border border-base-300 flex items-center justify-between animate-in slide-in-from-left-2">
@@ -461,6 +467,12 @@ defmodule CashLensWeb.TransactionLive.Index do
                   <.icon name="hero-x-mark" class="size-4" />
                 </button>
               </div>
+            </div>
+
+            <div class="divider uppercase text-[10px] font-black opacity-20">Ou cole o texto do extrato</div>
+
+            <div class="form-control w-full mb-8">
+              <textarea name="pasted_text" rows="6" class="textarea textarea-bordered w-full rounded-2xl font-mono text-xs" placeholder="Cole aqui o conteúdo textual do seu extrato..."></textarea>
             </div>
 
             <button type="submit" class="btn btn-primary btn-lg w-full rounded-2xl shadow-lg shadow-primary/20" phx-disable-with="Processando...">
@@ -732,6 +744,11 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
+  def handle_event("open_import", _params, socket) do
+    {:noreply, assign(socket, :show_import_modal, true)}
+  end
+
+  @impl true
   def handle_event("open_quick_category", %{"name" => name, "id" => tx_id}, socket) do
     suggested_name = name |> String.split(" ") |> Enum.map(&String.capitalize/1) |> Enum.join(" ")
     {:noreply, socket |> assign(:show_quick_category_modal, true) |> assign(:pending_transaction_id, tx_id) |> assign(:category_form, to_form(%{"name" => suggested_name}))}
@@ -987,36 +1004,62 @@ defmodule CashLensWeb.TransactionLive.Index do
   def handle_event("validate_import", _params, socket), do: {:noreply, socket}
 
   @impl true
-  def handle_event("save_import", %{"account_id" => account_id}, socket) do
-    all_affected_periods = consume_uploaded_entries(socket, :statement, fn %{path: path}, entry ->
-      content = File.read!(path)
-      content = if String.valid?(content), do: content, else: :unicode.characters_to_binary(content, :latin1, :utf8)
-      case Ingestor.parse(content, entry.client_name) do
-        {:error, reason} -> {:postpone, reason}
-        transactions_data ->
-          periods = Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
-            data |> Map.put(:account_id, account_id) |> CashLens.Transactions.AutoCategorizer.categorize() |> Transactions.create_transaction()
-            acc = MapSet.put(acc, {account_id, data.date.month, data.date.year})
-            description = String.upcase(data.description || "")
-            cond do
-              String.contains?(description, "BB MM OURO") ->
-                case Accounts.get_account_by_name("BB MM Ouro") do
-                  nil -> acc
-                  a -> MapSet.put(acc, {a.id, data.date.month, data.date.year})
-                end
-              String.contains?(description, ["BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
-                case Accounts.get_account_by_name("BB Rende Fácil") do
-                  nil -> acc
-                  a -> MapSet.put(acc, {a.id, data.date.month, data.date.year})
-                end
-              true -> acc
-            end
-          end)
-          {:ok, periods}
+  def handle_event("save_import", %{"account_id" => account_id} = params, socket) do
+    account = Accounts.get_account!(account_id)
+    parser_type = account.parser_type
+    pasted_text = params["pasted_text"] || ""
+
+    results = if String.trim(pasted_text) != "" do
+      # Process pasted text
+      case Ingestor.parse(pasted_text, parser_type) do
+        {:error, reason} -> {:error, reason}
+        transactions_data -> 
+          periods = process_transactions_data(transactions_data, account_id)
+          {:ok, [periods]}
+      end
+    else
+      # Process uploaded files
+      all_affected_periods = consume_uploaded_entries(socket, :statement, fn %{path: path}, _entry ->
+        content = File.read!(path)
+        content = if String.valid?(content), do: content, else: :unicode.characters_to_binary(content, :latin1, :utf8)
+        case Ingestor.parse(content, parser_type) do
+          {:error, reason} -> {:postpone, reason}
+          transactions_data ->
+            periods = process_transactions_data(transactions_data, account_id)
+            {:ok, periods}
+        end
+      end)
+      {:ok, all_affected_periods}
+    end
+
+    case results do
+      {:error, reason} -> 
+        {:noreply, put_flash(socket, :error, "Erro: #{reason}")}
+      {:ok, all_affected_periods} ->
+        all_affected_periods |> List.flatten() |> Enum.reduce(MapSet.new(), fn set, acc -> MapSet.union(acc, set) end) |> MapSet.to_list() |> Enum.each(fn {acc_id, month, year} -> CashLens.Accounting.calculate_monthly_balance(acc_id, year, month) end)
+        {:noreply, socket |> assign(:show_import_modal, false) |> assign(:page, 1) |> assign(:end_of_list?, false) |> assign(:pending_count, Transactions.count_pending_transactions()) |> put_flash(:info, "Importação concluída!") |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+    end
+  end
+
+  defp process_transactions_data(transactions_data, account_id) do
+    Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
+      data |> Map.put(:account_id, account_id) |> CashLens.Transactions.AutoCategorizer.categorize() |> Transactions.create_transaction()
+      acc = MapSet.put(acc, {account_id, data.date.month, data.date.year})
+      description = String.upcase(data.description || "")
+      cond do
+        String.contains?(description, "BB MM OURO") ->
+          case Accounts.get_account_by_name("BB MM Ouro") do
+            nil -> acc
+            a -> MapSet.put(acc, {a.id, data.date.month, data.date.year})
+          end
+        String.contains?(description, ["BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
+          case Accounts.get_account_by_name("BB Rende Fácil") do
+            nil -> acc
+            a -> MapSet.put(acc, {a.id, data.date.month, data.date.year})
+          end
+        true -> acc
       end
     end)
-    all_affected_periods |> List.flatten() |> Enum.reduce(MapSet.new(), fn set, acc -> MapSet.union(acc, set) end) |> MapSet.to_list() |> Enum.each(fn {acc_id, month, year} -> CashLens.Accounting.calculate_monthly_balance(acc_id, year, month) end)
-    {:noreply, socket |> assign(:show_import_modal, false) |> assign(:page, 1) |> assign(:end_of_list?, false) |> assign(:pending_count, Transactions.count_pending_transactions()) |> put_flash(:info, "Importação concluída!") |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
   end
 
   @impl true
