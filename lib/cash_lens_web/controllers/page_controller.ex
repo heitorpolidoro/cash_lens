@@ -35,6 +35,7 @@ defmodule CashLensWeb.PageController do
       balance = Enum.find(latest_balances, &(&1.account_id == account.id))
       
       %{
+        id: account.id,
         name: account.name,
         bank: account.bank,
         color: account.color,

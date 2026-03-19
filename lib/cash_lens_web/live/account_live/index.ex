@@ -30,8 +30,8 @@ defmodule CashLensWeb.AccountLive.Index do
             </tr>
           </thead>
           <tbody id="accounts" phx-update="stream">
-            <tr :for={{id, account} <- @streams.accounts} id={id} class="hover group border-b border-base-200">
-              <td class="text-center">
+            <tr :for={{id, account} <- @streams.accounts} id={id} class="hover group border-b border-base-200 cursor-pointer" phx-click={JS.navigate(~p"/transactions?account_id=#{account.id}&return_to=accounts")}>
+              <td class="text-center py-4">
                 <div class="avatar mx-auto">
                   <div class="w-8 rounded-full bg-base-300">
                     <%= if account.icon && account.icon != "" do %>

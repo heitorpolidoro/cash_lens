@@ -96,6 +96,28 @@ defmodule CashLens.Accounting do
   defp get_previous_period(year, month), do: {year, month - 1}
 
   @doc """
+  Returns the most recent balance for a specific account.
+  """
+  def get_latest_balance_for_account(account_id) do
+    Balance
+    |> where(account_id: ^account_id)
+    |> order_by([b], desc: b.year, desc: b.month)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  @doc """
+  Returns the oldest balance for a specific account.
+  """
+  def get_oldest_balance_for_account(account_id) do
+    Balance
+    |> where(account_id: ^account_id)
+    |> order_by([b], asc: b.year, asc: b.month)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  @doc """
   Returns the list of all balances based on filters and pagination.
   """
   def list_balances(filters \\ %{}, page \\ 1, page_size \\ 20) do

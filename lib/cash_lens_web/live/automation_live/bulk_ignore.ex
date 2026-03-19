@@ -8,8 +8,8 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
     ~H"""
     <div class="py-6 space-y-8">
       <.header>
-        Automação: Silenciar Massa
-        <:subtitle>Cadastre padrões (Regex) de descrições que NÃO devem disparar a sugestão de categorização em massa.</:subtitle>
+        Regras de Exclusão
+        <:subtitle>Cadastre padrões (Regex) de descrições que devem ser ignoradas na sugestão de categorização em massa.</:subtitle>
       </.header>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -17,13 +17,13 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
         <div class="lg:col-span-1">
           <div class="card bg-base-100 shadow-sm border border-base-300">
             <div class="card-body p-6">
-              <h2 class="text-sm font-black uppercase opacity-50 mb-4">Novo Padrão</h2>
+              <h2 class="text-sm font-black uppercase opacity-50 mb-4">Nova Regra</h2>
               <.form for={@form} id="ignore-form" phx-submit="save" phx-change="validate" class="space-y-4">
-                <.input field={@form[:pattern]} type="text" label="Regex do Padrão" placeholder="Ex: ^PIX ENVIADO" required />
-                <.input field={@form[:description]} type="text" label="Descrição/Motivo" placeholder="Ex: PIX genérico" />
+                <.input field={@form[:pattern]} type="text" label="Padrão (Regex)" placeholder="Ex: ^PIX ENVIADO" required />
+                <.input field={@form[:description]} type="text" label="Motivo" placeholder="Ex: Transações genéricas" />
                 <div class="pt-2">
                   <button type="submit" class="btn btn-primary w-full rounded-xl" phx-disable-with="Salvando...">
-                    Salvar Padrão
+                    Salvar Regra
                   </button>
                 </div>
               </.form>
@@ -38,7 +38,7 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
               <table class="table table-zebra w-full text-xs">
                 <thead class="bg-base-200/50">
                   <tr>
-                    <th>Padrão (Regex)</th>
+                    <th>Padrão</th>
                     <th>Motivo</th>
                     <th class="w-16"></th>
                   </tr>

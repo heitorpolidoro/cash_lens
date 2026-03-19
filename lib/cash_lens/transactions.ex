@@ -117,7 +117,7 @@ defmodule CashLens.Transactions do
   @doc """
   Calculates monthly totals for income (positive) and expenses (negative), ignoring transfers.
   """
-  def get_monthly_summary(date \\ nil) do
+  def get_monthly_summary(date \\ nil, filters \\ %{}) do
     target_date = date || get_latest_transaction_date() || Date.utc_today()
     first_of_month = Date.beginning_of_month(target_date)
     last_of_month = Date.end_of_month(target_date)
@@ -128,6 +128,10 @@ defmodule CashLens.Transactions do
       where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
       where: is_nil(t.reimbursement_link_key),
       select: t
+
+    query = 
+      query
+      |> filter_by_account(filters["account_id"])
 
     transactions = Repo.all(query)
 

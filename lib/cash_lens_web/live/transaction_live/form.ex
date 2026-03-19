@@ -7,31 +7,51 @@ defmodule CashLensWeb.TransactionLive.Form do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <div class="max-w-xl mx-auto py-8">
       <.header>
         {@page_title}
-        <:subtitle>Use this form to manage transaction records in your database.</:subtitle>
+        <:subtitle>Use este formulário para gerenciar os dados da transação.</:subtitle>
       </.header>
 
-      <.form for={@form} id="transaction-form" phx-change="validate" phx-submit="save">
-        <.input field={@form[:date]} type="date" label="Date" />
-        <.input field={@form[:description]} type="text" label="Description" />
-        <.input field={@form[:amount]} type="number" label="Amount" step="any" />
-        <.input field={@form[:category]} type="text" label="Category" />
-        <footer>
-          <.button phx-disable-with="Saving..." variant="primary">Save Transaction</.button>
-          <.button navigate={return_path(@return_to, @transaction)}>Cancel</.button>
-        </footer>
+      <.form :let={f} for={@form} id="transaction-form" phx-change="validate" phx-submit="save" class="mt-8 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <.input field={f[:date]} type="date" label="Data" required />
+          <.input field={f[:time]} type="time" label="Hora (opcional)" />
+        </div>
+
+        <.input field={f[:description]} type="text" label="Descrição" required placeholder="Ex: Supermercado, Aluguel..." />
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <.input field={f[:amount]} type="number" label="Valor" step="0.01" required placeholder="0.00" />
+          <.input field={f[:account_id]} type="select" label="Conta" options={Enum.map(@accounts, &{&1.name, &1.id})} required />
+        </div>
+
+        <.input field={f[:category_id]} type="select" label="Categoria (opcional)" options={Enum.map(@categories, &{CashLens.Categories.Category.full_name(&1), &1.id})} prompt="Pendente" />
+
+        <div class="pt-4">
+          <.button phx-disable-with="Salvando..." variant="primary" class="w-full">Salvar Transação</.button>
+        </div>
       </.form>
-    </Layouts.app>
+
+      <div class="mt-4">
+        <.link navigate={~p"/transactions"} class="text-sm font-semibold text-primary">
+          <span class="hero-arrow-left size-3 mr-1"></span> Voltar para lista
+        </.link>
+      </div>
+    </div>
     """
   end
 
   @impl true
   def mount(params, _session, socket) do
+    categories = CashLens.Categories.list_categories()
+    accounts = CashLens.Accounts.list_accounts()
+
     {:ok,
      socket
      |> assign(:return_to, return_to(params["return_to"]))
+     |> assign(:categories, categories)
+     |> assign(:accounts, accounts)
      |> apply_action(socket.assigns.live_action, params)}
   end
 
