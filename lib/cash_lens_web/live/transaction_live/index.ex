@@ -132,7 +132,7 @@ defmodule CashLensWeb.TransactionLive.Index do
             class={["btn btn-sm shadow-sm", if(@filters["unmatched_transfers"] == "true", do: "btn-secondary", else: "btn-outline border-base-300")]}
           >
             <.icon name="hero-link-slash" class="size-4 mr-1" />
-            Sem Par ({@unmatched_transfers_count})
+            Transferências sem par ({@unmatched_transfers_count})
           </button>
         </div>
       </div>
