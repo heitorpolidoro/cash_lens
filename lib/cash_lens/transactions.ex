@@ -46,7 +46,7 @@ defmodule CashLens.Transactions do
     |> filter_by_category(filters["category_id"])
     |> filter_by_description(filters["search"])
     |> filter_by_date(filters["date"])
-    |> filter_by_month_year(filters["month"], filters["year"])
+    |> filter_by_month_year(filters["month"], filters["year"], filters["category_id"], filters["unmatched_transfers"])
     |> filter_by_amount(filters["amount"])
     |> filter_by_amount_range(filters["amount_min"], filters["amount_max"])
     |> filter_by_type(filters["type"])
@@ -66,24 +66,30 @@ defmodule CashLens.Transactions do
 
   defp filter_unmatched_transfers(query, _), do: query
 
-  defp filter_by_month_year(query, month, year) do
-    query
-    |> then(fn q -> 
-      if (month && month != "") do
-        m = if is_binary(month), do: String.to_integer(month), else: month
-        where(q, [t], fragment("extract(month from ?)", t.date) == ^m)
-      else
-        q
-      end
-    end)
-    |> then(fn q -> 
-      if (year && year != "") do
-        y = if is_binary(year), do: String.to_integer(year), else: year
-        where(q, [t], fragment("extract(year from ?)", t.date) == ^y)
-      else
-        q
-      end
-    end)
+  defp filter_by_month_year(query, month, year, category_id, unmatched_transfers) do
+    # Skip date filtering if we are looking for pending or unmatched items
+    # This allows seeing ALL pending items regardless of month
+    if category_id == "nil" or unmatched_transfers == "true" do
+      query
+    else
+      query
+      |> then(fn q -> 
+        if (month && month != "") do
+          m = if is_binary(month), do: String.to_integer(month), else: month
+          where(q, [t], fragment("extract(month from ?)", t.date) == ^m)
+        else
+          q
+        end
+      end)
+      |> then(fn q -> 
+        if (year && year != "") do
+          y = if is_binary(year), do: String.to_integer(year), else: year
+          where(q, [t], fragment("extract(year from ?)", t.date) == ^y)
+        else
+          q
+        end
+      end)
+    end
   end
 
   defp order_by_date(query, :asc), do: order_by(query, [t], asc: t.date, asc_nulls_last: t.time, asc: t.inserted_at)
@@ -162,10 +168,16 @@ defmodule CashLens.Transactions do
 
     query = from t in Transaction,
       left_join: c in assoc(t, :category),
-      where: t.date >= ^first_of_month and t.date <= ^last_of_month,
       where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
       where: is_nil(t.reimbursement_link_key),
       select: t
+
+    # Bypass date filtering if special global filters are active
+    query = if filters["category_id"] == "nil" or filters["unmatched_transfers"] == "true" do
+      query
+    else
+      where(query, [t], t.date >= ^first_of_month and t.date <= ^last_of_month)
+    end
 
     query = 
       query

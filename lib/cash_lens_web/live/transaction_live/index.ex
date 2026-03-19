@@ -84,8 +84,8 @@ defmodule CashLensWeb.TransactionLive.Index do
             </button>
           </div>
 
-          <div class="join shadow-sm border border-base-300 bg-base-100">
-            <button type="button" phx-click="prev_month" class="join-item btn btn-sm btn-ghost px-2" title="Mês Anterior">
+          <div class={["join shadow-sm border border-base-300 bg-base-100 transition-opacity", (@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true") && "opacity-30 pointer-events-none grayscale"]}>
+            <button type="button" phx-click="prev_month" class="join-item btn btn-sm btn-ghost px-2" title="Mês Anterior" disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}>
               <.icon name="hero-chevron-left" class="size-4" />
             </button>
             
@@ -97,20 +97,20 @@ defmodule CashLensWeb.TransactionLive.Index do
               <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
               <input type="hidden" name="unmatched_transfers" value={@filters["unmatched_transfers"]} />
               
-              <select name="month" class="join-item select select-xs h-8 bg-transparent border-none focus:ring-0 font-bold uppercase text-[10px]">
+              <select name="month" class="join-item select select-xs h-8 bg-transparent border-none focus:ring-0 font-bold uppercase text-[10px]" disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}>
                 <%= for {m_name, m_val} <- [{"Jan", 1}, {"Fev", 2}, {"Mar", 3}, {"Abr", 4}, {"Mai", 5}, {"Jun", 6}, {"Jul", 7}, {"Ago", 8}, {"Set", 9}, {"Out", 10}, {"Nov", 11}, {"Dez", 12}] do %>
                   <option value={m_val} selected={@filters["month"] == "#{m_val}"}>{m_name}</option>
                 <% end %>
               </select>
               <div class="join-item flex items-center px-1 opacity-20">/</div>
-              <select name="year" class="join-item select select-xs h-8 bg-transparent border-none focus:ring-0 font-bold uppercase text-[10px]">
+              <select name="year" class="join-item select select-xs h-8 bg-transparent border-none focus:ring-0 font-bold uppercase text-[10px]" disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}>
                 <%= for y <- (Date.utc_today().year - 5)..(Date.utc_today().year + 1) do %>
                   <option value={y} selected={@filters["year"] == "#{y}"}>{y}</option>
                 <% end %>
               </select>
             </form>
 
-            <button type="button" phx-click="next_month" class="join-item btn btn-sm btn-ghost px-2" title="Próximo Mês">
+            <button type="button" phx-click="next_month" class="join-item btn btn-sm btn-ghost px-2" title="Próximo Mês" disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}>
               <.icon name="hero-chevron-right" class="size-4" />
             </button>
           </div>
