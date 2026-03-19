@@ -46,14 +46,44 @@ defmodule CashLens.Transactions do
     |> filter_by_category(filters["category_id"])
     |> filter_by_description(filters["search"])
     |> filter_by_date(filters["date"])
+    |> filter_by_month_year(filters["month"], filters["year"])
     |> filter_by_amount(filters["amount"])
     |> filter_by_amount_range(filters["amount_min"], filters["amount_max"])
     |> filter_by_type(filters["type"])
     |> filter_by_reimbursement_status(filters["reimbursement_status"])
+    |> filter_unmatched_transfers(filters["unmatched_transfers"])
     |> order_by_date(sort_order)
     |> limit(^page_size)
     |> offset(^offset)
     |> Repo.all()
+  end
+
+  defp filter_unmatched_transfers(query, "true") do
+    where(query, [t], t.transfer_key |> is_nil())
+    |> join(:inner, [t], c in assoc(t, :category))
+    |> where([..., c], c.slug == "transfer")
+  end
+
+  defp filter_unmatched_transfers(query, _), do: query
+
+  defp filter_by_month_year(query, month, year) do
+    query
+    |> then(fn q -> 
+      if (month && month != "") do
+        m = if is_binary(month), do: String.to_integer(month), else: month
+        where(q, [t], fragment("extract(month from ?)", t.date) == ^m)
+      else
+        q
+      end
+    end)
+    |> then(fn q -> 
+      if (year && year != "") do
+        y = if is_binary(year), do: String.to_integer(year), else: year
+        where(q, [t], fragment("extract(year from ?)", t.date) == ^y)
+      else
+        q
+      end
+    end)
   end
 
   defp order_by_date(query, :asc), do: order_by(query, [t], asc: t.date, asc_nulls_last: t.time, asc: t.inserted_at)
@@ -119,8 +149,16 @@ defmodule CashLens.Transactions do
   """
   def get_monthly_summary(date \\ nil, filters \\ %{}) do
     target_date = date || get_latest_transaction_date() || Date.utc_today()
-    first_of_month = Date.beginning_of_month(target_date)
-    last_of_month = Date.end_of_month(target_date)
+    
+    # If month/year filters are present, use them to define the summary period
+    {m, y} = if (filters["month"] && filters["month"] != "" && filters["year"] && filters["year"] != "") do
+      {String.to_integer(filters["month"]), String.to_integer(filters["year"])}
+    else
+      {target_date.month, target_date.year}
+    end
+
+    first_of_month = Date.new!(y, m, 1)
+    last_of_month = Date.end_of_month(first_of_month)
 
     query = from t in Transaction,
       left_join: c in assoc(t, :category),
@@ -145,7 +183,7 @@ defmodule CashLens.Transactions do
       |> Enum.filter(fn t -> Decimal.lt?(t.amount, 0) end)
       |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
 
-    %{income: income, expenses: Decimal.abs(expenses), month: target_date}
+    %{income: income, expenses: Decimal.abs(expenses), month: first_of_month}
   end
 
   @doc """
