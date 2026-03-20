@@ -1,7 +1,7 @@
 FROM elixir:1.16.3-otp-26-alpine
 
-# Install build dependencies, nodejs, npm and watching tools
-RUN apk add --no-cache build-base git python3 inotify-tools nodejs npm coreutils
+# Install build dependencies, watching tools and PDF tools
+RUN apk add --no-cache build-base git inotify-tools coreutils poppler-utils nodejs npm
 
 # Install Gemini CLI
 RUN npm install -g @google/gemini-cli

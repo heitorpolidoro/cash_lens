@@ -17,39 +17,64 @@ defmodule CashLens.Parsers.PDFParser do
   end
 
   defp extract_plan_fee(text) do
-    # Pattern: CFL7G68 Plano Contratado SEM PARAR TURBO 01/11/25 a 30/11/25 28/11/25 R$ 58,17
-    # Note: Sometimes the vehicle license plate might be missing or different
-    regex = ~r/Plano Contratado\s+.*?\s+(\d{2}\/\d{2}\/\d{2})\s+R\$\s+([\d,.]+)/
-    
-    case Regex.run(regex, text) do
-      [_, date_str, amount_str] ->
-        [%{
-          date: parse_date(date_str),
-          time: nil,
-          description: "Mensalidade Sem Parar",
-          amount: parse_amount(amount_str) |> Decimal.mult(-1)
-        }]
-      _ -> []
-    end
-  end
-
-  defp extract_usages(text) do
-    # Looking for lines like: 
-    # 06/11/25 às 16:58:35 YORG PARTICIPAÇÕES DO BRASIL LTDA ... R$ 11,00
-    # 26/11/25 às 19:38:12 RIOSP JACAREI SUL, CAT. 1 R$ 7,70
-    
-    # regex matches: date, time, description, amount
-    regex = ~r/(\d{2}\/\d{2}\/\d{2})\s+às\s+(\d{2}:\d{2}:\d{2})\s+(.*?)\s+R\$\s+([\d,.]+)/
+    # Pattern: Plano Contratado ... R$ 58,17
+    # Using scan to ensure we get all (though usually it's just one)
+    regex = ~r/Plano Contratado.*?(\d{2}\/\d{2}\/\d{2})\s+R\$\s+([\d,.]+)/s
     
     Regex.scan(regex, text)
-    |> Enum.map(fn [_, date_str, time_str, desc, amount_str] ->
+    |> Enum.map(fn [_, date_str, amount_str] ->
       %{
         date: parse_date(date_str),
-        time: parse_time(time_str),
-        description: String.trim(desc),
+        time: nil,
+        description: "Mensalidade Sem Parar",
         amount: parse_amount(amount_str) |> Decimal.mult(-1)
       }
     end)
+  end
+
+  defp extract_usages(text) do
+    lines = String.split(text, "\n")
+    
+    # regex for line 1: optional vehicle plate, date, description, amount
+    # Example: CFL7G68                                      26/11/25         RIOSP                                                             R$ 7,70
+    regex_l1 = ~r/(?:[A-Z0-9]{7})?\s*(\d{2}\/\d{2}\/\d{2})\s+(.*?)\s+R\$\s+([\d,.]+)/
+    
+    # regex for line 2: "às" time, more description
+    # Example:                                               às 19:38:12      JACAREI SUL, CAT. 1
+    regex_l2 = ~r/\s+às\s+(\d{2}:\d{2}:\d{2})\s+(.*)/
+
+    {transactions, _} = Enum.reduce(lines, {[], nil}, fn line, {acc, last_tx} ->
+      cond do
+        # 1. Matches line 1 (New Transaction starting)
+        Regex.match?(regex_l1, line) ->
+          [_, date_str, desc, amount_str] = Regex.run(regex_l1, line)
+          
+          new_tx = %{
+            date: parse_date(date_str),
+            time: nil,
+            description: String.trim(desc),
+            amount: parse_amount(amount_str) |> Decimal.mult(-1)
+          }
+          {acc, new_tx}
+
+        # 2. Matches line 2 (Continuing last transaction)
+        last_tx && Regex.match?(regex_l2, line) ->
+          [_, time_str, extra_desc] = Regex.run(regex_l2, line)
+          
+          updated_tx = %{last_tx | 
+            time: parse_time(time_str),
+            description: (last_tx.description <> " " <> String.trim(extra_desc)) |> String.trim()
+          }
+          {[updated_tx | acc], nil} # Finish this TX and add to list
+
+        # 3. Random line, if we have a pending TX that didn't get a "line 2", 
+        # we might want to save it or discard it. In Sem Parar, they usually come in pairs.
+        true ->
+          {acc, last_tx}
+      end
+    end)
+
+    transactions |> Enum.reverse()
   end
 
   defp parse_date(date_string) do

@@ -85,7 +85,13 @@ defmodule CashLensWeb.TransactionLive.Index do
           </div>
 
           <div class={["join shadow-sm border border-base-300 bg-base-100 transition-opacity", (@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true") && "opacity-30 pointer-events-none grayscale"]}>
-            <button type="button" phx-click="prev_month" class="join-item btn btn-sm btn-ghost px-2" title="Mês Anterior" disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}>
+            <button 
+              type="button" 
+              phx-click="prev_month" 
+              class="join-item btn btn-sm btn-ghost px-2" 
+              title="Mês Anterior" 
+              disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}
+            >
               <.icon name="hero-chevron-left" class="size-4" />
             </button>
             
@@ -98,19 +104,30 @@ defmodule CashLensWeb.TransactionLive.Index do
               <input type="hidden" name="unmatched_transfers" value={@filters["unmatched_transfers"]} />
               
               <select name="month" class="join-item select select-xs h-8 bg-transparent border-none focus:ring-0 font-bold uppercase text-[10px]" disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}>
+                <option value="" selected={@filters["month"] == ""}>Todos os Meses</option>
                 <%= for {m_name, m_val} <- [{"Jan", 1}, {"Fev", 2}, {"Mar", 3}, {"Abr", 4}, {"Mai", 5}, {"Jun", 6}, {"Jul", 7}, {"Ago", 8}, {"Set", 9}, {"Out", 10}, {"Nov", 11}, {"Dez", 12}] do %>
                   <option value={m_val} selected={@filters["month"] == "#{m_val}"}>{m_name}</option>
                 <% end %>
               </select>
-              <div class="join-item flex items-center px-1 opacity-20">/</div>
-              <select name="year" class="join-item select select-xs h-8 bg-transparent border-none focus:ring-0 font-bold uppercase text-[10px]" disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}>
+              
+              <input :if={@filters["month"] == ""} type="hidden" name="year" value={@filters["year"] || Date.utc_today().year} />
+              
+              <div :if={@filters["month"] != ""} class="join-item flex items-center px-1 opacity-20">/</div>
+              
+              <select :if={@filters["month"] != ""} name="year" class="join-item select select-xs h-8 bg-transparent border-none focus:ring-0 font-bold uppercase text-[10px]" disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}>
                 <%= for y <- (Date.utc_today().year - 5)..(Date.utc_today().year + 1) do %>
                   <option value={y} selected={@filters["year"] == "#{y}"}>{y}</option>
                 <% end %>
               </select>
             </form>
 
-            <button type="button" phx-click="next_month" class="join-item btn btn-sm btn-ghost px-2" title="Próximo Mês" disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}>
+            <button 
+              type="button" 
+              phx-click="next_month" 
+              class="join-item btn btn-sm btn-ghost px-2" 
+              title="Próximo Mês" 
+              disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}
+            >
               <.icon name="hero-chevron-right" class="size-4" />
             </button>
           </div>
@@ -264,6 +281,7 @@ defmodule CashLensWeb.TransactionLive.Index do
                 <input type="hidden" name="type" value={@filters["type"]} />
                 <input type="hidden" name="month" value={@filters["month"]} />
                 <input type="hidden" name="year" value={@filters["year"]} />
+                <input type="hidden" name="unmatched_transfers" value={@filters["unmatched_transfers"]} />
                 <tr>
                   <th class="w-40 px-4">
                     <div class="flex flex-col gap-1">
@@ -382,9 +400,6 @@ defmodule CashLensWeb.TransactionLive.Index do
                 <td class="w-40 px-4 text-xs opacity-60 truncate">{if transaction.account, do: transaction.account.name, else: "..."}</td>
                 <td class="w-24 px-4 text-right">
                   <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button type="button" phx-click="ai_research" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-secondary" title="Pesquisar com IA">
-                      <.icon name="hero-sparkles" class="size-3" />
-                    </button>
                     <%= if transaction.reimbursement_status do %>
                       <button type="button" phx-click="unmark_reimbursable" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-error" title="Remover marcação de reembolso">
                         <.icon name="hero-x-circle" class="size-3" />
@@ -435,23 +450,39 @@ defmodule CashLensWeb.TransactionLive.Index do
           <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter text-primary">Importar Extratos</h2>
           
           <form id="upload-form" phx-submit="save_import" phx-change="validate_import">
-            <div class="form-control w-full mb-6">
-              <label class="label"><span class="label-text font-bold">1. Selecione a Conta Destino</span></label>
-              <select name="account_id" class="select select-bordered w-full rounded-2xl h-12" required>
-                <option value="">Selecione uma conta</option>
+            <div class="form-control w-full mb-8">
+              <label class="label"><span class="label-text font-black uppercase opacity-40 text-[10px]">1. Selecione a Conta Destino</span></label>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                 <%= for account <- @import_accounts do %>
-                  <option value={account.id}>{account.name} ({translate_parser_type(account.parser_type)})</option>
-                <% end %>
-              </select>
-            </div>
+                  <label class={[
+                    "flex items-center gap-3 p-3 border-2 rounded-2xl cursor-pointer hover:bg-base-200 transition-all group",
+                    if(@import_account_id == account.id, do: "border-primary bg-primary/5", else: "border-base-300")
+                  ]}>
+                    <input type="radio" name="account_id" value={account.id} class="radio radio-primary radio-sm" required checked={@import_account_id == account.id} />
+                    
+                    <div class="avatar">
+                      <div class="w-8 rounded-full bg-base-300 overflow-hidden">
+                        <%= if account.icon && account.icon != "" do %>
+                          <img src={account.icon} />
+                        <% else %>
+                          <div class="flex items-center justify-center h-full w-full bg-primary text-primary-content text-[10px] font-bold">
+                            {String.slice(account.bank || account.name, 0..1)}
+                          </div>
+                        <% end %>
+                      </div>
+                    </div>
 
-            <div class="tabs tabs-boxed bg-base-200 p-1 mb-6">
-              <a class="tab tab-active">Enviar Arquivo</a>
-              <a class="tab opacity-50 cursor-not-allowed">Colar Texto (Breve)</a>
+                    <div class="min-w-0">
+                      <span class="block font-bold text-sm truncate">{account.name}</span>
+                      <span class="block text-[9px] opacity-50 uppercase font-black">{translate_parser_type(account.parser_type)}</span>
+                    </div>
+                  </label>
+                <% end %>
+              </div>
             </div>
 
             <div class="form-control w-full mb-8">
-              <label class="label"><span class="label-text font-bold">2. Envie o arquivo</span></label>
+              <label class="label"><span class="label-text font-bold">2. Envie o arquivo (CSV ou PDF)</span></label>
               <div class="p-10 border-2 border-dashed border-base-300 rounded-3xl bg-base-200/50 flex flex-col items-center justify-center group hover:border-primary transition-all cursor-pointer relative">
                 <.live_file_input upload={@uploads.statement} class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                 <.icon name="hero-cloud-arrow-up" class="size-12 opacity-20 mb-4 group-hover:text-primary group-hover:opacity-100 transition-all" />
@@ -467,12 +498,6 @@ defmodule CashLensWeb.TransactionLive.Index do
                   <.icon name="hero-x-mark" class="size-4" />
                 </button>
               </div>
-            </div>
-
-            <div class="divider uppercase text-[10px] font-black opacity-20">Ou cole o texto do extrato</div>
-
-            <div class="form-control w-full mb-8">
-              <textarea name="pasted_text" rows="6" class="textarea textarea-bordered w-full rounded-2xl font-mono text-xs" placeholder="Cole aqui o conteúdo textual do seu extrato..."></textarea>
             </div>
 
             <button type="submit" class="btn btn-primary btn-lg w-full rounded-2xl shadow-lg shadow-primary/20" phx-disable-with="Processando...">
@@ -573,37 +598,6 @@ defmodule CashLensWeb.TransactionLive.Index do
           </div>
         </div>
       </.modal>
-
-      <!-- Seção de IA (Overlay lateral) -->
-      <div :if={@ai_result} class="fixed inset-y-0 right-0 w-full md:w-1/2 bg-base-100 shadow-2xl z-50 border-l border-base-300 flex flex-col animate-in slide-in-from-right duration-300">
-        <div class="p-6 border-b border-base-300 flex justify-between items-center bg-base-200/50">
-          <div>
-            <h3 class="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
-              <.icon name="hero-sparkles" class="size-5 text-secondary" />
-              Insights da IA
-            </h3>
-            <p class="text-xs opacity-50 font-bold uppercase">{@ai_result.description}</p>
-          </div>
-          <button phx-click="close_modal" class="btn btn-circle btn-ghost btn-sm">
-            <.icon name="hero-x-mark" class="size-6" />
-          </button>
-        </div>
-        
-        <div class="flex-1 overflow-y-auto p-8 prose prose-sm max-w-none">
-          <div :if={@ai_loading && @ai_result.content == ""} class="flex flex-col items-center justify-center h-full opacity-40">
-            <span class="loading loading-ring loading-lg mb-4"></span>
-            <p class="font-black uppercase tracking-widest text-[10px] animate-pulse">Analisando transação...</p>
-          </div>
-          
-          <div id="ai-content-renderer" phx-hook="MarkdownRenderer" data-content={@ai_result.content} class="text-base-content leading-relaxed">
-            <!-- Content rendered via JS Hook -->
-          </div>
-          
-          <div :if={@ai_loading && @ai_result.content != ""} class="mt-4 flex justify-start">
-            <span class="loading loading-dots loading-xs opacity-30"></span>
-          </div>
-        </div>
-      </div>
     </div>
     """
   end
@@ -624,23 +618,22 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:reimbursement_credit, nil)
      |> assign(:reimbursement_search, "")
      |> assign(:pending_reimbursements, [])
-     |> assign(:ai_result, nil)
-     |> assign(:ai_loading, false)
      |> assign(:bulk_confirmation, nil)
      |> assign(:pending_transaction_id, nil)
+     |> assign(:import_account_id, nil)
      |> assign(:category_form, to_form(%{"name" => ""}))
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, accounts)
      |> assign(:import_accounts, Enum.filter(accounts, & &1.accepts_import))
      |> assign(:categories, Categories.list_categories())
-     |> assign(:filters, %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => "", "sort_order" => "desc", "type" => "", "month" => "#{Date.utc_today().month}", "year" => "#{Date.utc_today().year}", "unmatched_transfers" => ""})
+     |> assign(:filters, %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => "", "sort_order" => "desc", "type" => "", "month" => "", "year" => "", "unmatched_transfers" => ""})
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
      |> assign(:return_to, nil)
      |> assign(:summary, %{current_balance: Decimal.new("0"), income: Decimal.new("0"), expenses: Decimal.new("0"), month_name: ""})
      |> assign(:pending_count, Transactions.count_pending_transactions())
      |> assign(:unmatched_transfers_count, 0)
-     |> allow_upload(:statement, accept: ~w(.csv), max_entries: 100)}
+     |> allow_upload(:statement, accept: ~w(.csv .pdf), max_entries: 100)}
   end
 
   @impl true
@@ -658,14 +651,6 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> stream(:transactions, Transactions.list_transactions(filters, 1), reset: true)
 
     {:noreply, socket}
-  end
-
-  @impl true
-  def handle_event("ai_research", %{"id" => id}, socket) do
-    tx = Transactions.get_transaction!(id)
-    parent = self()
-    Task.start(fn -> CashLens.AI.research_transaction_stream(tx.description, parent) end)
-    {:noreply, socket |> assign(:ai_loading, true) |> assign(:ai_result, %{description: tx.description, content: ""})}
   end
 
   @impl true
@@ -756,7 +741,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("close_modal", _params, socket) do
-    {:noreply, socket |> assign(:show_import_modal, false) |> assign(:show_quick_category_modal, false) |> assign(:show_reimbursement_modal, false) |> assign(:show_balance_correction, false) |> assign(:ai_result, nil) |> assign(:ai_loading, false) |> assign(:confirm_modal, nil) |> assign(:bulk_confirmation, nil)}
+    {:noreply, socket |> assign(:show_import_modal, false) |> assign(:show_quick_category_modal, false) |> assign(:show_reimbursement_modal, false) |> assign(:show_balance_correction, false) |> assign(:confirm_modal, nil) |> assign(:bulk_confirmation, nil)}
   end
 
   @impl true
@@ -895,8 +880,9 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("prev_month", _params, socket) do
-    m = String.to_integer(socket.assigns.filters["month"])
-    y = String.to_integer(socket.assigns.filters["year"])
+    today = Date.utc_today()
+    m = if socket.assigns.filters["month"] == "", do: today.month, else: String.to_integer(socket.assigns.filters["month"])
+    y = if socket.assigns.filters["year"] == "", do: today.year, else: String.to_integer(socket.assigns.filters["year"])
     
     {new_m, new_y} = if m == 1, do: {12, y - 1}, else: {m - 1, y}
     
@@ -915,8 +901,9 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("next_month", _params, socket) do
-    m = String.to_integer(socket.assigns.filters["month"])
-    y = String.to_integer(socket.assigns.filters["year"])
+    today = Date.utc_today()
+    m = if socket.assigns.filters["month"] == "", do: today.month, else: String.to_integer(socket.assigns.filters["month"])
+    y = if socket.assigns.filters["year"] == "", do: today.year, else: String.to_integer(socket.assigns.filters["year"])
     
     {new_m, new_y} = if m == 12, do: {1, y + 1}, else: {m + 1, y}
     
@@ -1001,44 +988,55 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
+  def handle_event("validate_import", %{"account_id" => account_id}, socket) do
+    {:noreply, assign(socket, :import_account_id, account_id)}
+  end
+
+  @impl true
   def handle_event("validate_import", _params, socket), do: {:noreply, socket}
 
   @impl true
-  def handle_event("save_import", %{"account_id" => account_id} = params, socket) do
+  def handle_event("save_import", %{"account_id" => account_id}, socket) do
     account = Accounts.get_account!(account_id)
     parser_type = account.parser_type
-    pasted_text = params["pasted_text"] || ""
 
-    results = if String.trim(pasted_text) != "" do
-      # Process pasted text
-      case Ingestor.parse(pasted_text, parser_type) do
-        {:error, reason} -> {:error, reason}
-        transactions_data -> 
-          periods = process_transactions_data(transactions_data, account_id)
-          {:ok, [periods]}
-      end
-    else
-      # Process uploaded files
-      all_affected_periods = consume_uploaded_entries(socket, :statement, fn %{path: path}, _entry ->
-        content = File.read!(path)
-        content = if String.valid?(content), do: content, else: :unicode.characters_to_binary(content, :latin1, :utf8)
-        case Ingestor.parse(content, parser_type) do
-          {:error, reason} -> {:postpone, reason}
-          transactions_data ->
-            periods = process_transactions_data(transactions_data, account_id)
-            {:ok, periods}
+    all_affected = consume_uploaded_entries(socket, :statement, fn %{path: path}, _entry ->
+      content = File.read!(path)
+      
+      # If it's a PDF, we try to extract text using a system tool (pdftotext)
+      content = if String.ends_with?(path, ".pdf") or parser_type == "sem_parar_pdf" do
+        case System.cmd("pdftotext", ["-layout", path, "-"]) do
+          {text, 0} -> text
+          _ -> content # Fallback to raw (likely will fail parsing)
         end
-      end)
-      {:ok, all_affected_periods}
-    end
+      else
+        if String.valid?(content), do: content, else: :unicode.characters_to_binary(content, :latin1, :utf8)
+      end
 
-    case results do
-      {:error, reason} -> 
-        {:noreply, put_flash(socket, :error, "Erro: #{reason}")}
-      {:ok, all_affected_periods} ->
-        all_affected_periods |> List.flatten() |> Enum.reduce(MapSet.new(), fn set, acc -> MapSet.union(acc, set) end) |> MapSet.to_list() |> Enum.each(fn {acc_id, month, year} -> CashLens.Accounting.calculate_monthly_balance(acc_id, year, month) end)
-        {:noreply, socket |> assign(:show_import_modal, false) |> assign(:page, 1) |> assign(:end_of_list?, false) |> assign(:pending_count, Transactions.count_pending_transactions()) |> put_flash(:info, "Importação concluída!") |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
-    end
+      case Ingestor.parse(content, parser_type) do
+        {:error, reason} -> {:postpone, reason}
+        transactions_data ->
+          periods = process_transactions_data(transactions_data, account_id)
+          {:ok, {periods, length(transactions_data)}}
+      end
+    end)
+
+    {all_periods, total_count} = Enum.reduce(all_affected, {MapSet.new(), 0}, fn {periods, count}, {acc_p, acc_c} ->
+      {MapSet.union(acc_p, periods), acc_c + count}
+    end)
+
+    all_periods 
+    |> MapSet.to_list() 
+    |> Enum.each(fn {acc_id, month, year} -> CashLens.Accounting.calculate_monthly_balance(acc_id, year, month) end)
+
+    {:noreply, 
+     socket 
+     |> assign(:show_import_modal, false) 
+     |> assign(:page, 1) 
+     |> assign(:end_of_list?, false) 
+     |> assign(:pending_count, Transactions.count_pending_transactions()) 
+     |> put_flash(:info, "Sucesso! #{total_count} transações importadas.") 
+     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
   end
 
   defp process_transactions_data(transactions_data, account_id) do
@@ -1136,25 +1134,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> put_flash(:info, "Saldo ajustado com sucesso!")
      |> calculate_summary()
      |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
-  end
-
-  @impl true
-  def handle_info({:ai_chunk, chunk}, socket) do
-    new_content = (socket.assigns.ai_result.content || "") <> chunk
-    # Do NOT set ai_loading to false here, keep it true until ai_done
-    {:noreply, 
-     socket 
-     |> update(:ai_result, &Map.put(&1, :content, new_content))}
-  end
-
-  @impl true
-  def handle_info(:ai_done, socket) do
-    {:noreply, assign(socket, :ai_loading, false)}
-  end
-
-  @impl true
-  def handle_info({:ai_error, message}, socket) do
-    {:noreply, socket |> assign(:ai_loading, false) |> update(:ai_result, &Map.put(&1, :content, message))}
   end
 
   @impl true
