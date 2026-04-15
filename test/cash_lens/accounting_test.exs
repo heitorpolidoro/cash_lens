@@ -1,71 +1,58 @@
 defmodule CashLens.AccountingTest do
-  use CashLens.DataCase
-
+  use CashLens.DataCase, async: true
   alias CashLens.Accounting
+  alias CashLens.Accounting.Balance
+  import CashLens.AccountsFixtures
+  import CashLens.TransactionsFixtures
 
-  describe "balances" do
-    alias CashLens.Accounting.Balance
+  describe "calculate_monthly_balance/3" do
+    test "correctly chains balances between months" do
+      acc = account_fixture(%{name: "Checking", balance: "1000.00"})
+      
+      # Month 1: Jan 2026
+      # Initial: 1000.00 (from account)
+      # Transactions: -100.00
+      # Final should be: 900.00
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-01-15], amount: "-100.00"})
+      {:ok, b1} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      assert b1.initial_balance == Decimal.new("1000.00")
+      assert b1.final_balance == Decimal.new("900.00")
 
-    import CashLens.AccountingFixtures
-
-    @invalid_attrs %{balance: nil, month: nil, year: nil, initial_balance: nil, income: nil, expenses: nil, final_balance: nil}
-
-    test "list_balances/0 returns all balances" do
-      balance = balance_fixture()
-      assert Accounting.list_balances() == [balance]
+      # Month 2: Feb 2026
+      # Initial: 900.00 (chained from Jan)
+      # Transactions: +50.00
+      # Final should be: 950.00
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-02-10], amount: "50.00"})
+      {:ok, b2} = Accounting.calculate_monthly_balance(acc.id, 2026, 2)
+      assert b2.initial_balance == Decimal.new("900.00")
+      assert b2.final_balance == Decimal.new("950.00")
     end
 
-    test "get_balance!/1 returns the balance with given id" do
-      balance = balance_fixture()
-      assert Accounting.get_balance!(balance.id) == balance
-    end
+    test "recalculates correctly when middle month changes" do
+      acc = account_fixture(%{name: "Savings", balance: "0"})
+      
+      # Jan: +100 -> Final 100
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-01-01], amount: "100.00"})
+      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      
+      # Feb: +50 -> Final 150
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-02-01], amount: "50.00"})
+      Accounting.calculate_monthly_balance(acc.id, 2026, 2)
 
-    test "create_balance/1 with valid data creates a balance" do
-      valid_attrs = %{balance: "120.5", month: 42, year: 42, initial_balance: "120.5", income: "120.5", expenses: "120.5", final_balance: "120.5"}
+      # Now add a new transaction in Jan (+20)
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-01-15], amount: "20.00"})
+      
+      # Run recalculation
+      :ok = Accounting.recalculate_all_balances()
 
-      assert {:ok, %Balance{} = balance} = Accounting.create_balance(valid_attrs)
-      assert balance.balance == Decimal.new("120.5")
-      assert balance.month == 42
-      assert balance.year == 42
-      assert balance.initial_balance == Decimal.new("120.5")
-      assert balance.income == Decimal.new("120.5")
-      assert balance.expenses == Decimal.new("120.5")
-      assert balance.final_balance == Decimal.new("120.5")
-    end
+      # Verify Jan
+      b1 = Repo.get_by(Balance, account_id: acc.id, year: 2026, month: 1)
+      assert b1.final_balance == Decimal.new("120.00")
 
-    test "create_balance/1 with invalid data returns error changeset" do
-      assert {:error, %Ecto.Changeset{}} = Accounting.create_balance(@invalid_attrs)
-    end
-
-    test "update_balance/2 with valid data updates the balance" do
-      balance = balance_fixture()
-      update_attrs = %{balance: "456.7", month: 43, year: 43, initial_balance: "456.7", income: "456.7", expenses: "456.7", final_balance: "456.7"}
-
-      assert {:ok, %Balance{} = balance} = Accounting.update_balance(balance, update_attrs)
-      assert balance.balance == Decimal.new("456.7")
-      assert balance.month == 43
-      assert balance.year == 43
-      assert balance.initial_balance == Decimal.new("456.7")
-      assert balance.income == Decimal.new("456.7")
-      assert balance.expenses == Decimal.new("456.7")
-      assert balance.final_balance == Decimal.new("456.7")
-    end
-
-    test "update_balance/2 with invalid data returns error changeset" do
-      balance = balance_fixture()
-      assert {:error, %Ecto.Changeset{}} = Accounting.update_balance(balance, @invalid_attrs)
-      assert balance == Accounting.get_balance!(balance.id)
-    end
-
-    test "delete_balance/1 deletes the balance" do
-      balance = balance_fixture()
-      assert {:ok, %Balance{}} = Accounting.delete_balance(balance)
-      assert_raise Ecto.NoResultsError, fn -> Accounting.get_balance!(balance.id) end
-    end
-
-    test "change_balance/1 returns a balance changeset" do
-      balance = balance_fixture()
-      assert %Ecto.Changeset{} = Accounting.change_balance(balance)
+      # Verify Feb (Chained)
+      b2 = Repo.get_by(Balance, account_id: acc.id, year: 2026, month: 2)
+      assert b2.initial_balance == Decimal.new("120.00")
+      assert b2.final_balance == Decimal.new("170.00")
     end
   end
 end

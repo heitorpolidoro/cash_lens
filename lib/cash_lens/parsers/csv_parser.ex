@@ -15,8 +15,8 @@ defmodule CashLens.Parsers.CSVParser do
     |> Enum.reject(&is_nil/1)
   end
 
-  # Banco do Brasil: Data, Dep, Histórico, Data Bal, Doc, Valor, [Empty]
-  defp parse_row([date, _dep, description, _bal, _doc, amount | _], :bb) do
+  # Banco do Brasil: Data, Dep, Term, Histórico, Doc, Valor, [Empty]
+  defp parse_row([date, _dep, _term, description, _doc, amount | _], :bb) do
     amount_decimal = parse_amount(amount)
     description_up = String.upcase(description || "")
 

@@ -27,7 +27,8 @@ defmodule CashLens.Categories.Category do
   end
 
   defp generate_slug(changeset) do
-    if name = get_change(changeset, :name) do
+    if get_change(changeset, :name) || get_change(changeset, :parent_id) do
+      name = get_field(changeset, :name)
       # Base slug from current name
       base_slug = name |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "-") |> String.trim("-")
       

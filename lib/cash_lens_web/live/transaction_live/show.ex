@@ -6,7 +6,7 @@ defmodule CashLensWeb.TransactionLive.Show do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <div class="py-8">
       <.header>
         Transaction {@transaction.id}
         <:subtitle>This is a transaction record from your database.</:subtitle>
@@ -26,7 +26,7 @@ defmodule CashLensWeb.TransactionLive.Show do
         <:item title="Amount">{@transaction.amount}</:item>
         <:item title="Category">{@transaction.category}</:item>
       </.list>
-    </Layouts.app>
+    </div>
     """
   end
 

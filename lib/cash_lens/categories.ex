@@ -43,14 +43,27 @@ defmodule CashLens.Categories do
   def get_category!(id), do: Repo.get!(Category, id) |> Repo.preload(:parent)
 
   @doc """
-  Gets a list of IDs including the category itself and all its immediate children.
+  Gets a list of IDs including the category itself and all its descendants (children, grandchildren, etc.).
   """
   def get_category_ids_with_children(nil), do: []
   def get_category_ids_with_children(category_id) do
-    child_ids = 
-      Repo.all(from c in Category, where: c.parent_id == ^category_id, select: c.id)
-    
-    [category_id | child_ids]
+    initial_query =
+      Category
+      |> where([c], c.id == ^category_id)
+      |> select([c], %{id: c.id})
+
+    recursive_query =
+      Category
+      |> join(:inner, [c], ct in "category_tree", on: c.parent_id == ct.id)
+      |> select([c], %{id: c.id})
+
+    cte_query = initial_query |> union_all(^recursive_query)
+
+    recursive_ctes(Category, true)
+    |> with_cte("category_tree", as: ^cte_query)
+    |> join(:inner, [c], ct in "category_tree", on: c.id == ct.id)
+    |> select([c], c.id)
+    |> Repo.all()
   end
 
   @doc """

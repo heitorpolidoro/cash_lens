@@ -17,7 +17,7 @@ config :cash_lens, CashLens.Repo,
 # you can enable the server option below.
 config :cash_lens, CashLensWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
-  secret_key_base: "+wwMoOGMqjP/8bIPkd7ik78ThNJa1WkgLho9r04YexoVPMpn5b7wtjcvJ1G1IBv/",
+  secret_key_base: System.get_env("SECRET_KEY_BASE") || "test_change_me_secret_key_base",
   server: false
 
 # In test we don't send emails

@@ -39,7 +39,14 @@ defmodule CashLens.Transactions.Transaction do
       # Create a unique string representing this transaction
       # Include time in the string if it exists
       time_str = if time, do: Time.to_string(time), else: ""
-      raw_string = "#{account_id}|#{date}|#{time_str}|#{Decimal.to_string(amount)}|#{String.trim(desc)}"
+      
+      # Ensure binary_id is treated as a string for consistent interpolation
+      account_id_str = case account_id do
+        <<_::128>> -> Ecto.UUID.load!(account_id)
+        _ -> account_id
+      end
+
+      raw_string = "#{account_id_str}|#{date}|#{time_str}|#{Decimal.to_string(amount)}|#{String.trim(desc)}"
       
       # Hash the string to create a compact fingerprint
       hash = :crypto.hash(:sha256, raw_string) |> Base.encode16()

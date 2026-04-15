@@ -10,7 +10,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   def render(assigns) do
     ~H"""
     <div class="py-6 space-y-8">
-      <div :if={@filters["account_id"] != ""} class="mb-2">
+      <div :if={@filters["filter_account_id"] != ""} class="mb-2">
         <.link navigate={if @return_to == "accounts", do: ~p"/accounts", else: ~p"/"} class="text-xs font-black uppercase opacity-50 hover:opacity-100 flex items-center gap-1 transition-all group">
           <.icon name="hero-arrow-left" class="size-3 group-hover:-translate-x-1 transition-transform" />
           Voltar para {if @return_to == "accounts", do: "Contas", else: "Dashboard"}
@@ -18,14 +18,17 @@ defmodule CashLensWeb.TransactionLive.Index do
       </div>
       <.header>
         Transações
-        <:subtitle :if={@filters["account_id"] != ""}>
-          Filtrando por conta: {Enum.find(@accounts, & &1.id == @filters["account_id"]).name}
+        <:subtitle :if={@filters["filter_account_id"] not in ["", nil]}>
+          Filtrando por conta: {case Enum.find(@accounts, & &1.id == @filters["filter_account_id"]) do
+            nil -> "Desconhecida"
+            acc -> acc.name
+          end}
         </:subtitle>
         <:actions>
           <div class="dropdown dropdown-end">
-            <label tabindex="0" class="btn btn-outline border-base-300 btn-sm">
+            <button tabindex="0" class="btn btn-outline border-base-300 btn-sm">
               <.icon name="hero-ellipsis-vertical" class="size-4" /> Ações
-            </label>
+            </button>
             <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 mt-2 border border-base-200">
               <li>
                 <.link navigate={~p"/transactions/new"}>
@@ -97,8 +100,9 @@ defmodule CashLensWeb.TransactionLive.Index do
             
             <form id="month-selector" phx-change="apply_filters" class="m-0 p-0 flex">
               <input type="hidden" name="type" value={@filters["type"]} />
-              <input type="hidden" name="search" value={@filters["search"]} />
-              <input type="hidden" name="account_id" value={@filters["account_id"]} />
+              <input type="hidden" name="hidden_search" value={@filters["search"]} />
+
+              <input type="hidden" name="account_id" value={@filters["filter_account_id"]} />
               <input type="hidden" name="category_id" value={@filters["category_id"]} />
               <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
               <input type="hidden" name="unmatched_transfers" value={@filters["unmatched_transfers"]} />
@@ -157,16 +161,16 @@ defmodule CashLensWeb.TransactionLive.Index do
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <!-- Card de Saldo -->
         <div 
-          class={["stats shadow bg-base-100 border border-base-300 transition-all", @filters["account_id"] != "" && "hover:border-primary cursor-pointer active:scale-95"]}
-          phx-click={@filters["account_id"] != "" && "open_balance_correction"}
+          class={["stats shadow bg-base-100 border border-base-300 transition-all", @filters["filter_account_id"] != "" && "hover:border-primary cursor-pointer active:scale-95"]}
+          phx-click={@filters["filter_account_id"] != "" && "open_balance_correction"}
         >
           <div class="stat">
             <div class="stat-title flex items-center gap-2">
               Saldo
-              <.icon :if={@filters["account_id"] != ""} name="hero-pencil-square" class="size-3 opacity-30" />
+              <.icon :if={@filters["filter_account_id"] != ""} name="hero-pencil-square" class="size-3 opacity-30" />
             </div>
             <div class="stat-value text-primary font-black text-2xl">{format_currency(@summary.current_balance)}</div>
-            <div class="stat-desc">{if @filters["account_id"] != "", do: "Saldo desta conta", else: "Soma de todas as contas"}</div>
+            <div class="stat-desc">{if @filters["filter_account_id"] != "", do: "Saldo desta conta", else: "Soma de todas as contas"}</div>
           </div>
         </div>
 
@@ -178,7 +182,7 @@ defmodule CashLensWeb.TransactionLive.Index do
               Receitas ({@summary.month_name})
             </div>
             <div class="stat-value text-success font-black text-2xl">{format_currency(@summary.income)}</div>
-            <div class="stat-desc">Ganhos {if @filters["account_id"] != "", do: "nesta conta", else: "em todas as contas"}</div>
+            <div class="stat-desc">Ganhos {if @filters["filter_account_id"] != "", do: "nesta conta", else: "em todas as contas"}</div>
           </div>
         </div>
 
@@ -190,7 +194,7 @@ defmodule CashLensWeb.TransactionLive.Index do
               Despesas ({@summary.month_name})
             </div>
             <div class="stat-value text-error font-black text-2xl">{format_currency(@summary.expenses)}</div>
-            <div class="stat-desc">Gastos {if @filters["account_id"] != "", do: "nesta conta", else: "em todas as contas"}</div>
+            <div class="stat-desc">Gastos {if @filters["filter_account_id"] != "", do: "nesta conta", else: "em todas as contas"}</div>
           </div>
         </div>
 
@@ -215,7 +219,7 @@ defmodule CashLensWeb.TransactionLive.Index do
         <div class="p-2">
           <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">Corrigir Saldo</h2>
           <p class="text-xs opacity-60 mb-6">
-            Ajustando saldo da conta: <strong>{Enum.find(@accounts, & &1.id == @filters["account_id"]).name}</strong>
+            Ajustando saldo da conta: <strong>{Enum.find(@accounts, & &1.id == @filters["filter_account_id"]).name}</strong>
           </p>
 
           <.form :let={f} for={@balance_correction_form} id="balance-correction-form" phx-submit="save_balance_correction" class="space-y-6">
@@ -274,14 +278,14 @@ defmodule CashLensWeb.TransactionLive.Index do
       <!-- Tabela Unificada com Filtros -->
       <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="table table-zebra w-full text-xs table-fixed">
-            <thead class="bg-base-200/50">
-              <form id="transaction-filters" phx-change="apply_filters" class="m-0 p-0">
-                <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
-                <input type="hidden" name="type" value={@filters["type"]} />
-                <input type="hidden" name="month" value={@filters["month"]} />
-                <input type="hidden" name="year" value={@filters["year"]} />
-                <input type="hidden" name="unmatched_transfers" value={@filters["unmatched_transfers"]} />
+          <form id="transaction-filters" phx-change="apply_filters" class="m-0 p-0">
+            <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
+            <input type="hidden" name="type" value={@filters["type"]} />
+            <input type="hidden" name="month" value={@filters["month"]} />
+            <input type="hidden" name="year" value={@filters["year"]} />
+            <input type="hidden" name="unmatched_transfers" value={@filters["unmatched_transfers"]} />
+            <table class="table table-zebra w-full text-xs table-fixed">
+              <thead class="bg-base-200/50">
                 <tr>
                   <th class="w-40 px-4">
                     <div class="flex flex-col gap-1">
@@ -297,7 +301,7 @@ defmodule CashLensWeb.TransactionLive.Index do
                   <th class="px-4">
                     <div class="flex flex-col gap-1">
                       <span>Descrição</span>
-                      <input type="text" name="search" value={@filters["search"]} placeholder="Buscar..." class="input input-bordered input-xs font-normal w-full" phx-debounce="300" />
+                      <input type="text" name="search" value={@filters["filter_description"]} placeholder="Buscar..." class="input input-bordered input-xs font-normal w-full" phx-debounce="300" />
                     </div>
                   </th>
                   <th class="w-32 px-4">
@@ -326,7 +330,7 @@ defmodule CashLensWeb.TransactionLive.Index do
                       <select name="account_id" class="select select-bordered select-xs font-normal w-full">
                         <option value="">Todas</option>
                         <%= for account <- @accounts do %>
-                          <option value={account.id} selected={@filters["account_id"] == account.id}>{account.name}</option>
+                          <option value={account.id} selected={@filters["filter_account_id"] == account.id}>{account.name}</option>
                         <% end %>
                       </select>
                     </div>
@@ -340,9 +344,8 @@ defmodule CashLensWeb.TransactionLive.Index do
                     </div>
                   </th>
                 </tr>
-              </form>
-            </thead>
-            <tbody id="transactions" phx-update="stream" class="overflow-visible">
+              </thead>
+              <tbody id="transactions" phx-update="stream" class="overflow-visible">
               <tr :for={{id, transaction} <- @streams.transactions} id={id} class="hover group border-b border-base-200 overflow-visible">
                 <td class="whitespace-nowrap w-40 px-4">
                   <div class="flex flex-col">
@@ -401,25 +404,30 @@ defmodule CashLensWeb.TransactionLive.Index do
                 <td class="w-24 px-4 text-right">
                   <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <%= if transaction.reimbursement_status do %>
-                      <button type="button" phx-click="unmark_reimbursable" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-error" title="Remover marcação de reembolso">
+                      <button type="button" phx-click="unmark_reimbursable" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-error" title="Remover marcação de reembolso" aria-label="Remover Reembolso">
                         <.icon name="hero-x-circle" class="size-3" />
                       </button>
                     <% end %>
 
                     <%= if Decimal.lt?(transaction.amount, 0) && is_nil(transaction.reimbursement_status) do %>
-                      <button type="button" phx-click="mark_reimbursable" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-primary" title="Marcar Reembolsável">
+                      <button type="button" phx-click="mark_reimbursable" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-primary" title="Marcar Reembolsável" aria-label="Marcar Reembolsável">
                         <.icon name="hero-banknotes" class="size-3" />
                       </button>
                     <% end %>
                     <%= if Decimal.gt?(transaction.amount, 0) && is_nil(transaction.reimbursement_link_key) do %>
-                      <button type="button" phx-click="open_reimbursement_link" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-success" title="Este é um reembolso">
+                      <button type="button" phx-click="open_reimbursement_link" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-success" title="Este é um reembolso" aria-label="Vincular Reembolso">
                         <.icon name="hero-arrow-path" class="size-3" />
                       </button>
                     <% end %>
-                    <.link navigate={~p"/transactions/#{transaction}/edit"} class="btn btn-ghost btn-xs px-1">
+                    <%= if transaction.category && transaction.category.slug == "transfer" && is_nil(transaction.transfer_key) do %>
+                      <button type="button" phx-click="open_transfer_link" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-primary" title="Vincular par da transferência" aria-label="Vincular Transferência">
+                        <.icon name="hero-link" class="size-3" />
+                      </button>
+                    <% end %>
+                    <.link navigate={~p"/transactions/#{transaction}/edit"} class="btn btn-ghost btn-xs px-1" aria-label="Edit">
                       <.icon name="hero-pencil" class="size-3" />
                     </.link>
-                    <button type="button" phx-click="confirm_delete" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-error px-1">
+                    <button type="button" phx-click="confirm_delete" phx-value-id={transaction.id} class="btn btn-ghost btn-xs text-error px-1" aria-label="Excluir">
                       <.icon name="hero-trash" class="size-3" />
                     </button>
                   </div>
@@ -427,8 +435,71 @@ defmodule CashLensWeb.TransactionLive.Index do
               </tr>
             </tbody>
           </table>
+          </form>
+          <div id="infinite-scroll-sentinel" phx-hook="InfiniteScroll" data-page={@page}></div>
         </div>
       </div>
+
+      <.modal :if={@show_transfer_modal} id="transfer-modal" show on_cancel={JS.push("close_modal")}>
+        <div class="p-2">
+          <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">Vincular Transferência</h2>
+          <p class="text-xs opacity-60 mb-6">Selecione abaixo o par correspondente para este lançamento de {format_currency(@transfer_origin.amount)}.</p>
+          
+          <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
+            <%= if Enum.empty?(@pending_transfers) do %>
+              <div class="text-center py-10 opacity-40 italic">Nenhum par correspondente encontrado para esta transferência.</div>
+            <% end %>
+            <%= for pending <- @pending_transfers do %>
+              <button type="button" phx-click="link_transfer" phx-value-pair-id={pending.id} class="w-full text-left flex items-center justify-between p-3 border-2 border-base-300 rounded-xl hover:border-primary hover:bg-primary/5 transition-all group">
+                <div class="flex flex-col">
+                  <span class="text-[9px] font-bold uppercase opacity-50">{format_date(pending.date)} — {pending.account.name}</span>
+                  <span class="font-black text-md group-hover:text-primary">{pending.description}</span>
+                </div>
+                <div class="text-right">
+                  <span class={["font-black text-md", if(Decimal.lt?(pending.amount, 0), do: "text-error", else: "text-success")]}>{format_currency(pending.amount)}</span>
+                </div>
+              </button>
+            <% end %>
+          </div>
+
+          <div class="mt-6 pt-6 border-t border-base-300">
+            <button type="button" phx-click="open_quick_transfer" class="btn btn-outline btn-primary w-full rounded-2xl">
+              <.icon name="hero-plus-circle" class="size-4 mr-1" />
+              Não encontrei o par, criar manualmente
+            </button>
+          </div>
+        </div>
+      </.modal>
+
+      <.modal :if={@show_quick_transfer_modal} id="quick-transfer-modal" show on_cancel={JS.push("close_modal")}>
+        <div class="p-2">
+          <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">Criar Par da Transferência</h2>
+          <p class="text-xs opacity-60 mb-6">Confirme os dados abaixo para criar a transação correspondente na conta destino.</p>
+
+          <.form :let={f} for={@quick_transfer_form} id="quick-transfer-form" phx-submit="save_quick_transfer" class="space-y-6">
+            <div class="grid grid-cols-2 gap-4">
+              <.input field={f[:date]} type="date" label="Data" required readonly class="bg-base-200" />
+              <.input field={f[:amount]} type="number" label="Valor" step="0.01" required readonly class="bg-base-200 font-bold" />
+            </div>
+
+            <.input field={f[:description]} type="text" label="Descrição" required placeholder="Ex: Transferência entre contas..." />
+
+            <div class="form-control w-full">
+              <label class="label"><span class="label-text font-bold text-primary">Conta Destino</span></label>
+              <select name="account_id" class="select select-bordered w-full rounded-2xl h-12" required>
+                <option value="">Selecione a conta que recebeu/enviou</option>
+                <%= for account <- Enum.reject(@accounts, & &1.id == @transfer_origin.account_id) do %>
+                  <option value={account.id}>{account.name}</option>
+                <% end %>
+              </select>
+            </div>
+
+            <div class="pt-2">
+              <.button phx-disable-with="Criando e vinculando..." variant="primary" class="w-full">Confirmar e Vincular</.button>
+            </div>
+          </.form>
+        </div>
+      </.modal>
 
       <!-- Modais Existentes -->
       <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
@@ -613,7 +684,12 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
      |> assign(:show_balance_correction, false)
+     |> assign(:show_transfer_modal, false)
+     |> assign(:show_quick_transfer_modal, false)
+     |> assign(:transfer_origin, nil)
+     |> assign(:pending_transfers, [])
      |> assign(:balance_correction_form, to_form(%{"new_balance" => ""}))
+     |> assign(:quick_transfer_form, to_form(%{}))
      |> assign(:balance_diff, Decimal.new("0"))
      |> assign(:reimbursement_credit, nil)
      |> assign(:reimbursement_search, "")
@@ -638,8 +714,9 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_params(params, _url, socket) do
-    {return_to, filters} = Map.pop(params, "return_to")
-    filters = Map.merge(socket.assigns.filters, filters)
+    {return_to, filters_param} = Map.pop(params, "return_to")
+    
+    filters = Map.merge(socket.assigns.filters, filters_param || %{})
     
     socket = 
       socket 
@@ -648,7 +725,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> assign(:page, 1)
       |> assign(:end_of_list?, false)
       |> calculate_summary()
-      |> stream(:transactions, Transactions.list_transactions(filters, 1), reset: true)
+      |> stream(:transactions, Transactions.list_transactions(map_filters(filters), 1), reset: true)
 
     {:noreply, socket}
   end
@@ -668,7 +745,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       {:noreply,
        socket
        |> put_flash(:info, "Vínculo de reembolso removido.")
-       |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+       |> stream(:transactions, Transactions.list_transactions(map_filters(socket.assigns.filters), 1), reset: true)}
     else
       {:ok, updated} = Transactions.update_transaction(tx, %{reimbursement_status: nil, reimbursement_link_key: nil})
       {:noreply, stream_insert(socket, :transactions, updated)}
@@ -725,7 +802,34 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket 
      |> assign(:show_reimbursement_modal, false) 
      |> put_flash(:info, "Reembolso vinculado e categorizado!") 
-     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(socket.assigns.filters), 1), reset: true)}
+  end
+
+  @impl true
+  def handle_event("open_transfer_link", %{"id" => id}, socket) do
+    origin_tx = Transactions.get_transaction!(id)
+    {:noreply, 
+     socket 
+     |> assign(:show_transfer_modal, true)
+     |> assign(:transfer_origin, origin_tx)
+     |> update_transfer_linker_list()}
+  end
+
+  @impl true
+  def handle_event("link_transfer", %{"pair-id" => pair_id}, socket) do
+    origin_tx = socket.assigns.transfer_origin
+    pair_tx = Transactions.get_transaction!(pair_id)
+    transfer_key = Ecto.UUID.generate()
+
+    # Update both transactions with the same key
+    {:ok, _} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
+    {:ok, _} = Transactions.update_transaction(pair_tx, %{transfer_key: transfer_key})
+
+    {:noreply, 
+     socket 
+     |> assign(:show_transfer_modal, false) 
+     |> put_flash(:info, "Transferência vinculada com sucesso!") 
+     |> stream(:transactions, Transactions.list_transactions(map_filters(socket.assigns.filters), 1), reset: true)}
   end
 
   @impl true
@@ -740,8 +844,58 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
+  def handle_event("open_quick_transfer", _params, socket) do
+    origin = socket.assigns.transfer_origin
+    
+    form_data = %{
+      "date" => origin.date,
+      "amount" => Decimal.mult(origin.amount, -1),
+      "description" => origin.description
+    }
+
+    {:noreply, 
+     socket 
+     |> assign(:show_transfer_modal, false)
+     |> assign(:show_quick_transfer_modal, true)
+     |> assign(:quick_transfer_form, to_form(form_data))}
+  end
+
+  @impl true
+  def handle_event("save_quick_transfer", %{"account_id" => target_account_id, "description" => description, "date" => date, "amount" => amount}, socket) do
+    origin_tx = socket.assigns.transfer_origin
+    transfer_key = Ecto.UUID.generate()
+    
+    # 1. Update origin transaction
+    {:ok, origin_tx} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
+
+    # 2. Create target transaction
+    # Find the transfer category ID
+    transfer_category = Categories.get_category_by_slug("transfer")
+    
+    {:ok, pair_tx} = Transactions.create_transaction(%{
+      account_id: target_account_id,
+      category_id: transfer_category.id,
+      description: description,
+      date: date,
+      amount: amount,
+      transfer_key: transfer_key
+    })
+
+    # 3. Recalculate balances for both accounts/months
+    CashLens.Accounting.calculate_monthly_balance(origin_tx.account_id, origin_tx.date.year, origin_tx.date.month)
+    CashLens.Accounting.calculate_monthly_balance(pair_tx.account_id, pair_tx.date.year, pair_tx.date.month)
+
+    {:noreply,
+     socket
+     |> assign(:show_quick_transfer_modal, false)
+     |> put_flash(:info, "Par da transferência criado e vinculado!")
+     |> calculate_summary()
+     |> stream(:transactions, Transactions.list_transactions(map_filters(socket.assigns.filters), 1), reset: true)}
+  end
+
+  @impl true
   def handle_event("close_modal", _params, socket) do
-    {:noreply, socket |> assign(:show_import_modal, false) |> assign(:show_quick_category_modal, false) |> assign(:show_reimbursement_modal, false) |> assign(:show_balance_correction, false) |> assign(:confirm_modal, nil) |> assign(:bulk_confirmation, nil)}
+    {:noreply, socket |> assign(:show_import_modal, false) |> assign(:show_quick_category_modal, false) |> assign(:show_reimbursement_modal, false) |> assign(:show_balance_correction, false) |> assign(:show_transfer_modal, false) |> assign(:show_quick_transfer_modal, false) |> assign(:ai_result, nil) |> assign(:ai_loading, false) |> assign(:confirm_modal, nil) |> assign(:bulk_confirmation, nil)}
   end
 
   @impl true
@@ -818,51 +972,57 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:bulk_confirmation, nil) 
      |> assign(:pending_count, Transactions.count_pending_transactions()) 
      |> put_flash(:info, "Categorizado em massa!") 
-     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(socket.assigns.filters), 1), reset: true)}
   end
 
   @impl true
   def handle_event("auto_categorize_all", _params, socket) do
     Transactions.reapply_auto_categorization()
-    {:noreply, socket |> assign(:pending_count, Transactions.count_pending_transactions()) |> put_flash(:info, "Regras aplicadas!") |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+    {:noreply, socket |> assign(:pending_count, Transactions.count_pending_transactions()) |> put_flash(:info, "Regras aplicadas!") |> stream(:transactions, Transactions.list_transactions(map_filters(socket.assigns.filters), 1), reset: true)}
   end
 
   @impl true
   def handle_event("apply_filters", params, socket) do
-    new_filters = Map.merge(socket.assigns.filters, params)
-    {:noreply, 
-     socket 
-     |> assign(:filters, new_filters) 
+    valid_keys = Map.keys(socket.assigns.filters)
+    safe_params = Map.take(params, valid_keys)
+    new_filters = Map.merge(socket.assigns.filters, safe_params)
+
+    txs = Transactions.list_transactions(map_filters(new_filters), 1)
+
+    {:noreply,
+     socket
+     |> assign(:filters, new_filters)
      |> assign(:page, 1) 
      |> assign(:end_of_list?, false) 
      |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
+     |> stream(:transactions, txs, reset: true)}
   end
+
 
   @impl true
   def handle_event("toggle_sort", _params, socket) do
-    new_order = if socket.assigns.filters["sort_order"] == "desc", do: "asc", else: "desc"
-    new_filters = Map.put(socket.assigns.filters, "sort_order", new_order)
+    new_order = if socket.assigns.filters["filter_sort_order"] == "desc", do: "asc", else: "desc"
+    new_filters = Map.put(socket.assigns.filters, "filter_sort_order", new_order)
     {:noreply, 
      socket 
      |> assign(:filters, new_filters) 
      |> assign(:page, 1) 
      |> assign(:end_of_list?, false) 
      |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1), reset: true)}
   end
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
     today = Date.utc_today()
-    filters = %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => "", "sort_order" => "desc", "type" => "", "month" => "#{today.month}", "year" => "#{today.year}", "unmatched_transfers" => ""}
+    filters = %{"filter_description" => "", "filter_account_id" => "", "filter_category_id" => "", "filter_date" => "", "filter_amount" => "", "filter_sort_order" => "desc", "filter_type" => "", "month" => "#{today.month}", "filter_year" => "#{today.year}", "unmatched_transfers" => ""}
     {:noreply, 
      socket 
      |> assign(:filters, filters) 
      |> assign(:page, 1) 
      |> assign(:end_of_list?, false) 
      |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(filters), 1), reset: true)}
   end
 
   @impl true
@@ -875,7 +1035,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:page, 1) 
      |> assign(:end_of_list?, false) 
      |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1), reset: true)}
   end
 
   @impl true
@@ -883,20 +1043,20 @@ defmodule CashLensWeb.TransactionLive.Index do
     today = Date.utc_today()
     m = if socket.assigns.filters["month"] == "", do: today.month, else: String.to_integer(socket.assigns.filters["month"])
     y = if socket.assigns.filters["year"] == "", do: today.year, else: String.to_integer(socket.assigns.filters["year"])
-    
+
     {new_m, new_y} = if m == 1, do: {12, y - 1}, else: {m - 1, y}
-    
-    new_filters = socket.assigns.filters 
+
+    new_filters = socket.assigns.filters
       |> Map.put("month", "#{new_m}")
       |> Map.put("year", "#{new_y}")
 
-    {:noreply, 
-     socket 
-     |> assign(:filters, new_filters) 
-     |> assign(:page, 1) 
-     |> assign(:end_of_list?, false) 
+    {:noreply,
+     socket
+     |> assign(:filters, new_filters)
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
      |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1), reset: true)}
   end
 
   @impl true
@@ -904,46 +1064,47 @@ defmodule CashLensWeb.TransactionLive.Index do
     today = Date.utc_today()
     m = if socket.assigns.filters["month"] == "", do: today.month, else: String.to_integer(socket.assigns.filters["month"])
     y = if socket.assigns.filters["year"] == "", do: today.year, else: String.to_integer(socket.assigns.filters["year"])
-    
+
     {new_m, new_y} = if m == 12, do: {1, y + 1}, else: {m + 1, y}
-    
-    new_filters = socket.assigns.filters 
+
+    new_filters = socket.assigns.filters
       |> Map.put("month", "#{new_m}")
       |> Map.put("year", "#{new_y}")
 
-    {:noreply, 
-     socket 
-     |> assign(:filters, new_filters) 
-     |> assign(:page, 1) 
-     |> assign(:end_of_list?, false) 
+    {:noreply,
+     socket
+     |> assign(:filters, new_filters)
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
      |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1), reset: true)}
   end
-
   @impl true
   def handle_event("toggle_pending", _params, socket) do
     new_category_id = if socket.assigns.filters["category_id"] == "nil", do: "", else: "nil"
     new_filters = Map.put(socket.assigns.filters, "category_id", new_category_id)
-    {:noreply, 
+    {:noreply,
+ 
      socket 
      |> assign(:filters, new_filters) 
      |> assign(:page, 1) 
      |> assign(:end_of_list?, false) 
      |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1), reset: true)}
   end
 
   @impl true
   def handle_event("toggle_type", %{"type" => type}, socket) do
     new_type = if socket.assigns.filters["type"] == type, do: "", else: type
     new_filters = Map.put(socket.assigns.filters, "type", new_type)
-    {:noreply, 
+    {:noreply,
+ 
      socket 
      |> assign(:filters, new_filters) 
      |> assign(:page, 1) 
      |> assign(:end_of_list?, false) 
      |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(new_filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1), reset: true)}
   end
 
   @impl true
@@ -952,7 +1113,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       {:noreply, socket}
     else
       next_page = socket.assigns.page + 1
-      items = Transactions.list_transactions(socket.assigns.filters, next_page)
+      items = Transactions.list_transactions(map_filters(socket.assigns.filters), next_page)
       
       {:noreply, 
        socket 
@@ -1036,31 +1197,9 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:end_of_list?, false) 
      |> assign(:pending_count, Transactions.count_pending_transactions()) 
      |> put_flash(:info, "Sucesso! #{total_count} transações importadas.") 
-     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(socket.assigns.filters), 1), reset: true)}
   end
 
-  defp process_transactions_data(transactions_data, account_id) do
-    Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
-      data |> Map.put(:account_id, account_id) |> CashLens.Transactions.AutoCategorizer.categorize() |> Transactions.create_transaction()
-      acc = MapSet.put(acc, {account_id, data.date.month, data.date.year})
-      description = String.upcase(data.description || "")
-      cond do
-        String.contains?(description, "BB MM OURO") ->
-          case Accounts.get_account_by_name("BB MM Ouro") do
-            nil -> acc
-            a -> MapSet.put(acc, {a.id, data.date.month, data.date.year})
-          end
-        String.contains?(description, ["BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
-          case Accounts.get_account_by_name("BB Rende Fácil") do
-            nil -> acc
-            a -> MapSet.put(acc, {a.id, data.date.month, data.date.year})
-          end
-        true -> acc
-      end
-    end)
-  end
-
-  @impl true
   def handle_event("open_balance_correction", _params, socket) do
     current_balance = socket.assigns.summary.current_balance
     {:noreply, 
@@ -1085,7 +1224,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("save_balance_correction", %{"new_balance" => new_balance, "adjustment_type" => type}, socket) do
-    account_id = socket.assigns.filters["account_id"]
+    account_id = socket.assigns.filters["filter_account_id"]
     new_val = Decimal.new(new_balance)
     current_val = socket.assigns.summary.current_balance
     diff = Decimal.sub(new_val, current_val)
@@ -1133,7 +1272,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_balance_correction, false)
      |> put_flash(:info, "Saldo ajustado com sucesso!")
      |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(socket.assigns.filters, 1), reset: true)}
+     |> stream(:transactions, Transactions.list_transactions(map_filters(socket.assigns.filters), 1), reset: true)}
   end
 
   @impl true
@@ -1143,27 +1282,50 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   # Helpers
   defp matches_filters?(tx, filters) do
+    mapped = map_filters(filters)
     transfer_category_id = case Categories.get_category_by_slug("transfer") do
       nil -> nil
       cat -> cat.id
     end
 
-    category_match = case filters["category_id"] do
+    category_match = case mapped["category_id"] do
       "" -> true
       "nil" -> is_nil(tx.category_id)
       id -> tx.category_id == id
     end
-    search_match = if filters["search"] == "", do: true, else: String.contains?(String.upcase(tx.description || ""), String.upcase(filters["search"]))
-    account_match = if filters["account_id"] == "", do: true, else: tx.account_id == filters["account_id"]
-    type_match = case filters["type"] do
+    search_match = if mapped["search"] == "", do: true, else: String.contains?(String.upcase(tx.description || ""), String.upcase(mapped["search"]))
+    account_match = if mapped["account_id"] == "", do: true, else: tx.account_id == mapped["account_id"]
+    type_match = case mapped["type"] do
       "" -> true
       "debit" -> Decimal.lt?(tx.amount, 0)
       "credit" -> Decimal.gt?(tx.amount, 0)
       _ -> true
     end
-    unmatched_match = if filters["unmatched_transfers"] == "true", do: is_nil(tx.transfer_key) && tx.category_id == transfer_category_id, else: true
+    unmatched_match = if mapped["unmatched_transfers"] == "true", do: is_nil(tx.transfer_key) && tx.category_id == transfer_category_id, else: true
 
     category_match && search_match && account_match && type_match && unmatched_match
+  end
+
+  defp update_transfer_linker_list(socket) do
+    origin_tx = socket.assigns.transfer_origin
+    target_amount = Decimal.mult(origin_tx.amount, -1)
+    
+    # 1. Broad search for opposite value transactions
+    # Criteria: same absolute amount (opposite signal), no transfer_key, different account
+    candidates = 
+      Transactions.list_transactions(%{"amount" => target_amount})
+      |> Enum.filter(fn t -> 
+        is_nil(t.transfer_key) and 
+        t.id != origin_tx.id and 
+        t.account_id != origin_tx.account_id
+      end)
+
+    # 2. Sort by date proximity to origin_tx
+    sorted = Enum.sort_by(candidates, fn t -> 
+      abs(Date.diff(t.date, origin_tx.date))
+    end)
+
+    assign(socket, :pending_transfers, Enum.take(sorted, 50))
   end
 
   defp update_reimbursement_linker_list(socket) do
@@ -1221,14 +1383,19 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   defp calculate_summary(socket) do
     filters = socket.assigns.filters
-    summary = Transactions.get_monthly_summary(nil, filters)
-    unmatched_count = Transactions.list_transactions(Map.put(filters, "unmatched_transfers", "true")) |> length()
+    mapped = map_filters(filters)
+    summary = Transactions.get_monthly_summary(nil, mapped)
+    unmatched_count = Transactions.list_transactions(Map.put(mapped, "unmatched_transfers", "true")) |> length()
     
     current_balance = 
-      if filters["account_id"] != "" do
-        account = Enum.find(socket.assigns.accounts, & &1.id == filters["account_id"])
-        latest_balance = CashLens.Accounting.get_latest_balance_for_account(account.id)
-        if latest_balance, do: latest_balance.final_balance, else: account.balance
+      if mapped["account_id"] not in ["", nil] do
+        account = Enum.find(socket.assigns.accounts, & &1.id == mapped["account_id"])
+        if account do
+          latest_balance = CashLens.Accounting.get_latest_balance_for_account(account.id)
+          if latest_balance, do: latest_balance.final_balance, else: account.balance
+        else
+          Decimal.new("0")
+        end
       else
         latest_balances = CashLens.Accounting.list_latest_balances()
         all_accounts = socket.assigns.accounts
@@ -1255,6 +1422,21 @@ defmodule CashLensWeb.TransactionLive.Index do
     })
   end
 
+  defp map_filters(filters) do
+    %{
+      "search" => filters["search"],
+      "account_id" => filters["account_id"],
+      "category_id" => filters["category_id"],
+      "date" => filters["date"],
+      "amount" => filters["amount"],
+      "sort_order" => filters["sort_order"],
+      "type" => filters["type"],
+      "month" => filters["month"],
+      "year" => filters["year"],
+      "unmatched_transfers" => filters["unmatched_transfers"]
+    }
+  end
+
   defp translate_month(month) do
     months = %{
       "January" => "Janeiro", "February" => "Fevereiro", "March" => "Março",
@@ -1263,5 +1445,26 @@ defmodule CashLensWeb.TransactionLive.Index do
       "October" => "Outubro", "November" => "Novembro", "December" => "Dezembro"
     }
     months[month] || month
+  end
+
+  defp process_transactions_data(transactions_data, account_id) do
+    Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
+      data |> Map.put(:account_id, account_id) |> CashLens.Transactions.AutoCategorizer.categorize() |> Transactions.create_transaction()
+      acc = MapSet.put(acc, {account_id, data.date.month, data.date.year})
+      description = String.upcase(data.description || "")
+      cond do
+        String.contains?(description, "BB MM OURO") ->
+          case Accounts.get_account_by_name("BB MM Ouro") do
+            nil -> acc
+            a -> MapSet.put(acc, {a.id, data.date.month, data.date.year})
+          end
+        String.contains?(description, ["BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
+          case Accounts.get_account_by_name("BB Rende Fácil") do
+            nil -> acc
+            a -> MapSet.put(acc, {a.id, data.date.month, data.date.year})
+          end
+        true -> acc
+      end
+    end)
   end
 end

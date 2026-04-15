@@ -38,6 +38,12 @@ const liveSocket = new LiveSocket("/live", Socket, {
     },
     CategoryAutocomplete: {
       mounted() {
+        this.init();
+      },
+      updated() {
+        this.init();
+      },
+      init() {
         const input = this.el.querySelector('input');
         const dropdown = this.el.querySelector('.dropdown-content');
         const list = dropdown.querySelector('ul');
@@ -75,7 +81,11 @@ const liveSocket = new LiveSocket("/live", Socket, {
         };
         input.addEventListener("focus", () => { dropdown.classList.remove('hidden'); renderOptions(input.value); });
         input.addEventListener("input", (e) => { renderOptions(e.target.value); });
-        document.addEventListener("click", (e) => { if (!this.el.contains(e.target)) { dropdown.classList.add('hidden'); input.value = ""; } });
+        
+        // Remove existing listener if any to avoid duplicates
+        if (this.clickHandler) document.removeEventListener("click", this.clickHandler);
+        this.clickHandler = (e) => { if (!this.el.contains(e.target)) { dropdown.classList.add('hidden'); input.value = ""; } };
+        document.addEventListener("click", this.clickHandler);
       }
     },
     MarkdownRenderer: {

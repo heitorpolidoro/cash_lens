@@ -6,7 +6,7 @@ defmodule CashLensWeb.BalanceLive.Show do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <div class="py-8">
       <.header>
         Balance {@balance.id}
         <:subtitle>This is a balance record from your database.</:subtitle>
@@ -29,7 +29,7 @@ defmodule CashLensWeb.BalanceLive.Show do
         <:item title="Balance">{@balance.balance}</:item>
         <:item title="Final balance">{@balance.final_balance}</:item>
       </.list>
-    </Layouts.app>
+    </div>
     """
   end
 

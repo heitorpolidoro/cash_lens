@@ -131,8 +131,12 @@ defmodule CashLens.Transactions do
 
   defp filter_by_category(query, nil), do: query
   defp filter_by_category(query, ""), do: query
-  defp filter_by_category(query, "nil"), do: where(query, [t], is_nil(t.category_id))
+  defp filter_by_category(query, "nil") do
+    IO.puts("FILTER BY CATEGORY: NIL")
+    where(query, [t], is_nil(t.category_id))
+  end
   defp filter_by_category(query, category_id) do
+    IO.puts("FILTER BY CATEGORY: #{category_id}")
     ids = CashLens.Categories.get_category_ids_with_children(category_id)
     where(query, [t], t.category_id in ^ids)
   end
@@ -285,13 +289,19 @@ defmodule CashLens.Transactions do
   """
   def create_transaction(attrs) do
     changeset = Transaction.changeset(%Transaction{}, attrs)
+    fingerprint = Ecto.Changeset.get_field(changeset, :fingerprint)
 
-    case Repo.insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
-      {:ok, %Transaction{id: nil}} -> {:ok, :duplicate}
-      {:ok, transaction} -> 
-        CashLens.Transactions.TransferMatcher.match_transfer(transaction)
-        {:ok, transaction}
-      {:error, changeset} -> {:error, changeset}
+    # Manual check for duplicate to ensure consistent API response
+    if Repo.exists?(from t in Transaction, where: t.fingerprint == ^fingerprint) do
+      {:ok, :duplicate}
+    else
+      case Repo.insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
+        {:ok, %Transaction{id: nil}} -> {:ok, :duplicate}
+        {:ok, transaction} -> 
+          CashLens.Transactions.TransferMatcher.match_transfer(transaction)
+          {:ok, transaction}
+        {:error, changeset} -> {:error, changeset}
+      end
     end
   end
 

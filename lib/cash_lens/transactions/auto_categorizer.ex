@@ -15,6 +15,7 @@ defmodule CashLens.Transactions.AutoCategorizer do
     # 1. Get all categories that have keywords defined
     rules = Repo.all(from c in Category, where: not is_nil(c.keywords) and c.keywords != "")
 
+    require Logger
     # 2. Find first match
     matched_category = Enum.find(rules, fn category ->
       keywords = 
@@ -27,7 +28,7 @@ defmodule CashLens.Transactions.AutoCategorizer do
       match_word = Enum.find(keywords, fn k -> String.contains?(description, k) end)
       
       if match_word do
-        IO.puts("MATCH FOUND: Keyword '#{match_word}' found in Description '#{description}' for category '#{category.name}'")
+        Logger.debug("MATCH FOUND: Keyword '#{match_word}' found in Description '#{description}' for category '#{category.name}'")
       end
       
       not is_nil(match_word)
@@ -35,7 +36,7 @@ defmodule CashLens.Transactions.AutoCategorizer do
 
     # 3. Apply category if matched
     if matched_category do
-      IO.puts("Auto-categorized '#{description}' as '#{matched_category.name}'")
+      Logger.info("Auto-categorized '#{description}' as '#{matched_category.name}'")
       
       params = Map.put(transaction_params, :category_id, matched_category.id)
       
