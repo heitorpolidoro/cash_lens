@@ -96,7 +96,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
         this.el.innerHTML = raw
           .replace(/### (.*$)/gm, '<h3 class="text-lg font-black mt-4 mb-2 text-secondary">$1</h3>')
           .replace(/\*\*(.*?)\*\*/g, '<strong class="font-black text-secondary">$1</strong>')
-          .replace(/^\s*[\-\*] (.*$)/gm, '<div class="flex gap-2 ml-2 my-1"><span class="text-secondary">•</span><span>$1</span></div>')
+          .replace(/^\s*[-*] (.*$)/gm, '<div class="flex gap-2 ml-2 my-1"><span class="text-secondary">•</span><span>$1</span></div>')
           .replace(/\n\n/g, '<br/><br/>')
           .trim();
       }
