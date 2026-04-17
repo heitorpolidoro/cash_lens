@@ -42,7 +42,9 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       assert {:ok, _index_live, html} =
                form_live
-               |> form("#transaction-form", transaction: Map.put(@create_attrs, :account_id, transaction.account_id))
+               |> form("#transaction-form",
+                 transaction: Map.put(@create_attrs, :account_id, transaction.account_id)
+               )
                |> render_submit()
                |> follow_redirect(conn, ~p"/transactions")
 
@@ -78,9 +80,12 @@ defmodule CashLensWeb.TransactionLiveTest do
     test "deletes transaction in listing", %{conn: conn, transaction: transaction} do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-      assert index_live |> element("#transactions-#{transaction.id} button[aria-label='Excluir']") |> render_click()
+      assert index_live
+             |> element("#transactions-#{transaction.id} button[aria-label='Excluir']")
+             |> render_click()
+
       assert render(index_live) =~ "Excluir Transação?"
-      
+
       assert index_live |> element("button", "Sim, Apagar") |> render_click()
       refute has_element?(index_live, "#transactions-#{transaction.id}")
     end
@@ -98,14 +103,14 @@ defmodule CashLensWeb.TransactionLiveTest do
       index_live
       |> form("#transaction-filters", %{search: "non-existent-search"})
       |> render_change()
-      
+
       refute has_element?(index_live, "#transactions-#{transaction.id}")
 
       # Filter in
       index_live
       |> form("#transaction-filters", %{search: transaction.description})
       |> render_change()
-      
+
       assert has_element?(index_live, "#transactions-#{transaction.id}")
     end
 
@@ -146,7 +151,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       # The UI updates the stream and filters
       assert has_element?(index_live, "#transactions-#{jan_tx.id}")
       refute has_element?(index_live, "#transactions-#{feb_tx.id}")
-      
+
       # Navigate to next month
       index_live |> element("button[phx-click='next_month']") |> render_click()
 
@@ -157,10 +162,18 @@ defmodule CashLensWeb.TransactionLiveTest do
     test "toggles pending (uncategorized) transactions", %{conn: conn} do
       # We need to make sure they are in the same month/year or clear filters
       today = Date.utc_today()
-      cat_tx = transaction_fixture(description: "Categorized", category_id: category_fixture().id, date: today)
+
+      cat_tx =
+        transaction_fixture(
+          description: "Categorized",
+          category_id: category_fixture().id,
+          date: today
+        )
+
       uncat_tx = transaction_fixture(description: "Uncategorized", category_id: nil, date: today)
 
-      {:ok, index_live, _html} = live(conn, ~p"/transactions?month=#{today.month}&year=#{today.year}")
+      {:ok, index_live, _html} =
+        live(conn, ~p"/transactions?month=#{today.month}&year=#{today.year}")
 
       # Toggle pending
       index_live |> element("button[phx-click='toggle_pending']") |> render_click()
@@ -173,6 +186,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       # Create 60 transactions with different dates to ensure deterministic sort (desc)
       # Tx 60 will be the newest (most recent date)
       today = Date.utc_today()
+
       for i <- 1..60 do
         transaction_fixture(description: "Tx-#{i}-END", date: Date.add(today, i))
       end
@@ -185,7 +199,7 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       # Load more
       render_hook(index_live, "load-more", %{})
-      
+
       assert render(index_live) =~ "Tx-1-END"
     end
   end
@@ -206,7 +220,6 @@ defmodule CashLensWeb.TransactionLiveTest do
       refute has_element?(index_live, "#import-modal")
     end
 
-
     test "handles file upload flow", %{conn: conn} do
       account = account_fixture(accepts_import: true, parser_type: "bb_csv")
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
@@ -217,15 +230,16 @@ defmodule CashLensWeb.TransactionLiveTest do
       index_live |> form("#upload-form") |> render_change(%{account_id: account.id})
 
       # Mock file upload
-      file = file_input(index_live, "#upload-form", :statement, [
-        %{
-          last_modified: 1_594_171_200_000,
-          name: "bb_sample.csv",
-          content: File.read!("test/support/fixtures/files/bb_sample.csv"),
-          type: "text/csv"
-        }
-      ])
-      
+      file =
+        file_input(index_live, "#upload-form", :statement, [
+          %{
+            last_modified: 1_594_171_200_000,
+            name: "bb_sample.csv",
+            content: File.read!("test/support/fixtures/files/bb_sample.csv"),
+            type: "text/csv"
+          }
+        ])
+
       render_upload(file, "bb_sample.csv")
 
       # Submit

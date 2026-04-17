@@ -5,7 +5,13 @@ defmodule CashLensWeb.BalanceLiveTest do
   import CashLens.AccountingFixtures
   import CashLens.AccountsFixtures
 
-  @update_attrs %{initial_balance: "456.7", final_balance: "456.7", income: "456.7", expenses: "456.7", balance: "456.7"}
+  @update_attrs %{
+    initial_balance: "456.7",
+    final_balance: "456.7",
+    income: "456.7",
+    expenses: "456.7",
+    balance: "456.7"
+  }
   @invalid_attrs %{initial_balance: nil}
 
   defp create_balance(_) do
@@ -71,7 +77,10 @@ defmodule CashLensWeb.BalanceLiveTest do
     test "deletes balance in listing", %{conn: conn, balance: balance} do
       {:ok, index_live, _html} = live(conn, ~p"/balances")
 
-      assert index_live |> element("#balances-#{balance.id} button[phx-click='confirm_delete']") |> render_click()
+      assert index_live
+             |> element("#balances-#{balance.id} button[phx-click='confirm_delete']")
+             |> render_click()
+
       assert index_live |> element("button", "Sim, Apagar") |> render_click()
       refute has_element?(index_live, "#balances-#{balance.id}")
     end

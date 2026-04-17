@@ -46,6 +46,7 @@ defmodule CashLens.Categories do
   Gets a list of IDs including the category itself and all its descendants (children, grandchildren, etc.).
   """
   def get_category_ids_with_children(nil), do: []
+
   def get_category_ids_with_children(category_id) do
     initial_query =
       Category
@@ -132,6 +133,7 @@ defmodule CashLens.Categories do
     Phoenix.PubSub.broadcast(CashLens.PubSub, "categories", {event, category})
     {:ok, category}
   end
+
   defp broadcast(error, _), do: error
 
   @doc """

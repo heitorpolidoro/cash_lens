@@ -78,7 +78,10 @@ defmodule CashLensWeb.CategoryLiveTest do
     test "deletes category in listing", %{conn: conn, category: category} do
       {:ok, index_live, _html} = live(conn, ~p"/categories")
 
-      assert index_live |> element("#categories-#{category.id} button[phx-click='confirm_delete']") |> render_click()
+      assert index_live
+             |> element("#categories-#{category.id} button[phx-click='confirm_delete']")
+             |> render_click()
+
       assert index_live |> element("button", "Sim, Apagar") |> render_click()
       refute has_element?(index_live, "#categories-#{category.id}")
     end

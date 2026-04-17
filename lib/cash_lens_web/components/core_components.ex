@@ -60,7 +60,7 @@ defmodule CashLensWeb.CoreComponents do
 
   def button(%{rest: rest} = assigns) do
     variants = %{
-      "primary" => "btn-primary", 
+      "primary" => "btn-primary",
       "outline" => "btn-outline",
       "white" => "bg-white text-primary border-white hover:bg-white/90",
       nil => "btn-primary"
@@ -101,12 +101,14 @@ defmodule CashLensWeb.CoreComponents do
   attr :options, :list
   attr :multiple, :boolean, default: false
   attr :class, :any, default: nil
+
   attr :rest, :global,
     include: ~w(accept autocomplete capture cols disabled form list max maxlength min minlength
                 multiple pattern placeholder readonly required rows size step)
 
   def input(%{field: %Phoenix.HTML.FormField{} = field} = assigns) do
     errors = if Phoenix.Component.used_input?(field), do: field.errors, else: []
+
     assigns
     |> assign(field: nil, id: assigns.id || field.id)
     |> assign(:errors, Enum.map(errors, &translate_error(&1)))
@@ -116,12 +118,24 @@ defmodule CashLensWeb.CoreComponents do
   end
 
   def input(%{type: "checkbox"} = assigns) do
-    assigns = assign_new(assigns, :checked, fn -> Phoenix.HTML.Form.normalize_value("checkbox", assigns[:value]) end)
+    assigns =
+      assign_new(assigns, :checked, fn ->
+        Phoenix.HTML.Form.normalize_value("checkbox", assigns[:value])
+      end)
+
     ~H"""
     <div class="form-control mb-4">
       <label class="label cursor-pointer justify-start gap-4">
         <input type="hidden" name={@name} value="false" />
-        <input type="checkbox" id={@id} name={@name} value="true" checked={@checked} class={["checkbox checkbox-primary", @class]} {@rest} />
+        <input
+          type="checkbox"
+          id={@id}
+          name={@name}
+          value="true"
+          checked={@checked}
+          class={["checkbox checkbox-primary", @class]}
+          {@rest}
+        />
         <span :if={@label} class="label-text font-bold text-primary">{@label}</span>
       </label>
       <.error :for={msg <- @errors}>{msg}</.error>
@@ -133,7 +147,13 @@ defmodule CashLensWeb.CoreComponents do
     ~H"""
     <div class="form-control w-full mb-4">
       <label :if={@label} class="label"><span class="label-text font-bold">{@label}</span></label>
-      <select id={@id} name={@name} class={["select select-bordered w-full", @class]} multiple={@multiple} {@rest}>
+      <select
+        id={@id}
+        name={@name}
+        class={["select select-bordered w-full", @class]}
+        multiple={@multiple}
+        {@rest}
+      >
         <option :if={@prompt} value="">{@prompt}</option>
         {Phoenix.HTML.Form.options_for_select(@options, @value)}
       </select>
@@ -156,7 +176,14 @@ defmodule CashLensWeb.CoreComponents do
     ~H"""
     <div class="form-control w-full mb-4">
       <label :if={@label} class="label"><span class="label-text font-bold">{@label}</span></label>
-      <input type={@type} id={@id} name={@name} value={Phoenix.HTML.Form.normalize_value(@type, @value)} class={["input input-bordered w-full", @class]} {@rest} />
+      <input
+        type={@type}
+        id={@id}
+        name={@name}
+        value={Phoenix.HTML.Form.normalize_value(@type, @value)}
+        class={["input input-bordered w-full", @class]}
+        {@rest}
+      />
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
@@ -212,9 +239,10 @@ defmodule CashLensWeb.CoreComponents do
   slot :action
 
   def table(assigns) do
-    assigns = with %{rows: %Phoenix.LiveView.LiveStream{}} <- assigns do
-      assign(assigns, row_id: assigns.row_id || fn {id, _item} -> id end)
-    end
+    assigns =
+      with %{rows: %Phoenix.LiveView.LiveStream{}} <- assigns do
+        assign(assigns, row_id: assigns.row_id || fn {id, _item} -> id end)
+      end
 
     ~H"""
     <table class="table table-zebra w-full text-xs">
@@ -226,7 +254,11 @@ defmodule CashLensWeb.CoreComponents do
       </thead>
       <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
         <tr :for={row <- @rows} id={@row_id && @row_id.(row)} class="hover group">
-          <td :for={col <- @col} phx-click={@row_click && @row_click.(row)} class={@row_click && "hover:cursor-pointer"}>
+          <td
+            :for={col <- @col}
+            phx-click={@row_click && @row_click.(row)}
+            class={@row_click && "hover:cursor-pointer"}
+          >
             {render_slot(col, @row_item.(row))}
           </td>
           <td :if={@action != []} class="w-0">
@@ -262,6 +294,7 @@ defmodule CashLensWeb.CoreComponents do
 
   attr :name, :string, required: true
   attr :class, :any, default: "size-4"
+
   def icon(assigns) do
     ~H"""
     <span class={[@name, @class]} />
@@ -269,11 +302,19 @@ defmodule CashLensWeb.CoreComponents do
   end
 
   def show(js \\ %JS{}, selector) do
-    JS.show(js, to: selector, transition: {"transition-all ease-out duration-300", "opacity-0 scale-95", "opacity-100 scale-100"})
+    JS.show(js,
+      to: selector,
+      transition:
+        {"transition-all ease-out duration-300", "opacity-0 scale-95", "opacity-100 scale-100"}
+    )
   end
 
   def hide(js \\ %JS{}, selector) do
-    JS.hide(js, to: selector, transition: {"transition-all ease-in duration-200", "opacity-100 scale-100", "opacity-0 scale-95"})
+    JS.hide(js,
+      to: selector,
+      transition:
+        {"transition-all ease-in duration-200", "opacity-100 scale-100", "opacity-0 scale-95"}
+    )
   end
 
   def translate_error({msg, opts}) do

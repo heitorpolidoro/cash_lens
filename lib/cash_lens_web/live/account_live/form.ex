@@ -12,49 +12,63 @@ defmodule CashLensWeb.AccountLive.Form do
       <:subtitle>Use este formulário para gerenciar os dados da sua conta bancária.</:subtitle>
     </.header>
 
-                <.form for={@form} id="account-form" phx-change="validate" phx-submit="save">
-                  <.input field={@form[:name]} type="text" label="Nome" />
-                  <.input field={@form[:bank]} type="text" label="Banco" />
-                  <.input field={@form[:balance]} type="number" label="Saldo Inicial" step="any" />
-                  
-                  <.input field={@form[:parser_type]} type="select" label="Extrator" 
-                    options={[{"Banco do Brasil (CSV)", "bb_csv"}, {"Sem Parar (PDF)", "sem_parar_pdf"}]} 
-                    prompt="Selecione um extrator" />
+    <.form for={@form} id="account-form" phx-change="validate" phx-submit="save">
+      <.input field={@form[:name]} type="text" label="Nome" />
+      <.input field={@form[:bank]} type="text" label="Banco" />
+      <.input field={@form[:balance]} type="number" label="Saldo Inicial" step="any" />
 
-                  <.input field={@form[:color]} type="text" label="Cor (opcional)" />
-                          
-                          <div class="form-control">
-                            <label class="label cursor-pointer justify-start gap-4">
-                              <input type="hidden" name="account[accepts_import]" value="false" />
-                              <input type="checkbox" name="account[accepts_import]" value="true" checked={@form[:accepts_import].value} class="checkbox checkbox-primary" />
-                              <span class="label-text font-bold">Aceita importar extratos?</span>
-                            </label>
-                          </div>
-                  
-                  <div class="flex items-end gap-4">
-                    <div class="flex-1">
-                      <.input field={@form[:icon]} type="text" label="URL do Ícone (opcional)" />
-                    </div>
-                    <div class="avatar pb-2">
-                      <div class="w-12 rounded-full border border-base-300 bg-base-200 flex items-center justify-center overflow-hidden">
-                        <%= if @form[:icon].value && @form[:icon].value != "" do %>
-                          <img src={@form[:icon].value} />
-                        <% else %>
-                          <.icon name="hero-photo" class="size-6 opacity-20" />
-                        <% end %>
-                      </div>
-                    </div>
-                  </div>
-          
-                  <div class="mt-8 flex flex-col sm:flex-row gap-3">
-                    <.button phx-disable-with="Salvando..." variant="primary" class="flex-1">
-                      Salvar Conta
-                    </.button>
-                    <.button type="button" navigate={return_path(@return_to, @account)} class="btn btn-error btn-outline flex-1">
-                      Cancelar
-                    </.button>
-                  </div>
-                </.form>
+      <.input
+        field={@form[:parser_type]}
+        type="select"
+        label="Extrator"
+        options={[{"Banco do Brasil (CSV)", "bb_csv"}, {"Sem Parar (PDF)", "sem_parar_pdf"}]}
+        prompt="Selecione um extrator"
+      />
+
+      <.input field={@form[:color]} type="text" label="Cor (opcional)" />
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-4">
+          <input type="hidden" name="account[accepts_import]" value="false" />
+          <input
+            type="checkbox"
+            name="account[accepts_import]"
+            value="true"
+            checked={@form[:accepts_import].value}
+            class="checkbox checkbox-primary"
+          />
+          <span class="label-text font-bold">Aceita importar extratos?</span>
+        </label>
+      </div>
+
+      <div class="flex items-end gap-4">
+        <div class="flex-1">
+          <.input field={@form[:icon]} type="text" label="URL do Ícone (opcional)" />
+        </div>
+        <div class="avatar pb-2">
+          <div class="w-12 rounded-full border border-base-300 bg-base-200 flex items-center justify-center overflow-hidden">
+            <%= if @form[:icon].value && @form[:icon].value != "" do %>
+              <img src={@form[:icon].value} />
+            <% else %>
+              <.icon name="hero-photo" class="size-6 opacity-20" />
+            <% end %>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-8 flex flex-col sm:flex-row gap-3">
+        <.button phx-disable-with="Salvando..." variant="primary" class="flex-1">
+          Salvar Conta
+        </.button>
+        <.button
+          type="button"
+          navigate={return_path(@return_to, @account)}
+          class="btn btn-error btn-outline flex-1"
+        >
+          Cancelar
+        </.button>
+      </div>
+    </.form>
     """
   end
 

@@ -22,7 +22,17 @@ defmodule CashLens.Transactions.Transaction do
   @doc false
   def changeset(transaction, attrs) do
     transaction
-    |> cast(attrs, [:date, :time, :description, :amount, :category_id, :account_id, :transfer_key, :reimbursement_status, :reimbursement_link_key])
+    |> cast(attrs, [
+      :date,
+      :time,
+      :description,
+      :amount,
+      :category_id,
+      :account_id,
+      :transfer_key,
+      :reimbursement_status,
+      :reimbursement_link_key
+    ])
     |> validate_required([:date, :description, :amount, :account_id])
     |> generate_fingerprint()
     |> unique_constraint(:fingerprint)
@@ -39,18 +49,20 @@ defmodule CashLens.Transactions.Transaction do
       # Create a unique string representing this transaction
       # Include time in the string if it exists
       time_str = if time, do: Time.to_string(time), else: ""
-      
-      # Ensure binary_id is treated as a string for consistent interpolation
-      account_id_str = case account_id do
-        <<_::128>> -> Ecto.UUID.load!(account_id)
-        _ -> account_id
-      end
 
-      raw_string = "#{account_id_str}|#{date}|#{time_str}|#{Decimal.to_string(amount)}|#{String.trim(desc)}"
-      
+      # Ensure binary_id is treated as a string for consistent interpolation
+      account_id_str =
+        case account_id do
+          <<_::128>> -> Ecto.UUID.load!(account_id)
+          _ -> account_id
+        end
+
+      raw_string =
+        "#{account_id_str}|#{date}|#{time_str}|#{Decimal.to_string(amount)}|#{String.trim(desc)}"
+
       # Hash the string to create a compact fingerprint
       hash = :crypto.hash(:sha256, raw_string) |> Base.encode16()
-      
+
       put_change(changeset, :fingerprint, hash)
     else
       changeset

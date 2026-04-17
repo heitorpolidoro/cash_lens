@@ -4,8 +4,20 @@ defmodule CashLensWeb.AccountLiveTest do
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
 
-  @create_attrs %{name: "some name", balance: "120.5", color: "some color", bank: "some bank", icon: "some icon"}
-  @update_attrs %{name: "some updated name", balance: "456.7", color: "some updated color", bank: "some updated bank", icon: "some updated icon"}
+  @create_attrs %{
+    name: "some name",
+    balance: "120.5",
+    color: "some color",
+    bank: "some bank",
+    icon: "some icon"
+  }
+  @update_attrs %{
+    name: "some updated name",
+    balance: "456.7",
+    color: "some updated color",
+    bank: "some updated bank",
+    icon: "some updated icon"
+  }
   @invalid_attrs %{name: nil, balance: nil, color: nil, bank: nil, icon: nil}
   defp create_account(_) do
     account = account_fixture()

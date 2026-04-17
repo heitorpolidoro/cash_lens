@@ -8,8 +8,9 @@ defmodule CashLens.PDFParserTest do
       Extrato Mensal de Utilização
       Plano Contratado: SEM PARAR 10/12/25 R$ 58,17
       """
+
       transactions = PDFParser.parse(text, :sem_parar)
-      
+
       assert length(transactions) == 1
       tx = List.first(transactions)
       assert tx.description == "Mensalidade Sem Parar"
@@ -24,10 +25,11 @@ defmodule CashLens.PDFParserTest do
       XYZ9G88                                      27/11/25         ESTAPAR                                                           R$ 15,00
                                                    às 10:15:00      SHOPPING MORUMBI
       """
+
       transactions = PDFParser.parse(text, :sem_parar)
-      
+
       assert length(transactions) == 2
-      
+
       t1 = Enum.find(transactions, fn t -> String.contains?(t.description, "JACAREI") end)
       assert t1.amount == Decimal.new("-7.70")
       assert t1.date == ~D[2025-11-26]
@@ -46,6 +48,7 @@ defmodule CashLens.PDFParserTest do
       ABC1D23 02/01/26 TOLL R$ 5,50
               às 08:00:00 MAIN GATE
       """
+
       transactions = PDFParser.parse(text, :sem_parar)
       assert length(transactions) == 2
     end

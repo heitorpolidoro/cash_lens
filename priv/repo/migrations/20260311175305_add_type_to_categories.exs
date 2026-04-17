@@ -3,7 +3,8 @@ defmodule CashLens.Repo.Migrations.AddTypeToCategories do
 
   def change do
     alter table(:categories) do
-      add :type, :string, default: "variable", null: false # fixed or variable
+      # fixed or variable
+      add :type, :string, default: "variable", null: false
     end
 
     create index(:categories, [:type])

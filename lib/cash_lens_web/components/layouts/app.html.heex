@@ -16,10 +16,22 @@
       <div class="flex-none hidden lg:block">
         <ul class="menu menu-horizontal font-bold gap-2">
           <li><a href="/" class="rounded-lg hover:bg-base-200 transition-all">Dashboard</a></li>
-          <li><a href="/accounts" class="rounded-lg hover:bg-base-200 transition-all">Contas</a></li>
-          <li><a href="/transactions" class="rounded-lg hover:bg-base-200 transition-all">Transações</a></li>
-          <li><a href="/categories" class="rounded-lg hover:bg-base-200 transition-all">Categorias</a></li>
-          <li><a href="/balances" class="rounded-lg hover:bg-base-200 transition-all">Balanços</a></li>
+          <li>
+            <a href="/accounts" class="rounded-lg hover:bg-base-200 transition-all">Contas</a>
+          </li>
+          <li>
+            <a href="/transactions" class="rounded-lg hover:bg-base-200 transition-all">
+              Transações
+            </a>
+          </li>
+          <li>
+            <a href="/categories" class="rounded-lg hover:bg-base-200 transition-all">
+              Categorias
+            </a>
+          </li>
+          <li>
+            <a href="/balances" class="rounded-lg hover:bg-base-200 transition-all">Balanços</a>
+          </li>
         </ul>
       </div>
       <div class="flex-none gap-4 ml-4">
@@ -30,28 +42,28 @@
         </div>
       </div>
     </div>
-
-    <!-- Main Content -->
+    
+<!-- Main Content -->
     <main class="p-4 sm:p-8 flex-grow">
       <div class="mx-auto max-w-6xl">
         <.flash_group flash={@flash} />
         <%= if assigns[:inner_content] do %>
-          <%= @inner_content %>
+          {@inner_content}
         <% else %>
           {render_slot(@inner_block)}
         <% end %>
       </div>
     </main>
-
-    <!-- Footer -->
+    
+<!-- Footer -->
     <footer class="footer footer-center p-4 bg-base-100 text-base-content border-t border-base-300 opacity-50 text-xs">
       <aside>
         <p>CashLens Finance © 2026 - Controle Financeiro Inteligente</p>
       </aside>
     </footer>
   </div>
-
-  <!-- Sidebar para Mobile -->
+  
+<!-- Sidebar para Mobile -->
   <div class="drawer-side z-40">
     <label for="my-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
     <ul class="menu p-4 w-80 min-h-full bg-base-100">
@@ -60,11 +72,25 @@
           <span class="text-xl font-black text-primary">CashLens</span>
         </div>
       </li>
-      <li><a href="/" class="font-bold"><.icon name="hero-home" class="size-5 mr-2" />Dashboard</a></li>
-      <li><a href="/accounts" class="font-bold"><.icon name="hero-credit-card" class="size-5 mr-2" />Contas</a></li>
-      <li><a href="/transactions" class="font-bold"><.icon name="hero-arrows-right-left" class="size-5 mr-2" />Transações</a></li>
+      <li>
+        <a href="/" class="font-bold"><.icon name="hero-home" class="size-5 mr-2" />Dashboard</a>
+      </li>
+      <li>
+        <a href="/accounts" class="font-bold">
+          <.icon name="hero-credit-card" class="size-5 mr-2" />Contas
+        </a>
+      </li>
+      <li>
+        <a href="/transactions" class="font-bold">
+          <.icon name="hero-arrows-right-left" class="size-5 mr-2" />Transações
+        </a>
+      </li>
       <div class="divider"></div>
-      <li><a href="#" class="opacity-50"><.icon name="hero-cog-6-tooth" class="size-5 mr-2" />Configurações</a></li>
+      <li>
+        <a href="#" class="opacity-50">
+          <.icon name="hero-cog-6-tooth" class="size-5 mr-2" />Configurações
+        </a>
+      </li>
     </ul>
   </div>
 </div>

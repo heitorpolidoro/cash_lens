@@ -23,7 +23,7 @@ defmodule CashLens.CategoriesTest do
 
       categories = Categories.list_categories()
       names = Enum.map(categories, & &1.name)
-      
+
       # Expected order based on: [asc: coalesce(p.name, c.name), asc: c.name]
       # A Parent (top level, coalesce is "A Parent", name "A Parent")
       # Child 1 (coalesce is "A Parent", name "Child 1")
@@ -31,11 +31,11 @@ defmodule CashLens.CategoriesTest do
       # B Parent (top level, coalesce is "B Parent", name "B Parent")
       # Child 1 (coalesce is "B Parent", name "Child 1")
       assert names == ["A Parent", "Child 1", "Child 2", "B Parent", "Child 1"]
-      
+
       # Ensure parent is preloaded
-      assert Enum.all?(categories, fn c -> 
-        if c.parent_id, do: is_struct(c.parent, Category), else: is_nil(c.parent)
-      end)
+      assert Enum.all?(categories, fn c ->
+               if c.parent_id, do: is_struct(c.parent, Category), else: is_nil(c.parent)
+             end)
     end
 
     test "get_category!/1 returns the category with given id" do
@@ -87,10 +87,12 @@ defmodule CashLens.CategoriesTest do
       old_parent = category_fixture(name: "Old Parent")
       new_parent = category_fixture(name: "New Parent")
       category = category_fixture(name: "Child", parent_id: old_parent.id)
-      
+
       assert category.slug == "old-parent-child"
-      
-      assert {:ok, %Category{} = updated} = Categories.update_category(category, %{parent_id: new_parent.id})
+
+      assert {:ok, %Category{} = updated} =
+               Categories.update_category(category, %{parent_id: new_parent.id})
+
       assert updated.parent_id == new_parent.id
       assert updated.slug == "new-parent-child"
     end
@@ -116,25 +118,25 @@ defmodule CashLens.CategoriesTest do
     test "get_category_ids_with_children/1 returns parent, children and grandchildren IDs" do
       # Level 0
       parent = category_fixture(name: "Level 0")
-      
+
       # Level 1
       child1 = category_fixture(name: "Level 1A", parent_id: parent.id)
       child2 = category_fixture(name: "Level 1B", parent_id: parent.id)
-      
+
       # Level 2
       grandchild = category_fixture(name: "Level 2", parent_id: child1.id)
-      
+
       # Unrelated
       _other = category_fixture(name: "Other")
 
       ids = Categories.get_category_ids_with_children(parent.id)
-      
+
       assert length(ids) == 4
       assert parent.id in ids
       assert child1.id in ids
       assert child2.id in ids
       assert grandchild.id in ids
-      
+
       # Verify branch fetch
       child_branch_ids = Categories.get_category_ids_with_children(child1.id)
       assert length(child_branch_ids) == 2
@@ -171,7 +173,7 @@ defmodule CashLens.CategoriesTest do
       assert transaction.category_id == category.id
 
       assert {:ok, _} = Categories.delete_category(category)
-      
+
       # Verify transaction still exists but category_id is nil (via SET NULL constraint)
       updated_transaction = CashLens.Repo.get!(Transactions.Transaction, transaction.id)
       assert updated_transaction.category_id == nil

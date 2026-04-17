@@ -21,7 +21,10 @@ defmodule CashLensWeb.AdminDatabaseLive do
                 <%= for table <- @tables do %>
                   <.link
                     patch={~p"/admin/db/#{table}"}
-                    class={["btn btn-ghost btn-sm justify-start normal-case", @active_table == table && "btn-active bg-primary/10 text-primary"]}
+                    class={[
+                      "btn btn-ghost btn-sm justify-start normal-case",
+                      @active_table == table && "btn-active bg-primary/10 text-primary"
+                    ]}
                   >
                     <.icon name="hero-table-cells" class="size-4 mr-2" />
                     {table}
@@ -31,8 +34,8 @@ defmodule CashLensWeb.AdminDatabaseLive do
             </div>
           </div>
         </div>
-
-        <!-- Área Principal: Dados da Tabela -->
+        
+    <!-- Área Principal: Dados da Tabela -->
         <div class="lg:col-span-3">
           <%= if @active_table do %>
             <div class="card bg-base-100 shadow-sm border border-base-300 overflow-hidden">
@@ -57,7 +60,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
                                   type="text"
                                   name={"filters[#{col}]"}
                                   value={@filters[col]}
-                                  placeholder={"Filtrar..."}
+                                  placeholder="Filtrar..."
                                   phx-debounce="300"
                                   class="input input-bordered input-xs h-6 w-full font-normal"
                                 />
@@ -78,7 +81,10 @@ defmodule CashLensWeb.AdminDatabaseLive do
                         <% end %>
                         <%= if Enum.empty?(@rows) do %>
                           <tr>
-                            <td colspan={length(@columns)} class="text-center py-20 opacity-30 italic text-sm">
+                            <td
+                              colspan={length(@columns)}
+                              class="text-center py-20 opacity-30 italic text-sm"
+                            >
                               Nenhum registro encontrado para os filtros aplicados.
                             </td>
                           </tr>
@@ -112,9 +118,9 @@ defmodule CashLensWeb.AdminDatabaseLive do
     columns = list_table_columns(table)
     # Initialize empty filters for new columns
     filters = Map.new(columns, &{&1, ""})
-    
-    {:noreply, 
-     socket 
+
+    {:noreply,
+     socket
      |> assign(active_table: table, columns: columns, filters: filters)
      |> fetch_rows()}
   end
@@ -130,7 +136,9 @@ defmodule CashLensWeb.AdminDatabaseLive do
   # --- Database Logic ---
 
   defp list_db_tables do
-    query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name"
+    query =
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name"
+
     case Repo.query(query) do
       {:ok, %{rows: rows}} -> List.flatten(rows)
       _ -> []
@@ -138,7 +146,9 @@ defmodule CashLensWeb.AdminDatabaseLive do
   end
 
   defp list_table_columns(table) do
-    query = "SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND table_schema = 'public' ORDER BY ordinal_position"
+    query =
+      "SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND table_schema = 'public' ORDER BY ordinal_position"
+
     case Repo.query(query, [table]) do
       {:ok, %{rows: rows}} -> List.flatten(rows)
       _ -> []
@@ -152,10 +162,10 @@ defmodule CashLensWeb.AdminDatabaseLive do
 
     # Construct dynamic query
     base_query = "SELECT * FROM #{table}"
-    
+
     # Build WHERE clauses using positional parameters for safety
-    {where_clauses, params} = 
-      filters 
+    {where_clauses, params} =
+      filters
       |> Enum.filter(fn {_, v} -> v != "" and v != nil end)
       |> Enum.with_index(1)
       |> Enum.reduce({[], []}, fn {{col, val}, idx}, {clauses, acc_params} ->
@@ -163,7 +173,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
         {clauses ++ ["#{col}::text ILIKE $#{idx}"], acc_params ++ ["%#{val}%"]}
       end)
 
-    final_query = 
+    final_query =
       if Enum.empty?(where_clauses) do
         base_query
       else
@@ -174,10 +184,13 @@ defmodule CashLensWeb.AdminDatabaseLive do
 
     case Repo.query(final_query, params) do
       {:ok, %{rows: rows}} ->
-        mapped_rows = Enum.map(rows, fn row ->
-          Enum.zip(columns, row) |> Map.new()
-        end)
+        mapped_rows =
+          Enum.map(rows, fn row ->
+            Enum.zip(columns, row) |> Map.new()
+          end)
+
         assign(socket, rows: mapped_rows)
+
       {:error, error} ->
         IO.inspect(error, label: "DB ADMIN ERROR")
         assign(socket, rows: [])
@@ -185,6 +198,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
   end
 
   defp format_val(nil), do: "NULL"
+
   defp format_val(val) when is_binary(val) do
     if String.valid?(val) do
       val
@@ -193,5 +207,6 @@ defmodule CashLensWeb.AdminDatabaseLive do
       "0x" <> Base.encode16(val)
     end
   end
+
   defp format_val(val), do: inspect(val)
 end

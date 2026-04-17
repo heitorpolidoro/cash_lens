@@ -30,17 +30,19 @@ defmodule CashLens.Categories.Category do
     if get_change(changeset, :name) || get_change(changeset, :parent_id) do
       name = get_field(changeset, :name)
       # Base slug from current name
-      base_slug = name |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "-") |> String.trim("-")
-      
+      base_slug =
+        name |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "-") |> String.trim("-")
+
       # Try to find parent slug
       parent_id = get_field(changeset, :parent_id)
-      
-      final_slug = if parent_id do
-        parent = CashLens.Repo.get!(CashLens.Categories.Category, parent_id)
-        "#{parent.slug}-#{base_slug}"
-      else
-        base_slug
-      end
+
+      final_slug =
+        if parent_id do
+          parent = CashLens.Repo.get!(CashLens.Categories.Category, parent_id)
+          "#{parent.slug}-#{base_slug}"
+        else
+          base_slug
+        end
 
       put_change(changeset, :slug, final_slug)
     else
@@ -51,7 +53,9 @@ defmodule CashLens.Categories.Category do
   @doc """
   Returns a display name in the format 'Parent > Child'
   """
-  def full_name(%__MODULE__{name: name, parent: %__MODULE__{name: parent_name}}), do: "#{parent_name} > #{name}"
+  def full_name(%__MODULE__{name: name, parent: %__MODULE__{name: parent_name}}),
+    do: "#{parent_name} > #{name}"
+
   def full_name(%__MODULE__{name: name}), do: name
   def full_name(_), do: ""
 end

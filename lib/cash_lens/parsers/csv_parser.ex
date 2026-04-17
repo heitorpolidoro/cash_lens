@@ -10,7 +10,8 @@ defmodule CashLens.Parsers.CSVParser do
   def parse(csv_content, :bb) do
     csv_content
     |> CSV.parse_string()
-    |> Enum.drop(1) # Skip header
+    # Skip header
+    |> Enum.drop(1)
     |> Enum.map(fn row -> parse_row(row, :bb) end)
     |> Enum.reject(&is_nil/1)
   end
@@ -25,7 +26,8 @@ defmodule CashLens.Parsers.CSVParser do
       nil
     else
       # Extract metadata and CLEAN description
-      {final_date, final_time, clean_description} = extract_metadata_and_clean(description, parse_date(date))
+      {final_date, final_time, clean_description} =
+        extract_metadata_and_clean(description, parse_date(date))
 
       %{
         date: final_date,
@@ -47,31 +49,40 @@ defmodule CashLens.Parsers.CSVParser do
     date_match = Regex.run(~r/(\d{2})\/(\d{2})/, text)
     time_match = Regex.run(~r/(\d{2}):(\d{2})/, text)
 
-    final_date = 
+    final_date =
       case date_match do
-        [_, d, m] -> 
+        [_, d, m] ->
           Date.new!(base_date.year, String.to_integer(m), String.to_integer(d))
-        _ -> base_date
+
+        _ ->
+          base_date
       end
 
     final_time =
       case time_match do
-        [_, h, m] -> 
+        [_, h, m] ->
           case Time.new(String.to_integer(h), String.to_integer(m), 0) do
             {:ok, time} -> time
             _ -> nil
           end
-        _ -> nil
+
+        _ ->
+          nil
       end
 
     # CLEANING: Remove date, time, and common separators that become trailing/leading
-    clean_text = 
+    clean_text =
       text
-      |> String.replace(~r/\d{2}\/\d{2}/, "")   # Remove DD/MM
-      |> String.replace(~r/\d{2}:\d{2}/, "")   # Remove HH:MM
-      |> String.replace(~r/^[\s\-\.]+/, "")    # Remove leading dashes/dots/spaces
-      |> String.replace(~r/[\s\-\.]+$/, "")    # Remove trailing dashes/dots/spaces
-      |> String.replace(~r/\s+/, " ")          # Normalize spaces
+      # Remove DD/MM
+      |> String.replace(~r/\d{2}\/\d{2}/, "")
+      # Remove HH:MM
+      |> String.replace(~r/\d{2}:\d{2}/, "")
+      # Remove leading dashes/dots/spaces
+      |> String.replace(~r/^[\s\-\.]+/, "")
+      # Remove trailing dashes/dots/spaces
+      |> String.replace(~r/[\s\-\.]+$/, "")
+      # Normalize spaces
+      |> String.replace(~r/\s+/, " ")
       |> String.trim()
 
     {final_date, final_time, clean_text}
@@ -79,8 +90,11 @@ defmodule CashLens.Parsers.CSVParser do
 
   defp parse_date(date_string) do
     date_string = String.trim(date_string || "")
+
     case Date.from_iso8601(date_string) do
-      {:ok, date} -> date
+      {:ok, date} ->
+        date
+
       _ ->
         case String.split(date_string, "/") do
           [d, m, y] ->
@@ -89,7 +103,9 @@ defmodule CashLens.Parsers.CSVParser do
             rescue
               _ -> Date.utc_today()
             end
-          _ -> Date.utc_today()
+
+          _ ->
+            Date.utc_today()
         end
     end
   end

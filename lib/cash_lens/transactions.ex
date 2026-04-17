@@ -46,7 +46,12 @@ defmodule CashLens.Transactions do
     |> filter_by_category(filters["category_id"])
     |> filter_by_description(filters["search"])
     |> filter_by_date(filters["date"])
-    |> filter_by_month_year(filters["month"], filters["year"], filters["category_id"], filters["unmatched_transfers"])
+    |> filter_by_month_year(
+      filters["month"],
+      filters["year"],
+      filters["category_id"],
+      filters["unmatched_transfers"]
+    )
     |> filter_by_amount(filters["amount"])
     |> filter_by_amount_range(filters["amount_min"], filters["amount_max"])
     |> filter_by_type(filters["type"])
@@ -73,16 +78,16 @@ defmodule CashLens.Transactions do
       query
     else
       query
-      |> then(fn q -> 
-        if (month && month != "") do
+      |> then(fn q ->
+        if month && month != "" do
           m = if is_binary(month), do: String.to_integer(month), else: month
           where(q, [t], fragment("extract(month from ?)", t.date) == ^m)
         else
           q
         end
       end)
-      |> then(fn q -> 
-        if (year && year != "") do
+      |> then(fn q ->
+        if year && year != "" do
           y = if is_binary(year), do: String.to_integer(year), else: year
           where(q, [t], fragment("extract(year from ?)", t.date) == ^y)
         else
@@ -92,8 +97,11 @@ defmodule CashLens.Transactions do
     end
   end
 
-  defp order_by_date(query, :asc), do: order_by(query, [t], asc: t.date, asc_nulls_last: t.time, asc: t.inserted_at)
-  defp order_by_date(query, _), do: order_by(query, [t], desc: t.date, desc_nulls_last: t.time, desc: t.inserted_at)
+  defp order_by_date(query, :asc),
+    do: order_by(query, [t], asc: t.date, asc_nulls_last: t.time, asc: t.inserted_at)
+
+  defp order_by_date(query, _),
+    do: order_by(query, [t], desc: t.date, desc_nulls_last: t.time, desc: t.inserted_at)
 
   defp join_associations(query) do
     query
@@ -106,6 +114,7 @@ defmodule CashLens.Transactions do
 
   defp filter_by_amount(query, nil), do: query
   defp filter_by_amount(query, ""), do: query
+
   defp filter_by_amount(query, amount) do
     where(query, amount: ^amount)
   end
@@ -123,7 +132,9 @@ defmodule CashLens.Transactions do
 
   defp filter_by_reimbursement_status(query, nil), do: query
   defp filter_by_reimbursement_status(query, ""), do: query
-  defp filter_by_reimbursement_status(query, status), do: where(query, reimbursement_status: ^status)
+
+  defp filter_by_reimbursement_status(query, status),
+    do: where(query, reimbursement_status: ^status)
 
   defp filter_by_account(query, nil), do: query
   defp filter_by_account(query, ""), do: query
@@ -131,10 +142,12 @@ defmodule CashLens.Transactions do
 
   defp filter_by_category(query, nil), do: query
   defp filter_by_category(query, ""), do: query
+
   defp filter_by_category(query, "nil") do
     IO.puts("FILTER BY CATEGORY: NIL")
     where(query, [t], is_nil(t.category_id))
   end
+
   defp filter_by_category(query, category_id) do
     IO.puts("FILTER BY CATEGORY: #{category_id}")
     ids = CashLens.Categories.get_category_ids_with_children(category_id)
@@ -143,6 +156,7 @@ defmodule CashLens.Transactions do
 
   defp filter_by_description(query, nil), do: query
   defp filter_by_description(query, ""), do: query
+
   defp filter_by_description(query, search) do
     where(query, [t], ilike(t.description, ^"%#{search}%"))
   end
@@ -151,7 +165,12 @@ defmodule CashLens.Transactions do
   Lists the most recent transactions with a limit.
   """
   def list_recent_transactions(limit \\ 5) do
-    Repo.all(from t in Transaction, order_by: [desc: t.date, desc: t.inserted_at], limit: ^limit, preload: [:category, :account])
+    Repo.all(
+      from t in Transaction,
+        order_by: [desc: t.date, desc: t.inserted_at],
+        limit: ^limit,
+        preload: [:category, :account]
+    )
   end
 
   @doc """
@@ -159,43 +178,46 @@ defmodule CashLens.Transactions do
   """
   def get_monthly_summary(date \\ nil, filters \\ %{}) do
     target_date = date || get_latest_transaction_date() || Date.utc_today()
-    
+
     # If month/year filters are present, use them to define the summary period
-    {m, y} = if (filters["month"] && filters["month"] != "" && filters["year"] && filters["year"] != "") do
-      {String.to_integer(filters["month"]), String.to_integer(filters["year"])}
-    else
-      {target_date.month, target_date.year}
-    end
+    {m, y} =
+      if filters["month"] && filters["month"] != "" && filters["year"] && filters["year"] != "" do
+        {String.to_integer(filters["month"]), String.to_integer(filters["year"])}
+      else
+        {target_date.month, target_date.year}
+      end
 
     first_of_month = Date.new!(y, m, 1)
     last_of_month = Date.end_of_month(first_of_month)
 
-    query = from t in Transaction,
-      left_join: c in assoc(t, :category),
-      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
-      where: is_nil(t.reimbursement_link_key),
-      select: t
+    query =
+      from t in Transaction,
+        left_join: c in assoc(t, :category),
+        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+        where: is_nil(t.reimbursement_link_key),
+        select: t
 
     # Bypass date filtering if special global filters are active
-    query = if filters["category_id"] == "nil" or filters["unmatched_transfers"] == "true" do
-      query
-    else
-      where(query, [t], t.date >= ^first_of_month and t.date <= ^last_of_month)
-    end
+    query =
+      if filters["category_id"] == "nil" or filters["unmatched_transfers"] == "true" do
+        query
+      else
+        where(query, [t], t.date >= ^first_of_month and t.date <= ^last_of_month)
+      end
 
-    query = 
+    query =
       query
       |> filter_by_account(filters["account_id"])
 
     transactions = Repo.all(query)
 
-    income = 
-      transactions 
+    income =
+      transactions
       |> Enum.filter(fn t -> Decimal.gt?(t.amount, 0) end)
       |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
 
-    expenses = 
-      transactions 
+    expenses =
+      transactions
       |> Enum.filter(fn t -> Decimal.lt?(t.amount, 0) end)
       |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
 
@@ -206,24 +228,25 @@ defmodule CashLens.Transactions do
   Returns pure income and expenses history grouped by month, excluding transfers.
   """
   def get_historical_summary do
-    query = from t in Transaction,
-      left_join: c in assoc(t, :category),
-      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
-      where: is_nil(t.reimbursement_link_key),
-      select: t
+    query =
+      from t in Transaction,
+        left_join: c in assoc(t, :category),
+        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+        where: is_nil(t.reimbursement_link_key),
+        select: t
 
     Repo.all(query)
     |> Enum.group_by(fn t -> {t.date.year, t.date.month} end)
     |> Enum.map(fn {{year, month}, txs} ->
-      income = 
-        txs 
-        |> Enum.filter(&Decimal.gt?(&1.amount, 0)) 
+      income =
+        txs
+        |> Enum.filter(&Decimal.gt?(&1.amount, 0))
         |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
-      
-      expenses = 
-        txs 
-        |> Enum.filter(&Decimal.lt?(&1.amount, 0)) 
-        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount)) 
+
+      expenses =
+        txs
+        |> Enum.filter(&Decimal.lt?(&1.amount, 0))
+        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
         |> Decimal.abs()
 
       %{
@@ -241,35 +264,44 @@ defmodule CashLens.Transactions do
   Returns expense totals grouped by month and category, excluding transfers.
   """
   def get_historical_category_summary do
-    query = from t in Transaction,
-      join: c in assoc(t, :category),
-      left_join: p in assoc(c, :parent),
-      where: t.amount < 0,
-      where: c.slug not in ["initial_value", "transfer"],
-      where: is_nil(t.reimbursement_link_key),
-      select: %{
-        year: fragment("EXTRACT(YEAR FROM ?)", t.date), 
-        month: fragment("EXTRACT(MONTH FROM ?)", t.date), 
-        category_name: c.name,
-        parent_name: p.name,
-        type: c.type,
-        total: t.amount
-      }
+    query =
+      from t in Transaction,
+        join: c in assoc(t, :category),
+        left_join: p in assoc(c, :parent),
+        where: t.amount < 0,
+        where: c.slug not in ["initial_value", "transfer"],
+        where: is_nil(t.reimbursement_link_key),
+        select: %{
+          year: fragment("EXTRACT(YEAR FROM ?)", t.date),
+          month: fragment("EXTRACT(MONTH FROM ?)", t.date),
+          category_name: c.name,
+          parent_name: p.name,
+          type: c.type,
+          total: t.amount
+        }
 
     Repo.all(query)
-    |> Enum.group_by(fn item -> 
+    |> Enum.group_by(fn item ->
       year = if is_struct(item.year, Decimal), do: Decimal.to_integer(item.year), else: item.year
-      month = if is_struct(item.month, Decimal), do: Decimal.to_integer(item.month), else: item.month
-      {year, month} 
+
+      month =
+        if is_struct(item.month, Decimal), do: Decimal.to_integer(item.month), else: item.month
+
+      {year, month}
     end)
     |> Enum.map(fn {{year, month}, items} ->
-      categories = 
-        items 
+      categories =
+        items
         |> Enum.group_by(fn i -> {i.parent_name || i.category_name, i.type} end)
-        |> Enum.map(fn {{name, type}, txs} -> 
-          %{name: name, type: type, total: txs |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.total)) |> Decimal.abs()}
+        |> Enum.map(fn {{name, type}, txs} ->
+          %{
+            name: name,
+            type: type,
+            total:
+              txs |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.total)) |> Decimal.abs()
+          }
         end)
-      
+
       %{year: year, month: month, categories: categories}
     end)
     |> Enum.sort_by(fn %{year: y, month: m} -> {y, m} end)
@@ -296,11 +328,15 @@ defmodule CashLens.Transactions do
       {:ok, :duplicate}
     else
       case Repo.insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
-        {:ok, %Transaction{id: nil}} -> {:ok, :duplicate}
-        {:ok, transaction} -> 
+        {:ok, %Transaction{id: nil}} ->
+          {:ok, :duplicate}
+
+        {:ok, transaction} ->
           CashLens.Transactions.TransferMatcher.match_transfer(transaction)
           {:ok, transaction}
-        {:error, changeset} -> {:error, changeset}
+
+        {:error, changeset} ->
+          {:error, changeset}
       end
     end
   end
@@ -351,17 +387,32 @@ defmodule CashLens.Transactions do
   Unlinks all transactions sharing the same reimbursement_link_key.
   """
   def unlink_reimbursement_by_key(nil), do: :ok
+
   def unlink_reimbursement_by_key(link_key) do
     # 1. Restore negative transactions (expenses) to 'pending'
-    from(t in Transaction, 
-      where: t.reimbursement_link_key == ^link_key and t.amount < 0)
-    |> Repo.update_all(set: [reimbursement_status: "pending", reimbursement_link_key: nil, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)])
+    from(t in Transaction,
+      where: t.reimbursement_link_key == ^link_key and t.amount < 0
+    )
+    |> Repo.update_all(
+      set: [
+        reimbursement_status: "pending",
+        reimbursement_link_key: nil,
+        updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      ]
+    )
 
     # 2. Clear positive transactions (credits) completely
-    from(t in Transaction, 
-      where: t.reimbursement_link_key == ^link_key and t.amount > 0)
-    |> Repo.update_all(set: [reimbursement_status: nil, reimbursement_link_key: nil, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)])
-    
+    from(t in Transaction,
+      where: t.reimbursement_link_key == ^link_key and t.amount > 0
+    )
+    |> Repo.update_all(
+      set: [
+        reimbursement_status: nil,
+        reimbursement_link_key: nil,
+        updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      ]
+    )
+
     :ok
   end
 
@@ -372,5 +423,6 @@ defmodule CashLens.Transactions do
     Repo.aggregate(from(t in Transaction, where: is_nil(t.category_id)), :count)
   end
 
-  def change_transaction(%Transaction{} = transaction, attrs \\ %{}), do: Transaction.changeset(transaction, attrs)
+  def change_transaction(%Transaction{} = transaction, attrs \\ %{}),
+    do: Transaction.changeset(transaction, attrs)
 end

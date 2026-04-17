@@ -30,13 +30,17 @@ defmodule CashLensWeb.CategoryLive.Index do
             </tr>
           </thead>
           <tbody id="categories" phx-update="stream">
-            <tr :for={{id, category} <- @streams.categories} id={id} class="hover group border-b border-base-200">
+            <tr
+              :for={{id, category} <- @streams.categories}
+              id={id}
+              class="hover group border-b border-base-200"
+            >
               <td class="font-bold">{CashLens.Categories.Category.full_name(category)}</td>
               <td>
                 <label class="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    class="checkbox checkbox-secondary checkbox-xs" 
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-secondary checkbox-xs"
                     checked={category.type == "fixed"}
                     phx-click="toggle_fixed"
                     phx-value-id={category.id}
@@ -56,10 +60,20 @@ defmodule CashLensWeb.CategoryLive.Index do
               <td class="max-w-xs truncate italic opacity-60">{category.keywords}</td>
               <td class="text-right">
                 <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-4">
-                  <.link navigate={~p"/categories/#{category}/edit"} class="btn btn-ghost btn-xs px-1" phx-click-stop>
+                  <.link
+                    navigate={~p"/categories/#{category}/edit"}
+                    class="btn btn-ghost btn-xs px-1"
+                    phx-click-stop
+                  >
                     <.icon name="hero-pencil" class="size-3" />
                   </.link>
-                  <button type="button" phx-click="confirm_delete" phx-value-id={category.id} phx-click-stop class="btn btn-ghost btn-xs text-error px-1">
+                  <button
+                    type="button"
+                    phx-click="confirm_delete"
+                    phx-value-id={category.id}
+                    phx-click-stop
+                    class="btn btn-ghost btn-xs text-error px-1"
+                  >
                     <.icon name="hero-trash" class="size-3" />
                   </button>
                 </div>
@@ -79,8 +93,12 @@ defmodule CashLensWeb.CategoryLive.Index do
         <h2 class="text-2xl font-black mb-2">Excluir Categoria?</h2>
         <p class="text-base-content/60 mb-10">Deseja realmente apagar esta categoria?</p>
         <div class="flex flex-col sm:flex-row gap-3">
-          <button phx-click={@confirm_modal.action} class="btn btn-error btn-lg flex-1 rounded-2xl">Sim, Apagar</button>
-          <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">Cancelar</button>
+          <button phx-click={@confirm_modal.action} class="btn btn-error btn-lg flex-1 rounded-2xl">
+            Sim, Apagar
+          </button>
+          <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
+            Cancelar
+          </button>
         </div>
       </div>
     </.modal>
@@ -108,16 +126,19 @@ defmodule CashLensWeb.CategoryLive.Index do
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
     category = Categories.get_category!(id)
-    
+
     case Categories.delete_category(category) do
       {:ok, _} ->
         {:noreply, socket |> assign(:confirm_modal, nil) |> stream_delete(:categories, category)}
-      
+
       {:error, _changeset} ->
-        {:noreply, 
-         socket 
-         |> assign(:confirm_modal, nil) 
-         |> put_flash(:error, "Não foi possível excluir a categoria '#{category.name}'. Verifique se existem dependências.")}
+        {:noreply,
+         socket
+         |> assign(:confirm_modal, nil)
+         |> put_flash(
+           :error,
+           "Não foi possível excluir a categoria '#{category.name}'. Verifique se existem dependências."
+         )}
     end
   end
 
@@ -125,10 +146,11 @@ defmodule CashLensWeb.CategoryLive.Index do
   def handle_event("toggle_fixed", %{"id" => id}, socket) do
     category = Categories.get_category!(id)
     new_type = if category.type == "fixed", do: "variable", else: "fixed"
-    
+
     case Categories.update_category(category, %{type: new_type}) do
       {:ok, updated} ->
         {:noreply, stream_insert(socket, :categories, updated)}
+
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Falha ao atualizar.")}
     end

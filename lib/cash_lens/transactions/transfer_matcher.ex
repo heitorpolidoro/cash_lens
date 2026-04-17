@@ -26,18 +26,19 @@ defmodule CashLens.Transactions.TransferMatcher do
     target_amount = Decimal.negate(tx.amount)
 
     # Search for a twin transaction: same date, opposite amount, different account, no key yet
-    query = from t in Transaction,
-      where: t.id != ^tx.id,
-      where: t.account_id != ^tx.account_id,
-      where: t.date == ^tx.date,
-      where: t.amount == ^target_amount,
-      where: is_nil(t.transfer_key),
-      limit: 1
+    query =
+      from t in Transaction,
+        where: t.id != ^tx.id,
+        where: t.account_id != ^tx.account_id,
+        where: t.date == ^tx.date,
+        where: t.amount == ^target_amount,
+        where: is_nil(t.transfer_key),
+        limit: 1
 
     case Repo.one(query) do
-      nil -> 
+      nil ->
         check_for_auto_pairing(tx)
-      
+
       twin ->
         link_id = Ecto.UUID.generate()
         link_pair(tx.id, twin.id, link_id)
@@ -46,11 +47,11 @@ defmodule CashLens.Transactions.TransferMatcher do
 
   defp check_for_auto_pairing(tx) do
     description = String.upcase(tx.description || "")
-    
+
     cond do
       String.contains?(description, "BB MM OURO") ->
         create_virtual_twin(tx, "BB MM Ouro")
-      
+
       String.contains?(description, ["BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
         create_virtual_twin(tx, "BB Rende Fácil")
 
@@ -60,14 +61,17 @@ defmodule CashLens.Transactions.TransferMatcher do
   end
 
   defp create_virtual_twin(tx, target_account_name) do
-    target_account = Repo.one(from a in CashLens.Accounts.Account, 
-      where: ilike(a.name, ^target_account_name), 
-      limit: 1)
+    target_account =
+      Repo.one(
+        from a in CashLens.Accounts.Account,
+          where: ilike(a.name, ^target_account_name),
+          limit: 1
+      )
 
     if target_account do
       IO.puts("Creating virtual twin for '#{tx.description}' in account '#{target_account_name}'")
       link_id = Ecto.UUID.generate()
-      
+
       twin_params = %{
         date: tx.date,
         description: tx.description,
@@ -80,12 +84,17 @@ defmodule CashLens.Transactions.TransferMatcher do
       Repo.transaction(fn ->
         # 1. Update original by ID (avoids StaleEntryError)
         from(t in Transaction, where: t.id == ^tx.id)
-        |> Repo.update_all(set: [transfer_key: link_id, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)])
-        
+        |> Repo.update_all(
+          set: [
+            transfer_key: link_id,
+            updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+          ]
+        )
+
         # 2. Insert the twin (only if it doesn't exist by fingerprint)
         # Note: Twin's fingerprint will naturally be different because account_id is different
-        %Transaction{} 
-        |> Transaction.changeset(twin_params) 
+        %Transaction{}
+        |> Transaction.changeset(twin_params)
         |> Repo.insert(on_conflict: :nothing, conflict_target: :fingerprint)
       end)
 
@@ -99,8 +108,11 @@ defmodule CashLens.Transactions.TransferMatcher do
   defp link_pair(tx_id, twin_id, link_id) do
     Repo.transaction(fn ->
       from(t in Transaction, where: t.id in [^tx_id, ^twin_id])
-      |> Repo.update_all(set: [transfer_key: link_id, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)])
+      |> Repo.update_all(
+        set: [transfer_key: link_id, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+      )
     end)
+
     {:ok, link_id}
   end
 end
