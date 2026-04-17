@@ -124,7 +124,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
             <form id="month-selector" phx-change="apply_filters" class="m-0 p-0 flex">
               <input type="hidden" name="type" value={@filters["type"]} />
-              <input type="hidden" name="hidden_search" value={@filters["search"]} />
+              <input type="hidden" name="search" value={@filters["search"]} />
 
               <input type="hidden" name="account_id" value={@filters["account_id"]} />
               <input type="hidden" name="category_id" value={@filters["category_id"]} />
