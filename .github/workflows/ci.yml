@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
 
 permissions:
   contents: read
@@ -34,6 +34,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.ref }}
 
     - name: Set up Elixir
       uses: erlef/setup-beam@v1
@@ -57,5 +59,16 @@ jobs:
     - name: Compile and check warnings
       run: mix compile --warnings-as-errors
 
-    - name: Run tests
-      run: mix test
+    - name: Run tests with coverage
+      run: mix test --cover
+
+    - name: Report coverage to DeepSource
+      run: |
+        curl https://deepsource.io/cli | sh
+        # Note: In Elixir, coverage is often in cover/lcov.info or similar if configured.
+        # If not configured, this step might need excoveralls or similar.
+        if [ -f "cover/lcov.info" ]; then
+          ./bin/deepsource report --analyzer test-coverage --key elixir --value-file ./cover/lcov.info
+        fi
+      env:
+        DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
