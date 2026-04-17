@@ -10,7 +10,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   def render(assigns) do
     ~H"""
     <div class="py-6 space-y-8">
-      <div :if={@filters["filter_account_id"] != ""} class="mb-2">
+      <div :if={@filters["account_id"] != ""} class="mb-2">
         <.link navigate={if @return_to == "accounts", do: ~p"/accounts", else: ~p"/"} class="text-xs font-black uppercase opacity-50 hover:opacity-100 flex items-center gap-1 transition-all group">
           <.icon name="hero-arrow-left" class="size-3 group-hover:-translate-x-1 transition-transform" />
           Voltar para {if @return_to == "accounts", do: "Contas", else: "Dashboard"}
@@ -18,8 +18,8 @@ defmodule CashLensWeb.TransactionLive.Index do
       </div>
       <.header>
         Transações
-        <:subtitle :if={@filters["filter_account_id"] not in ["", nil]}>
-          Filtrando por conta: {case Enum.find(@accounts, & &1.id == @filters["filter_account_id"]) do
+        <:subtitle :if={@filters["account_id"] not in ["", nil]}>
+          Filtrando por conta: {case Enum.find(@accounts, & &1.id == @filters["account_id"]) do
             nil -> "Desconhecida"
             acc -> acc.name
           end}
@@ -102,7 +102,7 @@ defmodule CashLensWeb.TransactionLive.Index do
               <input type="hidden" name="type" value={@filters["type"]} />
               <input type="hidden" name="hidden_search" value={@filters["search"]} />
 
-              <input type="hidden" name="account_id" value={@filters["filter_account_id"]} />
+              <input type="hidden" name="account_id" value={@filters["account_id"]} />
               <input type="hidden" name="category_id" value={@filters["category_id"]} />
               <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
               <input type="hidden" name="unmatched_transfers" value={@filters["unmatched_transfers"]} />
@@ -161,16 +161,16 @@ defmodule CashLensWeb.TransactionLive.Index do
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <!-- Card de Saldo -->
         <div 
-          class={["stats shadow bg-base-100 border border-base-300 transition-all", @filters["filter_account_id"] != "" && "hover:border-primary cursor-pointer active:scale-95"]}
-          phx-click={@filters["filter_account_id"] != "" && "open_balance_correction"}
+          class={["stats shadow bg-base-100 border border-base-300 transition-all", @filters["account_id"] != "" && "hover:border-primary cursor-pointer active:scale-95"]}
+          phx-click={@filters["account_id"] != "" && "open_balance_correction"}
         >
           <div class="stat">
             <div class="stat-title flex items-center gap-2">
               Saldo
-              <.icon :if={@filters["filter_account_id"] != ""} name="hero-pencil-square" class="size-3 opacity-30" />
+              <.icon :if={@filters["account_id"] != ""} name="hero-pencil-square" class="size-3 opacity-30" />
             </div>
             <div class="stat-value text-primary font-black text-2xl">{format_currency(@summary.current_balance)}</div>
-            <div class="stat-desc">{if @filters["filter_account_id"] != "", do: "Saldo desta conta", else: "Soma de todas as contas"}</div>
+            <div class="stat-desc">{if @filters["account_id"] != "", do: "Saldo desta conta", else: "Soma de todas as contas"}</div>
           </div>
         </div>
 
@@ -182,7 +182,7 @@ defmodule CashLensWeb.TransactionLive.Index do
               Receitas ({@summary.month_name})
             </div>
             <div class="stat-value text-success font-black text-2xl">{format_currency(@summary.income)}</div>
-            <div class="stat-desc">Ganhos {if @filters["filter_account_id"] != "", do: "nesta conta", else: "em todas as contas"}</div>
+            <div class="stat-desc">Ganhos {if @filters["account_id"] != "", do: "nesta conta", else: "em todas as contas"}</div>
           </div>
         </div>
 
@@ -194,7 +194,7 @@ defmodule CashLensWeb.TransactionLive.Index do
               Despesas ({@summary.month_name})
             </div>
             <div class="stat-value text-error font-black text-2xl">{format_currency(@summary.expenses)}</div>
-            <div class="stat-desc">Gastos {if @filters["filter_account_id"] != "", do: "nesta conta", else: "em todas as contas"}</div>
+            <div class="stat-desc">Gastos {if @filters["account_id"] != "", do: "nesta conta", else: "em todas as contas"}</div>
           </div>
         </div>
 
@@ -219,7 +219,7 @@ defmodule CashLensWeb.TransactionLive.Index do
         <div class="p-2">
           <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">Corrigir Saldo</h2>
           <p class="text-xs opacity-60 mb-6">
-            Ajustando saldo da conta: <strong>{Enum.find(@accounts, & &1.id == @filters["filter_account_id"]).name}</strong>
+            Ajustando saldo da conta: <strong>{Enum.find(@accounts, & &1.id == @filters["account_id"]).name}</strong>
           </p>
 
           <.form :let={f} for={@balance_correction_form} id="balance-correction-form" phx-submit="save_balance_correction" class="space-y-6">
@@ -301,7 +301,7 @@ defmodule CashLensWeb.TransactionLive.Index do
                   <th class="px-4">
                     <div class="flex flex-col gap-1">
                       <span>Descrição</span>
-                      <input type="text" name="search" value={@filters["filter_description"]} placeholder="Buscar..." class="input input-bordered input-xs font-normal w-full" phx-debounce="300" />
+                      <input type="text" name="search" value={@filters["search"]} placeholder="Buscar..." class="input input-bordered input-xs font-normal w-full" phx-debounce="300" />
                     </div>
                   </th>
                   <th class="w-32 px-4">
@@ -330,7 +330,7 @@ defmodule CashLensWeb.TransactionLive.Index do
                       <select name="account_id" class="select select-bordered select-xs font-normal w-full">
                         <option value="">Todas</option>
                         <%= for account <- @accounts do %>
-                          <option value={account.id} selected={@filters["filter_account_id"] == account.id}>{account.name}</option>
+                          <option value={account.id} selected={@filters["account_id"] == account.id}>{account.name}</option>
                         <% end %>
                       </select>
                     </div>
@@ -1001,8 +1001,8 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("toggle_sort", _params, socket) do
-    new_order = if socket.assigns.filters["filter_sort_order"] == "desc", do: "asc", else: "desc"
-    new_filters = Map.put(socket.assigns.filters, "filter_sort_order", new_order)
+    new_order = if socket.assigns.filters["sort_order"] == "desc", do: "asc", else: "desc"
+    new_filters = Map.put(socket.assigns.filters, "sort_order", new_order)
     {:noreply, 
      socket 
      |> assign(:filters, new_filters) 
@@ -1015,7 +1015,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("clear_filters", _params, socket) do
     today = Date.utc_today()
-    filters = %{"filter_description" => "", "filter_account_id" => "", "filter_category_id" => "", "filter_date" => "", "filter_amount" => "", "filter_sort_order" => "desc", "filter_type" => "", "month" => "#{today.month}", "filter_year" => "#{today.year}", "unmatched_transfers" => ""}
+    filters = %{"search" => "", "account_id" => "", "category_id" => "", "date" => "", "amount" => "", "sort_order" => "desc", "type" => "", "month" => "#{today.month}", "year" => "#{today.year}", "unmatched_transfers" => ""}
     {:noreply, 
      socket 
      |> assign(:filters, filters) 
@@ -1224,7 +1224,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("save_balance_correction", %{"new_balance" => new_balance, "adjustment_type" => type}, socket) do
-    account_id = socket.assigns.filters["filter_account_id"]
+    account_id = socket.assigns.filters["account_id"]
     new_val = Decimal.new(new_balance)
     current_val = socket.assigns.summary.current_balance
     diff = Decimal.sub(new_val, current_val)
