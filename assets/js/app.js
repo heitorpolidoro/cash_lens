@@ -93,14 +93,9 @@ const liveSocket = new LiveSocket("/live", Socket, {
       mounted() { this.render(); },
       updated() { this.render(); },
       render() {
+        // TODO: Implement a robust Markdown-to-HTML renderer (e.g., using a library like marked or shiki)
         const raw = this.el.getAttribute("data-content") || "";
-        const html = raw
-          .replace(/^### +(.*)$/gm, '<h3 class="text-lg font-black mt-4 mb-2 text-secondary">$1</h3>')
-          .replace(/\*\*(.*?)\*\*/g, '<strong class="font-black text-secondary">$1</strong>')
-          .replace(/^[ \t]{0,4}[-*] +(.*)$/gm, '<div class="flex gap-2 ml-2 my-1"><span class="text-secondary">•</span><span>$1</span></div>')
-          .replace(/\n\n/g, '<br/><br/>')
-          .trim();
-        this.el.innerHTML = DOMPurify.sanitize(html);
+        this.el.innerHTML = DOMPurify.sanitize(raw);
       }
     }
   }
