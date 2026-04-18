@@ -4,6 +4,7 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/cash_lens"
 import topbar from "../vendor/topbar"
 import Chart from 'chart.js/auto';
+import DOMPurify from 'dompurify';
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -92,13 +93,9 @@ const liveSocket = new LiveSocket("/live", Socket, {
       mounted() { this.render(); },
       updated() { this.render(); },
       render() {
+        // TODO: Implement a robust Markdown-to-HTML renderer (e.g., using a library like marked or shiki)
         const raw = this.el.getAttribute("data-content") || "";
-        this.el.innerHTML = raw
-          .replace(/### (.*$)/gm, '<h3 class="text-lg font-black mt-4 mb-2 text-secondary">$1</h3>')
-          .replace(/\*\*(.*?)\*\*/g, '<strong class="font-black text-secondary">$1</strong>')
-          .replace(/^\s*[\-\*] (.*$)/gm, '<div class="flex gap-2 ml-2 my-1"><span class="text-secondary">•</span><span>$1</span></div>')
-          .replace(/\n\n/g, '<br/><br/>')
-          .trim();
+        this.el.innerHTML = DOMPurify.sanitize(raw);
       }
     }
   }

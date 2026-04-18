@@ -32,7 +32,9 @@ defmodule CashLens.TransactionsTest do
       t2 = transaction_fixture(%{amount: "150.00"})
       _t3 = transaction_fixture(%{amount: "250.00"})
 
-      results = Transactions.list_transactions(%{"amount_min" => "100.00", "amount_max" => "200.00"})
+      results =
+        Transactions.list_transactions(%{"amount_min" => "100.00", "amount_max" => "200.00"})
+
       assert length(results) == 1
       assert Enum.at(results, 0).id == t2.id
     end
@@ -58,8 +60,14 @@ defmodule CashLens.TransactionsTest do
 
     test "filters by category including hierarchy" do
       parent = CategoriesFixtures.category_fixture(%{name: "Food", slug: "food"})
-      child = CategoriesFixtures.category_fixture(%{name: "Dining Out", slug: "dining", parent_id: parent.id})
-      
+
+      child =
+        CategoriesFixtures.category_fixture(%{
+          name: "Dining Out",
+          slug: "dining",
+          parent_id: parent.id
+        })
+
       t1 = transaction_fixture(%{category_id: parent.id})
       t2 = transaction_fixture(%{category_id: child.id})
       _t3 = transaction_fixture(%{category_id: nil})
@@ -87,26 +95,52 @@ defmodule CashLens.TransactionsTest do
   describe "summaries" do
     test "get_monthly_summary/2 calculates income and expenses correctly" do
       acc = AccountsFixtures.account_fixture()
-      
+
       # We need specific slugs for some categories to test exclusions
-      cat_transfer = Repo.insert!(%CashLens.Categories.Category{name: "Transfer", slug: "transfer"})
-      cat_initial = Repo.insert!(%CashLens.Categories.Category{name: "Initial", slug: "initial_value"})
+      cat_transfer =
+        Repo.insert!(%CashLens.Categories.Category{name: "Transfer", slug: "transfer"})
+
+      cat_initial =
+        Repo.insert!(%CashLens.Categories.Category{name: "Initial", slug: "initial_value"})
+
       cat_expense = CategoriesFixtures.category_fixture(%{name: "Expense"})
-      
+
       # Valid income
       transaction_fixture(%{amount: "1000.00", date: ~D[2026-03-01], account_id: acc.id})
       # Valid expense
-      transaction_fixture(%{amount: "-200.00", date: ~D[2026-03-05], account_id: acc.id, category_id: cat_expense.id})
-      
+      transaction_fixture(%{
+        amount: "-200.00",
+        date: ~D[2026-03-05],
+        account_id: acc.id,
+        category_id: cat_expense.id
+      })
+
       # Ignored: Transfer
-      transaction_fixture(%{amount: "-500.00", date: ~D[2026-03-10], account_id: acc.id, category_id: cat_transfer.id})
+      transaction_fixture(%{
+        amount: "-500.00",
+        date: ~D[2026-03-10],
+        account_id: acc.id,
+        category_id: cat_transfer.id
+      })
+
       # Ignored: Initial value
-      transaction_fixture(%{amount: "10000.00", date: ~D[2026-03-12], account_id: acc.id, category_id: cat_initial.id})
+      transaction_fixture(%{
+        amount: "10000.00",
+        date: ~D[2026-03-12],
+        account_id: acc.id,
+        category_id: cat_initial.id
+      })
+
       # Ignored: Linked reimbursement
-      transaction_fixture(%{amount: "200.00", date: ~D[2026-03-15], account_id: acc.id, reimbursement_link_key: Ecto.UUID.generate()})
-      
+      transaction_fixture(%{
+        amount: "200.00",
+        date: ~D[2026-03-15],
+        account_id: acc.id,
+        reimbursement_link_key: Ecto.UUID.generate()
+      })
+
       summary = Transactions.get_monthly_summary(~D[2026-03-01])
-      
+
       assert summary.income == Decimal.new("1000.00")
       assert summary.expenses == Decimal.new("200.00")
       assert summary.month == ~D[2026-03-01]
@@ -114,7 +148,7 @@ defmodule CashLens.TransactionsTest do
 
     test "get_historical_summary/0 returns correct data grouped by month" do
       acc = AccountsFixtures.account_fixture()
-      
+
       # February
       transaction_fixture(%{amount: "1000.00", date: ~D[2026-02-01], account_id: acc.id})
       transaction_fixture(%{amount: "-100.00", date: ~D[2026-02-10], account_id: acc.id})
@@ -124,9 +158,9 @@ defmodule CashLens.TransactionsTest do
       transaction_fixture(%{amount: "-500.00", date: ~D[2026-03-05], account_id: acc.id})
 
       history = Transactions.get_historical_summary()
-      
+
       assert length(history) == 2
-      
+
       feb = Enum.find(history, &(&1.month == 2 and &1.year == 2026))
       assert feb.income == Decimal.new("1000.00")
       assert feb.expenses == Decimal.new("100.00")
@@ -141,14 +175,19 @@ defmodule CashLens.TransactionsTest do
 
   describe "reapply_auto_categorization/0" do
     test "assigns categories based on keyword rules" do
-      cat = CategoriesFixtures.category_fixture(%{name: "Streaming", slug: "streaming", keywords: "NETFLIX, SPOTIFY"})
-      
+      cat =
+        CategoriesFixtures.category_fixture(%{
+          name: "Streaming",
+          slug: "streaming",
+          keywords: "NETFLIX, SPOTIFY"
+        })
+
       t1 = transaction_fixture(%{description: "NETFLIX COM", category_id: nil})
       t2 = transaction_fixture(%{description: "SPOTIFY SA", category_id: nil})
       t3 = transaction_fixture(%{description: "Other stuff", category_id: nil})
-      
+
       assert :ok = Transactions.reapply_auto_categorization()
-      
+
       assert Transactions.get_transaction!(t1.id).category_id == cat.id
       assert Transactions.get_transaction!(t2.id).category_id == cat.id
       assert Transactions.get_transaction!(t3.id).category_id == nil
@@ -157,11 +196,11 @@ defmodule CashLens.TransactionsTest do
     test "assigns categories based on special hardcoded rules" do
       # BB MM OURO is a transfer according to AutoCategorizer
       transfer_cat = CategoriesFixtures.category_fixture(%{name: "Transfer", slug: "transfer"})
-      
+
       t = transaction_fixture(%{description: "BB MM OURO", category_id: nil})
-      
+
       assert :ok = Transactions.reapply_auto_categorization()
-      
+
       assert Transactions.get_transaction!(t.id).category_id == transfer_cat.id
     end
   end
@@ -175,7 +214,13 @@ defmodule CashLens.TransactionsTest do
 
     test "create_transaction/1 with valid data creates a transaction" do
       account = AccountsFixtures.account_fixture()
-      valid_attrs = %{date: ~D[2026-02-23], description: "some description", amount: "120.5", account_id: account.id}
+
+      valid_attrs = %{
+        date: ~D[2026-02-23],
+        description: "some description",
+        amount: "120.5",
+        account_id: account.id
+      }
 
       assert {:ok, %Transaction{} = transaction} = Transactions.create_transaction(valid_attrs)
       assert transaction.date == ~D[2026-02-23]
@@ -184,14 +229,21 @@ defmodule CashLens.TransactionsTest do
 
     test "create_transaction/1 with duplicate fingerprint returns :duplicate" do
       account = AccountsFixtures.account_fixture()
-      attrs = %{date: ~D[2026-02-23], description: "unique", amount: "120.5", account_id: account.id}
+
+      attrs = %{
+        date: ~D[2026-02-23],
+        description: "unique",
+        amount: "120.5",
+        account_id: account.id
+      }
+
       t1 = transaction_fixture(attrs)
-      
+
       # Let's inspect both fingerprints
       changeset2 = Transactions.change_transaction(%Transaction{}, attrs)
       IO.inspect(t1.fingerprint, label: "F1")
       IO.inspect(get_field(changeset2, :fingerprint), label: "F2")
-      
+
       assert {:ok, :duplicate} = Transactions.create_transaction(attrs)
     end
 
@@ -199,7 +251,9 @@ defmodule CashLens.TransactionsTest do
       transaction = transaction_fixture()
       update_attrs = %{description: "updated description"}
 
-      assert {:ok, %Transaction{} = transaction} = Transactions.update_transaction(transaction, update_attrs)
+      assert {:ok, %Transaction{} = transaction} =
+               Transactions.update_transaction(transaction, update_attrs)
+
       assert transaction.description == "updated description"
     end
 

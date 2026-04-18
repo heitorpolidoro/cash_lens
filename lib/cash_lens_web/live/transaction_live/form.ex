@@ -13,23 +13,57 @@ defmodule CashLensWeb.TransactionLive.Form do
         <:subtitle>Use este formulário para gerenciar os dados da transação.</:subtitle>
       </.header>
 
-      <.form :let={f} for={@form} id="transaction-form" phx-change="validate" phx-submit="save" class="mt-8 space-y-6">
+      <.form
+        :let={f}
+        for={@form}
+        id="transaction-form"
+        phx-change="validate"
+        phx-submit="save"
+        class="mt-8 space-y-6"
+      >
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <.input field={f[:date]} type="date" label="Data" required />
           <.input field={f[:time]} type="time" label="Hora (opcional)" />
         </div>
 
-        <.input field={f[:description]} type="text" label="Descrição" required placeholder="Ex: Supermercado, Aluguel..." />
+        <.input
+          field={f[:description]}
+          type="text"
+          label="Descrição"
+          required
+          placeholder="Ex: Supermercado, Aluguel..."
+        />
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <.input field={f[:amount]} type="number" label="Valor" step="0.01" required placeholder="0.00" />
-          <.input field={f[:account_id]} type="select" label="Conta" options={Enum.map(@accounts, &{&1.name, &1.id})} required />
+          <.input
+            field={f[:amount]}
+            type="number"
+            label="Valor"
+            step="0.01"
+            required
+            placeholder="0.00"
+          />
+          <.input
+            field={f[:account_id]}
+            type="select"
+            label="Conta"
+            options={Enum.map(@accounts, &{&1.name, &1.id})}
+            required
+          />
         </div>
 
-        <.input field={f[:category_id]} type="select" label="Categoria (opcional)" options={Enum.map(@categories, &{CashLens.Categories.Category.full_name(&1), &1.id})} prompt="Pendente" />
+        <.input
+          field={f[:category_id]}
+          type="select"
+          label="Categoria (opcional)"
+          options={Enum.map(@categories, &{CashLens.Categories.Category.full_name(&1), &1.id})}
+          prompt="Pendente"
+        />
 
         <div class="pt-4">
-          <.button phx-disable-with="Salvando..." variant="primary" class="w-full">Salvar Transação</.button>
+          <.button phx-disable-with="Salvando..." variant="primary" class="w-full">
+            Salvar Transação
+          </.button>
         </div>
       </.form>
 

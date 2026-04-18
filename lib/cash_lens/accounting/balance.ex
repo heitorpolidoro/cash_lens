@@ -20,7 +20,25 @@ defmodule CashLens.Accounting.Balance do
   @doc false
   def changeset(balance, attrs) do
     balance
-    |> cast(attrs, [:year, :month, :initial_balance, :income, :expenses, :balance, :final_balance, :account_id])
-    |> validate_required([:year, :month, :initial_balance, :income, :expenses, :balance, :final_balance, :account_id])
+    |> cast(attrs, [
+      :year,
+      :month,
+      :initial_balance,
+      :income,
+      :expenses,
+      :balance,
+      :final_balance,
+      :account_id
+    ])
+    |> validate_required([
+      :year,
+      :month,
+      :initial_balance,
+      :income,
+      :expenses,
+      :balance,
+      :final_balance,
+      :account_id
+    ])
   end
 end

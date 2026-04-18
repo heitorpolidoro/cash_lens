@@ -38,3 +38,4 @@
 - [ ] API robusta para suportar todas as operações de CRUD.
 - [ ] Banco de dados MongoDB para persistência.
 - [ ] Containerização total com Docker.
+- [ ] Implementar um renderizador de Markdown robusto no frontend (substituindo o placeholder no assets/js/app.js)

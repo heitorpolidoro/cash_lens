@@ -8,12 +8,13 @@ defmodule CashLensWeb.Formatters do
   Example: 1234.5 -> R$ 1.234,50
   """
   def format_currency(nil), do: "R$ 0,00"
+
   def format_currency(amount) do
     decimal = Decimal.cast(amount) |> elem(1) |> Decimal.round(2)
     is_negative = Decimal.lt?(decimal, 0)
     abs_decimal = Decimal.abs(decimal)
-    
-    {int_part, frac_part} = 
+
+    {int_part, frac_part} =
       abs_decimal
       |> Decimal.to_string(:normal)
       |> String.split(".")
@@ -22,7 +23,7 @@ defmodule CashLensWeb.Formatters do
         [int, frac] -> {int, String.pad_trailing(frac, 2, "0")}
       end
 
-    formatted_int = 
+    formatted_int =
       int_part
       |> String.to_charlist()
       |> Enum.reverse()
@@ -38,9 +39,11 @@ defmodule CashLensWeb.Formatters do
   Formats a Date struct as DD/MM/YYYY.
   """
   def format_date(nil), do: ""
+
   def format_date(%Date{} = date) do
     Calendar.strftime(date, "%d/%m/%Y")
   end
+
   def format_date(date_string) when is_binary(date_string) do
     case Date.from_iso8601(date_string) do
       {:ok, date} -> format_date(date)
@@ -52,6 +55,7 @@ defmodule CashLensWeb.Formatters do
   Formats a Time struct as HH:MM.
   """
   def format_time(nil), do: ""
+
   def format_time(%Time{} = time) do
     Time.truncate(time, :second) |> Time.to_string() |> String.slice(0..4)
   end
@@ -77,9 +81,11 @@ defmodule CashLensWeb.Formatters do
   def translate_reimbursement_status(nil, _amount), do: ""
   def translate_reimbursement_status("pending", _amount), do: "Pendente"
   def translate_reimbursement_status("requested", _amount), do: "Solicitado"
+
   def translate_reimbursement_status("paid", amount) do
     if Decimal.lt?(amount, 0), do: "Reembolso Pago", else: "Reembolso"
   end
+
   def translate_reimbursement_status(other, _amount), do: String.capitalize(other)
 
   @doc """

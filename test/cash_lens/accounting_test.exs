@@ -8,7 +8,7 @@ defmodule CashLens.AccountingTest do
   describe "calculate_monthly_balance/3" do
     test "correctly chains balances between months" do
       acc = account_fixture(%{name: "Checking", balance: "1000.00"})
-      
+
       # Month 1: Jan 2026
       # Initial: 1000.00 (from account)
       # Transactions: -100.00
@@ -30,18 +30,18 @@ defmodule CashLens.AccountingTest do
 
     test "recalculates correctly when middle month changes" do
       acc = account_fixture(%{name: "Savings", balance: "0"})
-      
+
       # Jan: +100 -> Final 100
       transaction_fixture(%{account_id: acc.id, date: ~D[2026-01-01], amount: "100.00"})
       Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      
+
       # Feb: +50 -> Final 150
       transaction_fixture(%{account_id: acc.id, date: ~D[2026-02-01], amount: "50.00"})
       Accounting.calculate_monthly_balance(acc.id, 2026, 2)
 
       # Now add a new transaction in Jan (+20)
       transaction_fixture(%{account_id: acc.id, date: ~D[2026-01-15], amount: "20.00"})
-      
+
       # Run recalculation
       :ok = Accounting.recalculate_all_balances()
 

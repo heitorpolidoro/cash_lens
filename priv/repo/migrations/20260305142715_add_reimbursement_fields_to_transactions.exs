@@ -3,7 +3,8 @@ defmodule CashLens.Repo.Migrations.AddReimbursementFieldsToTransactions do
 
   def change do
     alter table(:transactions) do
-      add :reimbursement_status, :string # pending, requested, paid
+      # pending, requested, paid
+      add :reimbursement_status, :string
       add :reimbursement_link_key, :uuid
     end
 

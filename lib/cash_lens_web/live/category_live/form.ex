@@ -13,10 +13,23 @@ defmodule CashLensWeb.CategoryLive.Form do
         <:subtitle>Organize sua hierarquia financeira e defina regras de identificação.</:subtitle>
       </.header>
 
-      <.form :let={f} for={@form} id="category-form" phx-change="validate" phx-submit="save" class="space-y-8 mt-8">
+      <.form
+        :let={f}
+        for={@form}
+        id="category-form"
+        phx-change="validate"
+        phx-submit="save"
+        class="space-y-8 mt-8"
+      >
         <div class="space-y-6 bg-base-100 p-8 rounded-3xl border border-base-300 shadow-sm">
           <div class="grid grid-cols-1 gap-6">
-            <.input field={f[:name]} type="text" label="Nome da Categoria" placeholder="Ex: Moradia, Netflix..." required />
+            <.input
+              field={f[:name]}
+              type="text"
+              label="Nome da Categoria"
+              placeholder="Ex: Moradia, Netflix..."
+              required
+            />
           </div>
 
           <div class="divider">Hierarquia</div>
@@ -35,15 +48,20 @@ defmodule CashLensWeb.CategoryLive.Form do
             field={f[:type]}
             type="select"
             label="Tipo de Gasto"
-            options={[{"Fixo (Contas Obrigatórias)", "fixed"}, {"Variável (Estilo de Vida)", "variable"}]}
+            options={[
+              {"Fixo (Contas Obrigatórias)", "fixed"},
+              {"Variável (Estilo de Vida)", "variable"}
+            ]}
           />
 
-          <.input 
-            field={f[:default_reimbursable]} 
-            type="checkbox" 
-            label="Marcar automaticamente para reembolso?" 
+          <.input
+            field={f[:default_reimbursable]}
+            type="checkbox"
+            label="Marcar automaticamente para reembolso?"
           />
-          <p class="text-[10px] opacity-50 px-1 -mt-4 mb-4">Transações desta categoria nascerão com status "Pendente" de reembolso.</p>
+          <p class="text-[10px] opacity-50 px-1 -mt-4 mb-4">
+            Transações desta categoria nascerão com status "Pendente" de reembolso.
+          </p>
 
           <.input
             field={f[:keywords]}
@@ -52,13 +70,17 @@ defmodule CashLensWeb.CategoryLive.Form do
             placeholder="Ex: UBER, 99APP, TAXI..."
             rows="3"
           />
-          <p class="text-[10px] opacity-50 italic">Sempre que uma transação contiver uma dessas palavras, ela será categorizada automaticamente aqui.</p>
+          <p class="text-[10px] opacity-50 italic">
+            Sempre que uma transação contiver uma dessas palavras, ela será categorizada automaticamente aqui.
+          </p>
         </div>
 
         <div class="flex flex-col gap-3">
-          <.button phx-disable-with="Salvando..." class="w-full btn-primary btn-lg shadow-xl shadow-primary/20 rounded-2xl">
-            <.icon name="hero-check-circle" class="size-5 mr-2" />
-            Salvar Categoria
+          <.button
+            phx-disable-with="Salvando..."
+            class="w-full btn-primary btn-lg shadow-xl shadow-primary/20 rounded-2xl"
+          >
+            <.icon name="hero-check-circle" class="size-5 mr-2" /> Salvar Categoria
           </.button>
 
           <.link navigate={~p"/categories"} class="btn btn-ghost btn-sm">
@@ -72,10 +94,10 @@ defmodule CashLensWeb.CategoryLive.Form do
 
   @impl true
   def mount(params, _session, socket) do
-    all_categories = 
+    all_categories =
       Categories.list_categories()
       |> Enum.sort_by(& &1.name)
-    
+
     {:ok,
      socket
      |> assign(:parent_options, all_categories)
@@ -85,7 +107,7 @@ defmodule CashLensWeb.CategoryLive.Form do
   defp apply_action(socket, :edit, %{"id" => id}) do
     category = Categories.get_category!(id)
     # Filter out current category from parents to avoid self-reference
-    parents = Enum.reject(socket.assigns.parent_options, & &1.id == id)
+    parents = Enum.reject(socket.assigns.parent_options, &(&1.id == id))
 
     socket
     |> assign(:page_title, "Editar Categoria")
@@ -143,5 +165,6 @@ defmodule CashLensWeb.CategoryLive.Form do
     slug = name |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "_")
     Map.put(params, "slug", slug)
   end
+
   defp maybe_generate_slug(params), do: params
 end

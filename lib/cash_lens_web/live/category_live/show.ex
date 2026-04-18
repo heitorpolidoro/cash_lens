@@ -39,6 +39,7 @@ defmodule CashLensWeb.CategoryLive.Show do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    {:ok, assign(socket, :category, Categories.get_category!(id) |> CashLens.Repo.preload(:parent))}
+    {:ok,
+     assign(socket, :category, Categories.get_category!(id) |> CashLens.Repo.preload(:parent))}
   end
 end

@@ -19,8 +19,9 @@ defmodule CashLens.Transactions.BulkIgnoreTest do
     end
 
     test "unique constraint on pattern" do
-      {:ok, _} = Repo.insert(BulkIgnorePattern.changeset(%BulkIgnorePattern{}, %{pattern: "DUPLICATE"}))
-      
+      {:ok, _} =
+        Repo.insert(BulkIgnorePattern.changeset(%BulkIgnorePattern{}, %{pattern: "DUPLICATE"}))
+
       changeset = BulkIgnorePattern.changeset(%BulkIgnorePattern{}, %{pattern: "DUPLICATE"})
       assert {:error, changeset} = Repo.insert(changeset)
       assert %{pattern: ["has already been taken"]} = errors_on(changeset)

@@ -4,8 +4,20 @@ defmodule CashLensWeb.AccountLiveTest do
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
 
-  @create_attrs %{name: "some name", balance: "120.5", color: "some color", bank: "some bank", icon: "some icon"}
-  @update_attrs %{name: "some updated name", balance: "456.7", color: "some updated color", bank: "some updated bank", icon: "some updated icon"}
+  @create_attrs %{
+    name: "some name",
+    balance: "120.5",
+    color: "some color",
+    bank: "some bank",
+    icon: "some icon"
+  }
+  @update_attrs %{
+    name: "some updated name",
+    balance: "456.7",
+    color: "some updated color",
+    bank: "some updated bank",
+    icon: "some updated icon"
+  }
   @invalid_attrs %{name: nil, balance: nil, color: nil, bank: nil, icon: nil}
   defp create_account(_) do
     account = account_fixture()
@@ -19,7 +31,7 @@ defmodule CashLensWeb.AccountLiveTest do
     test "lists all accounts", %{conn: conn, account: account} do
       {:ok, _index_live, html} = live(conn, ~p"/accounts")
 
-      assert html =~ "Listing Accounts"
+      assert html =~ "Listando Contas"
       assert html =~ account.name
     end
 
@@ -28,11 +40,11 @@ defmodule CashLensWeb.AccountLiveTest do
 
       assert {:ok, form_live, _} =
                index_live
-               |> element("a", "New Account")
+               |> element("a", "Nova Conta")
                |> render_click()
                |> follow_redirect(conn, ~p"/accounts/new")
 
-      assert render(form_live) =~ "New Account"
+      assert render(form_live) =~ "Nova Conta"
 
       assert form_live
              |> form("#account-form", account: @invalid_attrs)
@@ -45,7 +57,7 @@ defmodule CashLensWeb.AccountLiveTest do
                |> follow_redirect(conn, ~p"/accounts")
 
       html = render(index_live)
-      assert html =~ "Account created successfully"
+      assert html =~ "Conta criada com sucesso"
       assert html =~ "some name"
     end
 
@@ -54,11 +66,11 @@ defmodule CashLensWeb.AccountLiveTest do
 
       assert {:ok, form_live, _html} =
                index_live
-               |> element("#accounts-#{account.id} a", "Edit")
+               |> element("#accounts-#{account.id} a")
                |> render_click()
                |> follow_redirect(conn, ~p"/accounts/#{account}/edit")
 
-      assert render(form_live) =~ "Edit Account"
+      assert render(form_live) =~ "Editar Conta"
 
       assert form_live
              |> form("#account-form", account: @invalid_attrs)
@@ -71,14 +83,15 @@ defmodule CashLensWeb.AccountLiveTest do
                |> follow_redirect(conn, ~p"/accounts")
 
       html = render(index_live)
-      assert html =~ "Account updated successfully"
+      assert html =~ "Conta atualizada com sucesso"
       assert html =~ "some updated name"
     end
 
     test "deletes account in listing", %{conn: conn, account: account} do
       {:ok, index_live, _html} = live(conn, ~p"/accounts")
 
-      assert index_live |> element("#accounts-#{account.id} a", "Delete") |> render_click()
+      assert index_live |> element("#accounts-#{account.id} button") |> render_click()
+      assert index_live |> element("button", "Sim, Apagar") |> render_click()
       refute has_element?(index_live, "#accounts-#{account.id}")
     end
   end
@@ -89,7 +102,7 @@ defmodule CashLensWeb.AccountLiveTest do
     test "displays account", %{conn: conn, account: account} do
       {:ok, _show_live, html} = live(conn, ~p"/accounts/#{account}")
 
-      assert html =~ "Show Account"
+      assert html =~ "Exibir Conta"
       assert html =~ account.name
     end
 
@@ -98,11 +111,11 @@ defmodule CashLensWeb.AccountLiveTest do
 
       assert {:ok, form_live, _} =
                show_live
-               |> element("a", "Edit")
+               |> element("a", "Editar conta")
                |> render_click()
                |> follow_redirect(conn, ~p"/accounts/#{account}/edit?return_to=show")
 
-      assert render(form_live) =~ "Edit Account"
+      assert render(form_live) =~ "Editar Conta"
 
       assert form_live
              |> form("#account-form", account: @invalid_attrs)
@@ -115,7 +128,7 @@ defmodule CashLensWeb.AccountLiveTest do
                |> follow_redirect(conn, ~p"/accounts/#{account}")
 
       html = render(show_live)
-      assert html =~ "Account updated successfully"
+      assert html =~ "Conta atualizada com sucesso"
       assert html =~ "some updated name"
     end
   end

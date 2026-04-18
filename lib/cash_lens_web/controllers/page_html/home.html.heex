@@ -3,8 +3,7 @@
     <h1 class="text-3xl font-bold text-base-content">Dashboard Financeiro</h1>
     <div class="flex gap-2">
       <.link href={~p"/transactions"} class="btn btn-outline btn-sm">
-        <.icon name="hero-arrow-up-tray" class="size-4 mr-1" />
-        Importar Extrato
+        <.icon name="hero-arrow-up-tray" class="size-4 mr-1" /> Importar Extrato
       </.link>
     </div>
   </div>
@@ -14,46 +13,57 @@
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title">Saldo Atual</div>
-        <div class="stat-value text-primary font-black text-2xl">{format_currency(@total_balance)}</div>
+        <div class="stat-value text-primary font-black text-2xl">
+          {format_currency(@total_balance)}
+        </div>
         <div class="stat-desc">Soma de todas as contas</div>
       </div>
     </div>
-
-    <!-- Card de Receitas -->
+    
+<!-- Card de Receitas -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title text-success">Receitas ({@summary_month})</div>
-        <div class="stat-value text-success font-black text-2xl">{format_currency(@monthly_income)}</div>
+        <div class="stat-value text-success font-black text-2xl">
+          {format_currency(@monthly_income)}
+        </div>
         <div class="stat-desc">Ganhos no mês selecionado</div>
       </div>
     </div>
-
-    <!-- Card de Despesas -->
+    
+<!-- Card de Despesas -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title text-error">Despesas ({@summary_month})</div>
-        <div class="stat-value text-error font-black text-2xl">{format_currency(@monthly_expenses)}</div>
+        <div class="stat-value text-error font-black text-2xl">
+          {format_currency(@monthly_expenses)}
+        </div>
         <div class="stat-desc">Gastos no mês selecionado</div>
       </div>
     </div>
-
-    <!-- Card de Balanço -->
+    
+<!-- Card de Balanço -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title">Balanço ({@summary_month})</div>
         <% balance = Decimal.sub(@monthly_income, @monthly_expenses) %>
-        <div class={["stat-value font-black text-2xl", if(Decimal.gt?(balance, 0), do: "text-success", else: "text-error")]}>
+        <div class={[
+          "stat-value font-black text-2xl",
+          if(Decimal.gt?(balance, 0), do: "text-success", else: "text-error")
+        ]}>
           {format_currency(balance)}
         </div>
         <div class="stat-desc">Resultado no mês</div>
       </div>
     </div>
   </div>
-
-  <!-- Evolução Financeira (Gráfico) -->
+  
+<!-- Evolução Financeira (Gráfico) -->
   <div class="card bg-base-100 shadow-sm border border-base-300">
     <div class="card-body p-6">
-      <h2 class="card-title text-base-content mb-4 uppercase text-xs opacity-50 font-black">Evolução Financeira Consolidada</h2>
+      <h2 class="card-title text-base-content mb-4 uppercase text-xs opacity-50 font-black">
+        Evolução Financeira Consolidada
+      </h2>
       <div class="w-full h-80">
         <canvas id="balanceChart" data-history={@chart_data}></canvas>
       </div>
@@ -64,19 +74,28 @@
     <!-- Gastos Fixos (Gráfico) -->
     <div class="card bg-base-100 shadow-sm border border-base-300">
       <div class="card-body p-6">
-        <h2 class="card-title text-base-content uppercase text-xs opacity-50 font-black">Custo de Vida (Gastos Fixos)</h2>
+        <h2 class="card-title text-base-content uppercase text-xs opacity-50 font-black">
+          Custo de Vida (Gastos Fixos)
+        </h2>
         <div class="w-full h-80">
           <canvas id="fixedChart" data-categories={@fixed_data}></canvas>
         </div>
       </div>
     </div>
-
-    <!-- Gastos Variáveis (Gráfico) -->
+    
+<!-- Gastos Variáveis (Gráfico) -->
     <div class="card bg-base-100 shadow-sm border border-base-300">
       <div class="card-body p-6">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="card-title text-base-content uppercase text-xs opacity-50 font-black">Estilo de Vida (Gastos Variáveis)</h2>
-          <a href="/transactions?category_id=nil" class="text-[10px] link link-primary no-underline font-bold uppercase">Ver Pendentes</a>
+          <h2 class="card-title text-base-content uppercase text-xs opacity-50 font-black">
+            Estilo de Vida (Gastos Variáveis)
+          </h2>
+          <a
+            href="/transactions?category_id=nil"
+            class="text-[10px] link link-primary no-underline font-bold uppercase"
+          >
+            Ver Pendentes
+          </a>
         </div>
         <div class="w-full h-80">
           <canvas id="variableChart" data-categories={@variable_data}></canvas>
@@ -91,16 +110,25 @@
       <div class="card-body p-6">
         <div class="flex items-center justify-between mb-4">
           <h2 class="card-title text-base-content">Minhas Contas</h2>
-          <a href="/accounts" class="link link-primary text-sm no-underline hover:underline">Ver todas</a>
+          <a href="/accounts" class="link link-primary text-sm no-underline hover:underline">
+            Ver todas
+          </a>
         </div>
         <div class="space-y-3">
           <%= for account <- @accounts do %>
-            <.link navigate={~p"/transactions?account_id=#{account.id}&return_to=dashboard"} class="flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300 gap-4">
+            <.link
+              navigate={~p"/transactions?account_id=#{account.id}&return_to=dashboard"}
+              class="flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300 gap-4"
+            >
               <div class="flex items-center gap-4 min-w-0">
                 <div class="avatar flex-shrink-0">
                   <div class={"w-10 rounded-full bg-base-300 overflow-hidden flex items-center justify-center #{unless account.icon, do: "placeholder"}"}>
                     <%= if account.icon && account.icon != "" do %>
-                      <img src={account.icon} alt={account.name} class="w-full h-full object-cover" />
+                      <img
+                        src={account.icon}
+                        alt={account.name}
+                        class="w-full h-full object-cover"
+                      />
                     <% else %>
                       <div class={"flex items-center justify-center h-full w-full #{if account.color, do: "bg-[#{account.color}]", else: "bg-primary"} text-primary-content font-bold"}>
                         {String.slice(account.bank || account.name, 0..1)}
@@ -113,8 +141,11 @@
                   <p class="text-xs opacity-60 truncate">{account.bank}</p>
                 </div>
               </div>
-              <div class="flex-1"></div> <!-- Espaçador para empurrar o saldo -->
-              <p class="font-black whitespace-nowrap text-right">{format_currency(account.display_balance)}</p>
+              <div class="flex-1"></div>
+              <!-- Espaçador para empurrar o saldo -->
+              <p class="font-black whitespace-nowrap text-right">
+                {format_currency(account.display_balance)}
+              </p>
             </.link>
           <% end %>
           <div :if={Enum.empty?(@accounts)} class="text-center py-4 opacity-50 italic text-sm">
