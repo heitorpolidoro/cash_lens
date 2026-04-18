@@ -163,14 +163,14 @@ defmodule CashLensWeb.TransactionLiveTest do
       # We need to make sure they are in the same month/year or clear filters
       today = Date.utc_today()
 
-      cat_tx =
+      _cat_tx =
         transaction_fixture(
           description: "Categorized",
           category_id: category_fixture().id,
           date: today
         )
 
-      uncat_tx = transaction_fixture(description: "Uncategorized", category_id: nil, date: today)
+      _uncat_tx = transaction_fixture(description: "Uncategorized", category_id: nil, date: today)
 
       {:ok, index_live, _html} =
         live(conn, ~p"/transactions?month=#{today.month}&year=#{today.year}")
