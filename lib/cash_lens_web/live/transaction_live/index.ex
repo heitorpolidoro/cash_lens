@@ -608,7 +608,8 @@ defmodule CashLensWeb.TransactionLive.Index do
                                 type="button"
                                 class="font-black text-primary hover:bg-primary/10"
                               >
-                                <.icon name="hero-plus-circle" class="size-4" /><span>
+                                <.icon name="hero-plus-circle" class="size-4" />
+                                <span>
                                   Nova Categoria
                                 </span>
                               </button>
