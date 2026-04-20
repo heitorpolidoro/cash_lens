@@ -1,6 +1,6 @@
 # CashLens
 
-<p align="left">
+<div>
   <!-- GitHub -->
   <a href="https://github.com/heitorpolidoro/cash_lens/actions/workflows/ci.yml">
     <img src="https://github.com/heitorpolidoro/cash_lens/actions/workflows/ci.yml/badge.svg" alt="CI Status">
@@ -8,14 +8,16 @@
   <a href="https://github.com/sponsors/heitorpolidoro">
     <img src="https://img.shields.io/github/sponsors/heitorpolidoro?color=ea4aaa" alt="GitHub Sponsors">
   </a>
-  &nbsp;&nbsp;
+</div>
+
+<div>
   <!-- DeepSource -->
   <a href="https://deepsource.io/gh/heitorpolidoro/cash_lens/">
     <img src="https://app.deepsource.com/gh/heitorpolidoro/cash_lens.svg/?label=active+issues&show_all=true" alt="DeepSource Active Issues">
   </a>
-</p>
+</div>
 
-<p align="left">
+<div>
   <!-- SonarCloud Status & Coverage -->
   <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens">
     <img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=alert_status" alt="Quality Gate Status">
@@ -35,7 +37,7 @@
   <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens">
     <img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=sqale_rating" alt="Maintainability Rating">
   </a>
-</p>
+</div>
 
 To start your Phoenix server:
 
