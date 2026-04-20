@@ -63,13 +63,6 @@ jobs:
     - name: Run tests with coverage
       run: mix test --cover
 
-    - name: Report coverage to DeepSource
-      uses: deepsourcelabs/test-coverage-action@master
-      with:
-        key: elixir
-        coverage-file: cover/lcov.info
-        dsn: ${{ secrets.DEEPSOURCE_DSN }}
-
     - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
       env:
