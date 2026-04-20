@@ -262,7 +262,8 @@ defmodule CashLensWeb.TransactionLiveTest do
       |> render_change()
 
       # Verify the form input itself contains the value
-      assert element(index_live, "#transaction-filters input[name='search']") |> render() =~ "value=\"something\""
+      assert element(index_live, "#transaction-filters input[name='search']") |> render() =~
+               "value=\"something\""
     end
   end
 

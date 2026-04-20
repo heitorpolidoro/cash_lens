@@ -64,15 +64,11 @@ jobs:
       run: mix test --cover
 
     - name: Report coverage to DeepSource
-      run: |
-        curl https://deepsource.io/cli | sh
-        # Note: In Elixir, coverage is often in cover/lcov.info or similar if configured.
-        # If not configured, this step might need excoveralls or similar.
-        if [ -f "cover/lcov.info" ]; then
-          ./bin/deepsource report --analyzer test-coverage --key elixir --value-file ./cover/lcov.info
-        fi
-      env:
-        DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+      uses: deepsourcelabs/test-coverage-action@master
+      with:
+        key: elixir
+        coverage-file: cover/lcov.info
+        dsn: ${{ secrets.DEEPSOURCE_DSN }}
 
     - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
