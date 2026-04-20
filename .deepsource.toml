@@ -20,9 +20,5 @@ enabled = true
   environment = ["browser", "nodejs"]
 
 [[analyzers]]
-name = "test-coverage"
-enabled = true
-
-[[analyzers]]
 name = "secrets"
 enabled = true
