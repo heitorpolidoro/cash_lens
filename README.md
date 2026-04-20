@@ -1,9 +1,41 @@
 # CashLens
 
-[![CI](https://github.com/heitorpolidoro/cash_lens/actions/workflows/ci.yml/badge.svg)](https://github.com/heitorpolidoro/cash_lens/actions/workflows/ci.yml)
-[![DeepSource](https://static.deepsource.io/deepsource-badge-light-mini.svg)](https://deepsource.io/gh/heitorpolidoro/cash_lens/)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/heitorpolidoro?color=ea4aaa)](https://github.com/sponsors/heitorpolidoro)
+<p align="left">
+  <!-- GitHub -->
+  <a href="https://github.com/heitorpolidoro/cash_lens/actions/workflows/ci.yml">
+    <img src="https://github.com/heitorpolidoro/cash_lens/actions/workflows/ci.yml/badge.svg" alt="CI Status">
+  </a>
+  <a href="https://github.com/sponsors/heitorpolidoro">
+    <img src="https://img.shields.io/github/sponsors/heitorpolidoro?color=ea4aaa" alt="GitHub Sponsors">
+  </a>
+  &nbsp;&nbsp;
+  <!-- DeepSource -->
+  <a href="https://deepsource.io/gh/heitorpolidoro/cash_lens/">
+    <img src="https://static.deepsource.io/deepsource-badge-light-mini.svg" alt="DeepSource">
+  </a>
+</p>
+
+<p align="left">
+  <!-- SonarCloud Status & Coverage -->
+  <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens">
+    <img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=alert_status" alt="Quality Gate Status">
+  </a>
+  <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens">
+    <img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=coverage" alt="Coverage">
+  </a>
+  <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens">
+    <img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=bugs" alt="Bugs">
+  </a>
+  <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens">
+    <img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=vulnerabilities" alt="Vulnerabilities">
+  </a>
+  <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens">
+    <img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=code_smells" alt="Code Smells">
+  </a>
+  <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens">
+    <img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=sqale_rating" alt="Maintainability Rating">
+  </a>
+</p>
 
 To start your Phoenix server:
 
