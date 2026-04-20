@@ -20,10 +20,6 @@ enabled = true
   environment = ["browser", "nodejs"]
 
 [[analyzers]]
-name = "elixir"
-enabled = true
-
-[[analyzers]]
 name = "test-coverage"
 enabled = true
 
