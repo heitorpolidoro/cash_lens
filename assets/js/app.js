@@ -2,7 +2,6 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/cash_lens"
-import topbar from "../vendor/topbar"
 import Chart from 'chart.js/auto';
 import DOMPurify from 'dompurify';
 
@@ -117,7 +116,7 @@ window.addEventListener("load", () => {
       new Chart(ctx, {
         type: 'line',
         data: {
-          labels: labels,
+          labels,
           datasets: [
             {
               label: 'Saldo Final (Acumulado)',
@@ -227,7 +226,7 @@ window.addEventListener("load", () => {
 
     new Chart(el, {
       type: 'line',
-      data: { labels: labels, datasets: datasets },
+      data: { labels, datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
