@@ -11,7 +11,7 @@
   &nbsp;&nbsp;
   <!-- DeepSource -->
   <a href="https://deepsource.io/gh/heitorpolidoro/cash_lens/">
-    <img src="https://static.deepsource.io/deepsource-badge-light-mini.svg" alt="DeepSource">
+    <img src="https://app.deepsource.com/gh/heitorpolidoro/cash_lens.svg/?label=active+issues&show_all=true" alt="DeepSource Active Issues">
   </a>
 </p>
 
