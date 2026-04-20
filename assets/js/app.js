@@ -113,7 +113,7 @@ window.addEventListener("load", () => {
       const history = JSON.parse(rawData);
       const labels = history.map(item => `${item.month}/${item.year}`);
       
-      new Chart(ctx, {
+      const chart = new Chart(ctx, {
         type: 'line',
         data: {
           labels,
@@ -181,6 +181,7 @@ window.addEventListener("load", () => {
           }
         }
       });
+      console.debug("Balance chart initialized", chart.id);
     }
   }
 
@@ -224,7 +225,7 @@ window.addEventListener("load", () => {
       };
     });
 
-    new Chart(el, {
+    const chart = new Chart(el, {
       type: 'line',
       data: { labels, datasets },
       options: {
@@ -255,6 +256,7 @@ window.addEventListener("load", () => {
         }
       }
     });
+    console.debug("Category chart initialized", chart.id);
   };
 
   initCategoryChart('fixedChart');
