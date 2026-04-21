@@ -88,7 +88,7 @@ defmodule CashLens.CSVParserTest do
       # but the description column contains 'PIX - ENVIADO 24/02 10:15 CPF: ***.123.456-**'
       csv_content = "Data,Dep,Term,Hist,Doc,Valor,\n24/02/2026,0,0,PIX - ENVIADO 24/02 10:15 ALGUEM,1,-100.00,\n"
       
-      # NimbleCSV.RFC4180.parse_string handles the header automatically.
+      # We explicitly skip the header in the parser.
       
       transactions = CSVParser.parse(csv_content, :bb)
       assert length(transactions) == 1
