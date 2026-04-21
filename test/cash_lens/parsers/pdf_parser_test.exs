@@ -60,7 +60,7 @@ defmodule CashLens.PDFParserTest do
       """
 
       transactions = PDFParser.parse(text, :sem_parar)
-      
+
       assert length(transactions) == 1
       tx = List.first(transactions)
       assert tx.description == "ESTAPAR"

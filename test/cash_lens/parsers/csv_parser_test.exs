@@ -78,7 +78,9 @@ defmodule CashLens.CSVParserTest do
       assert rende.date == ~D[2026-02-25]
 
       # Test a PIX transaction
-      pix = Enum.find(transactions, fn t -> String.contains?(t.description, "TRANSFERENCIA PIX") end)
+      pix =
+        Enum.find(transactions, fn t -> String.contains?(t.description, "TRANSFERENCIA PIX") end)
+
       assert pix.amount == Decimal.new("-25.50")
       assert pix.date == ~D[2026-02-26]
     end
@@ -86,10 +88,11 @@ defmodule CashLens.CSVParserTest do
     test "extracts metadata from complex BB description" do
       # In BB, sometimes the transaction has a generic history like 'PIX - ENVIADO' 
       # but the description column contains 'PIX - ENVIADO 24/02 10:15 CPF: ***.123.456-**'
-      csv_content = "Data,Dep,Term,Hist,Doc,Valor,\n24/02/2026,0,0,PIX - ENVIADO 24/02 10:15 ALGUEM,1,-100.00,\n"
-      
+      csv_content =
+        "Data,Dep,Term,Hist,Doc,Valor,\n24/02/2026,0,0,PIX - ENVIADO 24/02 10:15 ALGUEM,1,-100.00,\n"
+
       # We explicitly skip the header in the parser.
-      
+
       transactions = CSVParser.parse(csv_content, :bb)
       assert length(transactions) == 1
       tx = List.first(transactions)
