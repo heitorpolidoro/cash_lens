@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Pre-commit hook to check Elixir formatting
+# Consistent with CI "Build and test"
+
+echo "Running mix format --check-formatted..."
+mix format --check-formatted
+
+if [ $? -ne 0 ]; then
+  echo "Error: Elixir formatting check failed."
+  echo "Please run 'mix format' to fix formatting before committing."
+  exit 1
+fi
+
+exit 0
