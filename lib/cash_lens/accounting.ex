@@ -54,9 +54,7 @@ defmodule CashLens.Accounting do
       income: income,
       expenses: expenses,
       balance: balance_diff,
-      final_balance: final_balance,
-      inserted_at: DateTime.utc_now() |> DateTime.truncate(:second),
-      updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      final_balance: final_balance
     }
 
     # Atomic Upsert using the unique index
