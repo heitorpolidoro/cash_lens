@@ -1,0 +1,18 @@
+_extends: .github
+repository:
+  name: cash_lens
+  description: Personal finance tracking and analysis built with Elixir and Phoenix.
+  topics: elixir, phoenix, finance, tracking, analysis
+  has_projects: true
+
+branches:
+  - name: master
+    protection:
+      required_status_checks:
+        contexts:
+          - "GitGuardian Security Checks"
+          - "SonarCloud"
+          - "SonarCloud Code Analysis"
+          - "DeepSource: Test coverage"
+          - "DeepSource: Secrets"
+          - "Build and test"
