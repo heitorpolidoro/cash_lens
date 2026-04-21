@@ -24,7 +24,7 @@ branches:
           - "GitGuardian Security Checks"
           - "SonarCloud"
           - "SonarCloud Code Analysis"
-          - "DeepSource: JavaScript"
+          - "DeepSource: Test coverage"
           - "DeepSource: Secrets"
           - "Build and test"
       enforce_admins: false
