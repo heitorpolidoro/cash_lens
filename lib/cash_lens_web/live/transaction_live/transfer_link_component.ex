@@ -72,8 +72,8 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
           </div>
         </div>
       </.modal>
-
-      <!-- Modal Criar Par da Transferência -->
+      
+    <!-- Modal Criar Par da Transferência -->
       <.modal
         :if={@show_quick_transfer_modal}
         id="quick-transfer-modal"

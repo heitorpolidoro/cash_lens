@@ -124,5 +124,4 @@ defmodule CashLens.Parsers.Ingestor do
       end
     end)
   end
-
 end

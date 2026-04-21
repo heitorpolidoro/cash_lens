@@ -175,7 +175,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:bulk_confirmation, nil)}
   end
 
-
   @impl true
   def handle_event(
         "update_category",
