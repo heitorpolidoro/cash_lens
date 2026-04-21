@@ -52,5 +52,19 @@ defmodule CashLens.PDFParserTest do
       transactions = PDFParser.parse(text, :sem_parar)
       assert length(transactions) == 2
     end
+
+    test "handles usage line without a following time line" do
+      text = """
+      XYZ9G88 27/11/25 ESTAPAR R$ 15,00
+      Some other random text that doesn't match
+      """
+
+      transactions = PDFParser.parse(text, :sem_parar)
+      
+      assert length(transactions) == 1
+      tx = List.first(transactions)
+      assert tx.description == "ESTAPAR"
+      assert tx.amount == Decimal.new("-15.00")
+    end
   end
 end

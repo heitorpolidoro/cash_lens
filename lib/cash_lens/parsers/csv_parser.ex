@@ -10,8 +10,6 @@ defmodule CashLens.Parsers.CSVParser do
   def parse(csv_content, :bb) do
     csv_content
     |> CSV.parse_string()
-    # Skip header
-    |> Enum.drop(1)
     |> Enum.map(fn row -> parse_row(row, :bb) end)
     |> Enum.reject(&is_nil/1)
   end

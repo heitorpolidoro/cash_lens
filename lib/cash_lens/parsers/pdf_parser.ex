@@ -36,14 +36,12 @@ defmodule CashLens.Parsers.PDFParser do
     lines = String.split(text, "\n")
 
     # regex for line 1: optional vehicle plate, date, description, amount
-    # Example: CFL7G68                                      26/11/25         RIOSP                                                             R$ 7,70
     regex_l1 = ~r/(?:[A-Z0-9]{7})?\s*(\d{2}\/\d{2}\/\d{2})\s+(.*?)\s+R\$\s+([\d,.]+)/
 
     # regex for line 2: "às" time, more description
-    # Example:                                               às 19:38:12      JACAREI SUL, CAT. 1
     regex_l2 = ~r/\s+às\s+(\d{2}:\d{2}:\d{2})\s+(.*)/
 
-    {transactions, _} =
+    {transactions, last_tx} =
       Enum.reduce(lines, {[], nil}, fn line, {acc, last_tx} ->
         cond do
           # 1. Matches line 1 (New Transaction starting)
@@ -57,6 +55,8 @@ defmodule CashLens.Parsers.PDFParser do
               amount: parse_amount(amount_str) |> Decimal.mult(-1)
             }
 
+            # If there was a previous tx, save it now
+            acc = if last_tx, do: [last_tx | acc], else: acc
             {acc, new_tx}
 
           # 2. Matches line 2 (Continuing last transaction)
@@ -73,14 +73,16 @@ defmodule CashLens.Parsers.PDFParser do
             # Finish this TX and add to list
             {[updated_tx | acc], nil}
 
-          # 3. Random line, if we have a pending TX that didn't get a "line 2", 
-          # we might want to save it or discard it. In Sem Parar, they usually come in pairs.
+          # 3. Random line, if we have a pending TX, we keep it as it might be a single-line TX
+          # or it might get an "às" line next.
           true ->
             {acc, last_tx}
         end
       end)
 
-    transactions |> Enum.reverse()
+    # Final flush
+    final_acc = if last_tx, do: [last_tx | transactions], else: transactions
+    final_acc |> Enum.reverse()
   end
 
   defp parse_date(date_string) do
