@@ -8,6 +8,7 @@ defmodule CashLens.Parsers.CSVParser do
   Parses a CSV string for Banco do Brasil format.
   """
   def parse(csv_content, :bb) do
+    # Note: NimbleCSV.RFC4180.parse_string skips the header row by default.
     csv_content
     |> CSV.parse_string()
     |> Enum.map(fn row -> parse_row(row, :bb) end)
