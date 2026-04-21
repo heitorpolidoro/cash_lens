@@ -4,7 +4,6 @@ defmodule CashLens.Parsers.Ingestor do
   """
   alias CashLens.Parsers.CSVParser
   alias CashLens.Parsers.PDFParser
-  alias CashLens.Transactions
   alias CashLens.Accounts
 
   @doc """
@@ -62,12 +61,48 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   defp process_transactions_data(transactions_data, account_id) do
-    Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
-      data
-      |> Map.put(:account_id, account_id)
-      |> CashLens.Transactions.AutoCategorizer.categorize()
-      |> Transactions.create_transaction()
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
 
+    # 1. Prepare all entries
+    entries =
+      Enum.map(transactions_data, fn data ->
+        attrs =
+          data
+          |> Map.put(:account_id, account_id)
+          |> CashLens.Transactions.AutoCategorizer.categorize()
+
+        # Generate changeset to get fingerprint and validate
+        changeset =
+          CashLens.Transactions.Transaction.changeset(
+            %CashLens.Transactions.Transaction{},
+            attrs
+          )
+
+        # Merge changes with timestamps and a generated ID
+        changeset.changes
+        |> Map.put(:id, Ecto.UUID.generate())
+        |> Map.put(:inserted_at, now)
+        |> Map.put(:updated_at, now)
+      end)
+
+    # 2. Batch Insert with on_conflict: :nothing
+    # We use returning: true to get the actually inserted transactions for TransferMatcher
+    {_count, inserted_transactions} =
+      CashLens.Repo.insert_all(
+        CashLens.Transactions.Transaction,
+        entries,
+        on_conflict: :nothing,
+        conflict_target: :fingerprint,
+        returning: true
+      )
+
+    # 3. Run TransferMatcher for new transactions
+    Enum.each(inserted_transactions, fn tx ->
+      CashLens.Transactions.TransferMatcher.match_transfer(tx)
+    end)
+
+    # 4. Collect affected periods for balance recalculation
+    Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
       acc = MapSet.put(acc, {account_id, data.date.month, data.date.year})
       description = String.upcase(data.description || "")
 
@@ -89,4 +124,5 @@ defmodule CashLens.Parsers.Ingestor do
       end
     end)
   end
+
 end

@@ -144,27 +144,6 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_event("link_transfer", %{"pair-id" => pair_id}, socket) do
-    origin_tx = socket.assigns.transfer_origin
-    pair_tx = Transactions.get_transaction!(pair_id)
-    transfer_key = Ecto.UUID.generate()
-
-    # Update both transactions with the same key
-    {:ok, _} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
-    {:ok, _} = Transactions.update_transaction(pair_tx, %{transfer_key: transfer_key})
-
-    {:noreply,
-     socket
-     |> assign(:show_transfer_modal, false)
-     |> put_flash(:info, "Transferência vinculada com sucesso!")
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
-  end
-
-  @impl true
   def handle_event("open_import", _params, socket) do
     {:noreply, assign(socket, :show_import_modal, true)}
   end
@@ -178,79 +157,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_quick_category_modal, true)
      |> assign(:pending_transaction_id, tx_id)
      |> assign(:category_form, to_form(%{"name" => suggested_name}))}
-  end
-
-  @impl true
-  def handle_event("open_quick_transfer", _params, socket) do
-    origin = socket.assigns.transfer_origin
-
-    form_data = %{
-      "date" => origin.date,
-      "amount" => Decimal.mult(origin.amount, -1),
-      "description" => origin.description
-    }
-
-    {:noreply,
-     socket
-     |> assign(:show_transfer_modal, false)
-     |> assign(:show_quick_transfer_modal, true)
-     |> assign(:quick_transfer_form, to_form(form_data))}
-  end
-
-  @impl true
-  def handle_event(
-        "save_quick_transfer",
-        %{
-          "account_id" => target_account_id,
-          "description" => description,
-          "date" => date,
-          "amount" => amount
-        },
-        socket
-      ) do
-    origin_tx = socket.assigns.transfer_origin
-    transfer_key = Ecto.UUID.generate()
-
-    # 1. Update origin transaction
-    {:ok, origin_tx} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
-
-    # 2. Create target transaction
-    # Find the transfer category ID
-    transfer_category = Categories.get_category_by_slug("transfer")
-
-    {:ok, pair_tx} =
-      Transactions.create_transaction(%{
-        account_id: target_account_id,
-        category_id: transfer_category.id,
-        description: description,
-        date: date,
-        amount: amount,
-        transfer_key: transfer_key
-      })
-
-    # 3. Recalculate balances for both accounts/months
-    CashLens.Accounting.calculate_monthly_balance(
-      origin_tx.account_id,
-      origin_tx.date.year,
-      origin_tx.date.month
-    )
-
-    CashLens.Accounting.calculate_monthly_balance(
-      pair_tx.account_id,
-      pair_tx.date.year,
-      pair_tx.date.month
-    )
-
-    {:noreply,
-     socket
-     |> assign(:show_quick_transfer_modal, false)
-     |> put_flash(:info, "Par da transferência criado e vinculado!")
-     |> calculate_summary()
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
   end
 
   @impl true
@@ -268,6 +174,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:confirm_modal, nil)
      |> assign(:bulk_confirmation, nil)}
   end
+
 
   @impl true
   def handle_event(
@@ -697,6 +604,28 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:show_reimbursement_modal, false)
      |> put_flash(:info, "Reembolso vinculado e categorizado!")
+     |> stream(
+       :transactions,
+       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
+       reset: true
+     )}
+  end
+
+  @impl true
+  def handle_info(:close_transfer_modal, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_transfer_modal, false)
+     |> assign(:show_quick_transfer_modal, false)}
+  end
+
+  @impl true
+  def handle_info({:transfer_linked, message}, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_transfer_modal, false)
+     |> assign(:show_quick_transfer_modal, false)
+     |> put_flash(:info, message)
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),

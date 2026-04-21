@@ -709,129 +709,26 @@
     </div>
   </div>
 
-  <.modal :if={@show_transfer_modal} id="transfer-modal" show on_cancel={JS.push("close_modal")}>
-    <div class="p-2">
-      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
-        Vincular Transferência
-      </h2>
-      <p class="text-xs opacity-60 mb-6">
-        Selecione abaixo o par correspondente para este lançamento de {format_currency(
-          @transfer_origin.amount
-        )}.
-      </p>
+  <.live_component
+    module={CashLensWeb.TransactionLive.TransferLinkComponent}
+    id="transfer-link-modal"
+    show_transfer_modal={@show_transfer_modal}
+    show_quick_transfer_modal={@show_quick_transfer_modal}
+    transfer_origin={@transfer_origin}
+    pending_transfers={@pending_transfers}
+    quick_transfer_form={@quick_transfer_form}
+    accounts={@accounts}
+  />
 
-      <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
-        <%= if Enum.empty?(@pending_transfers) do %>
-          <div class="text-center py-10 opacity-40 italic">
-            Nenhum par correspondente encontrado para esta transferência.
-          </div>
-        <% end %>
-        <%= for pending <- @pending_transfers do %>
-          <button
-            type="button"
-            phx-click="link_transfer"
-            phx-value-pair-id={pending.id}
-            class="w-full text-left flex items-center justify-between p-3 border-2 border-base-300 rounded-xl hover:border-primary hover:bg-primary/5 transition-all group"
-          >
-            <div class="flex flex-col">
-              <span class="text-[9px] font-bold uppercase opacity-50">
-                {format_date(pending.date)} — {pending.account.name}
-              </span>
-              <span class="font-black text-md group-hover:text-primary">
-                {pending.description}
-              </span>
-            </div>
-            <div class="text-right">
-              <span class={[
-                "font-black text-md",
-                if(Decimal.lt?(pending.amount, 0), do: "text-error", else: "text-success")
-              ]}>
-                {format_currency(pending.amount)}
-              </span>
-            </div>
-          </button>
-        <% end %>
-      </div>
+  <.live_component
+    module={CashLensWeb.TransactionLive.ReimbursementLinkComponent}
+    id="reimbursement-link-modal"
+    show={@show_reimbursement_modal}
+    reimbursement_credit={@reimbursement_credit}
+    reimbursement_search={@reimbursement_search}
+    pending_reimbursements={@pending_reimbursements}
+  />
 
-      <div class="mt-6 pt-6 border-t border-base-300">
-        <button
-          type="button"
-          phx-click="open_quick_transfer"
-          class="btn btn-outline btn-primary w-full rounded-2xl"
-        >
-          <.icon name="hero-plus-circle" class="size-4 mr-1" />
-          Não encontrei o par, criar manualmente
-        </button>
-      </div>
-    </div>
-  </.modal>
-
-  <.modal
-    :if={@show_quick_transfer_modal}
-    id="quick-transfer-modal"
-    show
-    on_cancel={JS.push("close_modal")}
-  >
-    <div class="p-2">
-      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
-        Criar Par da Transferência
-      </h2>
-      <p class="text-xs opacity-60 mb-6">
-        Confirme os dados abaixo para criar a transação correspondente na conta destino.
-      </p>
-
-      <.form
-        :let={f}
-        for={@quick_transfer_form}
-        id="quick-transfer-form"
-        phx-submit="save_quick_transfer"
-        class="space-y-6"
-      >
-        <div class="grid grid-cols-2 gap-4">
-          <.input field={f[:date]} type="date" label="Data" required readonly class="bg-base-200" />
-          <.input
-            field={f[:amount]}
-            type="number"
-            label="Valor"
-            step="0.01"
-            required
-            readonly
-            class="bg-base-200 font-bold"
-          />
-        </div>
-
-        <.input
-          field={f[:description]}
-          type="text"
-          label="Descrição"
-          required
-          placeholder="Ex: Transferência entre contas..."
-        />
-
-        <div class="form-control w-full">
-          <label class="label">
-            <span class="label-text font-bold text-primary">Conta Destino</span>
-          </label>
-          <select
-            name="account_id"
-            class="select select-bordered w-full rounded-2xl h-12"
-            required
-          >
-            <option value="">Selecione a conta que recebeu/enviou</option>
-            <%= for account <- Enum.reject(@accounts, & &1.id == @transfer_origin.account_id) do %>
-              <option value={account.id}>{account.name}</option>
-            <% end %>
-          </select>
-        </div>
-
-        <div class="pt-2">
-          <.button phx-disable-with="Criando e vinculando..." variant="primary" class="w-full">
-            Confirmar e Vincular
-          </.button>
-        </div>
-      </.form>
-    </div>
-  </.modal>
   
 <!-- Modais Existentes -->
   <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
@@ -895,93 +792,4 @@
     </div>
   </.modal>
 
-  <.modal
-    :if={@show_reimbursement_modal}
-    id="reimbursement-modal"
-    show
-    on_cancel={JS.push("close_modal")}
-  >
-    <div class="p-2">
-      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-success">
-        Vincular Reembolso
-      </h2>
-      <p class="text-xs opacity-60 mb-6">
-        Selecione abaixo a despesa que foi coberta por este recebimento de {format_currency(
-          @reimbursement_credit.amount
-        )}.
-      </p>
-      
-<!-- Campo de Busca -->
-      <div class="mb-6">
-        <div class="relative">
-          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <.icon name="hero-magnifying-glass" class="size-4 opacity-30" />
-          </div>
-          <input
-            type="text"
-            placeholder="Buscar por descrição ou valor..."
-            class="input input-bordered w-full pl-10 h-12 rounded-2xl bg-base-200 border-none focus:ring-success"
-            phx-keyup="reimbursement_search_change"
-            phx-debounce="300"
-            value={@reimbursement_search}
-          />
-        </div>
-      </div>
-
-      <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
-        <%= if Enum.empty?(@pending_reimbursements) do %>
-          <div class="text-center py-10 opacity-40 italic">
-            Nenhuma despesa pendente de reembolso encontrada.
-          </div>
-        <% end %>
-        <%= for pending <- @pending_reimbursements do %>
-          <button
-            type="button"
-            phx-click="link_reimbursement"
-            phx-value-expense-id={pending.id}
-            class={[
-              "w-full text-left flex items-center justify-between p-3 border-2 rounded-xl hover:border-success hover:bg-success/5 transition-all group",
-              if(
-                Decimal.eq?(
-                  Decimal.abs(Decimal.round(pending.amount, 2)),
-                  Decimal.round(@reimbursement_credit.amount, 2)
-                ),
-                do: "border-success bg-success/5 shadow-lg shadow-success/10",
-                else: "border-base-300"
-              )
-            ]}
-          >
-            <div class="flex flex-col">
-              <span class="text-[9px] font-bold uppercase opacity-50">
-                {format_date(pending.date)} — {pending.account.name}
-              </span>
-              <span class="font-black text-md group-hover:text-success">
-                {pending.description}
-              </span>
-              <div
-                :if={is_nil(pending.category_id)}
-                class="text-[8px] text-warning font-black uppercase mt-0.5"
-              >
-                Sem Categoria
-              </div>
-            </div>
-            <div class="text-right">
-              <span class="font-black text-md text-error">{format_currency(pending.amount)}</span>
-              <div
-                :if={
-                  Decimal.eq?(
-                    Decimal.abs(Decimal.round(pending.amount, 2)),
-                    Decimal.round(@reimbursement_credit.amount, 2)
-                  )
-                }
-                class="text-[8px] text-success font-black uppercase mt-0.5"
-              >
-                Match Perfeito!
-              </div>
-            </div>
-          </button>
-        <% end %>
-      </div>
-    </div>
-  </.modal>
 </div>

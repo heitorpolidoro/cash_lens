@@ -42,15 +42,25 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
 
     case uploaded_files do
       [file_path] ->
-        case Ingestor.import_file(account, file_path) do
-          {:ok, count} ->
-            send(self(), {:import_success, count})
-            {:noreply, socket}
+        pid = self()
 
-          {:error, reason} ->
-            send(self(), {:import_error, reason})
-            {:noreply, socket}
+        # In test environment, we run synchronously to avoid Sandbox issues
+        # and ensure the test can assert on the results immediately.
+        if Application.get_env(:cash_lens, :sql_sandbox) do
+          case Ingestor.import_file(account, file_path) do
+            {:ok, count} -> send(pid, {:import_success, count})
+            {:error, reason} -> send(pid, {:import_error, reason})
+          end
+        else
+          Task.start(fn ->
+            case Ingestor.import_file(account, file_path) do
+              {:ok, count} -> send(pid, {:import_success, count})
+              {:error, reason} -> send(pid, {:import_error, reason})
+            end
+          end)
         end
+
+        {:noreply, socket}
 
       [] ->
         send(self(), {:import_error, "Nenhum arquivo selecionado."})

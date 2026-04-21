@@ -2,100 +2,143 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
   use CashLensWeb, :live_component
 
   alias CashLens.Transactions
+  alias CashLens.Categories
 
   @impl true
   def render(assigns) do
     ~H"""
     <div id={@id}>
+      <!-- Modal Vincular Transferência -->
       <.modal
-        :if={@show}
-        id={"#{@id}-modal"}
+        :if={@show_transfer_modal}
+        id="transfer-modal"
         show
-        on_cancel={JS.push("close_modal")}
+        on_cancel={JS.push("close_modal", target: @myself)}
       >
         <div class="p-2">
-          <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-success">
-            Vincular Reembolso
+          <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
+            Vincular Transferência
           </h2>
           <p class="text-xs opacity-60 mb-6">
-            Selecione abaixo a despesa que foi coberta por este recebimento de {format_currency(
-              @reimbursement_credit.amount
+            Selecione abaixo o par correspondente para este lançamento de {format_currency(
+              @transfer_origin.amount
             )}.
           </p>
-          
-    <!-- Campo de Busca -->
-          <div class="mb-6">
-            <div class="relative">
-              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <.icon name="hero-magnifying-glass" class="size-4 opacity-30" />
-              </div>
-              <input
-                type="text"
-                placeholder="Buscar por descrição ou valor..."
-                class="input input-bordered w-full pl-10 h-12 rounded-2xl bg-base-200 border-none focus:ring-success"
-                phx-keyup="reimbursement_search_change"
-                phx-target={@myself}
-                phx-debounce="300"
-                value={@reimbursement_search}
-              />
-            </div>
-          </div>
 
           <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
-            <%= if Enum.empty?(@pending_reimbursements) do %>
+            <%= if Enum.empty?(@pending_transfers) do %>
               <div class="text-center py-10 opacity-40 italic">
-                Nenhuma despesa pendente de reembolso encontrada.
+                Nenhum par correspondente encontrado para esta transferência.
               </div>
             <% end %>
-            <%= for pending <- @pending_reimbursements do %>
+            <%= for pending <- @pending_transfers do %>
               <button
                 type="button"
-                phx-click="link_reimbursement"
+                phx-click="link_transfer"
                 phx-target={@myself}
-                phx-value-expense-id={pending.id}
-                class={[
-                  "w-full text-left flex items-center justify-between p-3 border-2 rounded-xl hover:border-success hover:bg-success/5 transition-all group",
-                  if(
-                    Decimal.eq?(
-                      Decimal.abs(Decimal.round(pending.amount, 2)),
-                      Decimal.round(@reimbursement_credit.amount, 2)
-                    ),
-                    do: "border-success bg-success/5 shadow-lg shadow-success/10",
-                    else: "border-base-300"
-                  )
-                ]}
+                phx-value-pair-id={pending.id}
+                class="w-full text-left flex items-center justify-between p-3 border-2 border-base-300 rounded-xl hover:border-primary hover:bg-primary/5 transition-all group"
               >
                 <div class="flex flex-col">
                   <span class="text-[9px] font-bold uppercase opacity-50">
                     {format_date(pending.date)} — {pending.account.name}
                   </span>
-                  <span class="font-black text-md group-hover:text-success">
+                  <span class="font-black text-md group-hover:text-primary">
                     {pending.description}
                   </span>
-                  <div
-                    :if={is_nil(pending.category_id)}
-                    class="text-[8px] text-warning font-black uppercase mt-0.5"
-                  >
-                    Sem Categoria
-                  </div>
                 </div>
                 <div class="text-right">
-                  <span class="font-black text-md text-error">{format_currency(pending.amount)}</span>
-                  <div
-                    :if={
-                      Decimal.eq?(
-                        Decimal.abs(Decimal.round(pending.amount, 2)),
-                        Decimal.round(@reimbursement_credit.amount, 2)
-                      )
-                    }
-                    class="text-[8px] text-success font-black uppercase mt-0.5"
-                  >
-                    Match Perfeito!
-                  </div>
+                  <span class={[
+                    "font-black text-md",
+                    if(Decimal.lt?(pending.amount, 0), do: "text-error", else: "text-success")
+                  ]}>
+                    {format_currency(pending.amount)}
+                  </span>
                 </div>
               </button>
             <% end %>
           </div>
+
+          <div class="mt-6 pt-6 border-t border-base-300">
+            <button
+              type="button"
+              phx-click="open_quick_transfer"
+              phx-target={@myself}
+              class="btn btn-outline btn-primary w-full rounded-2xl"
+            >
+              <.icon name="hero-plus-circle" class="size-4 mr-1" />
+              Não encontrei o par, criar manualmente
+            </button>
+          </div>
+        </div>
+      </.modal>
+
+      <!-- Modal Criar Par da Transferência -->
+      <.modal
+        :if={@show_quick_transfer_modal}
+        id="quick-transfer-modal"
+        show
+        on_cancel={JS.push("close_modal", target: @myself)}
+      >
+        <div class="p-2">
+          <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
+            Criar Par da Transferência
+          </h2>
+          <p class="text-xs opacity-60 mb-6">
+            Confirme os dados abaixo para criar a transação correspondente na conta destino.
+          </p>
+
+          <.form
+            :let={f}
+            for={@quick_transfer_form}
+            id="quick-transfer-form"
+            phx-submit="save_quick_transfer"
+            phx-target={@myself}
+            class="space-y-6"
+          >
+            <div class="grid grid-cols-2 gap-4">
+              <.input field={f[:date]} type="date" label="Data" required readonly class="bg-base-200" />
+              <.input
+                field={f[:amount]}
+                type="number"
+                label="Valor"
+                step="0.01"
+                required
+                readonly
+                class="bg-base-200 font-bold"
+              />
+            </div>
+
+            <.input
+              field={f[:description]}
+              type="text"
+              label="Descrição"
+              required
+              placeholder="Ex: Transferência entre contas..."
+            />
+
+            <div class="form-control w-full">
+              <label class="label">
+                <span class="label-text font-bold text-primary">Conta Destino</span>
+              </label>
+              <select
+                name="account_id"
+                class="select select-bordered w-full rounded-2xl h-12"
+                required
+              >
+                <option value="">Selecione a conta que recebeu/enviou</option>
+                <%= for account <- Enum.reject(@accounts, & &1.id == @transfer_origin.account_id) do %>
+                  <option value={account.id}>{account.name}</option>
+                <% end %>
+              </select>
+            </div>
+
+            <div class="pt-2">
+              <.button phx-disable-with="Criando e vinculando..." variant="primary" class="w-full">
+                Confirmar e Vincular
+              </.button>
+            </div>
+          </.form>
         </div>
       </.modal>
     </div>
@@ -104,96 +147,92 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
 
   @impl true
   def update(assigns, socket) do
-    socket =
-      socket
-      |> assign(assigns)
-      |> assign_new(:reimbursement_search, fn -> "" end)
-      |> assign_new(:pending_reimbursements, fn -> [] end)
-
-    socket =
-      if assigns[:reimbursement_credit] do
-        update_reimbursement_linker_list(socket)
-      else
-        socket
-      end
-
-    {:ok, socket}
+    {:ok, assign(socket, assigns)}
   end
 
   @impl true
-  def handle_event("reimbursement_search_change", %{"value" => search}, socket) do
-    {:noreply,
-     socket |> assign(:reimbursement_search, search) |> update_reimbursement_linker_list()}
+  def handle_event("close_modal", _params, socket) do
+    send(self(), :close_transfer_modal)
+    {:noreply, socket}
   end
 
   @impl true
-  def handle_event("link_reimbursement", %{"expense-id" => expense_id}, socket) do
-    credit_tx = socket.assigns.reimbursement_credit
-    expense_tx = Transactions.get_transaction!(expense_id)
-    link_key = Ecto.UUID.generate()
+  def handle_event("link_transfer", %{"pair-id" => pair_id}, socket) do
+    origin_tx = socket.assigns.transfer_origin
+    pair_tx = Transactions.get_transaction!(pair_id)
+    transfer_key = Ecto.UUID.generate()
 
-    final_category_id = expense_tx.category_id || credit_tx.category_id
+    # Update both transactions with the same key
+    {:ok, _} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
+    {:ok, _} = Transactions.update_transaction(pair_tx, %{transfer_key: transfer_key})
 
-    {:ok, _} =
-      Transactions.update_transaction(expense_tx, %{
-        reimbursement_status: "paid",
-        reimbursement_link_key: link_key,
-        category_id: final_category_id
-      })
-
-    {:ok, _} =
-      Transactions.update_transaction(credit_tx, %{
-        reimbursement_status: "paid",
-        reimbursement_link_key: link_key,
-        category_id: final_category_id
-      })
-
-    send(self(), :reimbursement_linked)
+    send(self(), {:transfer_linked, "Transferência vinculada com sucesso!"})
 
     {:noreply, socket}
   end
 
-  defp update_reimbursement_linker_list(socket) do
-    credit_tx = socket.assigns.reimbursement_credit
-    target_amount = credit_tx.amount |> Decimal.abs() |> Decimal.round(2)
-    search = socket.assigns.reimbursement_search
+  @impl true
+  def handle_event("open_quick_transfer", _params, socket) do
+    origin = socket.assigns.transfer_origin
 
-    # 1. EXHAUSTIVE GLOBAL SEARCH for exact value matches
-    exact_matches =
-      Transactions.list_transactions(%{"amount" => Decimal.mult(target_amount, -1)}, 1, 100)
-      |> Enum.filter(&is_nil(&1.reimbursement_link_key))
+    form_data = %{
+      "date" => origin.date,
+      "amount" => Decimal.mult(origin.amount, -1),
+      "description" => origin.description
+    }
 
-    # 2. CONTEXTUAL SEARCH (recent items or description match)
-    filters = %{"amount_max" => -0.01}
-    filters = if search != "", do: Map.put(filters, "search", search), else: filters
-    recent_items = Transactions.list_transactions(filters, 1, 500)
+    {:noreply,
+     socket
+     |> assign(:show_transfer_modal, false)
+     |> assign(:show_quick_transfer_modal, true)
+     |> assign(:quick_transfer_form, to_form(form_data))}
+  end
 
-    # Combine and deduplicate (by ID)
-    all_pending =
-      (exact_matches ++ recent_items)
-      |> Enum.uniq_by(& &1.id)
-      |> Enum.filter(&(is_nil(&1.reimbursement_link_key) && &1.reimbursement_status != "paid"))
+  @impl true
+  def handle_event(
+        "save_quick_transfer",
+        %{
+          "account_id" => target_account_id,
+          "description" => description,
+          "date" => date,
+          "amount" => amount
+        },
+        socket
+      ) do
+    origin_tx = socket.assigns.transfer_origin
+    transfer_key = Ecto.UUID.generate()
 
-    sorted_pending =
-      all_pending
-      |> Enum.sort(fn a, b ->
-        amount_a = Decimal.abs(a.amount) |> Decimal.round(2)
-        amount_b = Decimal.abs(b.amount) |> Decimal.round(2)
-        target = Decimal.round(target_amount, 2)
+    # 1. Update origin transaction
+    {:ok, origin_tx} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
 
-        exact_a = Decimal.eq?(amount_a, target)
-        exact_b = Decimal.eq?(amount_b, target)
-        pending_cat_a = is_nil(a.category_id)
-        pending_cat_b = is_nil(b.category_id)
+    # 2. Create target transaction
+    transfer_category = Categories.get_category_by_slug("transfer")
 
-        cond do
-          exact_a != exact_b -> exact_a
-          pending_cat_a != pending_cat_b -> pending_cat_a
-          true -> Date.compare(a.date, b.date) != :lt
-        end
-      end)
-      |> Enum.take(50)
+    {:ok, pair_tx} =
+      Transactions.create_transaction(%{
+        account_id: target_account_id,
+        category_id: transfer_category.id,
+        description: description,
+        date: date,
+        amount: amount,
+        transfer_key: transfer_key
+      })
 
-    assign(socket, :pending_reimbursements, sorted_pending)
+    # 3. Recalculate balances
+    CashLens.Accounting.calculate_monthly_balance(
+      origin_tx.account_id,
+      origin_tx.date.year,
+      origin_tx.date.month
+    )
+
+    CashLens.Accounting.calculate_monthly_balance(
+      pair_tx.account_id,
+      pair_tx.date.year,
+      pair_tx.date.month
+    )
+
+    send(self(), {:transfer_linked, "Par da transferência criado e vinculado!"})
+
+    {:noreply, socket}
   end
 end
