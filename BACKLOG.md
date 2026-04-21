@@ -20,8 +20,8 @@ Este arquivo consolida as diretrizes estratégicas, decisões arquiteturais e o 
    - [x] **Remover Lógica de Negócio da UI**: Mover parsing e cálculos contábeis dos templates/LiveViews para os contextos `Transactions` ou `Accounting`.
 
 2. **Integridade de Dados (PostgreSQL)**
-   - [ ] **Restrições de Unicidade Faltantes**: Adicionar unique index em `balances(account_id, year, month)` e `categories(parent_id, name)`.
-   - [ ] **Upsert Consistente**: Usar `on_conflict` em `calculate_monthly_balance` para evitar race conditions, dependendo da restrição de unicidade.
+   - [x] **Restrições de Unicidade Faltantes**: Adicionar unique index em `balances(account_id, year, month)` e `categories(parent_id, name)`.
+   - [x] **Upsert Consistente**: Usar `on_conflict` em `calculate_monthly_balance` para evitar race conditions, dependendo da restrição de unicidade.
 
 3. **Blindagem de Core (QA)**
    - [ ] **Testes de Parsers**: Implementar testes unitários reais para `csv_parser_test.exs` e `pdf_parser_test.exs`.

@@ -24,6 +24,8 @@ defmodule CashLens.Categories.Category do
     |> validate_inclusion(:type, ["fixed", "variable"])
     |> generate_slug()
     |> unique_constraint(:slug)
+    |> unique_constraint(:name, name: :categories_top_level_name_index)
+    |> unique_constraint(:name, name: :categories_sub_level_name_index)
   end
 
   defp generate_slug(changeset) do

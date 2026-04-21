@@ -178,5 +178,34 @@ defmodule CashLens.CategoriesTest do
       updated_transaction = CashLens.Repo.get!(Transactions.Transaction, transaction.id)
       assert updated_transaction.category_id == nil
     end
+
+    test "create_category/1 fails when name is duplicated at the same level" do
+      category_fixture(name: "Unique")
+      assert {:error, changeset} = Categories.create_category(%{name: "Unique"})
+      # Can fail on name or slug unique constraint
+      errors = errors_on(changeset)
+
+      assert "has already been taken" in (Map.get(errors, :name, []) ++ Map.get(errors, :slug, []))
+
+      parent = category_fixture(name: "Parent")
+      category_fixture(name: "Sub", parent_id: parent.id)
+
+      assert {:error, changeset} =
+               Categories.create_category(%{name: "Sub", parent_id: parent.id})
+
+      errors = errors_on(changeset)
+
+      assert "has already been taken" in (Map.get(errors, :name, []) ++ Map.get(errors, :slug, []))
+    end
+
+    test "create_category/1 allows same name in different levels or different parents" do
+      parent1 = category_fixture(name: "Parent 1")
+      parent2 = category_fixture(name: "Parent 2")
+
+      assert {:ok, _} = Categories.create_category(%{name: "Shared", parent_id: parent1.id})
+      assert {:ok, _} = Categories.create_category(%{name: "Shared", parent_id: parent2.id})
+      # slug is different
+      assert {:ok, _} = Categories.create_category(%{name: "Parent 1 Root"})
+    end
   end
 end
