@@ -54,14 +54,18 @@ defmodule CashLens.Accounting do
       income: income,
       expenses: expenses,
       balance: balance_diff,
-      final_balance: final_balance
+      final_balance: final_balance,
+      inserted_at: DateTime.utc_now() |> DateTime.truncate(:second),
+      updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
     }
 
-    # Upsert logic (find existing or create new)
-    case existing_balance do
-      nil -> create_balance(attrs)
-      balance -> update_balance(balance, attrs)
-    end
+    # Atomic Upsert using the unique index
+    Repo.insert(
+      %Balance{} |> Balance.changeset(attrs),
+      on_conflict: {:replace_all_except, [:id, :inserted_at]},
+      conflict_target: [:account_id, :year, :month],
+      returning: true
+    )
   end
 
   defp get_chained_initial_balance(account_id, year, month, first_of_month, existing_balance) do
