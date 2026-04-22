@@ -3,8 +3,9 @@ defmodule CashLens.Transactions.AutoCategorizer do
   Handles automatic classification of transactions based on database rules.
   """
   import Ecto.Query
-  alias CashLens.Repo
+
   alias CashLens.Categories.Category
+  alias CashLens.Repo
 
   @doc """
   Analyzes a transaction map or struct and assigns a category_id based on DB rules.
@@ -16,6 +17,7 @@ defmodule CashLens.Transactions.AutoCategorizer do
     rules = Repo.all(from c in Category, where: not is_nil(c.keywords) and c.keywords != "")
 
     require Logger
+
     # 2. Find first match
     matched_category =
       Enum.find(rules, fn category ->
@@ -56,12 +58,10 @@ defmodule CashLens.Transactions.AutoCategorizer do
   end
 
   defp check_special_rules(params, description) do
-    cond do
-      String.contains?(description, ["BB MM OURO", "BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
-        assign_category_by_slug(params, "transfer")
-
-      true ->
-        params
+    if String.contains?(description, ["BB MM OURO", "BB RENDE FÁCIL", "BB RENDE FACIL"]) do
+      assign_category_by_slug(params, "transfer")
+    else
+      params
     end
   end
 

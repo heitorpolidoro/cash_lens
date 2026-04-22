@@ -92,47 +92,53 @@ defmodule CashLens.Accounting do
         final
 
       nil ->
-        # If no previous month, look for the most recent snapshot BEFORE this month
-        last_snapshot =
-          from(b in Balance,
-            where: b.account_id == ^account_id and b.is_snapshot == true,
-            where: b.year < ^year or (b.year == ^year and b.month < ^month),
-            order_by: [desc: b.year, desc: b.month],
-            limit: 1
-          )
-          |> Repo.one()
-
-        cond do
-          last_snapshot ->
-            Logger.info(
-              "Found snapshot at #{last_snapshot.month}/#{last_snapshot.year}. Re-calculating from there..."
-            )
-
-            calculate_from_point(account_id, last_snapshot, year, month)
-
-          existing_balance ->
-            Logger.debug("Root balance detected. Preserving existing initial_balance.")
-            existing_balance.initial_balance
-
-          true ->
-            # Fallback to the Account's base balance PLUS the sum of any transactions before this month
-            Logger.info(
-              "No previous balance or snapshot. Using account base balance + previous transactions."
-            )
-
-            account = Repo.get!(CashLens.Accounts.Account, account_id)
-            base_balance = account.balance || Decimal.new("0")
-
-            initial_query =
-              from t in Transaction,
-                where: t.account_id == ^account_id and t.date < ^first_of_month,
-                select: sum(t.amount)
-
-            previous_transactions_sum = Repo.one(initial_query) || Decimal.new("0")
-
-            Decimal.add(base_balance, previous_transactions_sum)
-        end
+        handle_initial_balance_fallback(account_id, year, month, first_of_month, existing_balance)
     end
+  end
+
+  defp handle_initial_balance_fallback(account_id, year, month, first_of_month, existing_balance) do
+    case find_latest_snapshot(account_id, year, month) do
+      %Balance{} = snapshot ->
+        Logger.info("Found snapshot at #{snapshot.month}/#{snapshot.year}. Re-calculating...")
+        calculate_from_point(account_id, snapshot, year, month)
+
+      nil ->
+        resolve_root_or_base_balance(account_id, first_of_month, existing_balance)
+    end
+  end
+
+  defp find_latest_snapshot(account_id, year, month) do
+    from(b in Balance,
+      where: b.account_id == ^account_id and b.is_snapshot == true,
+      where: b.year < ^year or (b.year == ^year and b.month < ^month),
+      order_by: [desc: b.year, desc: b.month],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  defp resolve_root_or_base_balance(account_id, first_of_month, existing_balance) do
+    if existing_balance do
+      Logger.debug("Root balance detected. Preserving existing initial_balance.")
+      existing_balance.initial_balance
+    else
+      Logger.info("Using account base balance + previous transactions.")
+      calculate_base_plus_previous(account_id, first_of_month)
+    end
+  end
+
+  defp calculate_base_plus_previous(account_id, first_of_month) do
+    account = Repo.get!(CashLens.Accounts.Account, account_id)
+    base_balance = account.balance || Decimal.new("0")
+
+    initial_query =
+      from t in Transaction,
+        where: t.account_id == ^account_id and t.date < ^first_of_month,
+        select: sum(t.amount)
+
+    previous_transactions_sum = Repo.one(initial_query) || Decimal.new("0")
+
+    Decimal.add(base_balance, previous_transactions_sum)
   end
 
   defp calculate_from_point(account_id, last_point, target_year, target_month) do

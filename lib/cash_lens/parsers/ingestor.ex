@@ -3,10 +3,10 @@ defmodule CashLens.Parsers.Ingestor do
   Main entry point for statement ingestion. Detects format and dispatches to correct parser.
   """
   require Logger
-  alias CashLens.Parsers.CSVParser
-  alias CashLens.Parsers.PDFParser
-  alias CashLens.Parsers.OFXParser
   alias CashLens.Accounts
+  alias CashLens.Parsers.CSVParser
+  alias CashLens.Parsers.OFXParser
+  alias CashLens.Parsers.PDFParser
 
   @doc """
   Parses the content based on the provided parser_type.

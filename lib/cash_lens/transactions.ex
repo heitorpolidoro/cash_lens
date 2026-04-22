@@ -5,10 +5,8 @@ defmodule CashLens.Transactions do
 
   import Ecto.Query, warn: false
   alias CashLens.Repo
-
-  alias CashLens.Transactions.Transaction
-
   alias CashLens.Transactions.BulkIgnorePattern
+  alias CashLens.Transactions.Transaction
 
   @doc """
   Returns the list of all bulk ignore patterns.

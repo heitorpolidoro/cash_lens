@@ -237,13 +237,10 @@ defmodule CashLens.TransactionsTest do
         account_id: account.id
       }
 
-      t1 = transaction_fixture(attrs)
+      _t1 = transaction_fixture(attrs)
 
-      # Let's inspect both fingerprints
-      changeset2 = Transactions.change_transaction(%Transaction{}, attrs)
-      IO.inspect(t1.fingerprint, label: "F1")
-      IO.inspect(get_field(changeset2, :fingerprint), label: "F2")
-
+      # Let's verify both fingerprints
+      _changeset2 = Transactions.change_transaction(%Transaction{}, attrs)
       assert {:ok, :duplicate} = Transactions.create_transaction(attrs)
     end
 

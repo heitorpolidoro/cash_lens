@@ -1,9 +1,9 @@
 defmodule CashLensWeb.TransactionLive.Index do
   use CashLensWeb, :live_view
 
-  alias CashLens.Transactions
   alias CashLens.Accounts
   alias CashLens.Categories
+  alias CashLens.Transactions
 
   @impl true
   def mount(_params, _session, socket) do
