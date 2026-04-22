@@ -208,7 +208,7 @@ defmodule CashLens.Transactions do
       query
       |> filter_by_account(filters["account_id"])
 
-    # Optimized SQL aggregation
+    # Optimized SQL aggregation with nil handling
     result =
       from(t in query,
         select: %{
@@ -219,8 +219,8 @@ defmodule CashLens.Transactions do
       |> Repo.one()
 
     %{
-      income: result.income || Decimal.new("0"),
-      expenses: result.expenses || Decimal.new("0"),
+      income: (result && result.income) || Decimal.new("0"),
+      expenses: (result && result.expenses) || Decimal.new("0"),
       month: first_of_month
     }
   end
@@ -235,16 +235,16 @@ defmodule CashLens.Transactions do
         where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
         where: is_nil(t.reimbursement_link_key),
         group_by: [
-          fragment("EXTRACT(YEAR FROM ?)", t.date),
-          fragment("EXTRACT(MONTH FROM ?)", t.date)
+          fragment("year"),
+          fragment("month")
         ],
         order_by: [
-          desc: fragment("EXTRACT(YEAR FROM ?)", t.date),
-          desc: fragment("EXTRACT(MONTH FROM ?)", t.date)
+          desc: fragment("year"),
+          desc: fragment("month")
         ],
         select: %{
-          year: fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
-          month: fragment("EXTRACT(MONTH FROM ?)::integer", t.date),
+          year: fragment("EXTRACT(YEAR FROM ?)::integer as year", t.date),
+          month: fragment("EXTRACT(MONTH FROM ?)::integer as month", t.date),
           income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", t.amount, t.amount)),
           expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", t.amount, t.amount))
         }
