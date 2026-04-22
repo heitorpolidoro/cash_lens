@@ -84,7 +84,7 @@ defmodule CashLens.Accounting do
         last_snapshot =
           from(b in Balance,
             where: b.account_id == ^account_id and b.is_snapshot == true,
-            where: fragment("(? * 100 + ?)", b.year, b.month) < ^(year * 100 + month),
+            where: b.year < ^year or (b.year == ^year and b.month < ^month),
             order_by: [desc: b.year, desc: b.month],
             limit: 1
           )

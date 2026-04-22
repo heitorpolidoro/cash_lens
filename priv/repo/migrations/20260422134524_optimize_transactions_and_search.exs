@@ -15,7 +15,9 @@ defmodule CashLens.Repo.Migrations.OptimizeTransactionsAndSearch do
 
     # Composite index for transaction ordering (most frequent operation)
     # Added explicit directions to match UI usage
-    create index(:transactions, [:date, :time, :inserted_at], name: :transactions_ordering_index)
+    create index(:transactions, [desc: :date, desc: :time, desc: :inserted_at],
+             name: :transactions_ordering_index
+           )
 
     # Index for transfer linking
     create index(:transactions, [:transfer_key], name: :transactions_transfer_key_index)
@@ -27,10 +29,10 @@ defmodule CashLens.Repo.Migrations.OptimizeTransactionsAndSearch do
   end
 
   def down do
-    drop index(:transactions, name: :transactions_reimbursement_link_key_index)
-    drop index(:transactions, name: :transactions_transfer_key_index)
-    drop index(:transactions, name: :transactions_ordering_index)
-    drop index(:transactions, name: :transactions_description_trgm_index)
+    drop_if_exists index(:transactions, name: :transactions_reimbursement_link_key_index)
+    drop_if_exists index(:transactions, name: :transactions_transfer_key_index)
+    drop_if_exists index(:transactions, name: :transactions_ordering_index)
+    drop_if_exists index(:transactions, name: :transactions_description_trgm_index)
     execute "DROP EXTENSION IF EXISTS pg_trgm"
   end
 end
