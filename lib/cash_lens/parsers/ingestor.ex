@@ -45,8 +45,11 @@ defmodule CashLens.Parsers.Ingestor do
             _ -> content
           end
 
-        String.ends_with?(file_path, [".ofx", ".OFX"]) ->
-          content
+        String.ends_with?(file_path, [".ofx", ".OFX"]) or
+            String.ends_with?(file_path, [".csv", ".CSV"]) ->
+          if String.valid?(content),
+            do: content,
+            else: :unicode.characters_to_binary(content, :latin1, :utf8)
 
         true ->
           if String.valid?(content),

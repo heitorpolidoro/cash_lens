@@ -9,11 +9,17 @@ defmodule CashLens.Parsers.OFXParser do
   Parses an OFX string and returns a list of transaction maps.
   """
   def parse(content, _format) do
-    # 1. Split by <STMTTRN> block
+    # Use case-insensitive regex split for STMTTRN blocks
+    # Ensure we handle files that might not have a header before the first block
     content
-    |> String.split("<STMTTRN>", trim: true)
-    # Drop the header/metadata part before the first transaction
-    |> Enum.drop(1)
+    |> String.split(~r/<STMTTRN>/i, trim: true)
+    |> then(fn
+      [first | rest] ->
+        if Regex.run(~r/<STMTTRN/i, first), do: [first | rest], else: rest
+
+      [] ->
+        []
+    end)
     |> Enum.map(&parse_transaction_block/1)
     |> Enum.reject(&is_nil/1)
   end
@@ -39,7 +45,8 @@ defmodule CashLens.Parsers.OFXParser do
 
   defp extract_tag(block, tag) do
     # Matches <TAG>VALUE or <TAG>VALUE</TAG> case-insensitively
-    pattern = ~r/<#{tag}>(.*?)(?:<|$)/si
+    # Use non-greedy with character class to prevent catastrophic backtracking
+    pattern = ~r/<#{tag}>([^<>]*?)(?:<|$)/si
 
     case Regex.run(pattern, block) do
       [_, value] -> String.trim(value)

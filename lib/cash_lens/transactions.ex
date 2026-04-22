@@ -235,16 +235,16 @@ defmodule CashLens.Transactions do
         where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
         where: is_nil(t.reimbursement_link_key),
         group_by: [
-          fragment("year"),
-          fragment("month")
+          fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
+          fragment("EXTRACT(MONTH FROM ?)::integer", t.date)
         ],
         order_by: [
-          desc: fragment("year"),
-          desc: fragment("month")
+          desc: fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
+          desc: fragment("EXTRACT(MONTH FROM ?)::integer", t.date)
         ],
         select: %{
-          year: fragment("EXTRACT(YEAR FROM ?)::integer as year", t.date),
-          month: fragment("EXTRACT(MONTH FROM ?)::integer as month", t.date),
+          year: fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
+          month: fragment("EXTRACT(MONTH FROM ?)::integer", t.date),
           income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", t.amount, t.amount)),
           expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", t.amount, t.amount))
         }
