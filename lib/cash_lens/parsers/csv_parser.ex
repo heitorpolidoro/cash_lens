@@ -1,4 +1,5 @@
 defmodule CashLens.Parsers.CSVParser do
+  @behaviour CashLens.Parsers.Parser
   @moduledoc """
   Module to parse financial statement CSV files with support for multiple bank formats.
   """

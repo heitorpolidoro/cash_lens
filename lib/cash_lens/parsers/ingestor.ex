@@ -2,8 +2,10 @@ defmodule CashLens.Parsers.Ingestor do
   @moduledoc """
   Main entry point for statement ingestion. Detects format and dispatches to correct parser.
   """
+  require Logger
   alias CashLens.Parsers.CSVParser
   alias CashLens.Parsers.PDFParser
+  alias CashLens.Parsers.OFXParser
   alias CashLens.Accounts
 
   @doc """
@@ -12,12 +14,16 @@ defmodule CashLens.Parsers.Ingestor do
   def parse(content, parser_type) do
     case parser_type do
       "bb_csv" ->
-        IO.puts("Using BB CSV Parser")
+        Logger.info("Using BB CSV Parser")
         CSVParser.parse(content, :bb)
 
       "sem_parar_pdf" ->
-        IO.puts("Using Sem Parar PDF Parser")
+        Logger.info("Using Sem Parar PDF Parser")
         PDFParser.parse(content, :sem_parar)
+
+      "standard_ofx" ->
+        Logger.info("Using Standard OFX Parser")
+        OFXParser.parse(content, :standard)
 
       _ ->
         {:error, "Extrator não configurado ou não suportado para esta conta."}
@@ -32,15 +38,23 @@ defmodule CashLens.Parsers.Ingestor do
     content = File.read!(file_path)
 
     content =
-      if String.ends_with?(file_path, ".pdf") or account.parser_type == "sem_parar_pdf" do
-        case System.cmd("pdftotext", ["-layout", file_path, "-"]) do
-          {text, 0} -> text
-          _ -> content
-        end
-      else
-        if String.valid?(content),
-          do: content,
-          else: :unicode.characters_to_binary(content, :latin1, :utf8)
+      cond do
+        String.ends_with?(file_path, ".pdf") or account.parser_type == "sem_parar_pdf" ->
+          case System.cmd("pdftotext", ["-layout", file_path, "-"]) do
+            {text, 0} -> text
+            _ -> content
+          end
+
+        String.ends_with?(file_path, [".ofx", ".OFX"]) or
+            String.ends_with?(file_path, [".csv", ".CSV"]) ->
+          if String.valid?(content),
+            do: content,
+            else: :unicode.characters_to_binary(content, :latin1, :utf8)
+
+        true ->
+          if String.valid?(content),
+            do: content,
+            else: :unicode.characters_to_binary(content, :latin1, :utf8)
       end
 
     case parse(content, account.parser_type) do
