@@ -14,30 +14,15 @@ defmodule CashLens.Accounting do
   Calculates and creates/updates a monthly balance record for an account.
   """
   def calculate_monthly_balance(account_id, year, month) do
-    start_time = System.monotonic_time()
-
-    :telemetry.execute(
-      [:cash_lens, :accounting, :calculate_balance, :start],
-      %{system_time: System.system_time()},
-      %{account_id: account_id, year: year, month: month}
+    :telemetry.span(
+      [:cash_lens, :accounting, :calculate_balance],
+      %{account_id: account_id, year: year, month: month},
+      fn ->
+        result = do_calculate_monthly_balance(account_id, year, month)
+        status = if(match?({:ok, _}, result), do: :success, else: :error)
+        {result, %{status: status}}
+      end
     )
-
-    result = do_calculate_monthly_balance(account_id, year, month)
-
-    duration = System.monotonic_time() - start_time
-
-    :telemetry.execute(
-      [:cash_lens, :accounting, :calculate_balance, :stop],
-      %{duration: duration},
-      %{
-        account_id: account_id,
-        year: year,
-        month: month,
-        status: if(match?({:ok, _}, result), do: :success, else: :error)
-      }
-    )
-
-    result
   end
 
   defp do_calculate_monthly_balance(account_id, year, month) do

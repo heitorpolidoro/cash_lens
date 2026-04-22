@@ -27,7 +27,7 @@ defmodule CashLensWeb.Telemetry do
         description: "The time it takes to calculate a monthly balance",
         tags: [:status]
       ),
-      counter("cash_lens.accounting.calculate_balance.stop.count",
+      counter("cash_lens.accounting.calculate_balance.stop.duration",
         description: "Number of balance calculations performed",
         tags: [:status]
       ),
