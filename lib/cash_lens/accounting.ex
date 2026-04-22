@@ -108,12 +108,10 @@ defmodule CashLens.Accounting do
   end
 
   defp find_latest_snapshot(account_id, year, month) do
-    from(b in Balance,
-      where: b.account_id == ^account_id and b.is_snapshot == true,
-      where: b.year < ^year or (b.year == ^year and b.month < ^month),
-      order_by: [desc: b.year, desc: b.month],
-      limit: 1
-    )
+    Balance
+    |> where([b], b.account_id == ^account_id and b.is_snapshot == true)
+    |> where([b], b.year < ^year or (b.year == ^year and b.month < ^month))
+    |> order_by([b], desc: b.year, desc: b.month)
     |> Repo.one()
   end
 
@@ -128,8 +126,12 @@ defmodule CashLens.Accounting do
   end
 
   defp calculate_base_plus_previous(account_id, first_of_month) do
-    account = Repo.get!(CashLens.Accounts.Account, account_id)
-    base_balance = account.balance || Decimal.new("0")
+    base_balance =
+      Repo.one(
+        from a in CashLens.Accounts.Account,
+          where: a.id == ^account_id,
+          select: a.balance
+      ) || Decimal.new("0")
 
     initial_query =
       from t in Transaction,
