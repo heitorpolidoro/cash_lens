@@ -6,6 +6,7 @@ defmodule CashLens.Accounting do
   import Ecto.Query, warn: false
   alias CashLens.Repo
 
+  require Logger
   alias CashLens.Accounting.Balance
   alias CashLens.Transactions.Transaction
 
@@ -38,13 +39,16 @@ defmodule CashLens.Accounting do
       |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
       |> Decimal.abs()
 
-    # 2. Get initial balance (Priority: Previous month final balance > Existing root initial balance > Transactions sum)
+    # 2. Get initial balance (Chained from previous month or last snapshot)
     initial_balance =
       get_chained_initial_balance(account_id, year, month, first_of_month, existing_balance)
 
     # 3. Final calculations
     balance_diff = Decimal.sub(income, expenses)
     final_balance = Decimal.add(initial_balance, balance_diff)
+
+    # A snapshot is created every 6 months to avoid re-calculating from the beginning of time
+    is_snapshot = rem(month, 6) == 0
 
     attrs = %{
       account_id: account_id,
@@ -54,7 +58,8 @@ defmodule CashLens.Accounting do
       income: income,
       expenses: expenses,
       balance: balance_diff,
-      final_balance: final_balance
+      final_balance: final_balance,
+      is_snapshot: is_snapshot
     }
 
     # Atomic Upsert using the unique index
@@ -71,39 +76,71 @@ defmodule CashLens.Accounting do
 
     case Repo.get_by(Balance, account_id: account_id, year: prev_year, month: prev_month) do
       %Balance{final_balance: final} ->
-        IO.puts(
-          "Chaining balance: Using final balance from #{prev_month}/#{prev_year} as initial for #{month}/#{year}"
-        )
-
+        Logger.debug("Chaining balance: Using final balance from #{prev_month}/#{prev_year}")
         final
 
       nil ->
-        if existing_balance do
-          IO.puts("Root balance detected. Preserving existing initial_balance.")
-          existing_balance.initial_balance
-        else
-          # Fallback to the Account's base balance PLUS the sum of any transactions before this month
-          IO.puts(
-            "No previous balance found for #{prev_month}/#{prev_year}. Using account base balance + previous transactions."
+        # If no previous month, look for the most recent snapshot BEFORE this month
+        last_snapshot =
+          from(b in Balance,
+            where: b.account_id == ^account_id and b.is_snapshot == true,
+            where: fragment("(? * 100 + ?)", b.year, b.month) < ^(year * 100 + month),
+            order_by: [desc: b.year, desc: b.month],
+            limit: 1
           )
+          |> Repo.one()
 
-          account = Repo.get!(CashLens.Accounts.Account, account_id)
-          base_balance = account.balance || Decimal.new("0")
+        cond do
+          last_snapshot ->
+            Logger.info(
+              "Found snapshot at #{last_snapshot.month}/#{last_snapshot.year}. Re-calculating from there..."
+            )
 
-          initial_query =
-            from t in Transaction,
-              where: t.account_id == ^account_id and t.date < ^first_of_month,
-              select: sum(t.amount)
+            calculate_from_point(account_id, last_snapshot, year, month)
 
-          previous_transactions_sum = Repo.one(initial_query) || Decimal.new("0")
+          existing_balance ->
+            Logger.debug("Root balance detected. Preserving existing initial_balance.")
+            existing_balance.initial_balance
 
-          Decimal.add(base_balance, previous_transactions_sum)
+          true ->
+            # Fallback to the Account's base balance PLUS the sum of any transactions before this month
+            Logger.info(
+              "No previous balance or snapshot. Using account base balance + previous transactions."
+            )
+
+            account = Repo.get!(CashLens.Accounts.Account, account_id)
+            base_balance = account.balance || Decimal.new("0")
+
+            initial_query =
+              from t in Transaction,
+                where: t.account_id == ^account_id and t.date < ^first_of_month,
+                select: sum(t.amount)
+
+            previous_transactions_sum = Repo.one(initial_query) || Decimal.new("0")
+
+            Decimal.add(base_balance, previous_transactions_sum)
         end
+    end
+  end
+
+  defp calculate_from_point(account_id, last_point, target_year, target_month) do
+    {next_year, next_month} = get_next_period(last_point.year, last_point.month)
+
+    # We recursively calculate all missing months between the last point and our target
+    # This ensures that even if we are missing a whole year, the chain is restored.
+    if {next_year, next_month} == {target_year, target_month} do
+      last_point.final_balance
+    else
+      {:ok, next_balance} = calculate_monthly_balance(account_id, next_year, next_month)
+      calculate_from_point(account_id, next_balance, target_year, target_month)
     end
   end
 
   defp get_previous_period(year, 1), do: {year - 1, 12}
   defp get_previous_period(year, month), do: {year, month - 1}
+
+  defp get_next_period(year, 12), do: {year + 1, 1}
+  defp get_next_period(year, month), do: {year, month + 1}
 
   @doc """
   Returns the most recent balance for a specific account.

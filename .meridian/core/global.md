@@ -25,3 +25,7 @@ These standards apply to ALL agents in the Meridian/JARVIS ecosystem (Code, Data
 ## 🧪 Testing & Quality
 1. **Verification by Design:** If a component is impossible to test or validate, its design is flawed. Refactor.
 2. **Deterministic Behavior:** Outcomes should be predictable and independent of external, unmanaged state.
+
+## 🤖 GitHub Operations
+1. **Bot Identity:** ALL GitHub operations (creating PRs, comments, reviews, etc.) MUST be performed using the designated bot account.
+2. **Token Management:** Use the provided bot token for authentication. Never log or hardcode this token. All `gh` commands should be prefixed or configured to use this identity.

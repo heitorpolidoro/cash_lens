@@ -38,10 +38,10 @@ Este arquivo consolida as diretrizes estratégicas, decisões arquiteturais e o 
    - [ ] **Tratamento de Erros de Ingestão**: Substituir crashes (`Date.new!`) por erros graciosos e implementar estado de "Quarentena".
 
 2. **Performance de Banco de Dados**
-   - [ ] **Snapshots de Balanço**: Implementar sistema de snapshot periódico para evitar o recálculo custoso.
+   - [x] **Snapshots de Balanço**: Implementado sistema de snapshot (a cada 6 meses) para ancorar recálculos.
    - [x] **Árvore de Categorias**: Usar **CTE Recursiva (WITH RECURSIVE)** para buscar e gerenciar categorias filhas.
    - [x] **Otimização de Agregações**: Movido cálculos de resumo mensal/histórico para SQL puro (`SUM`, `GROUP BY`).
-   - [ ] **Novos Índices**: Otimizar ordenação com índices em `transactions(date DESC, time DESC, inserted_at DESC)`.
+   - [x] **Novos Índices**: Otimizada ordenação e ativada extensão `pg_trgm` para buscas textuais.
 
 ---
 
@@ -53,7 +53,7 @@ Este arquivo consolida as diretrizes estratégicas, decisões arquiteturais e o 
    - [ ] **OCR para Comprovantes**: Integrar leitura de PDFs baseada em imagens.
 
 2. **Arquitetura Assíncrona e Infraestrutura**
-   - [ ] **Workers / Processamento Assíncrono**: Introduzir `Oban` ou `Task.Supervisor` para rodar parsers em background.
+   - [x] **Workers / Processamento Assíncrono**: Configurado `Oban` e criado `RecalculateBalanceWorker`.
    - [ ] **Qualidade de Código**: Configurar checagem de tipos estáticos (`dialyzer`) e linter (`credo`).
    - [x] **Padronização de Logs**: Trocado `IO.puts` por chamadas ao módulo `Logger` no Ingestor.
    - [ ] **Observabilidade**: Ativar `pg_stat_statements` em prod e incluir rastreios de telemetria.
