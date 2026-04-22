@@ -191,8 +191,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
 
         assign(socket, rows: mapped_rows)
 
-      {:error, error} ->
-        IO.inspect(error, label: "DB ADMIN ERROR")
+      {:error, _error} ->
         assign(socket, rows: [])
     end
   end

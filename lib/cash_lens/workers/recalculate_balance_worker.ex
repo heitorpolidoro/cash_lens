@@ -1,12 +1,16 @@
 defmodule CashLens.Workers.RecalculateBalanceWorker do
+  @moduledoc """
+  Worker to recalculate balances in the background.
+  """
   use Oban.Worker,
     queue: :accounting,
     max_attempts: 3,
     unique: [period: 60, states: [:available, :scheduled, :executing]]
 
   alias CashLens.Accounting
-  alias CashLens.Repo
   alias CashLens.Accounting.Balance
+  alias CashLens.Repo
+
   require Logger
 
   @impl Oban.Worker
