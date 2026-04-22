@@ -43,3 +43,6 @@ config :phoenix,
   sort_verified_routes_query_params: true
 
 config :cash_lens, sql_sandbox: true
+
+# Configure Oban for testing
+config :cash_lens, Oban, testing: :manual
