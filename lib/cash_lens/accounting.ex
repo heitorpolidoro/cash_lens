@@ -128,11 +128,21 @@ defmodule CashLens.Accounting do
 
     # We recursively calculate all missing months between the last point and our target
     # This ensures that even if we are missing a whole year, the chain is restored.
-    if {next_year, next_month} == {target_year, target_month} do
-      last_point.final_balance
-    else
-      {:ok, next_balance} = calculate_monthly_balance(account_id, next_year, next_month)
-      calculate_from_point(account_id, next_balance, target_year, target_month)
+    case calculate_monthly_balance(account_id, next_year, next_month) do
+      {:ok, next_balance} ->
+        if {next_year, next_month} == {target_year, target_month} do
+          next_balance.final_balance
+        else
+          calculate_from_point(account_id, next_balance, target_year, target_month)
+        end
+
+      {:error, reason} ->
+        Logger.error(
+          "Failed to re-calculate balance chain at #{next_month}/#{next_year}: #{inspect(reason)}"
+        )
+
+        # Fallback to the last known point to avoid complete failure
+        last_point.final_balance
     end
   end
 
