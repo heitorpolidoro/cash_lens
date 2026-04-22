@@ -54,9 +54,10 @@ Este arquivo consolida as diretrizes estratégicas, decisões arquiteturais e o 
 
 2. **Arquitetura Assíncrona e Infraestrutura**
    - [x] **Workers / Processamento Assíncrono**: Configurado `Oban` e criado `RecalculateBalanceWorker`.
-   - [ ] **Qualidade de Código**: Configurar checagem de tipos estáticos (`dialyzer`) e linter (`credo`).
-   - [x] **Padronização de Logs**: Trocado `IO.puts` por chamadas ao módulo `Logger` no Ingestor.
-   - [ ] **Observabilidade**: Ativar `pg_stat_statements` em prod e incluir rastreios de telemetria.
+   - [x] **Qualidade de Código**: Configurada checagem de tipos estáticos (`dialyzer`) e linter (`credo`).
+   - [x] **Padronização de Logs**: Trocado `IO.puts` por chamadas ao módulo `Logger` no Ingestor e Accounting.
+   - [x] **Observabilidade**: Ativado `ConsoleReporter` para Telemetria e incluídos rastreios no cálculo de balanços.
+
 
 ---
 
