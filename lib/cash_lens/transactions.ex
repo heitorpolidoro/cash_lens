@@ -194,8 +194,7 @@ defmodule CashLens.Transactions do
       from t in Transaction,
         left_join: c in assoc(t, :category),
         where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
-        where: is_nil(t.reimbursement_link_key),
-        select: t
+        where: is_nil(t.reimbursement_link_key)
 
     # Bypass date filtering if special global filters are active
     query =
@@ -209,19 +208,21 @@ defmodule CashLens.Transactions do
       query
       |> filter_by_account(filters["account_id"])
 
-    transactions = Repo.all(query)
+    # Optimized SQL aggregation
+    result =
+      from(t in query,
+        select: %{
+          income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", t.amount, t.amount)),
+          expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", t.amount, t.amount))
+        }
+      )
+      |> Repo.one()
 
-    income =
-      transactions
-      |> Enum.filter(fn t -> Decimal.gt?(t.amount, 0) end)
-      |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
-
-    expenses =
-      transactions
-      |> Enum.filter(fn t -> Decimal.lt?(t.amount, 0) end)
-      |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
-
-    %{income: income, expenses: Decimal.abs(expenses), month: first_of_month}
+    %{
+      income: result.income || Decimal.new("0"),
+      expenses: result.expenses || Decimal.new("0"),
+      month: first_of_month
+    }
   end
 
   @doc """
@@ -233,31 +234,32 @@ defmodule CashLens.Transactions do
         left_join: c in assoc(t, :category),
         where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
         where: is_nil(t.reimbursement_link_key),
-        select: t
+        group_by: [
+          fragment("EXTRACT(YEAR FROM ?)", t.date),
+          fragment("EXTRACT(MONTH FROM ?)", t.date)
+        ],
+        order_by: [
+          desc: fragment("EXTRACT(YEAR FROM ?)", t.date),
+          desc: fragment("EXTRACT(MONTH FROM ?)", t.date)
+        ],
+        select: %{
+          year: fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
+          month: fragment("EXTRACT(MONTH FROM ?)::integer", t.date),
+          income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", t.amount, t.amount)),
+          expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", t.amount, t.amount))
+        }
 
     Repo.all(query)
-    |> Enum.group_by(fn t -> {t.date.year, t.date.month} end)
-    |> Enum.map(fn {{year, month}, txs} ->
-      income =
-        txs
-        |> Enum.filter(&Decimal.gt?(&1.amount, 0))
-        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
+    |> Enum.map(fn %{income: i, expenses: e} = row ->
+      income = i || Decimal.new("0")
+      expenses = e || Decimal.new("0")
 
-      expenses =
-        txs
-        |> Enum.filter(&Decimal.lt?(&1.amount, 0))
-        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
-        |> Decimal.abs()
-
-      %{
-        year: year,
-        month: month,
+      Map.merge(row, %{
         income: income,
         expenses: expenses,
         balance: Decimal.sub(income, expenses)
-      }
+      })
     end)
-    |> Enum.sort_by(fn %{year: y, month: m} -> {y, m} end)
   end
 
   @doc """

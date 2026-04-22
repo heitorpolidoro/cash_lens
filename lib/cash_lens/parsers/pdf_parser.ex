@@ -1,4 +1,5 @@
 defmodule CashLens.Parsers.PDFParser do
+  @behaviour CashLens.Parsers.Parser
   @moduledoc """
   Parser for PDF content (text-based) for various providers.
   """
