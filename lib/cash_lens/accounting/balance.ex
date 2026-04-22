@@ -12,6 +12,7 @@ defmodule CashLens.Accounting.Balance do
     field :expenses, :decimal
     field :balance, :decimal
     field :final_balance, :decimal
+    field :is_snapshot, :boolean, default: false
     belongs_to :account, CashLens.Accounts.Account
 
     timestamps(type: :utc_datetime)
@@ -28,7 +29,8 @@ defmodule CashLens.Accounting.Balance do
       :expenses,
       :balance,
       :final_balance,
-      :account_id
+      :account_id,
+      :is_snapshot
     ])
     |> validate_required([
       :year,
