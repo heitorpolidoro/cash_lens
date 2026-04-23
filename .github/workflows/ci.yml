@@ -63,6 +63,13 @@ jobs:
     - name: Run tests with coverage
       run: mix coveralls.xml
 
+    - name: Report coverage to DeepSource
+      run: |
+        curl -fsSL https://cli.deepsource.com/install | BINDIR=./bin sh
+        ./bin/deepsource report --analyzer test-coverage --key elixir --value-file ./cover/excoveralls.xml
+      env:
+        DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+
     - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
       env:
