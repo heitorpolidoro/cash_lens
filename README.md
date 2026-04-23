@@ -19,7 +19,6 @@
 <br>
 
 <!-- DeepSource -->
-<a href="https://app.deepsource.com/gh/heitorpolidoro/cash_lens/" target="_blank"><img alt="DeepSource" title="DeepSource" src="https://app.deepsource.com/gh/heitorpolidoro/cash_lens.svg/?label=code+coverage&show_trend=true"/></a>
 <a href="https://app.deepsource.com/gh/heitorpolidoro/cash_lens/" target="_blank"><img alt="DeepSource" title="DeepSource" src="https://app.deepsource.com/gh/heitorpolidoro/cash_lens.svg/?label=active+issues&show_trend=true&token=lJTrsoZ84oEv-4SuRN912pX1"/></a>
 <br>
 
