@@ -1,4 +1,4 @@
-FROM elixir:1.16.3-otp-26-alpine
+FROM elixir:1.18.4-otp-28-alpine
 
 # Install build dependencies, watching tools and PDF tools
 RUN apk add --no-cache python3 make g++ build-base git inotify-tools coreutils poppler-utils nodejs npm

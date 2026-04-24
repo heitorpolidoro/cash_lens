@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Elixir
+_build
+deps
+cover
+doc
+.fetch
+erl_crash.dump
+*.ez
+
+# Node
+assets/node_modules
+npm-debug.log
+
+# IDEs
+.idea
+.vscode
+
+# Environment
+*.env
+
+# App specific
+/ml/ml_models/*
+/ml/catboost_info/*
+/catboost_info/*
+/statements/
+/tmp
+/priv/static/assets/
+/priv/static/cache_manifest.json
