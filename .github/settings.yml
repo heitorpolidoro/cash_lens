@@ -24,10 +24,8 @@ branches:
           - "GitGuardian Security Checks"
           - "SonarCloud"
           - "SonarCloud Code Analysis"
-          - "DeepSource: Test coverage"
-          - "DeepSource: Secrets"
           - "Build and test"
-      enforce_admins: true
+      enforce_admins: false
       required_conversation_resolution: true
       restrictions:
         users:

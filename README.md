@@ -18,10 +18,6 @@
 <a href="https://github.com/heitorpolidoro/cash_lens/pulls"><img src="https://img.shields.io/github/issues-pr/heitorpolidoro/cash_lens" alt="GitHub pull requests"></a>
 <br>
 
-<!-- DeepSource -->
-<a href="https://deepsource.io/gh/heitorpolidoro/cash_lens/"><img src="https://app.deepsource.com/gh/heitorpolidoro/cash_lens.svg/?label=active+issues&show_all=true" alt="DeepSource Active Issues"></a>
-<br>
-
 <!-- SonarCloud -->
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=alert_status" alt="SonarCloud Quality Gate"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=coverage" alt="SonarCloud Coverage"></a>
