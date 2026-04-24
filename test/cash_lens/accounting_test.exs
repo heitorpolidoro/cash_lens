@@ -54,5 +54,107 @@ defmodule CashLens.AccountingTest do
       assert b2.initial_balance == Decimal.new("120.00")
       assert b2.final_balance == Decimal.new("170.00")
     end
+
+    test "fallbacks to snapshot when previous month is missing" do
+      acc = account_fixture(%{balance: "100.00"})
+
+      # Create a snapshot in Jan
+      {:ok, _} =
+        Accounting.create_balance(%{
+          account_id: acc.id,
+          year: 2026,
+          month: 1,
+          initial_balance: "100.00",
+          income: "0",
+          expenses: "0",
+          balance: "0",
+          final_balance: "100.00",
+          is_snapshot: true
+        })
+
+      # Now calculate Mar (Feb is missing)
+      # It should find snapshot in Jan and calculate Feb then Mar
+      {:ok, b3} = Accounting.calculate_monthly_balance(acc.id, 2026, 3)
+      assert b3.month == 3
+      assert b3.initial_balance == Decimal.new("100.00")
+
+      # Verify Feb was also created
+      assert Repo.get_by(Balance, account_id: acc.id, year: 2026, month: 2)
+    end
+
+    test "is_snapshot is true for months multiple of 6" do
+      acc = account_fixture()
+      {:ok, b6} = Accounting.calculate_monthly_balance(acc.id, 2026, 6)
+      assert b6.is_snapshot == true
+
+      {:ok, b1} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      assert b1.is_snapshot == false
+    end
+  end
+
+  describe "queries and filters" do
+    test "list_latest_balances/0 returns most recent balance per account" do
+      acc1 = account_fixture()
+      acc2 = account_fixture()
+
+      Accounting.calculate_monthly_balance(acc1.id, 2026, 1)
+      Accounting.calculate_monthly_balance(acc1.id, 2026, 2)
+      Accounting.calculate_monthly_balance(acc2.id, 2026, 1)
+
+      latest = Accounting.list_latest_balances()
+      assert length(latest) == 2
+
+      b1 = Enum.find(latest, &(&1.account_id == acc1.id))
+      assert b1.month == 2
+
+      b2 = Enum.find(latest, &(&1.account_id == acc2.id))
+      assert b2.month == 1
+    end
+
+    test "get_historical_balances/0 aggregates by month" do
+      acc1 = account_fixture()
+      acc2 = account_fixture()
+
+      Accounting.calculate_monthly_balance(acc1.id, 2026, 1)
+      Accounting.calculate_monthly_balance(acc2.id, 2026, 1)
+
+      history = Accounting.get_historical_balances()
+      assert length(history) >= 1
+      assert Enum.any?(history, &(&1.month == 1))
+    end
+
+    test "get_oldest_balance_for_account/1" do
+      acc = account_fixture()
+      Accounting.calculate_monthly_balance(acc.id, 2026, 2)
+      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+
+      oldest = Accounting.get_oldest_balance_for_account(acc.id)
+      assert oldest.month == 1
+    end
+
+    test "list_balances/1 with filters" do
+      acc = account_fixture()
+      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+
+      assert length(Accounting.list_balances(%{"month" => "1"})) >= 1
+      assert length(Accounting.list_balances(%{"month" => "2"})) == 0
+      assert length(Accounting.list_balances(%{"year" => "2026"})) >= 1
+      assert length(Accounting.list_balances(%{"account_id" => acc.id})) == 1
+    end
+  end
+
+  describe "crud" do
+    test "get_balance!/1" do
+      acc = account_fixture()
+      {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      assert Accounting.get_balance!(b.id).id == b.id
+    end
+
+    test "delete_balance/1" do
+      acc = account_fixture()
+      {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      assert {:ok, _} = Accounting.delete_balance(b)
+      assert_raise Ecto.NoResultsError, fn -> Accounting.get_balance!(b.id) end
+    end
   end
 end
