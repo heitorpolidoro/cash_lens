@@ -37,7 +37,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       account = account_fixture()
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-      assert {:ok, _index_live, html} =
+      assert {:ok, form_live, html} =
                index_live
                |> element("a[href='/transactions/new']")
                |> render_click()
@@ -45,15 +45,12 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       assert html =~ "New Transaction"
 
-      # Re-initialize live to interact with the form
-      {:ok, index_live, _html} = live(conn, ~p"/transactions/new")
-
-      assert index_live
+      assert form_live
              |> form("#transaction-form", transaction: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
       assert {:ok, _index_live, html} =
-               index_live
+               form_live
                |> form("#transaction-form",
                  transaction: Map.put(@create_attrs, :account_id, account.id)
                )
@@ -67,7 +64,7 @@ defmodule CashLensWeb.TransactionLiveTest do
     test "updates transaction in listing", %{conn: conn, transaction: transaction} do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-      assert {:ok, _index_live, html} =
+      assert {:ok, form_live, html} =
                index_live
                |> element("#transactions-#{transaction.id} a[aria-label='Edit']")
                |> render_click()
@@ -75,15 +72,12 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       assert html =~ "Edit Transaction"
 
-      # Re-initialize live for the form
-      {:ok, index_live, _html} = live(conn, ~p"/transactions/#{transaction}/edit")
-
-      assert index_live
+      assert form_live
              |> form("#transaction-form", transaction: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
       assert {:ok, _index_live, html} =
-               index_live
+               form_live
                |> form("#transaction-form", transaction: @update_attrs)
                |> render_submit()
                |> follow_redirect(conn, ~p"/transactions")

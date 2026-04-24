@@ -34,7 +34,7 @@ defmodule CashLens.Parsers.IngestorTest do
 
     test "handles unparseable files correctly" do
       account = account_fixture(parser_type: "standard_ofx")
-      file_path = "test/support/fixtures/files/test.ofx"
+      file_path = "test/support/fixtures/files/test_#{account.id}.ofx"
       File.write!(file_path, "invalid_data")
       # Most parsers will just return 0 transactions for garbage data
       assert {:ok, 0} = Ingestor.import_file(account, file_path)

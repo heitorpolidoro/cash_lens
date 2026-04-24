@@ -3,7 +3,6 @@ defmodule CashLensWeb.TransactionLive.FormTest do
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
   import CashLens.AccountsFixtures
-  import CashLens.CategoriesFixtures
 
   @create_attrs %{
     date: Date.to_iso8601(Date.utc_today()),
