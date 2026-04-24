@@ -321,23 +321,28 @@ defmodule CashLens.Transactions do
   """
   def create_transaction(attrs) do
     changeset = Transaction.changeset(%Transaction{}, attrs)
-    fingerprint = Ecto.Changeset.get_field(changeset, :fingerprint)
 
-    # Manual check for duplicate to ensure consistent API response
-    if Repo.exists?(from t in Transaction, where: t.fingerprint == ^fingerprint) do
-      {:ok, :duplicate}
-    else
-      case Repo.insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
-        {:ok, %Transaction{id: nil}} ->
-          {:ok, :duplicate}
+    if changeset.valid? do
+      fingerprint = Ecto.Changeset.get_field(changeset, :fingerprint)
 
-        {:ok, transaction} ->
-          CashLens.Transactions.TransferMatcher.match_transfer(transaction)
-          {:ok, transaction}
+      # Manual check for duplicate to ensure consistent API response
+      if Repo.exists?(from t in Transaction, where: t.fingerprint == ^fingerprint) do
+        {:ok, :duplicate}
+      else
+        case Repo.insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
+          {:ok, %Transaction{id: nil}} ->
+            {:ok, :duplicate}
 
-        {:error, changeset} ->
-          {:error, changeset}
+          {:ok, transaction} ->
+            CashLens.Transactions.TransferMatcher.match_transfer(transaction)
+            {:ok, transaction}
+
+          {:error, changeset} ->
+            {:error, changeset}
+        end
       end
+    else
+      {:error, %{changeset | action: :insert}}
     end
   end
 
