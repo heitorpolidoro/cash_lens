@@ -22,4 +22,23 @@ defmodule CashLens.Parsers.IngestorTest do
       assert {:error, _} = Ingestor.parse("any", "unknown")
     end
   end
+
+  describe "import_file/2" do
+    import CashLens.AccountsFixtures
+
+    test "imports CSV file successfully" do
+      account = account_fixture(parser_type: "bb_csv")
+      assert {:ok, 3} = Ingestor.import_file(account, @bb_sample)
+      assert length(CashLens.Repo.all(CashLens.Transactions.Transaction)) == 3
+    end
+
+    test "handles unparseable files correctly" do
+      account = account_fixture(parser_type: "standard_ofx")
+      file_path = "test/support/fixtures/files/test_#{account.id}.ofx"
+      File.write!(file_path, "invalid_data")
+      # Most parsers will just return 0 transactions for garbage data
+      assert {:ok, 0} = Ingestor.import_file(account, file_path)
+      File.rm!(file_path)
+    end
+  end
 end
