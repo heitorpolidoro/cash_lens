@@ -64,7 +64,12 @@ jobs:
       run: mix coveralls.xml
 
     - name: SonarQube Scan
-      uses: sonarsource/sonarqube-scan-action@v5
+      uses: sonarsource/sonarqube-scan-action@v6
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      with:
+        args: >
+          -Dsonar.organization=heitorpolidoro
+          -Dsonar.projectKey=heitorpolidoro_cash_lens
+          -Dsonar.host.url=https://sonarcloud.io
