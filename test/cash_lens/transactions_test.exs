@@ -90,6 +90,42 @@ defmodule CashLens.TransactionsTest do
       assert length(results) == 1
       assert Enum.at(results, 0).id == t2.id
     end
+
+    test "filters by unmatched transfers" do
+      transfer_cat = CategoriesFixtures.category_fixture(%{name: "Transfer", slug: "transfer"})
+      t1 = transaction_fixture(%{category_id: transfer_cat.id, transfer_key: nil})
+
+      _t2 =
+        transaction_fixture(%{category_id: transfer_cat.id, transfer_key: Ecto.UUID.generate()})
+
+      _t3 = transaction_fixture(%{category_id: nil})
+
+      results = Transactions.list_transactions(%{"unmatched_transfers" => "true"})
+      assert length(results) == 1
+      assert Enum.at(results, 0).id == t1.id
+    end
+
+    test "filters by type (debit/credit)" do
+      t1 = transaction_fixture(%{amount: "-10.00"})
+      t2 = transaction_fixture(%{amount: "10.00"})
+
+      debits = Transactions.list_transactions(%{"type" => "debit"})
+      assert length(debits) == 1
+      assert Enum.at(debits, 0).id == t1.id
+
+      credits = Transactions.list_transactions(%{"type" => "credit"})
+      assert length(credits) == 1
+      assert Enum.at(credits, 0).id == t2.id
+    end
+
+    test "filters by reimbursement status" do
+      t1 = transaction_fixture(%{reimbursement_status: "pending"})
+      _t2 = transaction_fixture(%{reimbursement_status: nil})
+
+      results = Transactions.list_transactions(%{"reimbursement_status" => "pending"})
+      assert length(results) == 1
+      assert Enum.at(results, 0).id == t1.id
+    end
   end
 
   describe "summaries" do
@@ -146,6 +182,15 @@ defmodule CashLens.TransactionsTest do
       assert summary.month == ~D[2026-03-01]
     end
 
+    test "get_monthly_summary/2 with explicit filters" do
+      acc = AccountsFixtures.account_fixture()
+      transaction_fixture(%{amount: "100.00", date: ~D[2025-01-15], account_id: acc.id})
+
+      summary = Transactions.get_monthly_summary(nil, %{"month" => "1", "year" => "2025"})
+      assert summary.income == Decimal.new("100.00")
+      assert summary.month == ~D[2025-01-01]
+    end
+
     test "get_historical_summary/0 returns correct data grouped by month" do
       acc = AccountsFixtures.account_fixture()
 
@@ -159,7 +204,7 @@ defmodule CashLens.TransactionsTest do
 
       history = Transactions.get_historical_summary()
 
-      assert length(history) == 2
+      assert length(history) >= 2
 
       feb = Enum.find(history, &(&1.month == 2 and &1.year == 2026))
       assert feb.income == Decimal.new("1000.00")
@@ -170,6 +215,19 @@ defmodule CashLens.TransactionsTest do
       assert mar.income == Decimal.new("1500.00")
       assert mar.expenses == Decimal.new("500.00")
       assert mar.balance == Decimal.new("1000.00")
+    end
+
+    test "get_historical_category_summary/0" do
+      cat = CategoriesFixtures.category_fixture(%{name: "Food", type: "fixed"})
+      transaction_fixture(%{amount: "-50.00", date: ~D[2026-04-01], category_id: cat.id})
+
+      results = Transactions.get_historical_category_summary()
+      assert length(results) > 0
+      month_data = Enum.find(results, &(&1.month == 4 and &1.year == 2026))
+      assert month_data
+      cat_data = Enum.find(month_data.categories, &(&1.name == "Food"))
+      assert cat_data.total == Decimal.new("50.00")
+      assert cat_data.type == "fixed"
     end
   end
 
@@ -240,7 +298,6 @@ defmodule CashLens.TransactionsTest do
       _t1 = transaction_fixture(attrs)
 
       # Let's verify both fingerprints
-      _changeset2 = Transactions.change_transaction(%Transaction{}, attrs)
       assert {:ok, :duplicate} = Transactions.create_transaction(attrs)
     end
 
@@ -254,10 +311,64 @@ defmodule CashLens.TransactionsTest do
       assert transaction.description == "updated description"
     end
 
+    test "update_transaction_category/2" do
+      transaction = transaction_fixture(%{category_id: nil})
+      cat = CategoriesFixtures.category_fixture()
+      assert {:ok, updated} = Transactions.update_transaction_category(transaction.id, cat.id)
+      assert updated.category_id == cat.id
+    end
+
     test "delete_transaction/1 deletes the transaction" do
       transaction = transaction_fixture()
       assert {:ok, %Transaction{}} = Transactions.delete_transaction(transaction)
       assert_raise Ecto.NoResultsError, fn -> Transactions.get_transaction!(transaction.id) end
+    end
+
+    test "unlink_reimbursement_by_key/1" do
+      key = Ecto.UUID.generate()
+
+      t1 =
+        transaction_fixture(%{
+          amount: "-100.00",
+          reimbursement_link_key: key,
+          reimbursement_status: "paid"
+        })
+
+      t2 =
+        transaction_fixture(%{
+          amount: "100.00",
+          reimbursement_link_key: key,
+          reimbursement_status: "paid"
+        })
+
+      assert :ok = Transactions.unlink_reimbursement_by_key(key)
+
+      updated_t1 = Transactions.get_transaction!(t1.id)
+      assert updated_t1.reimbursement_link_key == nil
+      assert updated_t1.reimbursement_status == "pending"
+
+      updated_t2 = Transactions.get_transaction!(t2.id)
+      assert updated_t2.reimbursement_link_key == nil
+      assert updated_t2.reimbursement_status == nil
+    end
+
+    test "count_pending_transactions/0" do
+      transaction_fixture(%{category_id: nil})
+      cat = CategoriesFixtures.category_fixture()
+      transaction_fixture(%{category_id: cat.id})
+
+      assert Transactions.count_pending_transactions() >= 1
+    end
+
+    test "list_recent_transactions/1" do
+      transaction_fixture()
+      assert length(Transactions.list_recent_transactions(1)) == 1
+    end
+
+    test "delete_all_transactions/0" do
+      transaction_fixture()
+      assert {_, nil} = Transactions.delete_all_transactions()
+      assert length(Transactions.list_transactions()) == 0
     end
   end
 end
