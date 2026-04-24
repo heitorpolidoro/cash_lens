@@ -61,7 +61,9 @@ jobs:
       run: mix compile --warnings-as-errors
 
     - name: Run tests with coverage
-      run: mix coveralls.xml
+      run: |
+        mix coveralls.xml
+        sed -i 's/file path="\//file path="/g' cover/excoveralls.xml
 
     - name: SonarQube Scan
       uses: sonarsource/sonarqube-scan-action@v6
