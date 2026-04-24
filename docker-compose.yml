@@ -16,11 +16,8 @@ services:
     command: /bin/sh -c "mix deps.get && mix phx.server"
     ports:
       - "4000:4000"
-    environment:
-      - DATABASE_URL=ecto://postgres:postgres@db/cash_lens_dev
-      - SECRET_KEY_BASE=sY8Gq6f0Xf8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f8f
-      - PHX_HOST=0.0.0.0
-      - WATCHMAN_DISABLE=true
+    env_file:
+      - dev.env
     volumes:
       - .:/app
       - /app/_build
