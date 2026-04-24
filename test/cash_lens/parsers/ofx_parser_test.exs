@@ -3,43 +3,19 @@ defmodule CashLens.Parsers.OFXParserTest do
   alias CashLens.Parsers.OFXParser
 
   @sample_ofx """
-  OFXHEADER:100
-  DATA:OFXSGML
-  VERSION:102
-  SECURITY:NONE
-  ENCODING:USASCII
-  CHARSET:1252
-  COMPRESSION:NONE
-  OLDFILEUID:NONE
-  NEWFILEUID:NONE
-
   <OFX>
-  <BANKMSGSRSV1>
-  <STMTTRNRS>
-  <STMTRS>
-  <CURDEF>BRL</CURDEF>
-  <BANKTRANLIST>
-  <DTSTART>20260401000000</DTSTART>
-  <DTEND>20260421000000</DTEND>
   <STMTTRN>
   <TRNTYPE>DEBIT</TRNTYPE>
   <DTPOSTED>20260410120000</DTPOSTED>
   <TRNAMT>-150.00</TRNAMT>
-  <FITID>20260410001</FITID>
-  <CHECKNUM>001</CHECKNUM>
   <MEMO>COMPRA SUPERMERCADO</MEMO>
   </STMTTRN>
   <STMTTRN>
   <TRNTYPE>CREDIT</TRNTYPE>
   <DTPOSTED>20260415103000</DTPOSTED>
-  <TRNAMT>1200.50</TRNAMT>
-  <FITID>20260415002</FITID>
-  <MEMO>TRANSFERENCIA RECEBIDA</MEMO>
+  <TRNAMT>1200,50</TRNAMT>
+  <NAME>TRANSFERENCIA RECEBIDA</NAME>
   </STMTTRN>
-  </BANKTRANLIST>
-  </STMTRS>
-  </STMTTRNRS>
-  </BANKMSGSRSV1>
   </OFX>
   """
 
@@ -56,8 +32,82 @@ defmodule CashLens.Parsers.OFXParserTest do
 
       t2 = Enum.find(transactions, fn t -> t.description == "TRANSFERENCIA RECEBIDA" end)
       assert t2.amount == Decimal.new("1200.50")
-      assert t2.date == ~D[2026-04-15]
-      assert t2.time == ~T[10:30:00]
+    end
+
+    test "handles lowercase tags" do
+      content =
+        "<stmttrn><trnamt>10.00</trnamt><dtposted>20260101</dtposted><memo>test</memo></stmttrn>"
+
+      [t] = OFXParser.parse(content, :standard)
+      assert t.description == "test"
+      assert t.amount == Decimal.new("10.00")
+    end
+
+    test "handles missing memo but present name" do
+      content =
+        "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>20260101</DTPOSTED><NAME>only name</NAME></STMTTRN>"
+
+      [t] = OFXParser.parse(content, :standard)
+      assert t.description == "only name"
+    end
+
+    test "handles missing memo and name" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>20260101</DTPOSTED></STMTTRN>"
+      [t] = OFXParser.parse(content, :standard)
+      assert t.description == "UNKNOWN"
+    end
+
+    test "handles empty or no blocks" do
+      assert OFXParser.parse("", :standard) == []
+      assert OFXParser.parse("<OFX>No blocks here</OFX>", :standard) == []
+    end
+
+    test "rejects invalid amount" do
+      content = "<STMTTRN><TRNAMT>invalid</TRNAMT><DTPOSTED>20260101</DTPOSTED></STMTTRN>"
+      assert OFXParser.parse(content, :standard) == []
+    end
+
+    test "rejects invalid date format" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>notadate</DTPOSTED></STMTTRN>"
+      assert OFXParser.parse(content, :standard) == []
+    end
+
+    test "rejects invalid date numbers" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>20261345</DTPOSTED></STMTTRN>"
+      assert OFXParser.parse(content, :standard) == []
+    end
+
+    test "handles date without time" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>20260101</DTPOSTED></STMTTRN>"
+      [t] = OFXParser.parse(content, :standard)
+      assert t.date == ~D[2026-01-01]
+      assert t.time == nil
+    end
+
+    test "handles incomplete time" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>2026010112</DTPOSTED></STMTTRN>"
+      [t] = OFXParser.parse(content, :standard)
+      assert t.date == ~D[2026-01-01]
+      assert t.time == nil
+    end
+
+    test "handles time with hours and mins but no secs" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>202601011230</DTPOSTED></STMTTRN>"
+      [t] = OFXParser.parse(content, :standard)
+      assert t.date == ~D[2026-01-01]
+      assert t.time == ~T[12:30:00]
+    end
+
+    test "handles time with hours, mins and invalid secs" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>202601011230XX</DTPOSTED></STMTTRN>"
+      [t] = OFXParser.parse(content, :standard)
+      assert t.date == ~D[2026-01-01]
+      assert t.time == ~T[12:30:00]
+    end
+
+    test "handles content that starts with a block immediately" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>20260101</DTPOSTED></STMTTRN>"
+      assert length(OFXParser.parse(content, :standard)) == 1
     end
 
     test "handles empty or invalid content" do

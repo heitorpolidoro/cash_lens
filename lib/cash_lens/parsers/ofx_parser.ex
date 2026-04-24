@@ -59,12 +59,7 @@ defmodule CashLens.Parsers.OFXParser do
       time =
         with {:ok, hour} <- safe_to_integer(String.slice(date_str, 8..9)),
              {:ok, min} <- safe_to_integer(String.slice(date_str, 10..11)),
-             sec_str = String.slice(date_str, 12..13),
-             sec =
-               if(sec_str != "" and String.length(sec_str) == 2,
-                 do: String.to_integer(sec_str),
-                 else: 0
-               ),
+             sec = extract_seconds(date_str),
              {:ok, time} <- Time.new(hour, min, sec) do
           time
         else
@@ -74,6 +69,15 @@ defmodule CashLens.Parsers.OFXParser do
       {:ok, {date, time}}
     else
       _ -> :error
+    end
+  end
+
+  defp extract_seconds(date_str) do
+    sec_str = String.slice(date_str, 12..13)
+
+    case safe_to_integer(sec_str) do
+      {:ok, s} -> s
+      _ -> 0
     end
   end
 
