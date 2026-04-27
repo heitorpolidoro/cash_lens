@@ -54,5 +54,14 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
       result = AutoCategorizer.categorize(params)
       assert result.category_id == category.id
     end
+
+    test "assign_category_by_slug returns original params if category not found" do
+      # We don't create any category here
+      _params = %{description: "RANDOM"}
+      # Triggering check_special_rules with a string that matches but has no category in DB
+      params_with_transfer_desc = %{description: "BB MM OURO"}
+      result = AutoCategorizer.categorize(params_with_transfer_desc)
+      assert result == params_with_transfer_desc
+    end
   end
 end

@@ -59,5 +59,79 @@ defmodule CashLens.Parsers.OFXParserTest do
       assert t2.date == ~D[2026-04-15]
       assert t2.time == ~T[10:30:00]
     end
+
+    test "handles empty or invalid content" do
+      assert OFXParser.parse("", :standard) == []
+      assert OFXParser.parse("NO TRANSACTIONS HERE", :standard) == []
+    end
+
+    test "handles malformed transaction blocks" do
+      malformed = """
+      <STMTTRN>
+      <TRNAMT>INVALID</TRNAMT>
+      <DTPOSTED>20260410120000</DTPOSTED>
+      <MEMO>INVALID AMOUNT</MEMO>
+      </STMTTRN>
+      <STMTTRN>
+      <TRNAMT>100.00</TRNAMT>
+      <DTPOSTED>INVALID_DATE</DTPOSTED>
+      <MEMO>INVALID DATE</MEMO>
+      </STMTTRN>
+      """
+
+      assert OFXParser.parse(malformed, :standard) == []
+    end
+
+    test "handles different date and time lengths" do
+      # Date without time, and date with short time
+      content = """
+      <STMTTRN>
+      <TRNAMT>50.00</TRNAMT>
+      <DTPOSTED>20260410</DTPOSTED>
+      <NAME>ONLY DATE</NAME>
+      </STMTTRN>
+      <STMTTRN>
+      <TRNAMT>60.00</TRNAMT>
+      <DTPOSTED>202604101230</DTPOSTED>
+      <NAME>DATE AND TIME NO SECS</NAME>
+      </STMTTRN>
+      """
+
+      transactions = OFXParser.parse(content, :standard)
+      assert length(transactions) == 2
+
+      t1 = Enum.at(transactions, 0)
+      assert t1.description == "ONLY DATE"
+      assert t1.date == ~D[2026-04-10]
+      assert t1.time == nil
+
+      t2 = Enum.at(transactions, 1)
+      assert t2.description == "DATE AND TIME NO SECS"
+      assert t2.date == ~D[2026-04-10]
+      assert t2.time == ~T[12:30:00]
+    end
+
+    test "handles missing mandatory tags" do
+      content = """
+      <STMTTRN>
+      <NAME>MISSING STUFF</NAME>
+      </STMTTRN>
+      """
+
+      # This will result in parse_decimal(nil) and parse_ofx_date(nil)
+      assert OFXParser.parse(content, :standard) == []
+    end
+
+    test "handles invalid integers in date components" do
+      content = """
+      <STMTTRN>
+      <TRNAMT>10.00</TRNAMT>
+      <DTPOSTED>2026XX10</DTPOSTED>
+      <NAME>BAD DATE</NAME>
+      </STMTTRN>
+      """
+
+      assert OFXParser.parse(content, :standard) == []
+    end
   end
 end

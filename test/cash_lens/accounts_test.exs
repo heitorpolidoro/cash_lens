@@ -76,5 +76,18 @@ defmodule CashLens.AccountsTest do
       account = account_fixture()
       assert %Ecto.Changeset{} = Accounts.change_account(account)
     end
+
+    test "get_total_balance/0 returns the sum of all account balances" do
+      assert Accounts.get_total_balance() == Decimal.new("0")
+      account_fixture(balance: "100.50")
+      account_fixture(balance: "200.25")
+      assert Accounts.get_total_balance() == Decimal.new("300.75")
+    end
+
+    test "get_account_by_name/1 returns the account with given name" do
+      account = account_fixture(name: "Unique Name")
+      assert Accounts.get_account_by_name("Unique Name") == account
+      assert Accounts.get_account_by_name("Non-existent") == nil
+    end
   end
 end

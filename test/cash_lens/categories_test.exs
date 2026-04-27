@@ -207,5 +207,15 @@ defmodule CashLens.CategoriesTest do
       # slug is different
       assert {:ok, _} = Categories.create_category(%{name: "Parent 1 Root"})
     end
+
+    test "Category.full_name/1 returns formatted name based on parent" do
+      parent = %Category{name: "Fixed"}
+      child = %Category{name: "Rent", parent: parent}
+      standalone = %Category{name: "Food"}
+
+      assert Category.full_name(child) == "Fixed > Rent"
+      assert Category.full_name(standalone) == "Food"
+      assert Category.full_name(%{not: "a category"}) == ""
+    end
   end
 end
