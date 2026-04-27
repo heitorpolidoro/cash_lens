@@ -1,5 +1,5 @@
 defmodule CashLensWeb.ErrorJSONTest do
-  use CashLensWeb.ConnCase, async: true
+  use CashLensWeb.ConnCase, async: false
 
   test "renders 404" do
     assert CashLensWeb.ErrorJSON.render("404.json", %{}) == %{errors: %{detail: "Not Found"}}

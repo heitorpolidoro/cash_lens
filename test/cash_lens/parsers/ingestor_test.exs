@@ -1,5 +1,5 @@
 defmodule CashLens.Parsers.IngestorTest do
-  use CashLens.DataCase, async: true
+  use CashLens.DataCase, async: false
   alias CashLens.Parsers.Ingestor
 
   @bb_sample "test/support/fixtures/files/bb_sample.csv"

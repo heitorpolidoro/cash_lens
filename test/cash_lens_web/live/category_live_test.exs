@@ -1,5 +1,5 @@
 defmodule CashLensWeb.CategoryLiveTest do
-  use CashLensWeb.ConnCase
+  use CashLensWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
   import CashLens.CategoriesFixtures

@@ -1,5 +1,5 @@
 defmodule CashLensWeb.AccountLiveTest do
-  use CashLensWeb.ConnCase
+  use CashLensWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures

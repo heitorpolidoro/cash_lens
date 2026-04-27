@@ -1,5 +1,5 @@
 defmodule CashLens.Transactions.BulkIgnoreTest do
-  use CashLens.DataCase, async: true
+  use CashLens.DataCase, async: false
   alias CashLens.Transactions.BulkIgnorePattern
 
   describe "changeset/2" do

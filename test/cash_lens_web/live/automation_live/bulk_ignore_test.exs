@@ -1,5 +1,6 @@
 defmodule CashLensWeb.AutomationLive.BulkIgnoreTest do
-  use CashLensWeb.ConnCase
+  use CashLensWeb.ConnCase, async: false
+
   import Phoenix.LiveViewTest
   alias CashLens.Transactions
 

@@ -1,5 +1,5 @@
 defmodule CashLens.CategoriesTest do
-  use CashLens.DataCase
+  use CashLens.DataCase, async: false
 
   alias CashLens.Categories
   alias CashLens.Transactions

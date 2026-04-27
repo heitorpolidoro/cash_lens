@@ -1,5 +1,5 @@
 defmodule CashLens.Transactions.TransferMatcherTest do
-  use CashLens.DataCase, async: true
+  use CashLens.DataCase, async: false
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.Transaction
   import CashLens.AccountsFixtures

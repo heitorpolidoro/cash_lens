@@ -1,5 +1,5 @@
 defmodule CashLensWeb.FormattersTest do
-  use CashLensWeb.ConnCase, async: true
+  use CashLensWeb.ConnCase, async: false
   alias CashLensWeb.Formatters
 
   describe "format_currency/1" do

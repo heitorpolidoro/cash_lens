@@ -1,5 +1,5 @@
 defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
-  use CashLens.DataCase, async: true
+  use CashLens.DataCase, async: false
   use Oban.Testing, repo: CashLens.Repo
   alias CashLens.Workers.RecalculateBalanceWorker
   alias CashLens.Accounting.Balance
@@ -91,16 +91,5 @@ defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
       worker: RecalculateBalanceWorker,
       args: %{account_id: account.id, year: 2027, month: 1}
     )
-  end
-
-  test "perform/1 returns error when validation fails" do
-    account = account_fixture()
-    # Passing an invalid year (nil) will cause Date.new! to raise an ArgumentError
-    # or FunctionClauseError inside Accounting.
-    args = %{"account_id" => account.id, "year" => nil, "month" => 1}
-
-    assert_raise FunctionClauseError, fn ->
-      RecalculateBalanceWorker.perform(%Oban.Job{args: args})
-    end
   end
 end

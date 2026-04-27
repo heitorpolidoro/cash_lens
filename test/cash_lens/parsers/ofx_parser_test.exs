@@ -1,5 +1,5 @@
 defmodule CashLens.Parsers.OFXParserTest do
-  use CashLens.DataCase, async: true
+  use CashLens.DataCase, async: false
   alias CashLens.Parsers.OFXParser
 
   @sample_ofx """

@@ -1,5 +1,5 @@
 defmodule CashLens.PDFParserTest do
-  use CashLens.DataCase, async: true
+  use CashLens.DataCase, async: false
   alias CashLens.Parsers.PDFParser
 
   describe "parse/2 (sem_parar)" do

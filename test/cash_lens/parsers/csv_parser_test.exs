@@ -1,5 +1,5 @@
 defmodule CashLens.CSVParserTest do
-  use CashLens.DataCase, async: true
+  use CashLens.DataCase, async: false
   alias CashLens.Parsers.CSVParser
 
   @sample_path "test/support/fixtures/files/bb_sample.csv"

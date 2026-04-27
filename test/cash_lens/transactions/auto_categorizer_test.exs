@@ -1,5 +1,5 @@
 defmodule CashLens.Transactions.AutoCategorizerTest do
-  use CashLens.DataCase, async: true
+  use CashLens.DataCase, async: false
   alias CashLens.Transactions.AutoCategorizer
   import CashLens.CategoriesFixtures
 
