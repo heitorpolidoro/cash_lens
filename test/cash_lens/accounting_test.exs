@@ -132,14 +132,23 @@ defmodule CashLens.AccountingTest do
       assert oldest.month == 1
     end
 
-    test "list_balances/1 with filters" do
+    test "list_balances/1 with filters and pagination" do
       acc = account_fixture()
       Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      Accounting.calculate_monthly_balance(acc.id, 2026, 2)
+      Accounting.calculate_monthly_balance(acc.id, 2026, 3)
+
+      assert length(Accounting.list_balances(%{"account_id" => acc.id}, 1, 2)) == 2
+      assert length(Accounting.list_balances(%{"account_id" => acc.id}, 2, 2)) == 1
 
       assert length(Accounting.list_balances(%{"month" => "1"})) >= 1
-      assert length(Accounting.list_balances(%{"month" => "2"})) == 0
+      assert length(Accounting.list_balances(%{"month" => "10"})) == 0
       assert length(Accounting.list_balances(%{"year" => "2026"})) >= 1
-      assert length(Accounting.list_balances(%{"account_id" => acc.id})) == 1
+      assert length(Accounting.list_balances(%{"account_id" => acc.id})) == 3
+
+      assert length(
+               Accounting.list_balances(%{"account_id" => nil, "month" => nil, "year" => ""})
+             ) >= 3
     end
   end
 
@@ -148,6 +157,20 @@ defmodule CashLens.AccountingTest do
       acc = account_fixture()
       {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
       assert Accounting.get_balance!(b.id).id == b.id
+    end
+
+    test "update_balance/2" do
+      acc = account_fixture()
+      {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      assert {:ok, updated} = Accounting.update_balance(b, %{income: "999.00"})
+      assert updated.income == Decimal.new("999.00")
+    end
+
+    test "change_balance/2" do
+      acc = account_fixture()
+      {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      changeset = Accounting.change_balance(b, %{income: "888.00"})
+      assert changeset.valid?
     end
 
     test "delete_balance/1" do
