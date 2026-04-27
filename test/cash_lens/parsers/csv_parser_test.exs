@@ -57,6 +57,15 @@ defmodule CashLens.CSVParserTest do
 
       assert clean_text == "DESC"
     end
+
+    test "handles invalid time formats gracefully" do
+      # 99:99 matches the regex but is an invalid Time
+      base_date = ~D[2026-01-01]
+      text = "INVALID TIME 99:99"
+      {date, time, _} = CSVParser.extract_metadata_and_clean(text, base_date)
+      assert date == base_date
+      assert time == nil
+    end
   end
 
   describe "parse/2" do
@@ -99,6 +108,34 @@ defmodule CashLens.CSVParserTest do
       assert tx.date == ~D[2026-02-24]
       assert tx.time == ~T[10:15:00]
       assert tx.description == "PIX - ENVIADO ALGUEM"
+    end
+
+    test "handles invalid dates and amounts in parse" do
+      # Invalid date and amount string
+      csv_content = "Data,Dep,Term,Hist,Doc,Valor,\nINVALID,0,0,DESCRIPTION,1,NOT_A_NUMBER,\n"
+      transactions = CSVParser.parse(csv_content, :bb)
+
+      # Should return nil for zero amount (NOT_A_NUMBER -> 0)
+      assert length(transactions) == 0
+    end
+
+    test "handles malformed date rescue path" do
+      # This date split works but Date.new! would fail if we didn't have the rescue
+      csv_content = "Data,Dep,Term,Hist,Doc,Valor,\n32/01/2026,0,0,DESCRIPTION,1,-10.00,\n"
+      transactions = CSVParser.parse(csv_content, :bb)
+      assert length(transactions) == 1
+      # Falls back to Date.utc_today() in rescue
+      assert List.first(transactions).date == Date.utc_today()
+    end
+
+    test "internal parse_amount handles nil gracefully" do
+      # Triggers parse_row(_, _) -> nil fallback
+      csv_content = "Data,Dep,Term,Hist,Doc,Valor,\nSHORT_ROW\n"
+      assert CSVParser.parse(csv_content, :bb) == []
+
+      # Triggers parse_amount :error branch
+      csv_content_empty = "Data,Dep,Term,Hist,Doc,Valor,\n01/01/2026,0,0,DESC,1, ,\n"
+      assert length(CSVParser.parse(csv_content_empty, :bb)) == 0
     end
   end
 end

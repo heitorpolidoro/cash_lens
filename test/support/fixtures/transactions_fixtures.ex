@@ -22,4 +22,18 @@ defmodule CashLens.TransactionsFixtures do
 
     transaction
   end
+
+  @doc """
+  Generate a bulk ignore pattern.
+  """
+  def insert_bulk_ignore_pattern(attrs \\ %{}) do
+    {:ok, pattern} =
+      attrs
+      |> Enum.into(%{
+        pattern: "some pattern"
+      })
+      |> CashLens.Transactions.create_bulk_ignore_pattern()
+
+    pattern
+  end
 end
