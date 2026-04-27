@@ -166,15 +166,18 @@ defmodule CashLens.TransactionsTest do
     alias CashLens.Transactions.BulkIgnorePattern
 
     test "list_bulk_ignore_patterns/0 returns all patterns" do
-      pattern = insert_bulk_ignore_pattern(%{pattern: "A"})
+      unique_pattern = "UNIQUE_#{Ecto.UUID.generate() |> String.slice(0..7)}"
+      pattern = insert_bulk_ignore_pattern(%{pattern: unique_pattern})
       assert Enum.any?(Transactions.list_bulk_ignore_patterns(), &(&1.id == pattern.id))
     end
 
     test "create_bulk_ignore_pattern/1 with valid data creates a pattern" do
-      assert {:ok, %BulkIgnorePattern{} = pattern} =
-               Transactions.create_bulk_ignore_pattern(%{pattern: "test_new"})
+      unique_pattern = "NEW_#{Ecto.UUID.generate() |> String.slice(0..7)}"
 
-      assert pattern.pattern == "test_new"
+      assert {:ok, %BulkIgnorePattern{} = pattern} =
+               Transactions.create_bulk_ignore_pattern(%{pattern: unique_pattern})
+
+      assert pattern.pattern == unique_pattern
     end
 
     test "delete_bulk_ignore_pattern/1" do
@@ -197,11 +200,14 @@ defmodule CashLens.TransactionsTest do
       acc = AccountsFixtures.account_fixture()
 
       # We need specific slugs for some categories to test exclusions
+      # Use get_by or insert to avoid collisions in parallel CI
       cat_transfer =
-        Repo.insert!(%CashLens.Categories.Category{name: "Transfer", slug: "transfer"})
+        Repo.get_by(CashLens.Categories.Category, slug: "transfer") ||
+          Repo.insert!(%CashLens.Categories.Category{name: "Transfer", slug: "transfer"})
 
       cat_initial =
-        Repo.insert!(%CashLens.Categories.Category{name: "Initial", slug: "initial_value"})
+        Repo.get_by(CashLens.Categories.Category, slug: "initial_value") ||
+          Repo.insert!(%CashLens.Categories.Category{name: "Initial", slug: "initial_value"})
 
       cat_expense = CategoriesFixtures.category_fixture(%{name: "Expense"})
 

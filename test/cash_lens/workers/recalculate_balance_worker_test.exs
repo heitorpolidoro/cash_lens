@@ -93,12 +93,13 @@ defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
     )
   end
 
-  test "perform/1 returns error when period calculation fails" do
-    # Instead of nil (which crashes Ecto), we use a valid UUID that doesn't exist.
-    # This triggers a DB constraint error because the changeset doesn't handle the foreign key.
-    args = %{"account_id" => Ecto.UUID.generate(), "year" => 2026, "month" => 1}
+  test "perform/1 returns error when validation fails" do
+    account = account_fixture()
+    # Passing an invalid year (nil) will cause Date.new! to raise an ArgumentError
+    # or FunctionClauseError inside Accounting.
+    args = %{"account_id" => account.id, "year" => nil, "month" => 1}
 
-    assert_raise Ecto.ConstraintError, fn ->
+    assert_raise FunctionClauseError, fn ->
       RecalculateBalanceWorker.perform(%Oban.Job{args: args})
     end
   end
