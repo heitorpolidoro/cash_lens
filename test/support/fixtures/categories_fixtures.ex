@@ -8,11 +8,13 @@ defmodule CashLens.CategoriesFixtures do
   Generate a category.
   """
   def category_fixture(attrs \\ %{}) do
+    unique_id = System.unique_integer([:positive])
+
     {:ok, category} =
       attrs
       |> Enum.into(%{
-        name: "some name",
-        slug: "some slug"
+        name: "category #{unique_id}",
+        slug: "category-#{unique_id}"
       })
       |> CashLens.Categories.create_category()
 

@@ -4,7 +4,6 @@ defmodule CashLens.AccountingTest do
   alias CashLens.Accounting
   alias CashLens.Accounting.Balance
   import CashLens.AccountsFixtures
-  import CashLens.TransactionsFixtures
 
   describe "balances" do
     test "list_balances/1 returns all balances" do

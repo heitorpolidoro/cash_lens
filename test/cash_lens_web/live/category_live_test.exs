@@ -38,15 +38,17 @@ defmodule CashLensWeb.CategoryLiveTest do
              |> form("#category-form", category: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
+      unique_name = "unique category #{System.unique_integer([:positive])}"
+
       assert {:ok, index_live, _html} =
                form_live
-               |> form("#category-form", category: @create_attrs)
+               |> form("#category-form", category: %{@create_attrs | name: unique_name})
                |> render_submit()
                |> follow_redirect(conn, ~p"/categories")
 
       html = render(index_live)
       assert html =~ "Categoria criada com sucesso!"
-      assert html =~ "unique category name"
+      assert html =~ unique_name
     end
 
     test "updates category in listing", %{conn: conn, category: category} do
