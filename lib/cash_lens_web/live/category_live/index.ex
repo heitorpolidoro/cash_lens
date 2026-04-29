@@ -8,11 +8,11 @@ defmodule CashLensWeb.CategoryLive.Index do
     ~H"""
     <div class="py-6 space-y-8">
       <.header>
-        Listando Categorias
+        Categories
         <:actions>
           <.link navigate={~p"/categories/new"}>
             <.button variant="primary">
-              <.icon name="hero-plus" class="mr-1" /> Nova Categoria
+              <.icon name="hero-plus" class="mr-1" /> New Category
             </.button>
           </.link>
         </:actions>
@@ -22,10 +22,10 @@ defmodule CashLensWeb.CategoryLive.Index do
         <table class="table table-zebra w-full text-xs">
           <thead class="bg-base-200/50">
             <tr>
-              <th>Nome</th>
-              <th>Tipo</th>
-              <th class="text-center">Reembolso?</th>
-              <th>Palavras-chave (Regras)</th>
+              <th>Name</th>
+              <th>Type</th>
+              <th class="text-center">Reimbursement?</th>
+              <th>Keywords (Rules)</th>
               <th class="w-16"></th>
             </tr>
           </thead>
@@ -45,12 +45,12 @@ defmodule CashLensWeb.CategoryLive.Index do
                     phx-click="toggle_fixed"
                     phx-value-id={category.id}
                   />
-                  <span class="text-[9px] font-black uppercase opacity-60">Fixo</span>
+                  <span class="text-[9px] font-black uppercase opacity-60">Fixed</span>
                 </label>
               </td>
               <td class="text-center">
                 <%= if category.default_reimbursable do %>
-                  <span title="Gera reembolso automático">
+                  <span title="Generates automatic reimbursement">
                     <.icon name="hero-banknotes" class="size-5 text-primary mx-auto" />
                   </span>
                 <% else %>
@@ -84,20 +84,20 @@ defmodule CashLensWeb.CategoryLive.Index do
       </div>
     </div>
 
-    <!-- Modal de Confirmação -->
+    <!-- Confirmation Modal -->
     <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
       <div class="p-4 text-center">
         <div class="w-20 h-20 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
           <.icon name="hero-trash" class="size-10" />
         </div>
-        <h2 class="text-2xl font-black mb-2">Excluir Categoria?</h2>
-        <p class="text-base-content/60 mb-10">Deseja realmente apagar esta categoria?</p>
+        <h2 class="text-2xl font-black mb-2">Delete Category?</h2>
+        <p class="text-base-content/60 mb-10">Do you really want to delete this category?</p>
         <div class="flex flex-col sm:flex-row gap-3">
           <button phx-click={@confirm_modal.action} class="btn btn-error btn-lg flex-1 rounded-2xl">
-            Sim, Apagar
+            Yes, Delete
           </button>
           <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
-            Cancelar
+            Cancel
           </button>
         </div>
       </div>
@@ -109,7 +109,7 @@ defmodule CashLensWeb.CategoryLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Categorias")
+     |> assign(:page_title, "Categories")
      |> assign(:confirm_modal, nil)
      |> stream(:categories, Categories.list_categories())}
   end
@@ -137,7 +137,7 @@ defmodule CashLensWeb.CategoryLive.Index do
          |> assign(:confirm_modal, nil)
          |> put_flash(
            :error,
-           "Não foi possível excluir a categoria '#{category.name}'. Verifique se existem dependências."
+           "Could not delete category '#{category.name}'. Check if there are dependencies."
          )}
     end
   end
@@ -152,7 +152,7 @@ defmodule CashLensWeb.CategoryLive.Index do
         {:noreply, stream_insert(socket, :categories, updated)}
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Falha ao atualizar.")}
+        {:noreply, put_flash(socket, :error, "Failed to update.")}
     end
   end
 end

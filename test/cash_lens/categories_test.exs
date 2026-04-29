@@ -54,14 +54,38 @@ defmodule CashLens.CategoriesTest do
       assert String.contains?(child.slug, "finance")
     end
 
-    test "update_category/2 with valid data updates the category and slug" do
+    test "update_category/2 with invalid data returns error changeset" do
       category = category_fixture()
-      u = System.unique_integer([:positive])
-      new_name = "New Name #{u}"
-      update_attrs = %{name: new_name}
+      assert {:error, %Ecto.Changeset{}} = Categories.update_category(category, %{name: nil})
+      assert fetched = Categories.get_category!(category.id)
+      assert fetched.name == category.name
+    end
 
-      assert {:ok, %Category{} = updated} = Categories.update_category(category, update_attrs)
-      assert updated.name == new_name
+    test "get_category_ids_with_children/1 returns IDs for the whole branch" do
+      p = category_fixture(name: "Parent")
+      c1 = category_fixture(name: "Child 1", parent_id: p.id)
+      c2 = category_fixture(name: "Child 2", parent_id: p.id)
+      gc1 = category_fixture(name: "Grandchild 1", parent_id: c1.id)
+
+      ids = Categories.get_category_ids_with_children(p.id)
+      assert length(ids) == 4
+      assert p.id in ids
+      assert c1.id in ids
+      assert c2.id in ids
+      assert gc1.id in ids
+
+      assert Categories.get_category_ids_with_children(nil) == []
+    end
+
+    test "get_category_by_slug/1 returns the category with given slug" do
+      category = category_fixture(name: "Unique Slug Test")
+      assert fetched = Categories.get_category_by_slug(category.slug)
+      assert fetched.id == category.id
+    end
+
+    test "change_category/1 returns a category changeset" do
+      category = category_fixture()
+      assert %Ecto.Changeset{} = Categories.change_category(category)
     end
 
     test "delete_category/1 deletes the category" do

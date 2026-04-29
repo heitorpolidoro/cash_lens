@@ -7,21 +7,21 @@
       <.icon
         name="hero-arrow-left"
         class="size-3 group-hover:-translate-x-1 transition-transform"
-      /> Voltar para {if @return_to == "accounts", do: "Contas", else: "Dashboard"}
+      /> Back to {if @return_to == "accounts", do: "Accounts", else: "Dashboard"}
     </.link>
   </div>
   <.header>
-    Transações
+    Transactions
     <:subtitle :if={@filters["account_id"] not in ["", nil]}>
-      Filtrando por conta: {case Enum.find(@accounts, &(&1.id == @filters["account_id"])) do
-        nil -> "Desconhecida"
+      Filtering by account: {case Enum.find(@accounts, &(&1.id == @filters["account_id"])) do
+        nil -> "Unknown"
         acc -> acc.name
       end}
     </:subtitle>
     <:actions>
       <div class="dropdown dropdown-end">
         <button tabindex="0" class="btn btn-outline border-base-300 btn-sm">
-          <.icon name="hero-ellipsis-vertical" class="size-4" /> Ações
+          <.icon name="hero-ellipsis-vertical" class="size-4" /> Actions
         </button>
         <ul
           tabindex="0"
@@ -29,33 +29,33 @@
         >
           <li>
             <.link navigate={~p"/transactions/new"}>
-              <.icon name="hero-plus" class="size-4" /> Nova Transação
+              <.icon name="hero-plus" class="size-4" /> New Transaction
             </.link>
           </li>
           <li>
             <button type="button" phx-click="open_import">
-              <.icon name="hero-arrow-up-tray" class="size-4" /> Importar Extratos
+              <.icon name="hero-arrow-up-tray" class="size-4" /> Import Statements
             </button>
           </li>
           <li>
             <button type="button" phx-click="auto_categorize_all">
-              <.icon name="hero-sparkles" class="size-4" /> Auto-Categorizar
+              <.icon name="hero-sparkles" class="size-4" /> Auto-Categorize
             </button>
           </li>
           <li>
             <.link navigate={~p"/reimbursements"}>
-              <.icon name="hero-banknotes" class="size-4" /> Reembolsos
+              <.icon name="hero-banknotes" class="size-4" /> Reimbursements
             </.link>
           </li>
           <li>
             <.link navigate={~p"/admin/exclusion_rules"}>
-              <.icon name="hero-no-symbol" class="size-4" /> Regras de Exclusão
+              <.icon name="hero-no-symbol" class="size-4" /> Exclusion Rules
             </.link>
           </li>
           <div class="divider my-1"></div>
           <li>
             <button type="button" phx-click="confirm_delete_all" class="text-error">
-              <.icon name="hero-trash" class="size-4" /> Limpar Tudo
+              <.icon name="hero-trash" class="size-4" /> Clear All
             </button>
           </li>
         </ul>
@@ -78,7 +78,7 @@
             )
           ]}
         >
-          <.icon name="hero-arrow-trending-down" class="size-4 mr-1" /> Débitos
+          <.icon name="hero-arrow-trending-down" class="size-4 mr-1" /> Debits
         </button>
         <button
           type="button"
@@ -92,7 +92,7 @@
             )
           ]}
         >
-          <.icon name="hero-arrow-trending-up" class="size-4 mr-1" /> Créditos
+          <.icon name="hero-arrow-trending-up" class="size-4 mr-1" /> Credits
         </button>
       </div>
 
@@ -105,7 +105,7 @@
           type="button"
           phx-click="prev_month"
           class="join-item btn btn-sm btn-ghost px-2"
-          title="Mês Anterior"
+          title="Previous Month"
           disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}
         >
           <.icon name="hero-chevron-left" class="size-4" />
@@ -127,8 +127,8 @@
               @filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"
             }
           >
-            <option value="" selected={@filters["month"] == ""}>Todos os Meses</option>
-            <%= for {m_name, m_val} <- [{"Jan", 1}, {"Fev", 2}, {"Mar", 3}, {"Abr", 4}, {"Mai", 5}, {"Jun", 6}, {"Jul", 7}, {"Ago", 8}, {"Set", 9}, {"Out", 10}, {"Nov", 11}, {"Dez", 12}] do %>
+            <option value="" selected={@filters["month"] == ""}>All Months</option>
+            <%= for {m_name, m_val} <- [{"Jan", 1}, {"Feb", 2}, {"Mar", 3}, {"Apr", 4}, {"May", 5}, {"Jun", 6}, {"Jul", 7}, {"Aug", 8}, {"Sep", 9}, {"Oct", 10}, {"Nov", 11}, {"Dec", 12}] do %>
               <option value={m_val} selected={@filters["month"] == "#{m_val}"}>{m_name}</option>
             <% end %>
           </select>
@@ -162,7 +162,7 @@
           type="button"
           phx-click="next_month"
           class="join-item btn btn-sm btn-ghost px-2"
-          title="Próximo Mês"
+          title="Next Month"
           disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}
         >
           <.icon name="hero-chevron-right" class="size-4" />
@@ -182,8 +182,7 @@
           )
         ]}
       >
-        <.icon name="hero-exclamation-triangle" class="size-4 mr-1" />
-        Pendentes ({@pending_count})
+        <.icon name="hero-exclamation-triangle" class="size-4 mr-1" /> Pending ({@pending_count})
       </button>
 
       <button
@@ -198,13 +197,13 @@
         ]}
       >
         <.icon name="hero-link-slash" class="size-4 mr-1" />
-        Transferências sem par ({@unmatched_transfers_count})
+        Unmatched Transfers ({@unmatched_transfers_count})
       </button>
     </div>
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-    <!-- Card de Saldo -->
+    <!-- Balance Card -->
     <div
       class={[
         "stats shadow bg-base-100 border border-base-300 transition-all",
@@ -214,7 +213,7 @@
     >
       <div class="stat">
         <div class="stat-title flex items-center gap-2">
-          Saldo
+          Balance
           <.icon
             :if={@filters["account_id"] != ""}
             name="hero-pencil-square"
@@ -226,47 +225,49 @@
         </div>
         <div class="stat-desc">
           {if @filters["account_id"] != "",
-            do: "Saldo desta conta",
-            else: "Soma de todas as contas"}
+            do: "This account balance",
+            else: "Sum of all accounts"}
         </div>
       </div>
     </div>
     
-<!-- Card de Receitas -->
+<!-- Income Card -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title text-success flex items-center gap-1">
-          <.icon name="hero-arrow-up-circle" class="size-3" /> Receitas ({@summary.month_name})
+          <.icon name="hero-arrow-up-circle" class="size-3" /> Income ({@summary.month_name})
         </div>
         <div class="stat-value text-success font-black text-2xl">
           {format_currency(@summary.income)}
         </div>
         <div class="stat-desc">
-          Ganhos {if @filters["account_id"] != "", do: "nesta conta", else: "em todas as contas"}
+          Gains {if @filters["account_id"] != "", do: "in this account", else: "in all accounts"}
         </div>
       </div>
     </div>
     
-<!-- Card de Despesas -->
+<!-- Expenses Card -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title text-error flex items-center gap-1">
-          <.icon name="hero-arrow-down-circle" class="size-3" /> Despesas ({@summary.month_name})
+          <.icon name="hero-arrow-down-circle" class="size-3" /> Expenses ({@summary.month_name})
         </div>
         <div class="stat-value text-error font-black text-2xl">
           {format_currency(@summary.expenses)}
         </div>
         <div class="stat-desc">
-          Gastos {if @filters["account_id"] != "", do: "nesta conta", else: "em todas as contas"}
+          Spending {if @filters["account_id"] != "",
+            do: "in this account",
+            else: "in all accounts"}
         </div>
       </div>
     </div>
     
-<!-- Card de Balanço -->
+<!-- Result Card -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
         <div class="stat-title font-bold flex items-center gap-1">
-          <.icon name="hero-scale" class="size-3" /> Balanço ({@summary.month_name})
+          <.icon name="hero-scale" class="size-3" /> Result ({@summary.month_name})
         </div>
         <% balance = Decimal.sub(@summary.income, @summary.expenses) %>
         <div class={[
@@ -275,12 +276,12 @@
         ]}>
           {format_currency(balance)}
         </div>
-        <div class="stat-desc">Resultado no mês</div>
+        <div class="stat-desc">Monthly result</div>
       </div>
     </div>
   </div>
   
-<!-- Modal de Correção de Saldo -->
+<!-- Balance Correction Modal -->
   <.modal
     :if={@show_balance_correction}
     id="balance-correction-modal"
@@ -289,10 +290,10 @@
   >
     <div class="p-2">
       <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
-        Corrigir Saldo
+        Fix Balance
       </h2>
       <p class="text-xs opacity-60 mb-6">
-        Ajustando saldo da conta:
+        Adjusting account balance:
         <strong>{Enum.find(@accounts, &(&1.id == @filters["account_id"])).name}</strong>
       </p>
 
@@ -305,7 +306,7 @@
       >
         <div class="space-y-1">
           <label class="block text-xs font-black uppercase opacity-40">
-            Saldo Atual Registrado
+            Currently Registered Balance
           </label>
           <div class="text-xl font-mono font-bold">
             {format_currency(@summary.current_balance)}
@@ -316,7 +317,7 @@
           <.input
             field={f[:new_balance]}
             type="number"
-            label="Novo Saldo Real"
+            label="New Real Balance"
             step="0.01"
             required
             placeholder="0.00"
@@ -329,7 +330,7 @@
             class="flex items-center gap-2 px-3 py-2 bg-base-200 rounded-lg border border-base-300 animate-in fade-in slide-in-from-top-1 duration-200"
           >
             <span class="text-[10px] font-black uppercase opacity-50 text-nowrap">
-              Diferença (Ajuste):
+              Difference (Adjustment):
             </span>
             <span class={[
               "font-mono font-bold text-sm",
@@ -341,7 +342,7 @@
         </div>
 
         <div class="space-y-3">
-          <label class="block text-sm font-bold text-primary">Como aplicar o ajuste?</label>
+          <label class="block text-sm font-bold text-primary">How to apply the adjustment?</label>
           <div class="flex flex-col gap-2">
             <label class="flex items-center gap-3 p-3 border border-base-300 rounded-xl cursor-pointer hover:bg-base-200 transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5">
               <input
@@ -352,9 +353,9 @@
                 checked
               />
               <div>
-                <span class="block font-bold text-sm">Rendimentos</span>
+                <span class="block font-bold text-sm">Income</span>
                 <span class="block text-[10px] opacity-60">
-                  Cria uma nova transação com a diferença de valor.
+                  Creates a new transaction with the difference.
                 </span>
               </div>
             </label>
@@ -366,9 +367,9 @@
                 class="radio radio-primary"
               />
               <div>
-                <span class="block font-bold text-sm">Ajuste Inicial</span>
+                <span class="block font-bold text-sm">Initial Adjustment</span>
                 <span class="block text-[10px] opacity-60">
-                  Altera o saldo do balanço mais antigo e recalcula o histórico.
+                  Changes the oldest balance and recalculates history.
                 </span>
               </div>
             </label>
@@ -376,15 +377,15 @@
         </div>
 
         <div class="pt-2">
-          <.button phx-disable-with="Ajustando..." variant="primary" class="w-full">
-            Confirmar Ajuste
+          <.button phx-disable-with="Adjusting..." variant="primary" class="w-full">
+            Confirm Adjustment
           </.button>
         </div>
       </.form>
     </div>
   </.modal>
   
-<!-- Tabela Unificada com Filtros -->
+<!-- Unified Table with Filters -->
   <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">
     <div class="overflow-x-auto">
       <form id="transaction-filters" phx-change="apply_filters" class="m-0 p-0">
@@ -399,12 +400,12 @@
               <th class="w-40 px-4">
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center justify-between pr-2">
-                    <span>Data</span>
+                    <span>Date</span>
                     <button
                       type="button"
                       phx-click="toggle_sort"
                       class="btn btn-ghost btn-xs p-0 hover:bg-transparent"
-                      title="Alternar ordenação"
+                      title="Toggle sorting"
                     >
                       <.icon
                         name={
@@ -426,12 +427,12 @@
               </th>
               <th class="px-4">
                 <div class="flex flex-col gap-1">
-                  <span>Descrição</span>
+                  <span>Description</span>
                   <input
                     type="text"
                     name="search"
                     value={@filters["search"]}
-                    placeholder="Buscar..."
+                    placeholder="Search..."
                     class="input input-bordered input-xs font-normal w-full"
                     phx-debounce="300"
                   />
@@ -439,7 +440,7 @@
               </th>
               <th class="w-32 px-4">
                 <div class="flex flex-col gap-1 text-right">
-                  <span>Valor</span>
+                  <span>Amount</span>
                   <input
                     type="number"
                     name="amount"
@@ -454,15 +455,15 @@
               <th class="w-48 px-4">
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center justify-between pr-2">
-                    <span>Categoria</span>
+                    <span>Category</span>
                   </div>
                   <select
                     name="category_id"
                     class="select select-bordered select-xs font-normal w-full"
                   >
-                    <option value="">Todas</option>
+                    <option value="">All</option>
                     <option value="nil" selected={@filters["category_id"] == "nil"}>
-                      Pendente
+                      Pending
                     </option>
                     <%= for category <- @categories do %>
                       <option
@@ -477,12 +478,12 @@
               </th>
               <th class="w-40 px-4">
                 <div class="flex flex-col gap-1">
-                  <span>Conta</span>
+                  <span>Account</span>
                   <select
                     name="account_id"
                     class="select select-bordered select-xs font-normal w-full"
                   >
-                    <option value="">Todas</option>
+                    <option value="">All</option>
                     <%= for account <- @accounts do %>
                       <option value={account.id} selected={@filters["account_id"] == account.id}>
                         {account.name}
@@ -498,7 +499,7 @@
                     type="button"
                     phx-click="clear_filters"
                     class="btn btn-ghost btn-xs text-error p-0"
-                    title="Limpar filtros"
+                    title="Clear filters"
                   >
                     <.icon name="hero-x-circle" class="size-4" />
                   </button>
@@ -570,7 +571,7 @@
                         placeholder={
                           if transaction.category,
                             do: CashLens.Categories.Category.full_name(transaction.category),
-                            else: "Pendente"
+                            else: "Pending"
                         }
                         class={[
                           "input input-bordered input-xs w-full font-bold uppercase text-[9px] cursor-pointer",
@@ -585,7 +586,7 @@
                         phx-value-transaction_id={transaction.id}
                         phx-value-category_id=""
                         class="btn btn-ghost btn-xs p-0 text-error min-h-0 h-5 w-5 opacity-0 group-hover/cat:opacity-100 transition-opacity"
-                        title="Limpar Categoria"
+                        title="Clear Category"
                       >
                         <.icon name="hero-x-mark" class="size-3" />
                       </button>
@@ -599,7 +600,7 @@
                           >
                             <.icon name="hero-plus-circle" class="size-4" />
                             <span>
-                              Nova Categoria
+                              New Category
                             </span>
                           </button>
                         </li>
@@ -609,8 +610,8 @@
                   <%= if transaction.category && transaction.category.slug == "transfer" do %>
                     <span title={
                       if transaction.transfer_key,
-                        do: "Transferência vinculada",
-                        else: "Transferência pendente de vínculo"
+                        do: "Linked transfer",
+                        else: "Transfer pending link"
                     }>
                       <.icon
                         :if={transaction.transfer_key}
@@ -624,7 +625,7 @@
                       />
                     </span>
                   <% end %>
-                  <span :if={transaction.reimbursement_link_key} title="Reembolsado">
+                  <span :if={transaction.reimbursement_link_key} title="Reimbursed">
                     <.icon name="hero-shield-check" class="size-3 text-success" />
                   </span>
                 </div>
@@ -640,8 +641,8 @@
                       phx-click="unmark_reimbursable"
                       phx-value-id={transaction.id}
                       class="btn btn-ghost btn-xs text-error"
-                      title="Remover marcação de reembolso"
-                      aria-label="Remover Reembolso"
+                      title="Remove reimbursement mark"
+                      aria-label="Remove Reimbursement"
                     >
                       <.icon name="hero-x-circle" class="size-3" />
                     </button>
@@ -653,8 +654,8 @@
                       phx-click="mark_reimbursable"
                       phx-value-id={transaction.id}
                       class="btn btn-ghost btn-xs text-primary"
-                      title="Marcar Reembolsável"
-                      aria-label="Marcar Reembolsável"
+                      title="Mark Reimbursable"
+                      aria-label="Mark Reimbursable"
                     >
                       <.icon name="hero-banknotes" class="size-3" />
                     </button>
@@ -665,8 +666,8 @@
                       phx-click="open_reimbursement_link"
                       phx-value-id={transaction.id}
                       class="btn btn-ghost btn-xs text-success"
-                      title="Este é um reembolso"
-                      aria-label="Vincular Reembolso"
+                      title="This is a reimbursement"
+                      aria-label="Link Reimbursement"
                     >
                       <.icon name="hero-arrow-path" class="size-3" />
                     </button>
@@ -677,8 +678,8 @@
                       phx-click="open_transfer_link"
                       phx-value-id={transaction.id}
                       class="btn btn-ghost btn-xs text-primary"
-                      title="Vincular par da transferência"
-                      aria-label="Vincular Transferência"
+                      title="Link transfer pair"
+                      aria-label="Link Transfer"
                     >
                       <.icon name="hero-link" class="size-3" />
                     </button>
@@ -695,7 +696,7 @@
                     phx-click="confirm_delete"
                     phx-value-id={transaction.id}
                     class="btn btn-ghost btn-xs text-error px-1"
-                    aria-label="Excluir"
+                    aria-label="Delete"
                   >
                     <.icon name="hero-trash" class="size-3" />
                   </button>
@@ -729,22 +730,22 @@
     pending_reimbursements={@pending_reimbursements}
   />
   
-<!-- Modais Existentes -->
+<!-- Existing Modals -->
   <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
     <div class="p-4 text-center">
       <div class="w-20 h-20 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
         <.icon name="hero-trash" class="size-10" />
       </div>
-      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Excluir Transação?</h2>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Delete Transaction?</h2>
       <p class="text-base-content/60 mb-10">
-        Deseja realmente apagar esta transação? Esta ação não pode ser desfeita.
+        Do you really want to delete this transaction? This action cannot be undone.
       </p>
       <div class="flex flex-col sm:flex-row gap-3">
         <button phx-click={@confirm_modal.action} class="btn btn-error btn-lg flex-1 rounded-2xl">
-          Sim, Apagar
+          Yes, Delete
         </button>
         <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
-          Cancelar
+          Cancel
         </button>
       </div>
     </div>
@@ -770,11 +771,11 @@
       <div class="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-6">
         <.icon name="hero-sparkles" class="size-8" />
       </div>
-      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Categorização em Massa</h2>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Bulk Categorization</h2>
       <p class="text-sm opacity-70 mb-6">
-        Encontramos mais <strong>{length(@bulk_confirmation.items)}</strong>
-        transações com a descrição <span class="font-mono bg-base-300 px-1 rounded">"{@bulk_confirmation.description}"</span>.
-        Deseja categorizar todas como <strong class="text-primary">{@bulk_confirmation.category_name}</strong>?
+        We found <strong>{length(@bulk_confirmation.items)}</strong>
+        more transactions with description <span class="font-mono bg-base-300 px-1 rounded">"{@bulk_confirmation.description}"</span>.
+        Do you want to categorize all as <strong class="text-primary">{@bulk_confirmation.category_name}</strong>?
       </p>
 
       <div class="flex flex-col sm:flex-row gap-3">
@@ -782,10 +783,10 @@
           phx-click="apply_bulk_category"
           class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
         >
-          Sim, Categorizar Tudo
+          Yes, Categorize All
         </button>
         <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
-          Não, Apenas Esta
+          No, Only This One
         </button>
       </div>
     </div>

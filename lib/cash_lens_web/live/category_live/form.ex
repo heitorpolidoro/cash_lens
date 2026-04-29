@@ -10,7 +10,7 @@ defmodule CashLensWeb.CategoryLive.Form do
     <div class="max-w-2xl mx-auto py-8">
       <.header>
         {@page_title}
-        <:subtitle>Organize sua hierarquia financeira e defina regras de identificação.</:subtitle>
+        <:subtitle>Organize your financial hierarchy and define identification rules.</:subtitle>
       </.header>
 
       <.form
@@ -26,65 +26,65 @@ defmodule CashLensWeb.CategoryLive.Form do
             <.input
               field={f[:name]}
               type="text"
-              label="Nome da Categoria"
-              placeholder="Ex: Moradia, Netflix..."
+              label="Category Name"
+              placeholder="Ex: Housing, Netflix..."
               required
             />
           </div>
 
-          <div class="divider">Hierarquia</div>
+          <div class="divider">Hierarchy</div>
 
           <.input
             field={f[:parent_id]}
             type="select"
-            label="Categoria Pai (Opcional)"
+            label="Parent Category (Optional)"
             options={Enum.map(@parent_options, &{CashLens.Categories.Category.full_name(&1), &1.id})}
-            prompt="Nenhuma (Categoria Principal)"
+            prompt="None (Main Category)"
           />
 
-          <div class="divider">Configurações</div>
+          <div class="divider">Settings</div>
 
           <.input
             field={f[:type]}
             type="select"
-            label="Tipo de Gasto"
+            label="Spending Type"
             options={[
-              {"Fixo (Contas Obrigatórias)", "fixed"},
-              {"Variável (Estilo de Vida)", "variable"}
+              {"Fixed (Essential Bills)", "fixed"},
+              {"Variable (Lifestyle)", "variable"}
             ]}
           />
 
           <.input
             field={f[:default_reimbursable]}
             type="checkbox"
-            label="Marcar automaticamente para reembolso?"
+            label="Mark automatically for reimbursement?"
           />
           <p class="text-[10px] opacity-50 px-1 -mt-4 mb-4">
-            Transações desta categoria nascerão com status "Pendente" de reembolso.
+            Transactions in this category will be created with "Pending" reimbursement status.
           </p>
 
           <.input
             field={f[:keywords]}
             type="textarea"
-            label="Palavras-chave (Separadas por vírgula)"
+            label="Keywords (Comma separated)"
             placeholder="Ex: UBER, 99APP, TAXI..."
             rows="3"
           />
           <p class="text-[10px] opacity-50 italic">
-            Sempre que uma transação contiver uma dessas palavras, ela será categorizada automaticamente aqui.
+            Whenever a transaction contains one of these words, it will be automatically categorized here.
           </p>
         </div>
 
         <div class="flex flex-col gap-3">
           <.button
-            phx-disable-with="Salvando..."
+            phx-disable-with="Saving..."
             class="w-full btn-primary btn-lg shadow-xl shadow-primary/20 rounded-2xl"
           >
-            <.icon name="hero-check-circle" class="size-5 mr-2" /> Salvar Categoria
+            <.icon name="hero-check-circle" class="size-5 mr-2" /> Save Category
           </.button>
 
           <.link navigate={~p"/categories"} class="btn btn-ghost btn-sm">
-            <.icon name="hero-arrow-left" class="size-3 mr-1" /> Voltar para lista
+            <.icon name="hero-arrow-left" class="size-3 mr-1" /> Back to list
           </.link>
         </div>
       </.form>
@@ -110,7 +110,7 @@ defmodule CashLensWeb.CategoryLive.Form do
     parents = Enum.reject(socket.assigns.parent_options, &(&1.id == id))
 
     socket
-    |> assign(:page_title, "Editar Categoria")
+    |> assign(:page_title, "Edit Category")
     |> assign(:category, category)
     |> assign(:parent_options, parents)
     |> assign(:form, to_form(Categories.change_category(category)))
@@ -118,7 +118,7 @@ defmodule CashLensWeb.CategoryLive.Form do
 
   defp apply_action(socket, :new, _params) do
     socket
-    |> assign(:page_title, "Nova Categoria")
+    |> assign(:page_title, "New Category")
     |> assign(:category, %Category{default_reimbursable: false})
     |> assign(:form, to_form(Categories.change_category(%Category{default_reimbursable: false})))
   end
@@ -140,7 +140,7 @@ defmodule CashLensWeb.CategoryLive.Form do
       {:ok, _category} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Categoria atualizada!")
+         |> put_flash(:info, "Category updated!")
          |> push_navigate(to: ~p"/categories")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -153,7 +153,7 @@ defmodule CashLensWeb.CategoryLive.Form do
       {:ok, _category} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Categoria criada com sucesso!")
+         |> put_flash(:info, "Category created successfully!")
          |> push_navigate(to: ~p"/categories")}
 
       {:error, %Ecto.Changeset{} = changeset} ->

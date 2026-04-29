@@ -18,7 +18,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       {:ok, _index_live, html} = live(conn, ~p"/reimbursements")
 
-      assert html =~ "Gestão de Reembolsos"
+      assert html =~ "Reimbursement Management"
       assert html =~ "Lunch for team"
     end
 
@@ -39,7 +39,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
         |> element("button[phx-click='mark_requested'][phx-value-id='#{tx.id}']")
         |> render_click()
 
-      assert html =~ "Solicitado"
+      assert html =~ "Requested"
       assert CashLens.Transactions.get_transaction!(tx.id).reimbursement_status == "requested"
     end
 
@@ -70,14 +70,14 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       # Now the modal is open, we can see the credit
       assert render(index_live) =~ "Company refund"
-      assert render(index_live) =~ "Match Perfeito!"
+      assert render(index_live) =~ "Perfect Match!"
 
       # Confirm link
       index_live
       |> element("button[phx-click='confirm_link'][phx-value-credit-id='#{credit.id}']")
       |> render_click()
 
-      assert render(index_live) =~ "1 despesas vinculadas!"
+      assert render(index_live) =~ "1 expenses linked!"
 
       updated_expense = CashLens.Transactions.get_transaction!(expense.id)
       assert updated_expense.reimbursement_status == "paid"

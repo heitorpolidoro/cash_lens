@@ -12,7 +12,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Transações")
+     |> assign(:page_title, "Transactions")
      |> assign(:show_import_modal, false)
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
@@ -98,7 +98,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
       {:noreply,
        socket
-       |> put_flash(:info, "Vínculo de reembolso removido.")
+       |> put_flash(:info, "Reimbursement link removed.")
        |> stream(
          :transactions,
          Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -226,7 +226,7 @@ defmodule CashLensWeb.TransactionLive.Index do
           else: {:noreply, stream_delete(socket, :transactions, tx)}
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Falha ao atualizar")}
+        {:noreply, put_flash(socket, :error, "Update failed")}
     end
   end
 
@@ -240,7 +240,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:bulk_confirmation, nil)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:info, "Categorizado em massa!")
+     |> put_flash(:info, "Bulk categorized!")
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -255,7 +255,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:info, "Regras aplicadas!")
+     |> put_flash(:info, "Rules applied!")
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -536,14 +536,14 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     case type do
       "rendimentos" ->
-        # Find or create "Rendimentos" category
+        # Find or create "Income" category
         category =
-          case Categories.get_category_by_slug("rendimentos") do
+          case Categories.get_category_by_slug("income") do
             nil ->
               {:ok, cat} =
                 Categories.create_category(%{
-                  name: "Rendimentos",
-                  slug: "rendimentos",
+                  name: "Income",
+                  slug: "income",
                   type: "variable"
                 })
 
@@ -560,7 +560,7 @@ defmodule CashLensWeb.TransactionLive.Index do
           category_id: category.id,
           amount: diff,
           date: today,
-          description: "Ajuste de Saldo (Rendimentos)"
+          description: "Balance Adjustment (Income)"
         })
 
         # Recalculate balance for the current month
@@ -588,7 +588,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:show_balance_correction, false)
-     |> put_flash(:info, "Saldo ajustado com sucesso!")
+     |> put_flash(:info, "Balance adjusted successfully!")
      |> calculate_summary()
      |> stream(
        :transactions,
@@ -602,7 +602,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:show_reimbursement_modal, false)
-     |> put_flash(:info, "Reembolso vinculado e categorizado!")
+     |> put_flash(:info, "Reimbursement linked and categorized!")
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -647,7 +647,7 @@ defmodule CashLensWeb.TransactionLive.Index do
         |> assign(:show_quick_category_modal, false)
         |> assign(:categories, Categories.list_categories())
         |> assign(:pending_count, Transactions.count_pending_transactions())
-        |> put_flash(:info, "Categoria criada!")
+        |> put_flash(:info, "Category created!")
 
       # Check against database ignore patterns
       ignore_patterns = Transactions.list_bulk_ignore_patterns()
@@ -703,7 +703,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:info, "Sucesso! #{count} transações importadas.")
+     |> put_flash(:info, "Success! #{count} transactions imported.")
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -713,7 +713,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_info({:import_error, reason}, socket) do
-    {:noreply, put_flash(socket, :error, "Erro na importação: #{reason}")}
+    {:noreply, put_flash(socket, :error, "Import error: #{reason}")}
   end
 
   @impl true
@@ -851,21 +851,6 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   defp translate_month(month) do
-    months = %{
-      "January" => "Janeiro",
-      "February" => "Fevereiro",
-      "March" => "Março",
-      "April" => "Abril",
-      "May" => "Maio",
-      "June" => "Junho",
-      "July" => "Julho",
-      "August" => "Agosto",
-      "September" => "Setembro",
-      "October" => "Outubro",
-      "November" => "Novembro",
-      "December" => "Dezembro"
-    }
-
-    months[month] || month
+    month
   end
 end

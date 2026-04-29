@@ -19,7 +19,7 @@ defmodule CashLensWeb.CategoryLiveTest do
     test "lists all categories", %{conn: conn, category: category} do
       {:ok, _index_live, html} = live(conn, ~p"/categories")
 
-      assert html =~ "Listando Categorias"
+      assert html =~ "Categories"
       assert html =~ category.name
     end
 
@@ -28,11 +28,11 @@ defmodule CashLensWeb.CategoryLiveTest do
 
       assert {:ok, form_live, _} =
                index_live
-               |> element("a", "Nova Categoria")
+               |> element("a", "New Category")
                |> render_click()
                |> follow_redirect(conn, ~p"/categories/new")
 
-      assert render(form_live) =~ "Nova Categoria"
+      assert render(form_live) =~ "New Category"
 
       assert form_live
              |> form("#category-form", category: @invalid_attrs)
@@ -47,7 +47,7 @@ defmodule CashLensWeb.CategoryLiveTest do
                |> follow_redirect(conn, ~p"/categories")
 
       html = render(index_live)
-      assert html =~ "Categoria criada com sucesso!"
+      assert html =~ "Category created successfully!"
       assert html =~ unique_name
     end
 
@@ -60,7 +60,7 @@ defmodule CashLensWeb.CategoryLiveTest do
                |> render_click()
                |> follow_redirect(conn, ~p"/categories/#{category}/edit")
 
-      assert render(form_live) =~ "Editar Categoria"
+      assert render(form_live) =~ "Edit Category"
 
       assert form_live
              |> form("#category-form", category: @invalid_attrs)
@@ -73,7 +73,7 @@ defmodule CashLensWeb.CategoryLiveTest do
                |> follow_redirect(conn, ~p"/categories")
 
       html = render(index_live)
-      assert html =~ "Categoria atualizada!"
+      assert html =~ "Category updated!"
       assert html =~ "some updated name"
     end
 
@@ -84,7 +84,7 @@ defmodule CashLensWeb.CategoryLiveTest do
              |> element("#categories-#{category.id} button[phx-click='confirm_delete']")
              |> render_click()
 
-      assert index_live |> element("button", "Sim, Apagar") |> render_click()
+      assert index_live |> element("button", "Yes, Delete") |> render_click()
       refute has_element?(index_live, "#categories-#{category.id}")
     end
   end
@@ -95,7 +95,7 @@ defmodule CashLensWeb.CategoryLiveTest do
     test "displays category", %{conn: conn, category: category} do
       {:ok, _show_live, html} = live(conn, ~p"/categories/#{category}")
 
-      assert html =~ "Categoria:"
+      assert html =~ "Category:"
       assert html =~ category.name
     end
 
@@ -104,11 +104,11 @@ defmodule CashLensWeb.CategoryLiveTest do
 
       assert {:ok, form_live, _} =
                show_live
-               |> element("a", "Editar Categoria")
+               |> element("a", "Edit Category")
                |> render_click()
                |> follow_redirect(conn, ~p"/categories/#{category}/edit")
 
-      assert render(form_live) =~ "Editar Categoria"
+      assert render(form_live) =~ "Edit Category"
 
       assert form_live
              |> form("#category-form", category: @invalid_attrs)
@@ -121,7 +121,7 @@ defmodule CashLensWeb.CategoryLiveTest do
                |> follow_redirect(conn, ~p"/categories")
 
       html = render(index_live)
-      assert html =~ "Categoria atualizada!"
+      assert html =~ "Category updated!"
       assert html =~ "some updated name"
     end
   end
