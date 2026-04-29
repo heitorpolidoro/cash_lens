@@ -1,6 +1,9 @@
 defmodule CashLens.Parsers.IngestorTest do
   use CashLens.DataCase, async: false
+  import Mox
   alias CashLens.Parsers.Ingestor
+
+  setup :verify_on_exit!
 
   @bb_sample "test/support/fixtures/files/bb_sample.csv"
 
@@ -96,7 +99,13 @@ defmodule CashLens.Parsers.IngestorTest do
       # If parser_type is sem_parar_pdf but file is not a valid PDF or pdftotext fails
       account = account_fixture(parser_type: "sem_parar_pdf")
       file_path = "test/support/fixtures/files/fail_#{account.id}.pdf"
-      File.write!(file_path, "not a pdf content")
+      content = "not a pdf content"
+      File.write!(file_path, content)
+
+      expect(CashLens.Parsers.PDFConverterMock, :convert, fn ^file_path ->
+        {:error, :failed}
+      end)
+
       # pdftotext will fail, returning the original content
       assert {:ok, 0} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)
@@ -115,6 +124,10 @@ defmodule CashLens.Parsers.IngestorTest do
       file_path = "test/support/fixtures/files/sem_parar_#{account.id}.pdf"
       content = "Plano Contratado 01/01/26 R$ 10,00\n"
       File.write!(file_path, content)
+
+      expect(CashLens.Parsers.PDFConverterMock, :convert, fn ^file_path ->
+        {:ok, content}
+      end)
 
       # Even if pdftotext fails, it falls back to content and parses
       assert {:ok, 1} = Ingestor.import_file(account, file_path)

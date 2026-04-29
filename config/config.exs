@@ -9,7 +9,8 @@ import Config
 
 config :cash_lens,
   ecto_repos: [CashLens.Repo],
-  generators: [timestamp_type: :utc_datetime, binary_id: true]
+  generators: [timestamp_type: :utc_datetime, binary_id: true],
+  pdf_converter: CashLens.Parsers.PDFConverter.SystemConverter
 
 # Configure the endpoint
 config :cash_lens, CashLensWeb.Endpoint,

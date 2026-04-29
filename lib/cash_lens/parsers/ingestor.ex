@@ -40,8 +40,10 @@ defmodule CashLens.Parsers.Ingestor do
     content =
       cond do
         String.ends_with?(file_path, ".pdf") or account.parser_type == "sem_parar_pdf" ->
-          case System.cmd("pdftotext", ["-layout", file_path, "-"]) do
-            {text, 0} -> text
+          converter = Application.get_env(:cash_lens, :pdf_converter)
+
+          case converter.convert(file_path) do
+            {:ok, text} -> text
             _ -> content
           end
 
