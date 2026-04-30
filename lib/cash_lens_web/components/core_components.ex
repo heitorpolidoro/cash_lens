@@ -249,7 +249,7 @@ defmodule CashLensWeb.CoreComponents do
       <thead>
         <tr>
           <th :for={col <- @col}>{col[:label]}</th>
-          <th :if={@action != []}><span class="sr-only">Ações</span></th>
+          <th :if={@action != []}><span class="sr-only">Actions</span></th>
         </tr>
       </thead>
       <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>

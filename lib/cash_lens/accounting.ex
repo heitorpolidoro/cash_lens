@@ -97,19 +97,22 @@ defmodule CashLens.Accounting do
   end
 
   defp handle_initial_balance_fallback(account_id, year, month, first_of_month, existing_balance) do
-    case find_latest_snapshot(account_id, year, month) do
-      %Balance{} = snapshot ->
-        Logger.info("Found snapshot at #{snapshot.month}/#{snapshot.year}. Re-calculating...")
-        calculate_from_point(account_id, snapshot, year, month)
+    case find_latest_balance_before(account_id, year, month) do
+      %Balance{} = last_balance ->
+        Logger.info(
+          "Found previous balance at #{last_balance.month}/#{last_balance.year}. Re-calculating gap..."
+        )
+
+        calculate_from_point(account_id, last_balance, year, month)
 
       nil ->
         resolve_root_or_base_balance(account_id, first_of_month, existing_balance)
     end
   end
 
-  defp find_latest_snapshot(account_id, year, month) do
+  defp find_latest_balance_before(account_id, year, month) do
     Balance
-    |> where([b], b.account_id == ^account_id and b.is_snapshot == true)
+    |> where([b], b.account_id == ^account_id)
     |> where([b], b.year < ^year or (b.year == ^year and b.month < ^month))
     |> order_by([b], desc: b.year, desc: b.month)
     |> Repo.one()

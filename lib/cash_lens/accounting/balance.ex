@@ -42,5 +42,6 @@ defmodule CashLens.Accounting.Balance do
       :final_balance,
       :account_id
     ])
+    |> foreign_key_constraint(:account_id)
   end
 end

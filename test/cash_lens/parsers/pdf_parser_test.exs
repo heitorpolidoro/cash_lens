@@ -69,23 +69,34 @@ defmodule CashLens.PDFParserTest do
 
     test "handles malformed data in internal helpers" do
       text = """
-      Plano Contratado 01/01/26 R$ INVALID
+      Plano Contratado 01/01/26 R$ 1,2,3
       ABC1D23 INVALID_DATE DESCRIPTION R$ 10,00
       ABC1D23 02/01/26 DESCRIPTION R$ 10,00
               às INVALID_TIME EXTRA
       """
 
       transactions = PDFParser.parse(text, :sem_parar)
-
-      # 1. Invalid fee amount -> 0
-      # 2. First usage regex fails to match due to INVALID_DATE
-      # 3. Second usage has valid date but invalid time
       assert length(transactions) >= 1
 
-      # Test invalid date fallback
-      # Since we can't easily trigger the private split fallback with the current regexes 
-      # without bypassing them, we can trust the coverage will hit if we provide bad data 
-      # that still matches the initial regex but fails later.
+      # The fee with "1,2,3" amount should result in Decimal 0 after parse_amount
+      fee = Enum.find(transactions, &(&1.description == "Mensalidade Sem Parar"))
+      assert fee.amount == Decimal.new("0")
+
+      # The usage with INVALID_DATE should fallback to Date.utc_today()
+      # (Because it matches \S+ and then parse_date hits the fallback)
+      usage1 = Enum.find(transactions, &(&1.description == "DESCRIPTION"))
+      assert usage1.date == Date.utc_today()
+
+      # The usage with INVALID_TIME should fallback to nil time
+      # Note: with loosened regex, "INVALID_TIME" matches \S+ in regex_l2
+      usage2 = Enum.find(transactions, &(&1.description == "DESCRIPTION EXTRA"))
+      assert usage2.time == nil
+    end
+
+    test "handles malformed amount in plan fee" do
+      text = "Plano Contratado: 01/01/26 R$ 1,2,3"
+      [tx] = PDFParser.parse(text, :sem_parar)
+      assert tx.amount == Decimal.new("0")
     end
 
     test "handles nil and empty inputs gracefully" do

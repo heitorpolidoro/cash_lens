@@ -24,7 +24,7 @@ defmodule CashLensWeb.BalanceLiveTest do
 
     test "lists all balances", %{conn: conn} do
       {:ok, _index_live, html} = live(conn, ~p"/balances")
-      assert html =~ "Listando Balanços"
+      assert html =~ "Listing Balances"
     end
 
     test "saves new balance", %{conn: conn} do
@@ -33,11 +33,11 @@ defmodule CashLensWeb.BalanceLiveTest do
 
       assert {:ok, form_live, _} =
                index_live
-               |> element("a", "Novo Balanço")
+               |> element("a", "New Balance")
                |> render_click()
                |> follow_redirect(conn, ~p"/balances/new")
 
-      assert render(form_live) =~ "Gerar Balanços Mensais"
+      assert render(form_live) =~ "Generate Monthly Balances"
 
       assert {:ok, index_live, _html} =
                form_live
@@ -46,7 +46,7 @@ defmodule CashLensWeb.BalanceLiveTest do
                |> follow_redirect(conn, ~p"/balances")
 
       html = render(index_live)
-      assert html =~ "Balanços gerados!"
+      assert html =~ "Balances generated!"
     end
 
     test "updates balance in listing", %{conn: conn, balance: balance} do
@@ -58,7 +58,7 @@ defmodule CashLensWeb.BalanceLiveTest do
                |> render_click()
                |> follow_redirect(conn, ~p"/balances/#{balance}/edit")
 
-      assert render(form_live) =~ "Editar Balanço"
+      assert render(form_live) =~ "Edit Balance"
 
       assert form_live
              |> form("#balance-form", balance: @invalid_attrs)
@@ -71,7 +71,7 @@ defmodule CashLensWeb.BalanceLiveTest do
                |> follow_redirect(conn, ~p"/balances")
 
       html = render(index_live)
-      assert html =~ "Balanço atualizado!"
+      assert html =~ "Balance updated!"
     end
 
     test "deletes balance in listing", %{conn: conn, balance: balance} do
@@ -81,7 +81,7 @@ defmodule CashLensWeb.BalanceLiveTest do
              |> element("#balances-#{balance.id} button[phx-click='confirm_delete']")
              |> render_click()
 
-      assert index_live |> element("button", "Sim, Apagar") |> render_click()
+      assert index_live |> element("button", "Yes, Delete") |> render_click()
       refute has_element?(index_live, "#balances-#{balance.id}")
     end
   end
@@ -91,7 +91,7 @@ defmodule CashLensWeb.BalanceLiveTest do
 
     test "displays balance", %{conn: conn, balance: balance} do
       {:ok, _show_live, html} = live(conn, ~p"/balances/#{balance}")
-      assert html =~ "Balanço"
+      assert html =~ "Balance"
     end
 
     test "updates balance and returns to list", %{conn: conn, balance: balance} do
@@ -103,7 +103,7 @@ defmodule CashLensWeb.BalanceLiveTest do
                |> render_click()
                |> follow_redirect(conn, ~p"/balances/#{balance}/edit?return_to=show")
 
-      assert render(form_live) =~ "Editar Balanço"
+      assert render(form_live) =~ "Edit Balance"
 
       assert form_live
              |> form("#balance-form", balance: @invalid_attrs)
@@ -116,7 +116,7 @@ defmodule CashLensWeb.BalanceLiveTest do
                |> follow_redirect(conn, ~p"/balances")
 
       html = render(index_live)
-      assert html =~ "Balanço atualizado!"
+      assert html =~ "Balance updated!"
     end
   end
 end

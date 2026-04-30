@@ -61,29 +61,29 @@ defmodule CashLensWeb.Formatters do
   end
 
   @doc """
-  Returns the abbreviated weekday name in Portuguese.
+  Returns the abbreviated weekday name in English.
   """
   def format_weekday(%Date{} = date) do
     case Date.day_of_week(date) do
-      1 -> "seg"
-      2 -> "ter"
-      3 -> "qua"
-      4 -> "qui"
-      5 -> "sex"
-      6 -> "sab"
-      7 -> "dom"
+      1 -> "mon"
+      2 -> "tue"
+      3 -> "wed"
+      4 -> "thu"
+      5 -> "fri"
+      6 -> "sat"
+      7 -> "sun"
     end
   end
 
   @doc """
-  Translates reimbursement status to Portuguese.
+  Translates reimbursement status to English.
   """
   def translate_reimbursement_status(nil, _amount), do: ""
-  def translate_reimbursement_status("pending", _amount), do: "Pendente"
-  def translate_reimbursement_status("requested", _amount), do: "Solicitado"
+  def translate_reimbursement_status("pending", _amount), do: "Pending"
+  def translate_reimbursement_status("requested", _amount), do: "Requested"
 
   def translate_reimbursement_status("paid", amount) do
-    if Decimal.lt?(amount, 0), do: "Reembolso Pago", else: "Reembolso"
+    if Decimal.lt?(amount, 0), do: "Reimbursement Paid", else: "Reimbursement"
   end
 
   def translate_reimbursement_status(other, _amount), do: String.capitalize(other)
@@ -93,5 +93,5 @@ defmodule CashLensWeb.Formatters do
   """
   def translate_parser_type("bb_csv"), do: "Banco do Brasil (CSV)"
   def translate_parser_type("sem_parar_pdf"), do: "Sem Parar (PDF)"
-  def translate_parser_type(_), do: "Não configurado"
+  def translate_parser_type(_), do: "Not configured"
 end

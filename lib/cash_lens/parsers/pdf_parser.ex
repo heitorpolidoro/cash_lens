@@ -20,7 +20,7 @@ defmodule CashLens.Parsers.PDFParser do
   defp extract_plan_fee(text) do
     # Pattern: Plano Contratado ... R$ 58,17
     # Using scan to ensure we get all (though usually it's just one)
-    regex = ~r/Plano Contratado.*?(\d{2}\/\d{2}\/\d{2})\s+R\$\s+([\d,.]+)/s
+    regex = ~r/Plano Contratado.*?(\d{2}\/\d{2}\/\d{2}|[A-Z_]+)\s+R\$\s+([\d,.]+)/s
 
     Regex.scan(regex, text)
     |> Enum.map(fn [_, date_str, amount_str] ->
@@ -28,7 +28,11 @@ defmodule CashLens.Parsers.PDFParser do
         date: parse_date(date_str),
         time: nil,
         description: "Mensalidade Sem Parar",
-        amount: parse_amount(amount_str) |> Decimal.mult(-1)
+        amount:
+          parse_amount(amount_str)
+          |> (fn amt ->
+                if Decimal.eq?(amt, 0), do: Decimal.new("0"), else: Decimal.mult(amt, -1)
+              end).()
       }
     end)
   end
@@ -37,10 +41,11 @@ defmodule CashLens.Parsers.PDFParser do
     lines = String.split(text, "\n")
 
     # regex for line 1: optional vehicle plate, date, description, amount
-    regex_l1 = ~r/(?:[A-Z0-9]{7})?\s*(\d{2}\/\d{2}\/\d{2})\s+(.*?)\s+R\$\s+([\d,.]+)/
+    regex_l1 =
+      ~r/^(?!.*Plano Contratado)(?:[A-Z0-9]{7})?\s*(\d{2}\/\d{2}\/\d{2}|[A-Z_]+)\s+(.*?)\s+R\$\s+([\d,.]+)/
 
     # regex for line 2: "às" time, more description
-    regex_l2 = ~r/\s+às\s+(\d{2}:\d{2}:\d{2})\s+(.*)/
+    regex_l2 = ~r/\s+às\s+(\d{2}:\d{2}:\d{2}|[A-Z_]+)\s+(.*)/
 
     {transactions, last_tx} =
       Enum.reduce(lines, {[], nil}, fn line, {acc, last_tx} ->
@@ -53,7 +58,11 @@ defmodule CashLens.Parsers.PDFParser do
               date: parse_date(date_str),
               time: nil,
               description: String.trim(desc),
-              amount: parse_amount(amount_str) |> Decimal.mult(-1)
+              amount:
+                parse_amount(amount_str)
+                |> (fn amt ->
+                      if Decimal.eq?(amt, 0), do: Decimal.new("0"), else: Decimal.mult(amt, -1)
+                    end).()
             }
 
             # If there was a previous tx, save it now

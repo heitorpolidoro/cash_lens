@@ -15,10 +15,10 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
       >
         <div class="p-2">
           <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
-            Nova Categoria
+            New Category
           </h2>
           <p class="text-xs opacity-60 mb-6">
-            Crie uma nova categoria para organizar seus lançamentos.
+            Create a new category to organize your entries.
           </p>
 
           <.form
@@ -32,17 +32,17 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
             <.input
               field={f[:name]}
               type="text"
-              label="Nome da Categoria"
-              placeholder="Ex: Alimentação, Lazer..."
+              label="Category Name"
+              placeholder="e.g. Food, Leisure..."
               required
             />
 
             <div class="form-control w-full">
               <label class="label">
-                <span class="label-text font-bold">Categoria Pai (Opcional)</span>
+                <span class="label-text font-bold">Parent Category (Optional)</span>
               </label>
               <select name="parent_id" class="select select-bordered w-full rounded-2xl h-12">
-                <option value="">Nenhuma (Categoria Principal)</option>
+                <option value="">None (Main Category)</option>
                 <%= for cat <- Enum.filter(@categories, &is_nil(&1.parent_id)) do %>
                   <option value={cat.id}>{cat.name}</option>
                 <% end %>
@@ -53,9 +53,9 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
               <button
                 type="submit"
                 class="btn btn-primary btn-lg w-full rounded-2xl shadow-lg shadow-primary/20"
-                phx-disable-with="Criando..."
+                phx-disable-with="Creating..."
               >
-                Salvar Categoria
+                Save Category
               </button>
             </div>
           </.form>
@@ -76,7 +76,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
         {:noreply, socket}
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Erro ao criar.")}
+        {:noreply, put_flash(socket, :error, "Error creating category.")}
     end
   end
 end
