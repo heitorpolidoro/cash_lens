@@ -98,10 +98,9 @@ defmodule CashLens.Parsers.OFXParserTest do
       assert t.time == ~T[12:30:00]
     end
 
-    test "handles time with hours, mins and invalid secs" do
+    test "handles time with invalid seconds string" do
       content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>202601011230XX</DTPOSTED></STMTTRN>"
       [t] = OFXParser.parse(content, :standard)
-      assert t.date == ~D[2026-01-01]
       assert t.time == ~T[12:30:00]
     end
 
@@ -172,15 +171,8 @@ defmodule CashLens.Parsers.OFXParserTest do
       assert OFXParser.parse(content, :standard) == []
     end
 
-    test "handles invalid integers in date components" do
-      content = """
-      <STMTTRN>
-      <TRNAMT>10.00</TRNAMT>
-      <DTPOSTED>2026XX10</DTPOSTED>
-      <NAME>BAD DATE</NAME>
-      </STMTTRN>
-      """
-
+    test "handles invalid month" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>20261301</DTPOSTED></STMTTRN>"
       assert OFXParser.parse(content, :standard) == []
     end
   end

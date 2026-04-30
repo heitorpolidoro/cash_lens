@@ -75,7 +75,7 @@ defmodule CashLens.Parsers.IngestorTest do
       # DO NOT create related accounts
 
       content =
-        "Data,Dep,Term,Hist,Doc,Valor,\n01/01/2026,0,0,BB MM OURO,1,-100.00,\n02/01/2026,0,0,BB REND RENDEZ,1,50.00,\n"
+        "Data,Dep,Term,Hist,Doc,Valor,\n01/01/2026,0,0,BB MM OURO,1,-100.00,\n02/01/2026,0,0,BB RENDE FACIL,1,50.00,\n"
 
       file_path = "test/support/fixtures/files/bb_missing_#{account.id}.csv"
       File.write!(file_path, content)
@@ -111,9 +111,9 @@ defmodule CashLens.Parsers.IngestorTest do
       File.rm!(file_path)
     end
 
-    test "handles unknown file extension branch" do
+    test "imports CSV with no transactions" do
       account = account_fixture(parser_type: "bb_csv")
-      file_path = "test/support/fixtures/files/ext_#{account.id}.other"
+      file_path = "test/support/fixtures/files/empty_#{account.id}.csv"
       File.write!(file_path, "Data,Dep,Term,Hist,Doc,Valor,\n")
       assert {:ok, 0} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)

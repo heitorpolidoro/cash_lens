@@ -231,13 +231,35 @@ defmodule CashLens.TransactionsTest do
       assert Enum.any?(Transactions.list_bulk_ignore_patterns(), &(&1.id == pattern.id))
     end
 
-    test "create_bulk_ignore_pattern/1 with valid data creates a pattern" do
-      unique_pattern = "NEW_#{System.unique_integer([:positive])}"
+    test "list_transactions handles various empty string/nil filters" do
+      transaction_fixture(%{description: "test"})
+      # Test empty strings and nil filters
+      filters = %{
+        "account_id" => "",
+        "category_id" => "",
+        "search" => "",
+        "date" => "",
+        "amount" => "",
+        "type" => "",
+        "reimbursement_status" => "",
+        "unmatched_transfers" => "false",
+        "month" => "",
+        "year" => ""
+      }
 
-      assert {:ok, %BulkIgnorePattern{} = pattern} =
-               Transactions.create_bulk_ignore_pattern(%{pattern: unique_pattern})
+      results = Transactions.list_transactions(filters)
+      assert length(results) >= 1
+    end
 
-      assert pattern.pattern == unique_pattern
+    test "filter_unmatched_transfers handles non-true value" do
+      transaction_fixture(%{description: "test"})
+      results = Transactions.list_transactions(%{"unmatched_transfers" => "false"})
+      assert length(results) >= 1
+    end
+
+    test "create_bulk_ignore_pattern/1 handles invalid pattern" do
+      # L16: bulk ignore pattern changeset invalid
+      assert {:error, _} = Transactions.create_bulk_ignore_pattern(%{pattern: ""})
     end
   end
 

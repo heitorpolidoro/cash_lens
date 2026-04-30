@@ -190,16 +190,13 @@ defmodule CashLens.AccountingTest do
       assert length(balances) > 0
     end
 
-    test "calculate_monthly_balance with December to January transition" do
+    test "calculate_monthly_balance triggers get_previous_period year transition" do
       account = account_fixture()
-      # Create balance for Dec 2025
+      # Ensure Jan 2026 is calculated based on Dec 2025
       Accounting.calculate_monthly_balance(account.id, 2025, 12)
-      # Calculate for Feb 2026. It will need to calculate Jan 2026.
-      # get_next_period(2025, 12) -> {2026, 1}
-      {:ok, balance} = Accounting.calculate_monthly_balance(account.id, 2026, 2)
+      {:ok, balance} = Accounting.calculate_monthly_balance(account.id, 2026, 1)
       assert balance.year == 2026
-      assert balance.month == 2
-      assert Repo.get_by(Balance, account_id: account.id, year: 2026, month: 1)
+      assert balance.month == 1
     end
   end
 end

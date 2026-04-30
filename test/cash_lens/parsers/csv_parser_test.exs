@@ -144,12 +144,29 @@ defmodule CashLens.CSVParserTest do
       assert List.first(transactions).date == Date.utc_today()
     end
 
-    test "parse_row fallback for other banks or malformed data" do
-      # Directly calling parse_row to hit fallback L41
-      assert {_date, _balance, _clean} =
-               CSVParser.extract_metadata_and_clean("test", ~D[2026-01-01])
+    test "parse_row/2 handles rows with incorrect length" do
+      # L41: fallback
+      assert CSVParser.parse("Data,Dep,Term,Hist,Doc,Valor,Extra,Extra\nshort_row", :bb) == []
+    end
 
-      # We already have tests hitting this indirectly but let's be sure
+    test "parse_amount/1 handles unparseable amount" do
+      # L123: :error -> Decimal.new("0")
+      csv_content = "Data,Dep,Term,Hist,Doc,Valor,\n2026-02-24,0,0,DESCRIPTION,1,!!!,\n"
+      transactions = CSVParser.parse(csv_content, :bb)
+      # amount 0 results in nil
+      assert transactions == []
+    end
+
+    test "extract_metadata_and_clean handles malformed time" do
+      # This hits the `_ -> nil` in extract_metadata_and_clean
+      {_date, time, _clean} = CSVParser.extract_metadata_and_clean("No time here", ~D[2026-01-01])
+      assert time == nil
+    end
+
+    test "parse_row description handling nil" do
+      csv_content = "Data,Dep,Term,Hist,Doc,Valor,\n2026-02-24,0,0,,1,-10.00,\n"
+      transactions = CSVParser.parse(csv_content, :bb)
+      assert List.first(transactions).description == ""
     end
   end
 end
