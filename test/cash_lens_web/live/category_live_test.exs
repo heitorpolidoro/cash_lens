@@ -77,6 +77,27 @@ defmodule CashLensWeb.CategoryLiveTest do
       assert html =~ "some updated name"
     end
 
+    test "toggles category type between fixed and variable", %{conn: conn, category: category} do
+      {:ok, index_live, _html} = live(conn, ~p"/categories")
+
+      # Initial state is variable based on category_fixture
+      assert category.type == "variable"
+
+      # Toggle to fixed
+      index_live
+      |> element("input[phx-click='toggle_fixed'][phx-value-id='#{category.id}']")
+      |> render_click()
+
+      assert CashLens.Categories.get_category!(category.id).type == "fixed"
+
+      # Toggle back to variable
+      index_live
+      |> element("input[phx-click='toggle_fixed'][phx-value-id='#{category.id}']")
+      |> render_click()
+
+      assert CashLens.Categories.get_category!(category.id).type == "variable"
+    end
+
     test "deletes category in listing", %{conn: conn, category: category} do
       {:ok, index_live, _html} = live(conn, ~p"/categories")
 
