@@ -171,8 +171,15 @@ defmodule CashLens.Parsers.OFXParserTest do
       assert OFXParser.parse(content, :standard) == []
     end
 
-    test "handles invalid month" do
-      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>20261301</DTPOSTED></STMTTRN>"
+    test "handles too short date string" do
+      # Hits the _ -> :error branch in parse_ofx_date
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>2026</DTPOSTED></STMTTRN>"
+      assert OFXParser.parse(content, :standard) == []
+    end
+
+    test "handles non-numeric date components" do
+      # Hits safe_to_integer :error -> :error branch in parse_ofx_date
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>2026XX01</DTPOSTED></STMTTRN>"
       assert OFXParser.parse(content, :standard) == []
     end
   end

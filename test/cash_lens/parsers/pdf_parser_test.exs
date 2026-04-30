@@ -106,5 +106,13 @@ defmodule CashLens.PDFParserTest do
       text = "ABC1D23 02/01/26 DESCRIPTION R$ \n"
       assert PDFParser.parse(text, :sem_parar) == []
     end
+
+    test "parse_time handles invalid time parts" do
+      # Triggers the else -> nil in parse_time
+      # This matches the regex às HH:MM:SS but Integer.parse fails
+      text = "01/01/26 DESCRIPTION R$ 10,00\n às XX:YY:ZZ EXTRA"
+      results = PDFParser.parse(text, :sem_parar)
+      assert List.first(results).time == nil
+    end
   end
 end

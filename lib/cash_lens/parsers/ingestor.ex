@@ -35,8 +35,16 @@ defmodule CashLens.Parsers.Ingestor do
   Returns `{:ok, count}` or `{:error, reason}`.
   """
   def import_file(account, file_path) do
-    content = File.read!(file_path)
+    case File.read(file_path) do
+      {:ok, content} ->
+        process_imported_content(content, account, file_path)
 
+      {:error, reason} ->
+        {:error, "Could not read file: #{reason}"}
+    end
+  end
+
+  defp process_imported_content(content, account, file_path) do
     content =
       cond do
         String.ends_with?(file_path, ".pdf") or account.parser_type == "sem_parar_pdf" ->

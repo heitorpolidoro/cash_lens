@@ -157,10 +157,10 @@ defmodule CashLens.CSVParserTest do
       assert transactions == []
     end
 
-    test "extract_metadata_and_clean handles malformed time" do
-      # This hits the `_ -> nil` in extract_metadata_and_clean
-      {_date, time, _clean} = CSVParser.extract_metadata_and_clean("No time here", ~D[2026-01-01])
-      assert time == nil
+    test "extract_metadata_and_clean handles invalid dates in content" do
+      # This will trigger the _ -> base_date branch in final_date
+      {date, _time, _clean} = CSVParser.extract_metadata_and_clean("COMPRA 32/13", ~D[2026-01-01])
+      assert date == ~D[2026-01-01]
     end
 
     test "parse_row description handling nil" do
