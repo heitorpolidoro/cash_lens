@@ -63,7 +63,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
         {:noreply, socket}
 
       [] ->
-        send(self(), {:import_error, "Nenhum arquivo selecionado."})
+        send(self(), {:import_error, "No file selected."})
         {:noreply, socket}
     end
   end
@@ -86,7 +86,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
       <.modal :if={@show} id="import-modal" show on_cancel={JS.push("close", target: @myself)}>
         <div class="p-2">
           <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter text-primary">
-            Importar Extratos
+            Import Statements
           </h2>
 
           <form
@@ -98,7 +98,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
             <div class="form-control w-full mb-8">
               <label class="label">
                 <span class="label-text font-black uppercase opacity-40 text-[10px]">
-                  1. Selecione a Conta Destino
+                  1. Select Destination Account
                 </span>
               </label>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
@@ -144,7 +144,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
 
             <div class="form-control w-full mb-8">
               <label class="label">
-                <span class="label-text font-bold">2. Envie o arquivo (CSV ou PDF)</span>
+                <span class="label-text font-bold">2. Upload file (CSV or PDF)</span>
               </label>
               <div class="p-10 border-2 border-dashed border-base-300 rounded-3xl bg-base-200/50 flex flex-col items-center justify-center group hover:border-primary transition-all cursor-pointer relative">
                 <.live_file_input
@@ -156,7 +156,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
                   class="size-12 opacity-20 mb-4 group-hover:text-primary group-hover:opacity-100 transition-all"
                 />
                 <p class="text-sm font-medium opacity-40">
-                  Arraste seu arquivo ou clique para selecionar
+                  Drag your file or click to select
                 </p>
               </div>
 
@@ -181,9 +181,9 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
             <button
               type="submit"
               class="btn btn-primary btn-lg w-full rounded-2xl shadow-lg shadow-primary/20"
-              phx-disable-with="Processando..."
+              phx-disable-with="Processing..."
             >
-              Iniciar Importação
+              Start Import
             </button>
           </form>
         </div>

@@ -9,23 +9,23 @@ defmodule CashLensWeb.AccountLive.Form do
     ~H"""
     <.header>
       {@page_title}
-      <:subtitle>Use este formulário para gerenciar os dados da sua conta bancária.</:subtitle>
+      <:subtitle>Use this form to manage your bank account data.</:subtitle>
     </.header>
 
     <.form for={@form} id="account-form" phx-change="validate" phx-submit="save">
-      <.input field={@form[:name]} type="text" label="Nome" />
-      <.input field={@form[:bank]} type="text" label="Banco" />
-      <.input field={@form[:balance]} type="number" label="Saldo Inicial" step="any" />
+      <.input field={@form[:name]} type="text" label="Name" />
+      <.input field={@form[:bank]} type="text" label="Bank" />
+      <.input field={@form[:balance]} type="number" label="Initial Balance" step="any" />
 
       <.input
         field={@form[:parser_type]}
         type="select"
-        label="Extrator"
+        label="Extractor"
         options={[{"Banco do Brasil (CSV)", "bb_csv"}, {"Sem Parar (PDF)", "sem_parar_pdf"}]}
-        prompt="Selecione um extrator"
+        prompt="Select an extractor"
       />
 
-      <.input field={@form[:color]} type="text" label="Cor (opcional)" />
+      <.input field={@form[:color]} type="text" label="Color (optional)" />
 
       <div class="form-control">
         <label class="label cursor-pointer justify-start gap-4">
@@ -37,13 +37,13 @@ defmodule CashLensWeb.AccountLive.Form do
             checked={@form[:accepts_import].value}
             class="checkbox checkbox-primary"
           />
-          <span class="label-text font-bold">Aceita importar extratos?</span>
+          <span class="label-text font-bold">Accepts statement imports?</span>
         </label>
       </div>
 
       <div class="flex items-end gap-4">
         <div class="flex-1">
-          <.input field={@form[:icon]} type="text" label="URL do Ícone (opcional)" />
+          <.input field={@form[:icon]} type="text" label="Icon URL (optional)" />
         </div>
         <div class="avatar pb-2">
           <div class="w-12 rounded-full border border-base-300 bg-base-200 flex items-center justify-center overflow-hidden">
@@ -57,15 +57,15 @@ defmodule CashLensWeb.AccountLive.Form do
       </div>
 
       <div class="mt-8 flex flex-col sm:flex-row gap-3">
-        <.button phx-disable-with="Salvando..." variant="primary" class="flex-1">
-          Salvar Conta
+        <.button phx-disable-with="Saving..." variant="primary" class="flex-1">
+          Save Account
         </.button>
         <.button
           type="button"
           navigate={return_path(@return_to, @account)}
           class="btn btn-error btn-outline flex-1"
         >
-          Cancelar
+          Cancel
         </.button>
       </div>
     </.form>
@@ -87,7 +87,7 @@ defmodule CashLensWeb.AccountLive.Form do
     account = Accounts.get_account!(id)
 
     socket
-    |> assign(:page_title, "Editar Conta")
+    |> assign(:page_title, "Edit Account")
     |> assign(:account, account)
     |> assign(:form, to_form(Accounts.change_account(account)))
   end
@@ -96,7 +96,7 @@ defmodule CashLensWeb.AccountLive.Form do
     account = %Account{}
 
     socket
-    |> assign(:page_title, "Nova Conta")
+    |> assign(:page_title, "New Account")
     |> assign(:account, account)
     |> assign(:form, to_form(Accounts.change_account(account)))
   end
@@ -116,7 +116,7 @@ defmodule CashLensWeb.AccountLive.Form do
       {:ok, account} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Conta atualizada com sucesso")
+         |> put_flash(:info, "Account updated successfully")
          |> push_navigate(to: return_path(socket.assigns.return_to, account))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -129,7 +129,7 @@ defmodule CashLensWeb.AccountLive.Form do
       {:ok, account} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Conta criada com sucesso")
+         |> put_flash(:info, "Account created successfully")
          |> push_navigate(to: return_path(socket.assigns.return_to, account))}
 
       {:error, %Ecto.Changeset{} = changeset} ->

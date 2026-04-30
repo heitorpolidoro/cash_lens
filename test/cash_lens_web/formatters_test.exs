@@ -50,14 +50,14 @@ defmodule CashLensWeb.FormattersTest do
   end
 
   describe "format_weekday/1" do
-    test "returns abbreviated weekday in Portuguese" do
-      assert Formatters.format_weekday(~D[2026-04-20]) == "seg"
-      assert Formatters.format_weekday(~D[2026-04-21]) == "ter"
-      assert Formatters.format_weekday(~D[2026-04-22]) == "qua"
-      assert Formatters.format_weekday(~D[2026-04-23]) == "qui"
-      assert Formatters.format_weekday(~D[2026-04-24]) == "sex"
-      assert Formatters.format_weekday(~D[2026-04-25]) == "sab"
-      assert Formatters.format_weekday(~D[2026-04-26]) == "dom"
+    test "returns abbreviated weekday in English" do
+      assert Formatters.format_weekday(~D[2026-04-20]) == "mon"
+      assert Formatters.format_weekday(~D[2026-04-21]) == "tue"
+      assert Formatters.format_weekday(~D[2026-04-22]) == "wed"
+      assert Formatters.format_weekday(~D[2026-04-23]) == "thu"
+      assert Formatters.format_weekday(~D[2026-04-24]) == "fri"
+      assert Formatters.format_weekday(~D[2026-04-25]) == "sat"
+      assert Formatters.format_weekday(~D[2026-04-26]) == "sun"
     end
   end
 
@@ -67,15 +67,16 @@ defmodule CashLensWeb.FormattersTest do
     end
 
     test "translates pending and requested" do
-      assert Formatters.translate_reimbursement_status("pending", 100) == "Pendente"
-      assert Formatters.translate_reimbursement_status("requested", 100) == "Solicitado"
+      assert Formatters.translate_reimbursement_status("pending", 100) == "Pending"
+      assert Formatters.translate_reimbursement_status("requested", 100) == "Requested"
     end
 
     test "translates paid based on amount" do
       assert Formatters.translate_reimbursement_status("paid", Decimal.new("-50")) ==
-               "Reembolso Pago"
+               "Reimbursement Paid"
 
-      assert Formatters.translate_reimbursement_status("paid", Decimal.new("50")) == "Reembolso"
+      assert Formatters.translate_reimbursement_status("paid", Decimal.new("50")) ==
+               "Reimbursement"
     end
 
     test "capitalizes other statuses" do
@@ -90,8 +91,8 @@ defmodule CashLensWeb.FormattersTest do
     end
 
     test "returns default for unknown types" do
-      assert Formatters.translate_parser_type("unknown") == "Não configurado"
-      assert Formatters.translate_parser_type(nil) == "Não configurado"
+      assert Formatters.translate_parser_type("unknown") == "Not configured"
+      assert Formatters.translate_parser_type(nil) == "Not configured"
     end
   end
 end

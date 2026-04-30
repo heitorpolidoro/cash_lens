@@ -8,18 +8,18 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
     ~H"""
     <div class="py-6 space-y-8">
       <.header>
-        Regras de Exclusão
+        Exclusion Rules
         <:subtitle>
-          Cadastre padrões (Regex) de descrições que devem ser ignoradas na sugestão de categorização em massa.
+          Register patterns (Regex) for descriptions that should be ignored in bulk categorization suggestions.
         </:subtitle>
       </.header>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Formulário de Cadastro -->
+        <!-- Registration Form -->
         <div class="lg:col-span-1">
           <div class="card bg-base-100 shadow-sm border border-base-300">
             <div class="card-body p-6">
-              <h2 class="text-sm font-black uppercase opacity-50 mb-4">Nova Regra</h2>
+              <h2 class="text-sm font-black uppercase opacity-50 mb-4">New Rule</h2>
               <.form
                 for={@form}
                 id="ignore-form"
@@ -30,23 +30,23 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
                 <.input
                   field={@form[:pattern]}
                   type="text"
-                  label="Padrão (Regex)"
-                  placeholder="Ex: ^PIX ENVIADO"
+                  label="Pattern (Regex)"
+                  placeholder="e.g. ^PIX SENT"
                   required
                 />
                 <.input
                   field={@form[:description]}
                   type="text"
-                  label="Motivo"
-                  placeholder="Ex: Transações genéricas"
+                  label="Reason"
+                  placeholder="e.g. Generic transactions"
                 />
                 <div class="pt-2">
                   <button
                     type="submit"
                     class="btn btn-primary w-full rounded-xl"
-                    phx-disable-with="Salvando..."
+                    phx-disable-with="Saving..."
                   >
-                    Salvar Regra
+                    Save Rule
                   </button>
                 </div>
               </.form>
@@ -54,15 +54,15 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
           </div>
         </div>
         
-    <!-- Listagem de Padrões -->
+    <!-- Pattern List -->
         <div class="lg:col-span-2">
           <div class="card bg-base-100 shadow-sm border border-base-300 overflow-hidden">
             <div class="card-body p-0">
               <table class="table table-zebra w-full text-xs">
                 <thead class="bg-base-200/50">
                   <tr>
-                    <th>Padrão</th>
-                    <th>Motivo</th>
+                    <th>Pattern</th>
+                    <th>Reason</th>
                     <th class="w-16"></th>
                   </tr>
                 </thead>
@@ -74,7 +74,7 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
                       <button
                         phx-click="delete"
                         phx-value-id={pattern.id}
-                        data-confirm="Tem certeza que deseja excluir este padrão?"
+                        data-confirm="Are you sure you want to delete this pattern?"
                         class="btn btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <.icon name="hero-trash" class="size-4" />
@@ -84,7 +84,7 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
                 </tbody>
               </table>
               <div id="no-patterns-msg" class="p-10 text-center opacity-30 italic only:block hidden">
-                Nenhum padrão cadastrado.
+                No patterns registered.
               </div>
             </div>
           </div>
@@ -121,7 +121,7 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
       {:ok, pattern} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Padrão cadastrado!")
+         |> put_flash(:info, "Pattern registered!")
          |> stream_insert(:patterns, pattern)
          |> assign(:form, to_form(Transactions.change_bulk_ignore_pattern(%BulkIgnorePattern{})))}
 
@@ -136,6 +136,6 @@ defmodule CashLensWeb.AutomationLive.BulkIgnore do
     {:ok, _} = Transactions.delete_bulk_ignore_pattern(pattern)
 
     {:noreply,
-     socket |> stream_delete(:patterns, pattern) |> put_flash(:info, "Padrão removido.")}
+     socket |> stream_delete(:patterns, pattern) |> put_flash(:info, "Pattern removed.")}
   end
 end

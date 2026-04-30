@@ -8,29 +8,29 @@ defmodule CashLensWeb.CategoryLive.Show do
     ~H"""
     <div class="max-w-xl mx-auto py-8">
       <.header>
-        Categoria: {@category.name}
-        <:subtitle>Detalhes da classificação e regras associadas.</:subtitle>
+        Category: {@category.name}
+        <:subtitle>Classification details and associated rules.</:subtitle>
         <:actions>
           <.link navigate={~p"/categories/#{@category}/edit"}>
-            <.button variant="primary">Editar Categoria</.button>
+            <.button variant="primary">Edit Category</.button>
           </.link>
         </:actions>
       </.header>
 
       <.list>
-        <:item title="Nome">{@category.name}</:item>
+        <:item title="Name">{@category.name}</:item>
         <:item title="Slug">{@category.slug}</:item>
-        <:item title="Categoria Pai">
-          {if @category.parent, do: @category.parent.name, else: "Principal"}
+        <:item title="Parent Category">
+          {if @category.parent, do: @category.parent.name, else: "Main"}
         </:item>
-        <:item title="Palavras-chave">
-          <span class="italic opacity-60">{@category.keywords || "Nenhuma regra definida"}</span>
+        <:item title="Keywords">
+          <span class="italic opacity-60">{@category.keywords || "No rules defined"}</span>
         </:item>
       </.list>
 
       <div class="mt-8">
         <.link navigate={~p"/categories"} class="text-sm font-semibold">
-          <.icon name="hero-arrow-left" class="size-3 mr-1" /> Voltar para lista
+          <.icon name="hero-arrow-left" class="size-3 mr-1" /> Back to list
         </.link>
       </div>
     </div>

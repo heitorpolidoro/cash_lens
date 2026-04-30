@@ -9,14 +9,14 @@ defmodule CashLensWeb.BalanceLive.Index do
     ~H"""
     <div class="py-6 space-y-8">
       <.header>
-        Listando Balanços
+        Listing Balances
         <:actions>
           <button phx-click="recalculate_all" class="btn btn-outline btn-warning">
-            <.icon name="hero-arrow-path-rounded-square" class="mr-1" /> Recalcular Todos
+            <.icon name="hero-arrow-path-rounded-square" class="mr-1" /> Recalculate All
           </button>
           <.link navigate={~p"/balances/new"}>
             <.button variant="primary">
-              <.icon name="hero-plus" class="mr-1" /> Novo Balanço
+              <.icon name="hero-plus" class="mr-1" /> New Balance
             </.button>
           </.link>
         </:actions>
@@ -29,12 +29,12 @@ defmodule CashLensWeb.BalanceLive.Index do
               <tr>
                 <th class="w-48">
                   <div class="flex flex-col gap-1">
-                    <span>Conta</span>
+                    <span>Account</span>
                     <select
                       name="account_id"
                       class="select select-bordered select-xs font-normal w-full"
                     >
-                      <option value="">Todas</option>
+                      <option value="">All</option>
                       <%= for account <- @accounts do %>
                         <option value={account.id} selected={@filters["account_id"] == account.id}>
                           {account.name}
@@ -45,9 +45,9 @@ defmodule CashLensWeb.BalanceLive.Index do
                 </th>
                 <th class="w-24">
                   <div class="flex flex-col gap-1">
-                    <span>Ano</span>
+                    <span>Year</span>
                     <select name="year" class="select select-bordered select-xs font-normal w-full">
-                      <option value="">Todos</option>
+                      <option value="">All</option>
                       <%= for year <- 2024..2030 do %>
                         <option value={year} selected={@filters["year"] == to_string(year)}>
                           {year}
@@ -58,9 +58,9 @@ defmodule CashLensWeb.BalanceLive.Index do
                 </th>
                 <th class="w-32">
                   <div class="flex flex-col gap-1">
-                    <span>Mês</span>
+                    <span>Month</span>
                     <select name="month" class="select select-bordered select-xs font-normal w-full">
-                      <option value="">Todos</option>
+                      <option value="">All</option>
                       <%= for {name, num} <- month_options() do %>
                         <option value={num} selected={@filters["month"] == to_string(num)}>
                           {name}
@@ -71,25 +71,25 @@ defmodule CashLensWeb.BalanceLive.Index do
                 </th>
                 <th class="text-right">
                   <div class="flex flex-col gap-1">
-                    <span>Saldo Inicial</span>
+                    <span>Initial Balance</span>
                     <div class="h-6"></div>
                   </div>
                 </th>
                 <th class="text-right">
                   <div class="flex flex-col gap-1">
-                    <span>Entradas</span>
+                    <span>Income</span>
                     <div class="h-6"></div>
                   </div>
                 </th>
                 <th class="text-right">
                   <div class="flex flex-col gap-1">
-                    <span>Saídas</span>
+                    <span>Expenses</span>
                     <div class="h-6"></div>
                   </div>
                 </th>
                 <th class="text-right">
                   <div class="flex flex-col gap-1 font-black">
-                    <span>Saldo Final</span>
+                    <span>Final Balance</span>
                     <div class="h-6"></div>
                   </div>
                 </th>
@@ -100,7 +100,7 @@ defmodule CashLensWeb.BalanceLive.Index do
                       type="button"
                       phx-click="clear_filters"
                       class="btn btn-ghost btn-xs text-error p-0"
-                      title="Limpar filtros"
+                      title="Clear filters"
                     >
                       <.icon name="hero-x-circle" class="size-4" />
                     </button>
@@ -130,7 +130,7 @@ defmodule CashLensWeb.BalanceLive.Index do
                       </div>
                     </div>
                     <span class="font-bold truncate max-w-[120px]">
-                      {if balance.account, do: balance.account.name, else: "Conta excluída"}
+                      {if balance.account, do: balance.account.name, else: "Deleted account"}
                     </span>
                   </div>
                 </td>
@@ -176,16 +176,16 @@ defmodule CashLensWeb.BalanceLive.Index do
         <div class="w-20 h-20 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
           <.icon name="hero-trash" class="size-10" />
         </div>
-        <h2 class="text-2xl font-black mb-2">Excluir Balanço?</h2>
+        <h2 class="text-2xl font-black mb-2">Delete Balance?</h2>
         <p class="text-base-content/60 mb-10">
-          Deseja realmente apagar este registro de balanço mensal?
+          Do you really want to delete this monthly balance record?
         </p>
         <div class="flex flex-col sm:flex-row gap-3">
           <button phx-click={@confirm_modal.action} class="btn btn-error btn-lg flex-1 rounded-2xl">
-            Sim, Apagar
+            Yes, Delete
           </button>
           <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
-            Cancelar
+            Cancel
           </button>
         </div>
       </div>
@@ -197,7 +197,7 @@ defmodule CashLensWeb.BalanceLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Balanços")
+     |> assign(:page_title, "Balances")
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, Accounts.list_accounts())
      |> assign(:filters, %{"account_id" => "", "month" => "", "year" => ""})
@@ -228,7 +228,7 @@ defmodule CashLensWeb.BalanceLive.Index do
 
     {:noreply,
      socket
-     |> put_flash(:info, "Todos os balanços foram recalculados em cascata!")
+     |> put_flash(:info, "All balances have been recalculated in cascade!")
      |> stream(:balances, Accounting.list_balances(socket.assigns.filters), reset: true)}
   end
 
@@ -250,25 +250,25 @@ defmodule CashLensWeb.BalanceLive.Index do
 
   defp translate_month_num(num) do
     Enum.at(
-      ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+      ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
       num - 1
     )
   end
 
   defp month_options do
     [
-      {"Janeiro", 1},
-      {"Fevereiro", 2},
-      {"Março", 3},
-      {"Abril", 4},
-      {"Maio", 5},
-      {"Junho", 6},
-      {"Julho", 7},
-      {"Agosto", 8},
-      {"Setembro", 9},
-      {"Outubro", 10},
-      {"Novembro", 11},
-      {"Dezembro", 12}
+      {"January", 1},
+      {"February", 2},
+      {"March", 3},
+      {"April", 4},
+      {"May", 5},
+      {"June", 6},
+      {"July", 7},
+      {"August", 8},
+      {"September", 9},
+      {"October", 10},
+      {"November", 11},
+      {"December", 12}
     ]
   end
 end

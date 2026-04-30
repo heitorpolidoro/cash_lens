@@ -24,7 +24,7 @@ defmodule CashLens.Workers.RecalculateBalanceWorker do
         if Repo.get_by(Balance, account_id: account_id, year: next_year, month: next_month) do
           %{account_id: account_id, year: next_year, month: next_month}
           |> __MODULE__.new()
-          |> Oban.insert()
+          |> oban().insert()
           |> case do
             {:ok, _job} ->
               :ok
@@ -45,4 +45,6 @@ defmodule CashLens.Workers.RecalculateBalanceWorker do
 
   defp get_next_period(year, 12), do: {year + 1, 1}
   defp get_next_period(year, month), do: {year, month + 1}
+
+  defp oban, do: Application.get_env(:cash_lens, :oban_module, Oban)
 end

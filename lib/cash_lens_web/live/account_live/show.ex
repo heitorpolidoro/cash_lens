@@ -7,24 +7,24 @@ defmodule CashLensWeb.AccountLive.Show do
   def render(assigns) do
     ~H"""
     <.header>
-      Conta {@account.name}
-      <:subtitle>Detalhes da sua conta bancária registrados no sistema.</:subtitle>
+      Account {@account.name}
+      <:subtitle>Details of your bank account registered in the system.</:subtitle>
       <:actions>
         <.button navigate={~p"/accounts"}>
           <.icon name="hero-arrow-left" />
         </.button>
         <.button variant="primary" navigate={~p"/accounts/#{@account}/edit?return_to=show"}>
-          <.icon name="hero-pencil-square" /> Editar conta
+          <.icon name="hero-pencil-square" /> Edit account
         </.button>
       </:actions>
     </.header>
 
     <.list>
-      <:item title="Nome">{@account.name}</:item>
-      <:item title="Banco">{@account.bank}</:item>
-      <:item title="Saldo">{@account.balance}</:item>
-      <:item title="Cor">{@account.color}</:item>
-      <:item title="Ícone">{@account.icon}</:item>
+      <:item title="Name">{@account.name}</:item>
+      <:item title="Bank">{@account.bank}</:item>
+      <:item title="Balance">{@account.balance}</:item>
+      <:item title="Color">{@account.color}</:item>
+      <:item title="Icon">{@account.icon}</:item>
     </.list>
     """
   end
@@ -33,7 +33,7 @@ defmodule CashLensWeb.AccountLive.Show do
   def mount(%{"id" => id}, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Exibir Conta")
+     |> assign(:page_title, "Show Account")
      |> assign(:account, Accounts.get_account!(id))}
   end
 end

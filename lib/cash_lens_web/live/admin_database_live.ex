@@ -7,16 +7,16 @@ defmodule CashLensWeb.AdminDatabaseLive do
     ~H"""
     <div class="py-6 space-y-8">
       <.header>
-        Administração do Banco de Dados
-        <:subtitle>Visualização e filtragem direta de tabelas.</:subtitle>
+        Database Administration
+        <:subtitle>Direct visualization and filtering of tables.</:subtitle>
       </.header>
 
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        <!-- Barra Lateral: Lista de Tabelas -->
+        <!-- Sidebar: Tables List -->
         <div class="lg:col-span-1 space-y-4">
           <div class="card bg-base-100 shadow-sm border border-base-300">
             <div class="card-body p-4">
-              <h2 class="card-title text-xs uppercase opacity-50 font-black mb-2">Tabelas</h2>
+              <h2 class="card-title text-xs uppercase opacity-50 font-black mb-2">Tables</h2>
               <div class="flex flex-col gap-1">
                 <%= for table <- @tables do %>
                   <.link
@@ -35,16 +35,16 @@ defmodule CashLensWeb.AdminDatabaseLive do
           </div>
         </div>
         
-    <!-- Área Principal: Dados da Tabela -->
+    <!-- Main Area: Table Data -->
         <div class="lg:col-span-3">
           <%= if @active_table do %>
             <div class="card bg-base-100 shadow-sm border border-base-300 overflow-hidden">
               <div class="card-body p-0">
                 <div class="p-6 border-b border-base-200 flex justify-between items-center bg-base-200/20">
                   <h2 class="text-xl font-black uppercase tracking-tighter text-primary">
-                    Tabela: {@active_table}
+                    Table: {@active_table}
                   </h2>
-                  <span class="badge badge-outline opacity-50">{length(@rows)} registros</span>
+                  <span class="badge badge-outline opacity-50">{length(@rows)} records</span>
                 </div>
 
                 <div class="overflow-x-auto">
@@ -60,7 +60,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
                                   type="text"
                                   name={"filters[#{col}]"}
                                   value={@filters[col]}
-                                  placeholder="Filtrar..."
+                                  placeholder="Filter..."
                                   phx-debounce="300"
                                   class="input input-bordered input-xs h-6 w-full font-normal"
                                 />
@@ -85,7 +85,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
                               colspan={length(@columns)}
                               class="text-center py-20 opacity-30 italic text-sm"
                             >
-                              Nenhum registro encontrado para os filtros aplicados.
+                              No records found for the applied filters.
                             </td>
                           </tr>
                         <% end %>
@@ -98,7 +98,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
           <% else %>
             <div class="flex flex-col items-center justify-center py-32 opacity-20">
               <.icon name="hero-circle-stack" class="size-24 mb-4" />
-              <p class="font-black uppercase tracking-widest">Selecione uma tabela ao lado</p>
+              <p class="font-black uppercase tracking-widest">Select a table on the side</p>
             </div>
           <% end %>
         </div>

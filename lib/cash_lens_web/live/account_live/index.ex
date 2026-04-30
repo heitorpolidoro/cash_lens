@@ -8,11 +8,11 @@ defmodule CashLensWeb.AccountLive.Index do
     ~H"""
     <div class="py-6 space-y-8">
       <.header>
-        Listando Contas
+        Accounts
         <:actions>
           <.link navigate={~p"/accounts/new"}>
             <.button variant="primary">
-              <.icon name="hero-plus" class="mr-1" /> Nova Conta
+              <.icon name="hero-plus" class="mr-1" /> New Account
             </.button>
           </.link>
         </:actions>
@@ -22,11 +22,11 @@ defmodule CashLensWeb.AccountLive.Index do
         <table class="table table-zebra w-full text-xs">
           <thead class="bg-base-200/50">
             <tr>
-              <th class="w-16 text-center">Ícone</th>
-              <th>Nome</th>
-              <th>Banco</th>
-              <th>Extrator</th>
-              <th class="text-center">Importa?</th>
+              <th class="w-16 text-center">Icon</th>
+              <th>Name</th>
+              <th>Bank</th>
+              <th>Extractor</th>
+              <th class="text-center">Import?</th>
               <th class="w-16"></th>
             </tr>
           </thead>
@@ -87,22 +87,22 @@ defmodule CashLensWeb.AccountLive.Index do
       </div>
     </div>
 
-    <!-- Modal de Confirmação -->
+    <!-- Confirmation Modal -->
     <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
       <div class="p-4 text-center">
         <div class="w-20 h-20 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
           <.icon name="hero-trash" class="size-10" />
         </div>
-        <h2 class="text-2xl font-black mb-2">Excluir Conta?</h2>
+        <h2 class="text-2xl font-black mb-2">Delete Account?</h2>
         <p class="text-base-content/60 mb-10">
-          Deseja realmente apagar esta conta? Esta ação removerá o registro permanentemente.
+          Do you really want to delete this account? This action will remove the record permanently.
         </p>
         <div class="flex flex-col sm:flex-row gap-3">
           <button phx-click={@confirm_modal.action} class="btn btn-error btn-lg flex-1 rounded-2xl">
-            Sim, Apagar
+            Yes, Delete
           </button>
           <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
-            Cancelar
+            Cancel
           </button>
         </div>
       </div>
@@ -114,7 +114,7 @@ defmodule CashLensWeb.AccountLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Listando Contas")
+     |> assign(:page_title, "Listing Accounts")
      |> assign(:confirm_modal, nil)
      |> stream(:accounts, Accounts.list_accounts())}
   end
