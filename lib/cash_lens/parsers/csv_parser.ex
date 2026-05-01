@@ -52,7 +52,10 @@ defmodule CashLens.Parsers.CSVParser do
     final_date =
       case date_match do
         [_, d, m] ->
-          Date.new!(base_date.year, String.to_integer(m), String.to_integer(d))
+          case Date.new(base_date.year, String.to_integer(m), String.to_integer(d)) do
+            {:ok, date} -> date
+            _ -> base_date
+          end
 
         _ ->
           base_date
@@ -98,9 +101,12 @@ defmodule CashLens.Parsers.CSVParser do
       _ ->
         case String.split(date_string, "/") do
           [d, m, y] ->
-            try do
-              Date.new!(String.to_integer(y), String.to_integer(m), String.to_integer(d))
-            rescue
+            with {d_int, ""} <- Integer.parse(d),
+                 {m_int, ""} <- Integer.parse(m),
+                 {y_int, ""} <- Integer.parse(y),
+                 {:ok, date} <- Date.new(y_int, m_int, d_int) do
+              date
+            else
               _ -> Date.utc_today()
             end
 

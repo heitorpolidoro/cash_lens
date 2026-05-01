@@ -98,8 +98,15 @@ defmodule CashLens.Parsers.PDFParser do
   defp parse_date(date_string) do
     case String.split(date_string, "/") do
       [d, m, y] ->
-        year = 2000 + String.to_integer(y)
-        Date.new!(year, String.to_integer(m), String.to_integer(d))
+        with {d_int, ""} <- Integer.parse(d),
+             {m_int, ""} <- Integer.parse(m),
+             {y_int, ""} <- Integer.parse(y),
+             year = if(y_int < 100, do: 2000 + y_int, else: y_int),
+             {:ok, date} <- Date.new(year, m_int, d_int) do
+          date
+        else
+          _ -> Date.utc_today()
+        end
 
       _ ->
         Date.utc_today()
@@ -108,8 +115,18 @@ defmodule CashLens.Parsers.PDFParser do
 
   defp parse_time(time_string) do
     case String.split(time_string, ":") do
-      [h, m, s] -> Time.new!(String.to_integer(h), String.to_integer(m), String.to_integer(s))
-      _ -> nil
+      [h, m, s] ->
+        with {h_int, ""} <- Integer.parse(h),
+             {m_int, ""} <- Integer.parse(m),
+             {s_int, ""} <- Integer.parse(s),
+             {:ok, time} <- Time.new(h_int, m_int, s_int) do
+          time
+        else
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 

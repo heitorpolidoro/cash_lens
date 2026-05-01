@@ -46,13 +46,9 @@ Este arquivo consolida as diretrizes estratégicas, decisões arquiteturais e o 
 ---
 
 ## 🔵 Prioridade 3: Inteligência e Processamento (Médio Prazo)
-*Foco: Automação avançada, Inteligência Artificial e processamento em background.*
+*Foco: Automação avançada e processamento em background.*
 
-1. **Inteligência Artificial (ML/AI)**
-   - [ ] **Categorização via LLM**: Integrar com Ollama para classificar automaticamente transações obscuras.
-   - [ ] **OCR para Comprovantes**: Integrar leitura de PDFs baseada em imagens.
-
-2. **Arquitetura Assíncrona e Infraestrutura**
+1. **Arquitetura Assíncrona e Infraestrutura**
    - [x] **Workers / Processamento Assíncrono**: Configurado `Oban` e criado `RecalculateBalanceWorker`.
    - [x] **Qualidade de Código**: Configurada checagem de tipos estáticos (`dialyzer`) e linter (`credo`).
    - [x] **Padronização de Logs**: Trocado `IO.puts` por chamadas ao módulo `Logger` no Ingestor e Accounting.

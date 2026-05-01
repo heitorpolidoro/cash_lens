@@ -84,15 +84,11 @@ defmodule CashLens.Parsers.IngestorTest do
       File.rm!(file_path)
     end
 
-    test "handles unsupported parser type" do
-      account = account_fixture(parser_type: "unknown")
-      file_path = "test/support/fixtures/files/unknown_#{account.id}.txt"
-      File.write!(file_path, "some content")
+    test "returns error when file cannot be read" do
+      account = account_fixture()
 
-      assert {:error, "Extrator não configurado ou não suportado para esta conta."} =
-               Ingestor.import_file(account, file_path)
-
-      File.rm!(file_path)
+      assert {:error, "Could not read file: enoent"} =
+               Ingestor.import_file(account, "non_existent_file.csv")
     end
 
     test "handles pdftotext failure branch" do
@@ -134,11 +130,25 @@ defmodule CashLens.Parsers.IngestorTest do
       File.rm!(file_path)
     end
 
-    test "handles uppercase extensions" do
+    test "handles unknown file extension with generic fallback" do
       account = account_fixture(parser_type: "bb_csv")
-      file_path = "test/support/fixtures/files/UPPER_#{account.id}.CSV"
+      file_path = "test/support/fixtures/files/generic_#{account.id}.txt"
       File.write!(file_path, "Data,Dep,Term,Hist,Doc,Valor,\n")
       assert {:ok, 0} = Ingestor.import_file(account, file_path)
+      File.rm!(file_path)
+    end
+
+    test "handles invalid UTF-8 by converting from Latin1" do
+      account = account_fixture(parser_type: "bb_csv")
+      file_path = "test/support/fixtures/files/invalid_utf8_#{account.id}.csv"
+      # \xE1 is 'á' in Latin1 but invalid in UTF-8
+      content = "Data,Dep,Term,Hist,Doc,Valor,\n01/01/2026,0,0,M\xE1-formado,1,-10.00,\n"
+      File.write!(file_path, content)
+
+      assert {:ok, 1} = Ingestor.import_file(account, file_path)
+
+      tx = CashLens.Repo.one(CashLens.Transactions.Transaction)
+      assert tx.description == "M\u00E1-formado"
       File.rm!(file_path)
     end
   end
