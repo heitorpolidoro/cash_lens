@@ -66,10 +66,13 @@ defmodule CashLensWeb.CoreComponents do
       nil => "btn-primary"
     }
 
-    assigns =
-      assign_new(assigns, :class, fn ->
-        ["btn", Map.get(variants, assigns[:variant])]
-      end)
+    class = [
+      "btn",
+      Map.get(variants, assigns[:variant]),
+      assigns[:class]
+    ]
+
+    assigns = assign(assigns, :class, class)
 
     if rest[:href] || rest[:navigate] || rest[:patch] do
       ~H"""

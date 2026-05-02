@@ -104,6 +104,11 @@ defmodule CashLens.Parsers.OFXParserTest do
       assert t.time == ~T[12:30:00]
     end
 
+    test "handles time nil" do
+      content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED></DTPOSTED></STMTTRN>"
+      assert OFXParser.parse(content, :standard) == []
+    end
+
     test "handles content that starts with a block immediately" do
       content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>20260101</DTPOSTED></STMTTRN>"
       assert length(OFXParser.parse(content, :standard)) == 1
