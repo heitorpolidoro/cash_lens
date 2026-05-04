@@ -37,7 +37,7 @@ defmodule CashLens.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [precommit: :test, quality_check: :test]
     ]
   end
 
@@ -106,6 +106,8 @@ defmodule CashLens.MixProject do
       ],
       precommit: ["quality_check"],
       quality_check: [
+        "ecto.create --quiet",
+        "ecto.migrate --quiet",
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "format --check-formatted",
