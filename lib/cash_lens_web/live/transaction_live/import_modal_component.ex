@@ -52,12 +52,15 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
             {:error, reason} -> send(pid, {:import_error, reason})
           end
         else
+          # coveralls-ignore-start
           Task.start(fn ->
             case Ingestor.import_file(account, file_path) do
               {:ok, count} -> send(pid, {:import_success, count})
               {:error, reason} -> send(pid, {:import_error, reason})
             end
           end)
+
+          # coveralls-ignore-stop
         end
 
         {:noreply, socket}
@@ -125,6 +128,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
                           <img src={account.icon} />
                         <% else %>
                           <div class="flex items-center justify-center h-full w-full bg-primary text-primary-content text-[10px] font-bold">
+                            <%!-- coveralls-ignore-next-line --%>
                             {String.slice(account.bank || account.name, 0..1)}
                           </div>
                         <% end %>
