@@ -102,8 +102,8 @@ defmodule CashLens.Parsers.Ingestor do
     # We use returning: true to get the actually inserted transactions for TransferMatcher
     {_count, inserted_transactions} = batch_insert_transactions(entries)
 
-    # 3. Run TransferMatcher for new transactions
-    Enum.each(inserted_transactions, &TransferMatcher.match_transfer/1)
+    # 3. Run TransferMatcher for new transactions in batch
+    TransferMatcher.match_transfers(inserted_transactions)
 
     # 4. Collect affected periods for balance recalculation
     collect_affected_periods(transactions_data, account_id)
@@ -140,29 +140,35 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   defp collect_affected_periods(transactions_data, account_id) do
+    # Pre-fetch special accounts to avoid N+1 queries
+    special_accounts = %{
+      "BB MM Ouro" => Accounts.get_account_by_name("BB MM Ouro"),
+      "BB Rende Fácil" => Accounts.get_account_by_name("BB Rende Fácil")
+    }
+
     Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
       acc = MapSet.put(acc, {account_id, data.date.month, data.date.year})
-      add_special_account_periods(acc, data)
+      add_special_account_periods(acc, data, special_accounts)
     end)
   end
 
-  defp add_special_account_periods(acc, data) do
+  defp add_special_account_periods(acc, data, special_accounts) do
     description = String.upcase(data.description || "")
 
     cond do
       String.contains?(description, "BB MM OURO") ->
-        add_account_period_if_exists(acc, "BB MM Ouro", data.date)
+        add_account_period_if_exists(acc, special_accounts["BB MM Ouro"], data.date)
 
       String.contains?(description, ["BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
-        add_account_period_if_exists(acc, "BB Rende Fácil", data.date)
+        add_account_period_if_exists(acc, special_accounts["BB Rende Fácil"], data.date)
 
       true ->
         acc
     end
   end
 
-  defp add_account_period_if_exists(acc, name, date) do
-    case Accounts.get_account_by_name(name) do
+  defp add_account_period_if_exists(acc, account, date) do
+    case account do
       nil -> acc
       a -> MapSet.put(acc, {a.id, date.month, date.year})
     end

@@ -57,7 +57,18 @@ defmodule CashLensWeb.TransactionLive.Index do
        month_name: ""
      })
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> assign(:unmatched_transfers_count, 0)}
+     |> assign(:unmatched_transfers_count, 0)
+     |> assign_transfer_category_id()}
+  end
+
+  defp assign_transfer_category_id(socket) do
+    id =
+      case Categories.get_category_by_slug("transfer") do
+        nil -> nil
+        cat -> cat.id
+      end
+
+    assign(socket, :transfer_category_id, id)
   end
 
   @impl true
@@ -668,7 +679,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       end
 
     socket =
-      if matches_filters?(tx, socket.assigns.filters),
+      if matches_filters?(tx, socket.assigns.filters, socket.assigns.transfer_category_id),
         do: stream_insert(socket, :transactions, tx),
         else: stream_delete(socket, :transactions, tx)
 
@@ -740,14 +751,14 @@ defmodule CashLensWeb.TransactionLive.Index do
     end)
   end
 
-  defp matches_filters?(tx, filters) do
+  defp matches_filters?(tx, filters, transfer_category_id \\ nil) do
     mapped = map_filters(filters)
 
     category_match?(tx, mapped["category_id"]) &&
       search_match?(tx, mapped["search"]) &&
       account_match?(tx, mapped["account_id"]) &&
       type_match?(tx, mapped["type"]) &&
-      unmatched_match?(tx, mapped["unmatched_transfers"])
+      unmatched_match?(tx, mapped["unmatched_transfers"], transfer_category_id)
   end
 
   defp category_match?(_tx, ""), do: true
@@ -768,19 +779,13 @@ defmodule CashLensWeb.TransactionLive.Index do
   defp type_match?(tx, "credit"), do: Decimal.gt?(tx.amount, 0)
   defp type_match?(_tx, _), do: true
 
-  defp unmatched_match?(_tx, "false"), do: true
+  defp unmatched_match?(_tx, "false", _), do: true
 
-  defp unmatched_match?(tx, "true") do
-    transfer_category_id =
-      case Categories.get_category_by_slug("transfer") do
-        nil -> nil
-        cat -> cat.id
-      end
-
+  defp unmatched_match?(tx, "true", transfer_category_id) do
     is_nil(tx.transfer_key) && tx.category_id == transfer_category_id
   end
 
-  defp unmatched_match?(_tx, _), do: true
+  defp unmatched_match?(_tx, _, _), do: true
 
   defp update_transfer_linker_list(socket) do
     origin_tx = socket.assigns.transfer_origin
