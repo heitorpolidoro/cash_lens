@@ -223,8 +223,6 @@ defmodule CashLens.TransactionsTest do
   end
 
   describe "bulk ignore patterns" do
-    alias CashLens.Transactions.BulkIgnorePattern
-
     test "list_bulk_ignore_patterns/0 returns all patterns" do
       unique_pattern = "UNIQUE_#{System.unique_integer([:positive])}"
       pattern = insert_bulk_ignore_pattern(%{pattern: unique_pattern})
