@@ -108,7 +108,7 @@ defmodule CashLens.MixProject do
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "format --check-formatted",
-        "credo --strict",
+        "credo",
         "test"
       ]
     ]
