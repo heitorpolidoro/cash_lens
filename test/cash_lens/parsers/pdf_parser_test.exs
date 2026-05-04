@@ -76,7 +76,7 @@ defmodule CashLens.PDFParserTest do
       """
 
       transactions = PDFParser.parse(text, :sem_parar)
-      assert length(transactions) >= 1
+      assert transactions != []
 
       # The fee with "1,2,3" amount should result in Decimal 0 after parse_amount
       fee = Enum.find(transactions, &(&1.description == "Mensalidade Sem Parar"))

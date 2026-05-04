@@ -33,33 +33,9 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   def handle_event("save_import", %{"account_id" => account_id}, socket) do
     account = Accounts.get_account!(account_id)
 
-    uploaded_files =
-      consume_uploaded_entries(socket, :statement, fn %{path: path}, entry ->
-        dest = Path.join(System.tmp_dir!(), "#{entry.uuid}-#{entry.client_name}")
-        File.cp!(path, dest)
-        {:ok, dest}
-      end)
-
-    case uploaded_files do
+    case consume_uploaded_entries(socket, :statement, &copy_to_temp/2) do
       [file_path] ->
-        pid = self()
-
-        # In test environment, we run synchronously to avoid Sandbox issues
-        # and ensure the test can assert on the results immediately.
-        if Application.get_env(:cash_lens, :sql_sandbox) do
-          case Ingestor.import_file(account, file_path) do
-            {:ok, count} -> send(pid, {:import_success, count})
-            {:error, reason} -> send(pid, {:import_error, reason})
-          end
-        else
-          Task.start(fn ->
-            case Ingestor.import_file(account, file_path) do
-              {:ok, count} -> send(pid, {:import_success, count})
-              {:error, reason} -> send(pid, {:import_error, reason})
-            end
-          end)
-        end
-
+        start_import(account, file_path)
         {:noreply, socket}
 
       [] ->
@@ -77,6 +53,29 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   @impl true
   def handle_event("cancel-upload", %{"ref" => ref}, socket) do
     {:noreply, cancel_upload(socket, :statement, ref)}
+  end
+
+  defp copy_to_temp(%{path: path}, entry) do
+    dest = Path.join(System.tmp_dir!(), "#{entry.uuid}-#{entry.client_name}")
+    File.cp!(path, dest)
+    {:ok, dest}
+  end
+
+  defp start_import(account, file_path) do
+    pid = self()
+
+    if Application.get_env(:cash_lens, :sql_sandbox) do
+      perform_import(account, file_path, pid)
+    else
+      Task.start(fn -> perform_import(account, file_path, pid) end)
+    end
+  end
+
+  defp perform_import(account, file_path, pid) do
+    case Ingestor.import_file(account, file_path) do
+      {:ok, count} -> send(pid, {:import_success, count})
+      {:error, reason} -> send(pid, {:import_error, reason})
+    end
   end
 
   @impl true

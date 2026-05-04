@@ -1,9 +1,9 @@
 defmodule CashLens.TransactionsTest do
   use CashLens.DataCase, async: false
 
+  alias CashLens.AccountsFixtures
   alias CashLens.Transactions
   alias CashLens.Transactions.Transaction
-  alias CashLens.AccountsFixtures
 
   import CashLens.TransactionsFixtures
 
@@ -152,7 +152,7 @@ defmodule CashLens.TransactionsTest do
       transaction_fixture(%{amount: "-30.00", date: ~D[2026-01-10], category_id: category.id})
 
       results = Transactions.get_historical_category_summary()
-      assert length(results) > 0
+      assert results != []
     end
   end
 
@@ -248,13 +248,13 @@ defmodule CashLens.TransactionsTest do
       }
 
       results = Transactions.list_transactions(filters)
-      assert length(results) >= 1
+      assert results != []
     end
 
     test "filter_unmatched_transfers handles non-true value" do
       transaction_fixture(%{description: "test"})
       results = Transactions.list_transactions(%{"unmatched_transfers" => "false"})
-      assert length(results) >= 1
+      assert results != []
     end
 
     test "create_bulk_ignore_pattern/1 handles invalid pattern" do

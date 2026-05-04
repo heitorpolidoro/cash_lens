@@ -17,7 +17,8 @@ defmodule CashLens.MixProject do
         "coveralls.detail": :test,
         "coveralls.post": :test,
         "coveralls.html": :test,
-        "coveralls.xml": :test
+        "coveralls.xml": :test,
+        quality_check: :test
       ],
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader]

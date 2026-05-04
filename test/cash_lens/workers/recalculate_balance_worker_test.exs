@@ -1,8 +1,8 @@
 defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
   use CashLens.DataCase, async: false
   use Oban.Testing, repo: CashLens.Repo
-  alias CashLens.Workers.RecalculateBalanceWorker
   alias CashLens.Accounting.Balance
+  alias CashLens.Workers.RecalculateBalanceWorker
   import CashLens.AccountsFixtures
 
   test "perform/1 calculates balance and enqueues next month if it exists" do

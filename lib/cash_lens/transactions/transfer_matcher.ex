@@ -3,9 +3,9 @@ defmodule CashLens.Transactions.TransferMatcher do
   Logic to automatically link transfers between different accounts.
   """
   import Ecto.Query
+  alias CashLens.Categories
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
-  alias CashLens.Categories
 
   @doc """
   Tries to find a matching pair for a given transaction if it's a transfer.

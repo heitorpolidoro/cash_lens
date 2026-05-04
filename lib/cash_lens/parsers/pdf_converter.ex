@@ -1,7 +1,9 @@
 defmodule CashLens.Parsers.PDFConverter do
+  @moduledoc false
   @callback convert(file_path :: String.t()) :: {:ok, String.t()} | {:error, any()}
 
   defmodule SystemConverter do
+    @moduledoc false
     @behaviour CashLens.Parsers.PDFConverter
 
     @impl true

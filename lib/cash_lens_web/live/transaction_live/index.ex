@@ -150,7 +150,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("open_quick_category", %{"name" => name, "id" => tx_id}, socket) do
-    suggested_name = name |> String.split(" ") |> Enum.map(&String.capitalize/1) |> Enum.join(" ")
+    suggested_name = name |> String.split(" ") |> Enum.map_join(" ", &String.capitalize/1)
 
     {:noreply,
      socket
@@ -185,45 +185,13 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     case Transactions.update_transaction_category(id, category_id) do
       {:ok, updated_tx} ->
-        socket = assign(socket, :pending_count, Transactions.count_pending_transactions())
-        tx = Transactions.get_transaction!(updated_tx.id)
-
-        # Check against database ignore patterns
-        ignore_patterns = Transactions.list_bulk_ignore_patterns()
-
-        should_skip_bulk =
-          Enum.any?(ignore_patterns, fn p ->
-            case Regex.compile(p.pattern) do
-              {:ok, re} -> Regex.run(re, tx.description || "")
-              _ -> false
-            end
-          end)
-
-        bulk_items =
-          if category_id && !should_skip_bulk do
-            Transactions.list_transactions(%{"search" => tx.description})
-            |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id))
-          else
-            []
-          end
-
         socket =
-          if Enum.any?(bulk_items) do
-            cat = Enum.find(socket.assigns.categories, &(&1.id == category_id))
+          socket
+          |> assign(:pending_count, Transactions.count_pending_transactions())
+          |> handle_bulk_suggestion(updated_tx, category_id)
+          |> stream_update_transaction(updated_tx)
 
-            assign(socket, :bulk_confirmation, %{
-              items: bulk_items,
-              category_id: category_id,
-              category_name: cat.name,
-              description: tx.description
-            })
-          else
-            socket
-          end
-
-        if matches_filters?(tx, socket.assigns.filters),
-          do: {:noreply, stream_insert(socket, :transactions, tx)},
-          else: {:noreply, stream_delete(socket, :transactions, tx)}
+        {:noreply, socket}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Update failed")}
@@ -635,56 +603,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_info({:category_created, category, target_transaction_id}, socket) do
     if target_transaction_id do
-      Transactions.update_transaction_category(
-        target_transaction_id,
-        category.id
-      )
-
-      tx = Transactions.get_transaction!(target_transaction_id)
-
-      socket =
-        socket
-        |> assign(:show_quick_category_modal, false)
-        |> assign(:categories, Categories.list_categories())
-        |> assign(:pending_count, Transactions.count_pending_transactions())
-        |> put_flash(:info, "Category created!")
-
-      # Check against database ignore patterns
-      ignore_patterns = Transactions.list_bulk_ignore_patterns()
-
-      should_skip_bulk =
-        Enum.any?(ignore_patterns, fn p ->
-          case Regex.compile(p.pattern) do
-            {:ok, re} -> Regex.run(re, tx.description || "")
-            _ -> false
-          end
-        end)
-
-      bulk_items =
-        if !should_skip_bulk do
-          Transactions.list_transactions(%{"search" => tx.description})
-          |> Enum.reject(&(&1.id == tx.id or &1.category_id == category.id))
-        else
-          []
-        end
-
-      socket =
-        if Enum.any?(bulk_items),
-          do:
-            assign(socket, :bulk_confirmation, %{
-              items: bulk_items,
-              category_id: category.id,
-              category_name: category.name,
-              description: tx.description
-            }),
-          else: socket
-
-      socket =
-        if matches_filters?(tx, socket.assigns.filters),
-          do: stream_insert(socket, :transactions, tx),
-          else: stream_delete(socket, :transactions, tx)
-
-      {:noreply, socket}
+      process_category_created_with_tx(socket, category, target_transaction_id)
     else
       {:noreply, assign(socket, :categories, Categories.list_categories())}
     end
@@ -723,46 +642,145 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   # Helpers
+  defp process_category_created_with_tx(socket, category, target_transaction_id) do
+    Transactions.update_transaction_category(target_transaction_id, category.id)
+    tx = Transactions.get_transaction!(target_transaction_id)
+
+    socket =
+      socket
+      |> assign(:show_quick_category_modal, false)
+      |> assign(:categories, Categories.list_categories())
+      |> assign(:pending_count, Transactions.count_pending_transactions())
+      |> put_flash(:info, "Category created!")
+
+    bulk_items = get_bulk_items_for_tx(tx, category.id)
+
+    socket =
+      if Enum.any?(bulk_items) do
+        assign(socket, :bulk_confirmation, %{
+          items: bulk_items,
+          category_id: category.id,
+          category_name: category.name,
+          description: tx.description
+        })
+      else
+        socket
+      end
+
+    socket =
+      if matches_filters?(tx, socket.assigns.filters),
+        do: stream_insert(socket, :transactions, tx),
+        else: stream_delete(socket, :transactions, tx)
+
+    {:noreply, socket}
+  end
+
+  defp get_bulk_items_for_tx(tx, category_id) do
+    ignore_patterns = Transactions.list_bulk_ignore_patterns()
+
+    should_skip_bulk =
+      Enum.any?(ignore_patterns, fn p ->
+        case Regex.compile(p.pattern) do
+          {:ok, re} -> Regex.run(re, tx.description || "")
+          _ -> false
+        end
+      end)
+
+    if should_skip_bulk do
+      []
+    else
+      Transactions.list_transactions(%{"search" => tx.description})
+      |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id))
+    end
+  end
+
+  defp stream_update_transaction(socket, tx) do
+    tx = Transactions.get_transaction!(tx.id)
+
+    if matches_filters?(tx, socket.assigns.filters),
+      do: stream_insert(socket, :transactions, tx),
+      else: stream_delete(socket, :transactions, tx)
+  end
+
+  defp handle_bulk_suggestion(socket, _tx, nil), do: socket
+
+  defp handle_bulk_suggestion(socket, tx, category_id) do
+    ignore_patterns = Transactions.list_bulk_ignore_patterns()
+
+    if should_skip_bulk?(tx.description, ignore_patterns) do
+      socket
+    else
+      bulk_items =
+        Transactions.list_transactions(%{"search" => tx.description})
+        |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id))
+
+      if Enum.any?(bulk_items) do
+        cat = Enum.find(socket.assigns.categories, &(&1.id == category_id))
+
+        assign(socket, :bulk_confirmation, %{
+          items: bulk_items,
+          category_id: category_id,
+          category_name: cat.name,
+          description: tx.description
+        })
+      else
+        socket
+      end
+    end
+  end
+
+  defp should_skip_bulk?(nil, _), do: true
+
+  defp should_skip_bulk?(description, ignore_patterns) do
+    Enum.any?(ignore_patterns, fn p ->
+      case Regex.compile(p.pattern) do
+        {:ok, re} -> Regex.match?(re, description)
+        _ -> false
+      end
+    end)
+  end
+
   defp matches_filters?(tx, filters) do
     mapped = map_filters(filters)
 
+    category_match?(tx, mapped["category_id"]) &&
+      search_match?(tx, mapped["search"]) &&
+      account_match?(tx, mapped["account_id"]) &&
+      type_match?(tx, mapped["type"]) &&
+      unmatched_match?(tx, mapped["unmatched_transfers"])
+  end
+
+  defp category_match?(_tx, ""), do: true
+  defp category_match?(tx, "nil"), do: is_nil(tx.category_id)
+  defp category_match?(tx, id), do: tx.category_id == id
+
+  defp search_match?(_tx, ""), do: true
+
+  defp search_match?(tx, search) do
+    String.contains?(String.upcase(tx.description || ""), String.upcase(search))
+  end
+
+  defp account_match?(_tx, ""), do: true
+  defp account_match?(tx, account_id), do: tx.account_id == account_id
+
+  defp type_match?(_tx, ""), do: true
+  defp type_match?(tx, "debit"), do: Decimal.lt?(tx.amount, 0)
+  defp type_match?(tx, "credit"), do: Decimal.gt?(tx.amount, 0)
+  defp type_match?(_tx, _), do: true
+
+  defp unmatched_match?(_tx, "false"), do: true
+
+  defp unmatched_match?(tx, "true") do
     transfer_category_id =
       case Categories.get_category_by_slug("transfer") do
         nil -> nil
         cat -> cat.id
       end
 
-    category_match =
-      case mapped["category_id"] do
-        "" -> true
-        "nil" -> is_nil(tx.category_id)
-        id -> tx.category_id == id
-      end
-
-    search_match =
-      if mapped["search"] == "",
-        do: true,
-        else:
-          String.contains?(String.upcase(tx.description || ""), String.upcase(mapped["search"]))
-
-    account_match =
-      if mapped["account_id"] == "", do: true, else: tx.account_id == mapped["account_id"]
-
-    type_match =
-      case mapped["type"] do
-        "" -> true
-        "debit" -> Decimal.lt?(tx.amount, 0)
-        "credit" -> Decimal.gt?(tx.amount, 0)
-        _ -> true
-      end
-
-    unmatched_match =
-      if mapped["unmatched_transfers"] == "true",
-        do: is_nil(tx.transfer_key) && tx.category_id == transfer_category_id,
-        else: true
-
-    category_match && search_match && account_match && type_match && unmatched_match
+    is_nil(tx.transfer_key) && tx.category_id == transfer_category_id
   end
+
+  defp unmatched_match?(_tx, _), do: true
 
   defp update_transfer_linker_list(socket) do
     origin_tx = socket.assigns.transfer_origin
@@ -799,27 +817,6 @@ defmodule CashLensWeb.TransactionLive.Index do
     unmatched_count =
       Transactions.list_transactions(Map.put(mapped, "unmatched_transfers", "true")) |> length()
 
-    current_balance =
-      if mapped["account_id"] not in ["", nil] do
-        account = Enum.find(socket.assigns.accounts, &(&1.id == mapped["account_id"]))
-
-        if account do
-          latest_balance = CashLens.Accounting.get_latest_balance_for_account(account.id)
-          if latest_balance, do: latest_balance.final_balance, else: account.balance
-        else
-          Decimal.new("0")
-        end
-      else
-        latest_balances = CashLens.Accounting.list_latest_balances()
-        all_accounts = socket.assigns.accounts
-
-        Enum.map(all_accounts, fn account ->
-          balance = Enum.find(latest_balances, &(&1.account_id == account.id))
-          if(balance, do: balance.final_balance, else: account.balance)
-        end)
-        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&1, &2))
-      end
-
     month_name =
       summary.month
       |> Calendar.strftime("%B")
@@ -828,11 +825,33 @@ defmodule CashLensWeb.TransactionLive.Index do
     socket
     |> assign(:unmatched_transfers_count, unmatched_count)
     |> assign(:summary, %{
-      current_balance: current_balance,
+      current_balance: calculate_current_balance(socket, mapped["account_id"]),
       income: summary.income,
       expenses: summary.expenses,
       month_name: month_name
     })
+  end
+
+  defp calculate_current_balance(socket, account_id) when account_id in ["", nil] do
+    latest_balances = CashLens.Accounting.list_latest_balances()
+
+    socket.assigns.accounts
+    |> Enum.map(fn account ->
+      balance = Enum.find(latest_balances, &(&1.account_id == account.id))
+      if balance, do: balance.final_balance, else: account.balance
+    end)
+    |> Enum.reduce(Decimal.new("0"), &Decimal.add(&1, &2))
+  end
+
+  defp calculate_current_balance(socket, account_id) do
+    case Enum.find(socket.assigns.accounts, &(&1.id == account_id)) do
+      nil ->
+        Decimal.new("0")
+
+      account ->
+        latest_balance = CashLens.Accounting.get_latest_balance_for_account(account.id)
+        if latest_balance, do: latest_balance.final_balance, else: account.balance
+    end
   end
 
   defp map_filters(filters) do
