@@ -2,6 +2,7 @@ defmodule CashLens.Transactions.TransferMatcher do
   @moduledoc """
   Logic to automatically link transfers between different accounts.
   """
+  require Logger
   import Ecto.Query
   alias CashLens.Categories
   alias CashLens.Repo
@@ -94,7 +95,10 @@ defmodule CashLens.Transactions.TransferMatcher do
       )
 
     if target_account do
-      IO.puts("Creating virtual twin for '#{tx.description}' in account '#{target_account_name}'")
+      Logger.info(
+        "Creating virtual twin for '#{tx.description}' in account '#{target_account_name}'"
+      )
+
       link_id = Ecto.UUID.generate()
 
       twin_params = %{
@@ -125,7 +129,7 @@ defmodule CashLens.Transactions.TransferMatcher do
 
       {:ok, :auto_matched}
     else
-      IO.puts("Warning: Account '#{target_account_name}' not found for auto-pairing.")
+      Logger.warning("Account '#{target_account_name}' not found for auto-pairing.")
       :no_account_found
     end
   end

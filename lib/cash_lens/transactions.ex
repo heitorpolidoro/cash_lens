@@ -144,12 +144,10 @@ defmodule CashLens.Transactions do
   defp filter_by_category(query, ""), do: query
 
   defp filter_by_category(query, "nil") do
-    IO.puts("FILTER BY CATEGORY: NIL")
     where(query, [t], is_nil(t.category_id))
   end
 
   defp filter_by_category(query, category_id) do
-    IO.puts("FILTER BY CATEGORY: #{category_id}")
     ids = CashLens.Categories.get_category_ids_with_children(category_id)
     where(query, [t], t.category_id in ^ids)
   end

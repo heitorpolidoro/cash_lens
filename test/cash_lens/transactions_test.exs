@@ -135,6 +135,30 @@ defmodule CashLens.TransactionsTest do
       assert summary.income == Decimal.new("100.00")
     end
 
+    test "get_monthly_summary/2 with category_id nil filter bypasses date range" do
+      category = CashLens.CategoriesFixtures.category_fixture(%{slug: "food"})
+      transaction_fixture(%{amount: "50.00", date: ~D[2025-06-10], category_id: category.id})
+
+      normal_summary = Transactions.get_monthly_summary(~D[2026-03-01])
+      bypass_summary = Transactions.get_monthly_summary(~D[2026-03-01], %{"category_id" => "nil"})
+
+      assert normal_summary.income == Decimal.new("0")
+      assert bypass_summary.income == Decimal.new("50.00")
+    end
+
+    test "get_monthly_summary/2 with unmatched_transfers filter bypasses date range" do
+      category = CashLens.CategoriesFixtures.category_fixture(%{slug: "food"})
+      transaction_fixture(%{amount: "75.00", date: ~D[2025-06-10], category_id: category.id})
+
+      normal_summary = Transactions.get_monthly_summary(~D[2026-03-01])
+
+      bypass_summary =
+        Transactions.get_monthly_summary(~D[2026-03-01], %{"unmatched_transfers" => "true"})
+
+      assert normal_summary.income == Decimal.new("0")
+      assert bypass_summary.income == Decimal.new("75.00")
+    end
+
     test "get_historical_summary/0" do
       category = CashLens.CategoriesFixtures.category_fixture(%{slug: "food"})
       transaction_fixture(%{amount: "100.00", date: ~D[2026-01-10], category_id: category.id})
