@@ -57,6 +57,19 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
     assert html =~ String.slice(account.bank || account.name, 0..1)
   end
 
+  test "renders account icon when present", %{conn: conn} do
+    _account =
+      account_fixture(%{
+        name: "Icon Account",
+        icon: "https://example.com/icon.png",
+        accepts_import: true
+      })
+
+    {:ok, _view, html} = live_isolated(conn, HostLive)
+
+    assert html =~ "https://example.com/icon.png"
+  end
+
   test "validate_import with account_id selected", %{conn: conn, account: account} do
     {:ok, view, _html} = live_isolated(conn, HostLive)
 
@@ -109,7 +122,11 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
   test "save_import with file - success using bb_csv parser", %{conn: conn, account: account} do
     {:ok, view, _html} = live_isolated(conn, HostLive)
 
-    csv_content = File.read!("test/support/fixtures/files/bb_sample.csv")
+    csv_content =
+      case File.read("test/support/fixtures/files/bb_sample.csv") do
+        {:ok, content} -> content
+        {:error, _} -> raise "Missing test fixture: test/support/fixtures/files/bb_sample.csv"
+      end
 
     upload =
       file_input(view, "#upload-form", :statement, [
@@ -121,6 +138,44 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
     view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
 
     assert render(view) =~ "Success"
+  end
+
+  test "in production-like environment, it starts a Task", %{conn: conn, account: account} do
+    parent = self()
+
+    # Simulate production environment where sandbox is false and we have a custom task starter
+    Application.put_env(:cash_lens, :sql_sandbox, false)
+
+    Application.put_env(:cash_lens, :task_start_fn, fn _func ->
+      send(parent, :task_dispatched)
+      {:ok, self()}
+    end)
+
+    on_exit(fn ->
+      Application.put_env(:cash_lens, :sql_sandbox, true)
+      Application.delete_env(:cash_lens, :task_start_fn)
+    end)
+
+    {:ok, view, _html} = live_isolated(conn, HostLive)
+
+    upload =
+      file_input(view, "#upload-form", :statement, [
+        %{name: "test.csv", content: "header\nrow", type: "text/csv"}
+      ])
+
+    render_upload(upload, "test.csv")
+
+    view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
+
+    assert_receive :task_dispatched
+  end
+
+  test "save_import without file sends error to parent", %{conn: conn, account: account} do
+    {:ok, view, _html} = live_isolated(conn, HostLive)
+
+    view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
+
+    assert render(view) =~ "Error: No file selected."
   end
 
   test "cancel-upload removes file entry", %{conn: conn} do

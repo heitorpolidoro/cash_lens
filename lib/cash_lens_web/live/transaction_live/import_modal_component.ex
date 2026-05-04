@@ -35,7 +35,9 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
 
     uploaded_files =
       consume_uploaded_entries(socket, :statement, fn %{path: path}, entry ->
-        dest = Path.join(System.tmp_dir!(), "#{entry.uuid}-#{entry.client_name}")
+        # Use Path.basename to prevent Path Traversal
+        filename = Path.basename(entry.client_name)
+        dest = Path.join(System.tmp_dir!(), "#{entry.uuid}-#{filename}")
         File.cp!(path, dest)
         {:ok, dest}
       end)
@@ -44,23 +46,24 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
       [file_path] ->
         pid = self()
 
-        # In test environment, we run synchronously to avoid Sandbox issues
-        # and ensure the test can assert on the results immediately.
-        if Application.get_env(:cash_lens, :sql_sandbox) do
-          case Ingestor.import_file(account, file_path) do
+        process_import = fn ->
+          result = Ingestor.import_file(account, file_path)
+          File.rm(file_path)
+
+          case result do
             {:ok, count} -> send(pid, {:import_success, count})
             {:error, reason} -> send(pid, {:import_error, reason})
           end
-        else
-          # coveralls-ignore-start
-          Task.start(fn ->
-            case Ingestor.import_file(account, file_path) do
-              {:ok, count} -> send(pid, {:import_success, count})
-              {:error, reason} -> send(pid, {:import_error, reason})
-            end
-          end)
+        end
 
-          # coveralls-ignore-stop
+        # In test environment, we run synchronously to avoid Sandbox issues
+        # and ensure the test can assert on the results immediately.
+        # Otherwise, we use the configured task starter (defaults to Task.start).
+        if Application.get_env(:cash_lens, :sql_sandbox) do
+          process_import.()
+        else
+          task_start = Application.get_env(:cash_lens, :task_start_fn, &Task.start/1)
+          task_start.(process_import)
         end
 
         {:noreply, socket}
