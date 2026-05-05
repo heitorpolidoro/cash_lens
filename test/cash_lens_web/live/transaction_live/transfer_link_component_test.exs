@@ -3,6 +3,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
   import Phoenix.LiveViewTest
   alias CashLens.Transactions
   alias CashLensWeb.TransactionLive.TransferLinkComponent
+  alias Ecto.Adapters.SQL.Sandbox
 
   @create_attrs %{description: "Transfer", amount: -100, date: ~D[2026-03-01]}
 
@@ -104,7 +105,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
         }
       )
 
-    Ecto.Adapters.SQL.Sandbox.allow(CashLens.Repo, self(), view.pid)
+    Sandbox.allow(CashLens.Repo, self(), view.pid)
 
     # Triggering the event on the component
     view |> element("button[phx-value-pair-id='#{pair_tx.id}']") |> render_click()
@@ -125,7 +126,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
         }
       )
 
-    Ecto.Adapters.SQL.Sandbox.allow(CashLens.Repo, self(), view.pid)
+    Sandbox.allow(CashLens.Repo, self(), view.pid)
 
     render_click(view, "open_quick_transfer", %{"myself" => "transfer-component"})
 

@@ -17,7 +17,8 @@ defmodule CashLens.MixProject do
         "coveralls.detail": :test,
         "coveralls.post": :test,
         "coveralls.html": :test,
-        "coveralls.xml": :test
+        "coveralls.xml": :test,
+        quality_check: :test
       ],
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader]
@@ -36,7 +37,7 @@ defmodule CashLens.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [precommit: :test, quality_check: :test]
     ]
   end
 
@@ -103,10 +104,14 @@ defmodule CashLens.MixProject do
         "esbuild cash_lens --minify",
         "phx.digest"
       ],
-      precommit: [
+      precommit: ["quality_check"],
+      quality_check: [
+        "ecto.create --quiet",
+        "ecto.migrate --quiet",
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "format --check-formatted",
+        "credo --strict",
         "test"
       ]
     ]

@@ -1,8 +1,8 @@
 defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
   use CashLensWeb, :live_component
 
-  alias CashLens.Transactions
   alias CashLens.Categories
+  alias CashLens.Transactions
 
   @impl true
   def render(assigns) do

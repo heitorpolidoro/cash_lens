@@ -3,6 +3,7 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponentTest do
   import Phoenix.LiveViewTest
   alias CashLens.Transactions
   alias CashLensWeb.TransactionLive.ReimbursementLinkComponent
+  alias Ecto.Adapters.SQL.Sandbox
 
   @create_attrs %{description: "some description", amount: 100, date: ~D[2026-03-01]}
 
@@ -79,7 +80,7 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponentTest do
   end
 
   test "links reimbursement", %{credit_tx: credit_tx, expense_tx: expense_tx} do
-    Ecto.Adapters.SQL.Sandbox.mode(CashLens.Repo, {:shared, self()})
+    Sandbox.mode(CashLens.Repo, {:shared, self()})
 
     {:ok, view, _html} =
       live_isolated(build_conn(), HostLive,

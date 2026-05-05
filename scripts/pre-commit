@@ -1,15 +1,18 @@
 #!/bin/sh
 
-# Pre-commit hook to check Elixir formatting
-# Consistent with CI "Build and test"
+# Pre-commit hook to run quality checks
+# Consistent with CI and "mix quality_check"
 
-echo "Running mix format --check-formatted..."
-mix format --check-formatted
+echo "Running mix quality_check (format, credo, compile, tests)..."
+mix quality_check
 
 if [ $? -ne 0 ]; then
-  echo "Error: Elixir formatting check failed."
-  echo "Please run 'mix format' to fix formatting before committing."
+  echo ""
+  echo "❌ Error: Quality checks failed."
+  echo "Please fix the issues above before committing."
   exit 1
 fi
 
+echo ""
+echo "✅ Quality checks passed!"
 exit 0

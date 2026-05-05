@@ -1,9 +1,9 @@
 defmodule CashLensWeb.PageController do
   use CashLensWeb, :controller
 
+  alias CashLens.Accounting
   alias CashLens.Accounts
   alias CashLens.Transactions
-  alias CashLens.Accounting
 
   def home(conn, _params) do
     # Get latest balances per account

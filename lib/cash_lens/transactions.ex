@@ -5,8 +5,10 @@ defmodule CashLens.Transactions do
 
   import Ecto.Query, warn: false
   alias CashLens.Repo
+  alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.BulkIgnorePattern
   alias CashLens.Transactions.Transaction
+  alias CashLens.Transactions.TransferMatcher
 
   @doc """
   Returns the list of all bulk ignore patterns.
@@ -76,23 +78,23 @@ defmodule CashLens.Transactions do
       query
     else
       query
-      |> then(fn q ->
-        if month && month != "" do
-          m = if is_binary(month), do: String.to_integer(month), else: month
-          where(q, [t], fragment("extract(month from ?)", t.date) == ^m)
-        else
-          q
-        end
-      end)
-      |> then(fn q ->
-        if year && year != "" do
-          y = if is_binary(year), do: String.to_integer(year), else: year
-          where(q, [t], fragment("extract(year from ?)", t.date) == ^y)
-        else
-          q
-        end
-      end)
+      |> filter_month(month)
+      |> filter_year(year)
     end
+  end
+
+  defp filter_month(query, month) when month in [nil, ""], do: query
+
+  defp filter_month(query, month) do
+    m = if is_binary(month), do: String.to_integer(month), else: month
+    where(query, [t], fragment("extract(month from ?)", t.date) == ^m)
+  end
+
+  defp filter_year(query, year) when year in [nil, ""], do: query
+
+  defp filter_year(query, year) do
+    y = if is_binary(year), do: String.to_integer(year), else: year
+    where(query, [t], fragment("extract(year from ?)", t.date) == ^y)
   end
 
   defp order_by_date(query, :asc),
@@ -142,12 +144,10 @@ defmodule CashLens.Transactions do
   defp filter_by_category(query, ""), do: query
 
   defp filter_by_category(query, "nil") do
-    IO.puts("FILTER BY CATEGORY: NIL")
     where(query, [t], is_nil(t.category_id))
   end
 
   defp filter_by_category(query, category_id) do
-    IO.puts("FILTER BY CATEGORY: #{category_id}")
     ids = CashLens.Categories.get_category_ids_with_children(category_id)
     where(query, [t], t.category_id in ^ids)
   end
@@ -176,44 +176,14 @@ defmodule CashLens.Transactions do
   """
   def get_monthly_summary(date \\ nil, filters \\ %{}) do
     target_date = date || get_latest_transaction_date() || Date.utc_today()
+    {first_of_month, last_of_month} = get_summary_period(target_date, filters)
 
-    # If month/year filters are present, use them to define the summary period
-    {m, y} =
-      if filters["month"] && filters["month"] != "" && filters["year"] && filters["year"] != "" do
-        {String.to_integer(filters["month"]), String.to_integer(filters["year"])}
-      else
-        {target_date.month, target_date.year}
-      end
-
-    first_of_month = Date.new!(y, m, 1)
-    last_of_month = Date.end_of_month(first_of_month)
-
-    query =
-      from t in Transaction,
-        left_join: c in assoc(t, :category),
-        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
-        where: is_nil(t.reimbursement_link_key)
-
-    # Bypass date filtering if special global filters are active
-    query =
-      if filters["category_id"] == "nil" or filters["unmatched_transfers"] == "true" do
-        query
-      else
-        where(query, [t], t.date >= ^first_of_month and t.date <= ^last_of_month)
-      end
-
-    query =
-      query
-      |> filter_by_account(filters["account_id"])
-
-    # Optimized SQL aggregation with nil handling
     result =
-      from(t in query,
-        select: %{
-          income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", t.amount, t.amount)),
-          expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", t.amount, t.amount))
-        }
-      )
+      Transaction
+      |> build_summary_base_query()
+      |> apply_summary_date_filters(first_of_month, last_of_month, filters)
+      |> filter_by_account(filters["account_id"])
+      |> aggregate_summary_totals()
       |> Repo.one()
 
     %{
@@ -221,6 +191,42 @@ defmodule CashLens.Transactions do
       expenses: (result && result.expenses) || Decimal.new("0"),
       month: first_of_month
     }
+  end
+
+  defp get_summary_period(_target_date, %{"month" => m, "year" => y})
+       when is_binary(m) and m != "" and is_binary(y) and y != "" do
+    first = Date.new!(String.to_integer(y), String.to_integer(m), 1)
+    {first, Date.end_of_month(first)}
+  end
+
+  defp get_summary_period(target_date, _filters) do
+    first = Date.new!(target_date.year, target_date.month, 1)
+    {first, Date.end_of_month(first)}
+  end
+
+  defp build_summary_base_query(query) do
+    from t in query,
+      left_join: c in assoc(t, :category),
+      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+      where: is_nil(t.reimbursement_link_key)
+  end
+
+  defp apply_summary_date_filters(query, _first, _last, %{"category_id" => "nil"}), do: query
+
+  defp apply_summary_date_filters(query, _first, _last, %{"unmatched_transfers" => "true"}),
+    do: query
+
+  defp apply_summary_date_filters(query, first, last, _filters) do
+    where(query, [t], t.date >= ^first and t.date <= ^last)
+  end
+
+  defp aggregate_summary_totals(query) do
+    from(t in query,
+      select: %{
+        income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", t.amount, t.amount)),
+        expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", t.amount, t.amount))
+      }
+    )
   end
 
   @doc """
@@ -264,47 +270,55 @@ defmodule CashLens.Transactions do
   Returns expense totals grouped by month and category, excluding transfers.
   """
   def get_historical_category_summary do
-    query =
-      from t in Transaction,
-        join: c in assoc(t, :category),
-        left_join: p in assoc(c, :parent),
-        where: t.amount < 0,
-        where: c.slug not in ["initial_value", "transfer"],
-        where: is_nil(t.reimbursement_link_key),
-        select: %{
-          year: fragment("EXTRACT(YEAR FROM ?)", t.date),
-          month: fragment("EXTRACT(MONTH FROM ?)", t.date),
-          category_name: c.name,
-          parent_name: p.name,
-          type: c.type,
-          total: t.amount
-        }
-
-    Repo.all(query)
-    |> Enum.group_by(fn item ->
-      year = if is_struct(item.year, Decimal), do: Decimal.to_integer(item.year), else: item.year
-
-      month =
-        if is_struct(item.month, Decimal), do: Decimal.to_integer(item.month), else: item.month
-
-      {year, month}
-    end)
-    |> Enum.map(fn {{year, month}, items} ->
-      categories =
-        items
-        |> Enum.group_by(fn i -> {i.parent_name || i.category_name, i.type} end)
-        |> Enum.map(fn {{name, type}, txs} ->
-          %{
-            name: name,
-            type: type,
-            total:
-              txs |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.total)) |> Decimal.abs()
-          }
-        end)
-
-      %{year: year, month: month, categories: categories}
-    end)
+    query_historical_category_totals()
+    |> Repo.all()
+    |> Enum.group_by(&group_by_month_year/1)
+    |> Enum.map(&format_month_summary/1)
     |> Enum.sort_by(fn %{year: y, month: m} -> {y, m} end)
+  end
+
+  defp query_historical_category_totals do
+    from t in Transaction,
+      join: c in assoc(t, :category),
+      left_join: p in assoc(c, :parent),
+      where: t.amount < 0,
+      where: c.slug not in ["initial_value", "transfer"],
+      where: is_nil(t.reimbursement_link_key),
+      select: %{
+        year: fragment("EXTRACT(YEAR FROM ?)", t.date),
+        month: fragment("EXTRACT(MONTH FROM ?)", t.date),
+        category_name: c.name,
+        parent_name: p.name,
+        type: c.type,
+        total: t.amount
+      }
+  end
+
+  defp group_by_month_year(item) do
+    year = if is_struct(item.year, Decimal), do: Decimal.to_integer(item.year), else: item.year
+
+    month =
+      if is_struct(item.month, Decimal), do: Decimal.to_integer(item.month), else: item.month
+
+    {year, month}
+  end
+
+  defp format_month_summary({{year, month}, items}) do
+    categories =
+      items
+      |> Enum.group_by(fn i -> {i.parent_name || i.category_name, i.type} end)
+      |> Enum.map(&format_category_total/1)
+
+    %{year: year, month: month, categories: categories}
+  end
+
+  defp format_category_total({{name, type}, txs}) do
+    total =
+      txs
+      |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.total))
+      |> Decimal.abs()
+
+    %{name: name, type: type, total: total}
   end
 
   defp get_latest_transaction_date do
@@ -325,7 +339,7 @@ defmodule CashLens.Transactions do
     |> Repo.insert()
     |> case do
       {:ok, transaction} ->
-        CashLens.Transactions.TransferMatcher.match_transfer(transaction)
+        TransferMatcher.match_transfer(transaction)
         {:ok, transaction}
 
       {:error, changeset} ->
@@ -372,7 +386,7 @@ defmodule CashLens.Transactions do
     pending_transactions = Repo.all(query)
 
     Enum.each(pending_transactions, fn tx ->
-      updates = CashLens.Transactions.AutoCategorizer.categorize(tx)
+      updates = AutoCategorizer.categorize(tx)
       if updates.category_id, do: update_transaction_category(tx.id, updates.category_id)
     end)
 
