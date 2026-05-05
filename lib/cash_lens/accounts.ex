@@ -46,6 +46,15 @@ defmodule CashLens.Accounts do
   end
 
   @doc """
+  Fetches multiple accounts by name in a single query. Returns a map of name => account.
+  """
+  def get_accounts_by_names(names) do
+    from(a in Account, where: a.name in ^names)
+    |> Repo.all()
+    |> Map.new(fn a -> {a.name, a} end)
+  end
+
+  @doc """
   Creates a account.
 
   ## Examples

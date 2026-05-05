@@ -139,12 +139,10 @@ defmodule CashLens.Parsers.Ingestor do
     )
   end
 
+  @special_account_names ["BB MM Ouro", "BB Rende Fácil"]
+
   defp collect_affected_periods(transactions_data, account_id) do
-    # Pre-fetch special accounts to avoid N+1 queries
-    special_accounts = %{
-      "BB MM Ouro" => Accounts.get_account_by_name("BB MM Ouro"),
-      "BB Rende Fácil" => Accounts.get_account_by_name("BB Rende Fácil")
-    }
+    special_accounts = Accounts.get_accounts_by_names(@special_account_names)
 
     Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
       acc = MapSet.put(acc, {account_id, data.date.month, data.date.year})
