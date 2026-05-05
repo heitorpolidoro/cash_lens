@@ -1,5 +1,5 @@
 defmodule CashLensWeb.TransactionLive.ImportModalComponentTest do
-  use CashLensWeb.ConnCase, async: true
+  use CashLensWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
 
@@ -55,5 +55,39 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponentTest do
     view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
 
     assert render(view) =~ "Error: No file selected."
+  end
+
+  test "handles save_import with uploaded file (sync mode)", %{conn: conn, account: account} do
+    {:ok, view, _html} = live_isolated(conn, HostLive)
+
+    upload =
+      file_input(view, "#upload-form", :statement, [
+        %{name: "test.csv", content: "some,csv,content", type: "text/csv"}
+      ])
+
+    render_upload(upload, "test.csv")
+    view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
+
+    # Parser type "ofx" doesn't match "standard_ofx" in Ingestor.parse/2 → error
+    assert render(view) =~ "Error:"
+  end
+
+  test "handles save_import with uploaded file (async mode)", %{conn: conn, account: account} do
+    Application.put_env(:cash_lens, :sql_sandbox, false)
+    on_exit(fn -> Application.put_env(:cash_lens, :sql_sandbox, true) end)
+
+    {:ok, view, _html} = live_isolated(conn, HostLive)
+
+    upload =
+      file_input(view, "#upload-form", :statement, [
+        %{name: "test.csv", content: "some,csv,content", type: "text/csv"}
+      ])
+
+    render_upload(upload, "test.csv")
+    view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
+
+    # Wait for async Task to complete and send the error message
+    Process.sleep(100)
+    assert render(view) =~ "Error:"
   end
 end

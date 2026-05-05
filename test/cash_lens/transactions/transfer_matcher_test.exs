@@ -158,5 +158,26 @@ defmodule CashLens.Transactions.TransferMatcherTest do
 
       assert :not_a_transfer == TransferMatcher.match_transfer(tx)
     end
+
+    test "returns :no_account_found when target account does not exist", %{
+      category: cat,
+      acc1: a1
+    } do
+      # No "BB MM Ouro" account exists in setup (only "Checking" and "Ouro")
+      tx =
+        transaction_fixture(%{
+          account_id: a1.id,
+          category_id: cat.id,
+          description: "BB MM OURO TRANSFER",
+          amount: Decimal.new("-50.00")
+        })
+
+      # transfer_key remains nil because create_virtual_twin returned :no_account_found
+      tx = Repo.get(Transaction, tx.id)
+      assert is_nil(tx.transfer_key)
+
+      # Call match_transfer explicitly to exercise the path and verify return value
+      assert TransferMatcher.match_transfer(tx) == :no_account_found
+    end
   end
 end

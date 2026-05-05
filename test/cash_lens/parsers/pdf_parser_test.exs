@@ -114,5 +114,13 @@ defmodule CashLens.PDFParserTest do
       results = PDFParser.parse(text, :sem_parar)
       assert List.first(results).time == nil
     end
+
+    test "do_parse_date falls back to today for invalid date components" do
+      # "31/13/26" splits into 3 parts so do_parse_date is called,
+      # but month 13 is invalid → Date.new fails → fallback to Date.utc_today()
+      text = "Plano Contratado: 31/13/26 R$ 10,00"
+      [tx] = PDFParser.parse(text, :sem_parar)
+      assert tx.date == Date.utc_today()
+    end
   end
 end

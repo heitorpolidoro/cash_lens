@@ -95,9 +95,10 @@ defmodule CashLens.Transactions.TransferMatcher do
       )
 
     if target_account do
-      Logger.info(
+      log_msg =
         "Creating virtual twin for '#{tx.description}' in account '#{target_account_name}'"
-      )
+
+      Logger.info(log_msg)
 
       link_id = Ecto.UUID.generate()
 
@@ -129,7 +130,8 @@ defmodule CashLens.Transactions.TransferMatcher do
 
       {:ok, :auto_matched}
     else
-      Logger.warning("Account '#{target_account_name}' not found for auto-pairing.")
+      warn_msg = "Account '#{target_account_name}' not found for auto-pairing."
+      Logger.warning(warn_msg)
       :no_account_found
     end
   end
