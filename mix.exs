@@ -103,10 +103,12 @@ defmodule CashLens.MixProject do
         "esbuild cash_lens --minify",
         "phx.digest"
       ],
-      precommit: [
+      precommit: ["quality_check"],
+      quality_check: [
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "format --check-formatted",
+        "credo",
         "test"
       ]
     ]

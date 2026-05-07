@@ -54,13 +54,10 @@ jobs:
     - name: Install dependencies
       run: mix deps.get
 
-    - name: Check Formatting
-      run: mix format --check-formatted
+    - name: Run Quality Checks
+      run: mix quality_check
 
-    - name: Compile and check warnings
-      run: mix compile --warnings-as-errors
-
-    - name: Run tests with coverage
+    - name: Generate Coverage Report
       run: |
         mix coveralls.xml
         sed -i 's/file path="\//file path="/g' cover/excoveralls.xml
