@@ -61,6 +61,11 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Configure MIME types
+config :mime, :types, %{
+  "application/x-ofx" => ["ofx"]
+}
+
 # Configure Oban
 config :cash_lens, Oban,
   repo: CashLens.Repo,
