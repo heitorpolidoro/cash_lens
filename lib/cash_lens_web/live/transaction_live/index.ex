@@ -708,7 +708,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   defp stream_update_transaction(socket, tx) do
     tx = Transactions.get_transaction!(tx.id)
 
-    if matches_filters?(tx, socket.assigns.filters),
+    if matches_filters?(tx, socket.assigns.filters, socket.assigns.transfer_category_id),
       do: stream_insert(socket, :transactions, tx),
       else: stream_delete(socket, :transactions, tx)
   end
@@ -751,7 +751,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     end)
   end
 
-  defp matches_filters?(tx, filters, transfer_category_id \\ nil) do
+  defp matches_filters?(tx, filters, transfer_category_id) do
     mapped = map_filters(filters)
 
     category_match?(tx, mapped["category_id"]) &&
