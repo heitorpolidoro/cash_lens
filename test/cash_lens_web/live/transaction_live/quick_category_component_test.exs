@@ -6,6 +6,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
   alias CashLens.Categories
   alias CashLens.Categories.Category
   alias CashLensWeb.TransactionLive.QuickCategoryComponent
+  alias Ecto.Adapters.SQL.Sandbox
 
   defmodule HostLive do
     use Phoenix.LiveView
@@ -48,7 +49,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
   end
 
   setup do
-    Ecto.Adapters.SQL.Sandbox.mode(CashLens.Repo, {:shared, self()})
+    Sandbox.mode(CashLens.Repo, {:shared, self()})
     :ok
   end
 

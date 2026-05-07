@@ -33,39 +33,9 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   def handle_event("save_import", %{"account_id" => account_id}, socket) do
     account = Accounts.get_account!(account_id)
 
-    uploaded_files =
-      consume_uploaded_entries(socket, :statement, fn %{path: path}, entry ->
-        # Use Path.basename to prevent Path Traversal
-        filename = Path.basename(entry.client_name)
-        dest = Path.join(System.tmp_dir!(), "#{entry.uuid}-#{filename}")
-        File.cp!(path, dest)
-        {:ok, dest}
-      end)
-
-    case uploaded_files do
+    case consume_uploaded_entries(socket, :statement, &copy_to_temp/2) do
       [file_path] ->
-        pid = self()
-
-        process_import = fn ->
-          result = Ingestor.import_file(account, file_path)
-          File.rm(file_path)
-
-          case result do
-            {:ok, count} -> send(pid, {:import_success, count})
-            {:error, reason} -> send(pid, {:import_error, reason})
-          end
-        end
-
-        # In test environment, we run synchronously to avoid Sandbox issues
-        # and ensure the test can assert on the results immediately.
-        # Otherwise, we use the configured task starter (defaults to Task.start).
-        if Application.get_env(:cash_lens, :sql_sandbox) do
-          process_import.()
-        else
-          task_start = Application.get_env(:cash_lens, :task_start_fn, &Task.start/1)
-          task_start.(process_import)
-        end
-
+        start_import(account, file_path)
         {:noreply, socket}
 
       [] ->
@@ -83,6 +53,34 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   @impl true
   def handle_event("cancel-upload", %{"ref" => ref}, socket) do
     {:noreply, cancel_upload(socket, :statement, ref)}
+  end
+
+  defp copy_to_temp(%{path: path}, entry) do
+    filename = Path.basename(entry.client_name)
+    dest = Path.join(System.tmp_dir!(), "#{entry.uuid}-#{filename}")
+    File.cp!(path, dest)
+    {:ok, dest}
+  end
+
+  defp start_import(account, file_path) do
+    pid = self()
+
+    process_import = fn ->
+      result = Ingestor.import_file(account, file_path)
+      File.rm(file_path)
+
+      case result do
+        {:ok, count} -> send(pid, {:import_success, count})
+        {:error, reason} -> send(pid, {:import_error, reason})
+      end
+    end
+
+    if Application.get_env(:cash_lens, :sql_sandbox) do
+      process_import.()
+    else
+      task_start = Application.get_env(:cash_lens, :task_start_fn, &Task.start/1)
+      task_start.(process_import)
+    end
   end
 
   @impl true

@@ -1,9 +1,9 @@
 defmodule CashLens.TransactionsTest do
   use CashLens.DataCase, async: false
 
+  alias CashLens.AccountsFixtures
   alias CashLens.Transactions
   alias CashLens.Transactions.Transaction
-  alias CashLens.AccountsFixtures
 
   import CashLens.TransactionsFixtures
 
@@ -135,6 +135,30 @@ defmodule CashLens.TransactionsTest do
       assert summary.income == Decimal.new("100.00")
     end
 
+    test "get_monthly_summary/2 with category_id nil filter bypasses date range" do
+      category = CashLens.CategoriesFixtures.category_fixture(%{slug: "food"})
+      transaction_fixture(%{amount: "50.00", date: ~D[2025-06-10], category_id: category.id})
+
+      normal_summary = Transactions.get_monthly_summary(~D[2026-03-01])
+      bypass_summary = Transactions.get_monthly_summary(~D[2026-03-01], %{"category_id" => "nil"})
+
+      assert normal_summary.income == Decimal.new("0")
+      assert bypass_summary.income == Decimal.new("50.00")
+    end
+
+    test "get_monthly_summary/2 with unmatched_transfers filter bypasses date range" do
+      category = CashLens.CategoriesFixtures.category_fixture(%{slug: "food"})
+      transaction_fixture(%{amount: "75.00", date: ~D[2025-06-10], category_id: category.id})
+
+      normal_summary = Transactions.get_monthly_summary(~D[2026-03-01])
+
+      bypass_summary =
+        Transactions.get_monthly_summary(~D[2026-03-01], %{"unmatched_transfers" => "true"})
+
+      assert normal_summary.income == Decimal.new("0")
+      assert bypass_summary.income == Decimal.new("75.00")
+    end
+
     test "get_historical_summary/0" do
       category = CashLens.CategoriesFixtures.category_fixture(%{slug: "food"})
       transaction_fixture(%{amount: "100.00", date: ~D[2026-01-10], category_id: category.id})
@@ -152,7 +176,7 @@ defmodule CashLens.TransactionsTest do
       transaction_fixture(%{amount: "-30.00", date: ~D[2026-01-10], category_id: category.id})
 
       results = Transactions.get_historical_category_summary()
-      assert length(results) > 0
+      assert results != []
     end
   end
 
@@ -223,8 +247,6 @@ defmodule CashLens.TransactionsTest do
   end
 
   describe "bulk ignore patterns" do
-    alias CashLens.Transactions.BulkIgnorePattern
-
     test "list_bulk_ignore_patterns/0 returns all patterns" do
       unique_pattern = "UNIQUE_#{System.unique_integer([:positive])}"
       pattern = insert_bulk_ignore_pattern(%{pattern: unique_pattern})
@@ -248,13 +270,13 @@ defmodule CashLens.TransactionsTest do
       }
 
       results = Transactions.list_transactions(filters)
-      assert length(results) >= 1
+      assert results != []
     end
 
     test "filter_unmatched_transfers handles non-true value" do
       transaction_fixture(%{description: "test"})
       results = Transactions.list_transactions(%{"unmatched_transfers" => "false"})
-      assert length(results) >= 1
+      assert results != []
     end
 
     test "create_bulk_ignore_pattern/1 handles invalid pattern" do

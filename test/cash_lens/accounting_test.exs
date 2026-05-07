@@ -9,7 +9,7 @@ defmodule CashLens.AccountingTest do
     test "list_balances/1 returns all balances" do
       acc = account_fixture()
       Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      assert length(Accounting.list_balances()) >= 1
+      assert Accounting.list_balances() != []
     end
 
     test "calculate_monthly_balance/3 creates a balance" do
@@ -28,9 +28,9 @@ defmodule CashLens.AccountingTest do
       assert length(Accounting.list_balances(%{"account_id" => acc.id}, 1, 2)) == 2
       assert length(Accounting.list_balances(%{"account_id" => acc.id}, 2, 2)) == 1
 
-      assert length(Accounting.list_balances(%{"month" => "1"})) >= 1
-      assert length(Accounting.list_balances(%{"month" => "10"})) == 0
-      assert length(Accounting.list_balances(%{"year" => "2026"})) >= 1
+      assert Accounting.list_balances(%{"month" => "1"}) != []
+      assert Accounting.list_balances(%{"month" => "10"}) == []
+      assert Accounting.list_balances(%{"year" => "2026"}) != []
       assert length(Accounting.list_balances(%{"account_id" => acc.id})) == 3
 
       assert length(
@@ -58,14 +58,14 @@ defmodule CashLens.AccountingTest do
       Accounting.calculate_monthly_balance(acc2.id, 2026, 1)
 
       latest_list = Accounting.list_latest_balances()
-      assert length(latest_list) >= 2
+      assert [_, _ | _] = latest_list
     end
 
     test "get_historical_balances/0 returns aggregated data" do
       acc = account_fixture()
       Accounting.calculate_monthly_balance(acc.id, 2026, 1)
       history = Accounting.get_historical_balances()
-      assert length(history) >= 1
+      assert history != []
       entry = Enum.find(history, &(&1.month == 1 and &1.year == 2026))
       assert entry.month == 1
     end
@@ -187,7 +187,7 @@ defmodule CashLens.AccountingTest do
 
       filters = %{"account_id" => "", "month" => "", "year" => ""}
       balances = Accounting.list_balances(filters)
-      assert length(balances) > 0
+      assert balances != []
     end
 
     test "calculate_monthly_balance triggers get_previous_period year transition" do

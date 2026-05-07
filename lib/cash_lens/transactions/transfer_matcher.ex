@@ -2,22 +2,48 @@ defmodule CashLens.Transactions.TransferMatcher do
   @moduledoc """
   Logic to automatically link transfers between different accounts.
   """
+  require Logger
   import Ecto.Query
+  alias CashLens.Categories
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
-  alias CashLens.Categories
 
   @doc """
-  Tries to find a matching pair for a given transaction if it's a transfer.
+  Tries to find matching pairs for given transactions if they are transfers.
+  Can receive a single transaction or a list.
   """
+  def match_transfers(transactions) when is_list(transactions) do
+    # 1. Filter out already matched or invalid
+    transfers =
+      transactions
+      |> Enum.filter(fn
+        %Transaction{id: id, category_id: cat_id, transfer_key: nil}
+        when not is_nil(id) and not is_nil(cat_id) ->
+          true
+
+        _ ->
+          false
+      end)
+
+    # 2. Match only those with 'transfer' category
+    # Pre-fetch 'transfer' category slug for efficiency
+    transfer_category = Categories.get_category_by_slug("transfer")
+
+    if transfer_category do
+      transfers
+      |> Enum.filter(&(&1.category_id == transfer_category.id))
+      |> Enum.each(&find_and_link/1)
+    end
+  end
+
   def match_transfer(%Transaction{id: nil}), do: :no_match
   def match_transfer(%Transaction{category_id: nil}), do: :no_match
   def match_transfer(%Transaction{transfer_key: key}) when not is_nil(key), do: :already_matched
 
   def match_transfer(%Transaction{} = tx) do
     # Only try to match if the category is "transfer"
-    case Categories.get_category!(tx.category_id) do
-      %{slug: "transfer"} -> find_and_link(tx)
+    case Categories.get_category_by_slug("transfer") do
+      %{id: id} when tx.category_id == id -> find_and_link(tx)
       _ -> :not_a_transfer
     end
   end
@@ -69,7 +95,11 @@ defmodule CashLens.Transactions.TransferMatcher do
       )
 
     if target_account do
-      IO.puts("Creating virtual twin for '#{tx.description}' in account '#{target_account_name}'")
+      log_msg =
+        "Creating virtual twin for '#{tx.description}' in account '#{target_account_name}'"
+
+      Logger.info(log_msg)
+
       link_id = Ecto.UUID.generate()
 
       twin_params = %{
@@ -100,7 +130,8 @@ defmodule CashLens.Transactions.TransferMatcher do
 
       {:ok, :auto_matched}
     else
-      IO.puts("Warning: Account '#{target_account_name}' not found for auto-pairing.")
+      warn_msg = "Account '#{target_account_name}' not found for auto-pairing."
+      Logger.warning(warn_msg)
       :no_account_found
     end
   end

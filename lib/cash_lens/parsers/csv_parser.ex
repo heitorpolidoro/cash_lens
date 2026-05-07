@@ -99,20 +99,24 @@ defmodule CashLens.Parsers.CSVParser do
         date
 
       _ ->
-        case String.split(date_string, "/") do
-          [d, m, y] ->
-            with {d_int, ""} <- Integer.parse(d),
-                 {m_int, ""} <- Integer.parse(m),
-                 {y_int, ""} <- Integer.parse(y),
-                 {:ok, date} <- Date.new(y_int, m_int, d_int) do
-              date
-            else
-              _ -> Date.utc_today()
-            end
+        parse_slashed_date(date_string)
+    end
+  end
 
-          _ ->
-            Date.utc_today()
+  defp parse_slashed_date(date_string) do
+    case String.split(date_string, "/") do
+      [d, m, y] ->
+        with {d_int, ""} <- Integer.parse(d),
+             {m_int, ""} <- Integer.parse(m),
+             {y_int, ""} <- Integer.parse(y),
+             {:ok, date} <- Date.new(y_int, m_int, d_int) do
+          date
+        else
+          _ -> Date.utc_today()
         end
+
+      _ ->
+        Date.utc_today()
     end
   end
 

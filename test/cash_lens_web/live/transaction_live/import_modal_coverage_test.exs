@@ -4,6 +4,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
   import CashLens.AccountsFixtures
 
   alias CashLensWeb.TransactionLive.ImportModalComponent
+  alias Ecto.Adapters.SQL.Sandbox
 
   defmodule HostLive do
     use Phoenix.LiveView
@@ -42,7 +43,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
   }
 
   setup do
-    Ecto.Adapters.SQL.Sandbox.mode(CashLens.Repo, {:shared, self()})
+    Sandbox.mode(CashLens.Repo, {:shared, self()})
     account = account_fixture(@create_attrs)
     {:ok, account: account}
   end

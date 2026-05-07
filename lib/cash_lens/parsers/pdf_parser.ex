@@ -28,13 +28,13 @@ defmodule CashLens.Parsers.PDFParser do
         date: parse_date(date_str),
         time: nil,
         description: "Mensalidade Sem Parar",
-        amount:
-          parse_amount(amount_str)
-          |> (fn amt ->
-                if Decimal.eq?(amt, 0), do: Decimal.new("0"), else: Decimal.mult(amt, -1)
-              end).()
+        amount: negate_if_not_zero(parse_amount(amount_str))
       }
     end)
+  end
+
+  defp negate_if_not_zero(amt) do
+    if Decimal.eq?(amt, 0), do: Decimal.new("0"), else: Decimal.mult(amt, -1)
   end
 
   defp extract_usages(text) do
@@ -48,68 +48,67 @@ defmodule CashLens.Parsers.PDFParser do
     regex_l2 = ~r/\s+às\s+(\d{2}:\d{2}:\d{2}|[A-Z_]+)\s+(.*)/
 
     {transactions, last_tx} =
-      Enum.reduce(lines, {[], nil}, fn line, {acc, last_tx} ->
-        cond do
-          # 1. Matches line 1 (New Transaction starting)
-          Regex.match?(regex_l1, line) ->
-            [_, date_str, desc, amount_str] = Regex.run(regex_l1, line)
-
-            new_tx = %{
-              date: parse_date(date_str),
-              time: nil,
-              description: String.trim(desc),
-              amount:
-                parse_amount(amount_str)
-                |> (fn amt ->
-                      if Decimal.eq?(amt, 0), do: Decimal.new("0"), else: Decimal.mult(amt, -1)
-                    end).()
-            }
-
-            # If there was a previous tx, save it now
-            acc = if last_tx, do: [last_tx | acc], else: acc
-            {acc, new_tx}
-
-          # 2. Matches line 2 (Continuing last transaction)
-          last_tx && Regex.match?(regex_l2, line) ->
-            [_, time_str, extra_desc] = Regex.run(regex_l2, line)
-
-            updated_tx = %{
-              last_tx
-              | time: parse_time(time_str),
-                description:
-                  (last_tx.description <> " " <> String.trim(extra_desc)) |> String.trim()
-            }
-
-            # Finish this TX and add to list
-            {[updated_tx | acc], nil}
-
-          # 3. Random line, if we have a pending TX, we keep it as it might be a single-line TX
-          # or it might get an "às" line next.
-          true ->
-            {acc, last_tx}
-        end
+      Enum.reduce(lines, {[], nil}, fn line, state ->
+        process_usage_line(line, state, regex_l1, regex_l2)
       end)
 
     # Final flush
     final_acc = if last_tx, do: [last_tx | transactions], else: transactions
-    final_acc |> Enum.reverse()
+    Enum.reverse(final_acc)
+  end
+
+  defp process_usage_line(line, {acc, last_tx}, regex_l1, regex_l2) do
+    cond do
+      # 1. Matches line 1 (New Transaction starting)
+      Regex.match?(regex_l1, line) ->
+        [_, date_str, desc, amount_str] = Regex.run(regex_l1, line)
+
+        new_tx = %{
+          date: parse_date(date_str),
+          time: nil,
+          description: String.trim(desc),
+          amount: negate_if_not_zero(parse_amount(amount_str))
+        }
+
+        # If there was a previous tx, save it now
+        acc = if last_tx, do: [last_tx | acc], else: acc
+        {acc, new_tx}
+
+      # 2. Matches line 2 (Continuing last transaction)
+      last_tx && Regex.match?(regex_l2, line) ->
+        [_, time_str, extra_desc] = Regex.run(regex_l2, line)
+
+        updated_tx = %{
+          last_tx
+          | time: parse_time(time_str),
+            description: (last_tx.description <> " " <> String.trim(extra_desc)) |> String.trim()
+        }
+
+        # Finish this TX and add to list
+        {[updated_tx | acc], nil}
+
+      # 3. Random line
+      true ->
+        {acc, last_tx}
+    end
   end
 
   defp parse_date(date_string) do
     case String.split(date_string, "/") do
-      [d, m, y] ->
-        with {d_int, ""} <- Integer.parse(d),
-             {m_int, ""} <- Integer.parse(m),
-             {y_int, ""} <- Integer.parse(y),
-             year = if(y_int < 100, do: 2000 + y_int, else: y_int),
-             {:ok, date} <- Date.new(year, m_int, d_int) do
-          date
-        else
-          _ -> Date.utc_today()
-        end
+      [d, m, y] -> do_parse_date(d, m, y)
+      _ -> Date.utc_today()
+    end
+  end
 
-      _ ->
-        Date.utc_today()
+  defp do_parse_date(d, m, y) do
+    with {d_int, ""} <- Integer.parse(d),
+         {m_int, ""} <- Integer.parse(m),
+         {y_int, ""} <- Integer.parse(y),
+         year = if(y_int < 100, do: 2000 + y_int, else: y_int),
+         {:ok, date} <- Date.new(year, m_int, d_int) do
+      date
+    else
+      _ -> Date.utc_today()
     end
   end
 

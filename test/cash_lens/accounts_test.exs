@@ -89,5 +89,18 @@ defmodule CashLens.AccountsTest do
       assert Accounts.get_account_by_name("Unique Name") == account
       assert Accounts.get_account_by_name("Non-existent") == nil
     end
+
+    test "get_accounts_by_names/1 returns a name-keyed map for matching accounts" do
+      a1 = account_fixture(name: "Alpha")
+      a2 = account_fixture(name: "Beta")
+      _other = account_fixture(name: "Gamma")
+
+      result = Accounts.get_accounts_by_names(["Alpha", "Beta", "Missing"])
+
+      assert result["Alpha"] == a1
+      assert result["Beta"] == a2
+      refute Map.has_key?(result, "Missing")
+      refute Map.has_key?(result, "Gamma")
+    end
   end
 end

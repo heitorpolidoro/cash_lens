@@ -5,6 +5,8 @@ defmodule CashLensWeb.CoreComponents do
   use Phoenix.Component
   use Gettext, backend: CashLensWeb.Gettext
 
+  alias Phoenix.HTML.Form
+  alias Phoenix.HTML.FormField
   alias Phoenix.LiveView.JS
 
   @doc """
@@ -97,7 +99,7 @@ defmodule CashLensWeb.CoreComponents do
   attr :label, :string, default: nil
   attr :value, :any
   attr :type, :string, default: "text"
-  attr :field, Phoenix.HTML.FormField
+  attr :field, FormField
   attr :errors, :list, default: []
   attr :checked, :boolean
   attr :prompt, :string, default: nil
@@ -109,7 +111,7 @@ defmodule CashLensWeb.CoreComponents do
     include: ~w(accept autocomplete capture cols disabled form list max maxlength min minlength
                 multiple pattern placeholder readonly required rows size step)
 
-  def input(%{field: %Phoenix.HTML.FormField{} = field} = assigns) do
+  def input(%{field: %FormField{} = field} = assigns) do
     errors = if Phoenix.Component.used_input?(field), do: field.errors, else: []
 
     assigns
@@ -123,7 +125,7 @@ defmodule CashLensWeb.CoreComponents do
   def input(%{type: "checkbox"} = assigns) do
     assigns =
       assign_new(assigns, :checked, fn ->
-        Phoenix.HTML.Form.normalize_value("checkbox", assigns[:value])
+        Form.normalize_value("checkbox", assigns[:value])
       end)
 
     ~H"""
