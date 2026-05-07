@@ -6,9 +6,9 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
 
+  alias CashLens.Repo
   alias CashLens.Transactions
   alias CashLens.Transactions.Transaction
-  alias CashLens.Repo
 
   describe "Index coverage" do
     test "unmark_reimbursable with link key", %{conn: conn} do
