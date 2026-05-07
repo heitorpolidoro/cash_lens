@@ -56,7 +56,8 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   end
 
   defp copy_to_temp(%{path: path}, entry) do
-    dest = Path.join(System.tmp_dir!(), "#{entry.uuid}-#{entry.client_name}")
+    filename = Path.basename(entry.client_name)
+    dest = Path.join(System.tmp_dir!(), "#{entry.uuid}-#{filename}")
     File.cp!(path, dest)
     {:ok, dest}
   end
@@ -64,17 +65,21 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   defp start_import(account, file_path) do
     pid = self()
 
-    if Application.get_env(:cash_lens, :sql_sandbox) do
-      perform_import(account, file_path, pid)
-    else
-      Task.start(fn -> perform_import(account, file_path, pid) end)
-    end
-  end
+    process_import = fn ->
+      result = Ingestor.import_file(account, file_path)
+      File.rm(file_path)
 
-  defp perform_import(account, file_path, pid) do
-    case Ingestor.import_file(account, file_path) do
-      {:ok, count} -> send(pid, {:import_success, count})
-      {:error, reason} -> send(pid, {:import_error, reason})
+      case result do
+        {:ok, count} -> send(pid, {:import_success, count})
+        {:error, reason} -> send(pid, {:import_error, reason})
+      end
+    end
+
+    if Application.get_env(:cash_lens, :sql_sandbox) do
+      process_import.()
+    else
+      task_start = Application.get_env(:cash_lens, :task_start_fn, &Task.start/1)
+      task_start.(process_import)
     end
   end
 
@@ -124,6 +129,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
                           <img src={account.icon} />
                         <% else %>
                           <div class="flex items-center justify-center h-full w-full bg-primary text-primary-content text-[10px] font-bold">
+                            <%!-- coveralls-ignore-next-line --%>
                             {String.slice(account.bank || account.name, 0..1)}
                           </div>
                         <% end %>

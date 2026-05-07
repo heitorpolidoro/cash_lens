@@ -5,6 +5,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
   import CashLens.TransactionsFixtures
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
+
   alias CashLens.Repo
   alias CashLens.Transactions
   alias CashLens.Transactions.Transaction
