@@ -37,8 +37,16 @@ defmodule CashLens.Repo.Migrations.InitialSetup do
     create index(:categories, [:parent_id])
     create index(:categories, [:type])
     create unique_index(:categories, [:slug])
-    create unique_index(:categories, [:name], where: "parent_id IS NULL", name: :categories_top_level_name_index)
-    create unique_index(:categories, [:parent_id, :name], where: "parent_id IS NOT NULL", name: :categories_sub_level_name_index)
+
+    create unique_index(:categories, [:name],
+             where: "parent_id IS NULL",
+             name: :categories_top_level_name_index
+           )
+
+    create unique_index(:categories, [:parent_id, :name],
+             where: "parent_id IS NOT NULL",
+             name: :categories_sub_level_name_index
+           )
 
     create table(:transactions, primary_key: false) do
       add :id, :binary_id, primary_key: true
@@ -62,10 +70,13 @@ defmodule CashLens.Repo.Migrations.InitialSetup do
     create index(:transactions, [:reimbursement_link_key])
     create index(:transactions, [:reimbursement_status])
     create unique_index(:transactions, [:fingerprint])
-    
+
     # Search and Ordering Indexes
     execute "CREATE INDEX transactions_description_trgm_index ON transactions USING gist (description gist_trgm_ops)"
-    create index(:transactions, [desc: :date, desc: :time, desc: :inserted_at], name: :transactions_ordering_index)
+
+    create index(:transactions, [desc: :date, desc: :time, desc: :inserted_at],
+             name: :transactions_ordering_index
+           )
 
     create table(:balances, primary_key: false) do
       add :id, :binary_id, primary_key: true
@@ -84,7 +95,10 @@ defmodule CashLens.Repo.Migrations.InitialSetup do
 
     create index(:balances, [:account_id])
     create index(:balances, [:account_id, :is_snapshot])
-    create unique_index(:balances, [:account_id, :year, :month], name: :balances_account_year_month_index)
+
+    create unique_index(:balances, [:account_id, :year, :month],
+             name: :balances_account_year_month_index
+           )
 
     create table(:bulk_ignore_patterns, primary_key: false) do
       add :id, :binary_id, primary_key: true
