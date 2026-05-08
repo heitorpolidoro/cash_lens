@@ -49,6 +49,48 @@ defmodule CashLens.Parsers.Ingestor do
     end
   end
 
+  @doc """
+  Imports all supported files from a directory.
+  """
+  def import_directory(account, dir_path) do
+    if File.dir?(dir_path) do
+      results =
+        dir_path
+        |> File.ls!()
+        |> Enum.filter(&supported_file?(&1))
+        |> Enum.map(fn filename ->
+          path = Path.join(dir_path, filename)
+          import_file(account, path)
+        end)
+
+      summarize_results(results)
+    else
+      {:error, "Path is not a directory"}
+    end
+  end
+
+  defp supported_file?(filename) do
+    ext = Path.extname(filename) |> String.downcase()
+    ext in [".csv", ".ofx", ".pdf"]
+  end
+
+  defp summarize_results(results) do
+    {successes, errors} =
+      Enum.split_with(results, fn
+        {:ok, _} -> true
+        _ -> false
+      end)
+
+    total_count = successes |> Enum.map(fn {:ok, count} -> count end) |> Enum.sum()
+
+    if Enum.empty?(errors) do
+      {:ok, total_count}
+    else
+      {:error,
+       "#{length(errors)} files failed to import. Total transactions from successful files: #{total_count}"}
+    end
+  end
+
   defp process_imported_content(content, account, file_path) do
     content = prepare_content(content, account, file_path)
 

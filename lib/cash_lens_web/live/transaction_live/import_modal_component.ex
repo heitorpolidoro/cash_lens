@@ -14,8 +14,13 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
       end)
       |> assign_new(:import_account_id, fn -> nil end)
       |> allow_upload(:statement,
-        accept: ~w(.csv .pdf),
-        max_entries: 1,
+        accept: ~w(.csv .pdf .ofx),
+        max_entries: 100,
+        max_file_size: 10_000_000
+      )
+      |> allow_upload(:directory_statement,
+        accept: ~w(.csv .pdf .ofx),
+        max_entries: 1000,
         max_file_size: 10_000_000
       )
 
@@ -33,15 +38,35 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   def handle_event("save_import", %{"account_id" => account_id}, socket) do
     account = Accounts.get_account!(account_id)
 
-    case consume_uploaded_entries(socket, :statement, &copy_to_temp/2) do
-      [file_path] ->
-        start_import(account, file_path)
-        {:noreply, socket}
+    results =
+      consume_uploaded_entries(socket, :statement, &copy_to_temp/2) ++
+        consume_uploaded_entries(socket, :directory_statement, &copy_to_temp/2)
 
+    case results do
       [] ->
         send(self(), {:import_error, "No file selected."})
         {:noreply, socket}
+
+      entries ->
+        file_paths = extract_file_paths(entries)
+
+        start_bulk_import(account, {:files, file_paths})
+        {:noreply, socket}
     end
+  end
+
+  @impl true
+  def handle_event("import_directory", %{"account_id" => account_id}, socket) do
+    account = Accounts.get_account!(account_id)
+    dir_path = "/app/statements"
+
+    start_bulk_import(account, {:directory, dir_path})
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("cancel-upload", %{"ref" => ref, "upload" => upload}, socket) do
+    {:noreply, cancel_upload(socket, String.to_existing_atom(upload), ref)}
   end
 
   @impl true
@@ -50,9 +75,13 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
     {:noreply, socket}
   end
 
-  @impl true
-  def handle_event("cancel-upload", %{"ref" => ref}, socket) do
-    {:noreply, cancel_upload(socket, :statement, ref)}
+  defp extract_file_paths(entries) do
+    for entry <- entries do
+      case entry do
+        {:ok, path} -> path
+        path -> path
+      end
+    end
   end
 
   defp copy_to_temp(%{path: path}, entry) do
@@ -62,12 +91,11 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
     {:ok, dest}
   end
 
-  defp start_import(account, file_path) do
+  defp start_bulk_import(account, source) do
     pid = self()
 
     process_import = fn ->
-      result = Ingestor.import_file(account, file_path)
-      File.rm(file_path)
+      result = process_source(account, source)
 
       case result do
         {:ok, count} -> send(pid, {:import_success, count})
@@ -80,6 +108,38 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
     else
       task_start = Application.get_env(:cash_lens, :task_start_fn, &Task.start/1)
       task_start.(process_import)
+    end
+  end
+
+  defp process_source(account, {:files, file_paths}) do
+    results =
+      Enum.map(file_paths, fn path ->
+        res = Ingestor.import_file(account, path)
+        File.rm(path)
+        res
+      end)
+
+    summarize_import_results(results)
+  end
+
+  defp process_source(account, {:directory, dir_path}) do
+    Ingestor.import_directory(account, dir_path)
+  end
+
+  defp summarize_import_results(results) do
+    {successes, errors} =
+      Enum.split_with(results, fn
+        {:ok, _} -> true
+        _ -> false
+      end)
+
+    total_count = successes |> Enum.map(fn {:ok, count} -> count end) |> Enum.sum()
+
+    if Enum.empty?(errors) do
+      {:ok, total_count}
+    else
+      {:error,
+       "#{length(errors)} files failed. Total transactions from successful files: #{total_count}"}
     end
   end
 
@@ -99,6 +159,16 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
             phx-submit="save_import"
             phx-change="validate_import"
           >
+            <button
+              id="import-dir-hidden-btn"
+              type="button"
+              phx-click="import_directory"
+              phx-target={@myself}
+              phx-value-account_id={@import_account_id}
+              class="hidden"
+            >
+              Import Dir
+            </button>
             <div class="form-control w-full mb-8">
               <label class="label">
                 <span class="label-text font-black uppercase opacity-40 text-[10px]">
@@ -148,38 +218,94 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
             </div>
 
             <div class="form-control w-full mb-8">
-              <label class="label">
-                <span class="label-text font-bold">2. Upload file (CSV or PDF)</span>
+              <label class="label flex justify-between items-end">
+                <span class="label-text font-black uppercase opacity-40 text-[10px]">
+                  2. Select Source
+                </span>
               </label>
-              <div class="p-10 border-2 border-dashed border-base-300 rounded-3xl bg-base-200/50 flex flex-col items-center justify-center group hover:border-primary transition-all cursor-pointer relative">
-                <.live_file_input
-                  upload={@uploads.statement}
-                  class="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-                <.icon
-                  name="hero-cloud-arrow-up"
-                  class="size-12 opacity-20 mb-4 group-hover:text-primary group-hover:opacity-100 transition-all"
-                />
-                <p class="text-sm font-medium opacity-40">
-                  Drag your file or click to select
-                </p>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                <!-- Dropzone for Files -->
+                <div class="p-6 border-2 border-dashed border-base-300 rounded-3xl bg-base-200/50 flex flex-col items-center justify-center group hover:border-primary transition-all cursor-pointer relative min-h-[160px]">
+                  <.icon
+                    name="hero-document-plus"
+                    class="size-8 opacity-20 mb-2 group-hover:text-primary group-hover:opacity-100 transition-all"
+                  />
+                  <p class="text-xs font-bold opacity-40 text-center">
+                    Click to select<br />individual files
+                  </p>
+                  <.live_file_input
+                    upload={@uploads.statement}
+                    class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                  />
+                </div>
+                
+    <!-- Dropzone for Folders -->
+                <div class="p-6 border-2 border-dashed border-base-300 rounded-3xl bg-base-200/50 flex flex-col items-center justify-center group hover:border-primary transition-all cursor-pointer relative min-h-[160px]">
+                  <.icon
+                    name="hero-folder-plus"
+                    class="size-8 opacity-20 mb-2 group-hover:text-primary group-hover:opacity-100 transition-all"
+                  />
+                  <p class="text-xs font-bold opacity-40 text-center">
+                    Click to select<br />an entire folder
+                  </p>
+                  <.live_file_input
+                    upload={@uploads.directory_statement}
+                    webkitdirectory
+                    class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                  />
+                </div>
               </div>
 
               <div
-                :for={entry <- @uploads.statement.entries}
-                class="mt-4 p-3 bg-base-100 rounded-xl border border-base-300 flex items-center justify-between animate-in slide-in-from-left-2"
+                :if={
+                  !Enum.empty?(@uploads.statement.entries) ||
+                    !Enum.empty?(@uploads.directory_statement.entries)
+                }
+                class="mt-4 max-h-40 overflow-y-auto space-y-2 p-1"
               >
-                <div class="flex items-center gap-3">
-                  <.icon name="hero-document-text" class="size-5 text-primary" />
-                  <span class="text-xs font-bold truncate max-w-[200px]">{entry.client_name}</span>
-                </div>
-                <button
-                  type="button"
-                  phx-click={JS.push("cancel-upload", value: %{ref: entry.ref}, target: @myself)}
-                  class="btn btn-ghost btn-xs text-error"
+                <div
+                  :for={entry <- @uploads.statement.entries}
+                  class="p-2 bg-base-100 rounded-lg border border-base-300 flex items-center justify-between animate-in fade-in zoom-in-95"
                 >
-                  <.icon name="hero-x-mark" class="size-4" />
-                </button>
+                  <div class="flex items-center gap-2 min-w-0">
+                    <.icon name="hero-document-text" class="size-4 text-primary shrink-0" />
+                    <span class="text-[10px] font-bold truncate">{entry.client_name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    phx-click={
+                      JS.push("cancel-upload",
+                        value: %{ref: entry.ref, upload: "statement"},
+                        target: @myself
+                      )
+                    }
+                    class="btn btn-ghost btn-xs text-error"
+                  >
+                    <.icon name="hero-x-mark" class="size-3" />
+                  </button>
+                </div>
+                <div
+                  :for={entry <- @uploads.directory_statement.entries}
+                  class="p-2 bg-base-100 rounded-lg border border-base-300 flex items-center justify-between animate-in fade-in zoom-in-95"
+                >
+                  <div class="flex items-center gap-2 min-w-0">
+                    <.icon name="hero-document-text" class="size-4 text-primary shrink-0" />
+                    <span class="text-[10px] font-bold truncate">{entry.client_name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    phx-click={
+                      JS.push("cancel-upload",
+                        value: %{ref: entry.ref, upload: "directory_statement"},
+                        target: @myself
+                      )
+                    }
+                    class="btn btn-ghost btn-xs text-error"
+                  >
+                    <.icon name="hero-x-mark" class="size-3" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -187,6 +313,10 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
               type="submit"
               class="btn btn-primary btn-lg w-full rounded-2xl shadow-lg shadow-primary/20"
               phx-disable-with="Processing..."
+              disabled={
+                Enum.empty?(@uploads.statement.entries) &&
+                  Enum.empty?(@uploads.directory_statement.entries)
+              }
             >
               Start Import
             </button>
