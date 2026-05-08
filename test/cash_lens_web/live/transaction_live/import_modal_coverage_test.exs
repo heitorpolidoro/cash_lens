@@ -230,7 +230,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
     view |> element("#import-dir-hidden-btn") |> render_click()
 
     # The flash update comes asynchronously. We use assert_patch or similar to wait,
-    # but since it's a flash without navigation, we can just check render(view) 
+    # but since it's a flash without navigation, we can just check render(view)
     # if it doesn't work we sleep. Wait, `render_click` on a component with phx-target
     # will wait for the component update, but not the parent LiveView's `handle_info`.
     Process.sleep(50)
