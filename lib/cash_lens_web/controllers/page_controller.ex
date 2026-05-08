@@ -56,29 +56,8 @@ defmodule CashLensWeb.PageController do
     summary = Transactions.get_monthly_summary()
     historical_categories = Transactions.get_historical_category_summary()
 
-    fixed_data =
-      historical_categories
-      |> Enum.map(fn month_data ->
-        Map.put(
-          month_data,
-          :categories,
-          Enum.filter(month_data.categories, &(&1.type == "fixed"))
-          |> Enum.map(fn cat -> Map.put(cat, :total, Decimal.to_float(cat.total)) end)
-        )
-      end)
-      |> Jason.encode!()
-
-    variable_data =
-      historical_categories
-      |> Enum.map(fn month_data ->
-        Map.put(
-          month_data,
-          :categories,
-          Enum.filter(month_data.categories, &(&1.type == "variable"))
-          |> Enum.map(fn cat -> Map.put(cat, :total, Decimal.to_float(cat.total)) end)
-        )
-      end)
-      |> Jason.encode!()
+    fixed_data = extract_category_data(historical_categories, "fixed")
+    variable_data = extract_category_data(historical_categories, "variable")
 
     month_name =
       summary.month
@@ -100,6 +79,20 @@ defmodule CashLensWeb.PageController do
 
   def chrome_devtools(conn, _params) do
     send_resp(conn, :no_content, "")
+  end
+
+  defp extract_category_data(historical_categories, type) do
+    historical_categories
+    |> Enum.map(&filter_and_format_categories(&1, type))
+    |> Jason.encode!()
+  end
+
+  defp filter_and_format_categories(month_data, type) do
+    Map.update!(month_data, :categories, fn categories ->
+      categories
+      |> Enum.filter(&(&1.type == type))
+      |> Enum.map(fn cat -> Map.put(cat, :total, Decimal.to_float(cat.total)) end)
+    end)
   end
 
   defp translate_month(month) do
