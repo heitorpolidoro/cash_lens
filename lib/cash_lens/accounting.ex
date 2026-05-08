@@ -99,9 +99,6 @@ defmodule CashLens.Accounting do
   defp handle_initial_balance_fallback(account_id, year, month, first_of_month, existing_balance) do
     case find_latest_balance_before(account_id, year, month) do
       %Balance{} = last_balance ->
-        Logger.info(
-          "Found previous balance at #{last_balance.month}/#{last_balance.year}. Re-calculating gap..."
-        )
 
         calculate_from_point(account_id, last_balance, year, month)
 
@@ -146,6 +143,10 @@ defmodule CashLens.Accounting do
     Decimal.add(base_balance, previous_transactions_sum)
   end
 
+  @doc false
+  def __test_calculate_from_point(account_id, last_point, target_year, target_month),
+    do: calculate_from_point(account_id, last_point, target_year, target_month)
+
   defp calculate_from_point(account_id, last_point, target_year, target_month) do
     {next_year, next_month} = get_next_period(last_point.year, last_point.month)
 
@@ -168,6 +169,7 @@ defmodule CashLens.Accounting do
         last_point.final_balance
     end
   end
+
 
   defp get_previous_period(year, 1), do: {year - 1, 12}
   defp get_previous_period(year, month), do: {year, month - 1}

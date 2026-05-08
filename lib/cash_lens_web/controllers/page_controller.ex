@@ -59,24 +59,20 @@ defmodule CashLensWeb.PageController do
     fixed_data =
       historical_categories
       |> Enum.map(fn month_data ->
-        Map.put(
-          month_data,
-          :categories,
-          Enum.filter(month_data.categories, &(&1.type == "fixed"))
+        Map.update!(month_data, :categories, fn categories ->
+          Enum.filter(categories, &(&1.type == "fixed"))
           |> Enum.map(fn cat -> Map.put(cat, :total, Decimal.to_float(cat.total)) end)
-        )
+        end)
       end)
       |> Jason.encode!()
 
     variable_data =
       historical_categories
       |> Enum.map(fn month_data ->
-        Map.put(
-          month_data,
-          :categories,
-          Enum.filter(month_data.categories, &(&1.type == "variable"))
+        Map.update!(month_data, :categories, fn categories ->
+          Enum.filter(categories, &(&1.type == "variable"))
           |> Enum.map(fn cat -> Map.put(cat, :total, Decimal.to_float(cat.total)) end)
-        )
+        end)
       end)
       |> Jason.encode!()
 

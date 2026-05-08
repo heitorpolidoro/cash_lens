@@ -198,5 +198,17 @@ defmodule CashLens.AccountingTest do
       assert balance.year == 2026
       assert balance.month == 1
     end
+
+    test "calculate_from_point handles failure fallback" do
+      account = account_fixture()
+      {:ok, b1} = Accounting.calculate_monthly_balance(account.id, 2026, 1)
+
+      invalid_uuid = Ecto.UUID.generate()
+      # Pass invalid_uuid to force calculate_monthly_balance inside calculate_from_point to fail
+      # This handles the {:error, _} branch inside calculate_from_point without needing to mock or mutate Logger state globally
+      result = Accounting.__test_calculate_from_point(invalid_uuid, b1, 2026, 2)
+      assert result == b1.final_balance
+    end
+
   end
 end

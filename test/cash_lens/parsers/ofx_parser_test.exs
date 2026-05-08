@@ -20,6 +20,22 @@ defmodule CashLens.Parsers.OFXParserTest do
   """
 
   describe "parse/2" do
+    test "handles missing dates properly" do
+      invalid_ofx = """
+      <OFX>
+        <BANKMSGSRSV1>
+          <STMTTRN>
+            <TRNAMT>-100.00</TRNAMT>
+            <FITID>123456</FITID>
+            <MEMO>Missing Date</MEMO>
+          </STMTTRN>
+        </BANKMSGSRSV1>
+      </OFX>
+      """
+
+      transactions = CashLens.Parsers.OFXParser.parse(invalid_ofx, %{})
+      assert Enum.empty?(transactions)
+    end
     test "correctly parses a standard OFX string" do
       transactions = OFXParser.parse(@sample_ofx, :standard)
 

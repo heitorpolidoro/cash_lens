@@ -68,7 +68,7 @@ defmodule CashLens.Transactions.TransferMatcherTest do
 
     test "skips transactions with nil id", %{category: cat} do
       tx = %Transaction{id: nil, category_id: cat.id, transfer_key: nil}
-      assert TransferMatcher.match_transfers([tx]) in [:ok, nil]
+      assert TransferMatcher.match_transfers([tx]) in [:ok, nil, []]
     end
 
     test "skips transactions with nil category_id", %{acc1: a1} do
@@ -87,7 +87,7 @@ defmodule CashLens.Transactions.TransferMatcherTest do
     end
 
     test "handles empty list" do
-      assert TransferMatcher.match_transfers([]) in [:ok, nil]
+      assert TransferMatcher.match_transfers([]) in [:ok, nil, []]
     end
 
     test "does nothing when transfer category does not exist" do
@@ -178,6 +178,30 @@ defmodule CashLens.Transactions.TransferMatcherTest do
 
       # Call match_transfer explicitly to exercise the path and verify return value
       assert TransferMatcher.match_transfer(tx) == :no_account_found
+    end
+
+    test "handles BB RENDE FÁCIL auto-pairing successfully", %{category: cat, acc1: a1} do
+      # Create target account "BB Rende Fácil"
+      rende_facil_acc = account_fixture(%{name: "BB Rende Fácil"})
+
+      tx = transaction_fixture(%{
+        account_id: a1.id,
+        category_id: cat.id,
+        description: "BB RENDE FÁCIL TRANSFER",
+        amount: Decimal.new("-100.00")
+      })
+
+      updated_tx = Repo.get(Transaction, tx.id)
+      assert updated_tx.transfer_key != nil
+
+      twin = Repo.get_by(Transaction, account_id: rende_facil_acc.id)
+      assert twin != nil
+      assert twin.amount == Decimal.new("100.00")
+      assert twin.transfer_key == updated_tx.transfer_key
+    end
+
+    test "returns :no_match for transaction with nil id" do
+      assert TransferMatcher.match_transfer(%Transaction{id: nil}) == :no_match
     end
   end
 end

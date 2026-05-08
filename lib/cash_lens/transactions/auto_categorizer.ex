@@ -30,11 +30,6 @@ defmodule CashLens.Transactions.AutoCategorizer do
 
         match_word = Enum.find(keywords, fn k -> String.contains?(description, k) end)
 
-        if match_word do
-          Logger.debug(
-            "MATCH FOUND: Keyword '#{match_word}' found in Description '#{description}' for category '#{category.name}'"
-          )
-        end
 
         not is_nil(match_word)
       end)
