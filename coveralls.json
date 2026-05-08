@@ -16,7 +16,15 @@
     "lib/cash_lens_web/controllers/error_json.ex",
     "lib/cash_lens_web.ex",
     "lib/cash_lens/application.ex",
+    "lib/cash_lens_web/live/automation_live/bulk_ignore.ex",
+    "lib/cash_lens_web/live/transaction_live/transfer_link_component.ex",
+    "lib/cash_lens_web/live/balance_live/index.ex",
+    "lib/cash_lens_web/live/balance_live/form.ex",
     "lib/cash_lens_web/formatters.ex",
+    "lib/cash_lens_web/live/category_live/index.ex",
+    "lib/cash_lens_web/live/category_live/form.ex",
+    "lib/cash_lens_web/live/reimbursement_live/index.ex",
+    "lib/cash_lens_web/live/transaction_live/reimbursement_link_component.ex",
     "lib/cash_lens_web/components/core_components.ex",
     "lib/cash_lens_web/router.ex",
     "test/support/data_case.ex",
@@ -26,14 +34,6 @@
     "lib/cash_lens_web/live/account_live/form.ex",
     "lib/cash_lens_web/live/account_live/index.ex",
     "lib/cash_lens_web/live/admin_database_live.ex",
-    "lib/cash_lens_web/components/layouts.ex",
-    "lib/cash_lens_web/live/automation_live/bulk_ignore.ex",
-    "lib/cash_lens_web/live/transaction_live/transfer_link_component.ex",
-    "lib/cash_lens_web/live/balance_live/index.ex",
-    "lib/cash_lens_web/live/balance_live/form.ex",
-    "lib/cash_lens_web/live/category_live/index.ex",
-    "lib/cash_lens_web/live/category_live/form.ex",
-    "lib/cash_lens_web/live/reimbursement_live/index.ex",
-    "lib/cash_lens_web/live/transaction_live/reimbursement_link_component.ex"
+    "lib/cash_lens_web/components/layouts.ex"
   ]
 }

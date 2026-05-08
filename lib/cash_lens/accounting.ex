@@ -99,7 +99,6 @@ defmodule CashLens.Accounting do
   defp handle_initial_balance_fallback(account_id, year, month, first_of_month, existing_balance) do
     case find_latest_balance_before(account_id, year, month) do
       %Balance{} = last_balance ->
-
         calculate_from_point(account_id, last_balance, year, month)
 
       nil ->
@@ -169,7 +168,6 @@ defmodule CashLens.Accounting do
         last_point.final_balance
     end
   end
-
 
   defp get_previous_period(year, 1), do: {year - 1, 12}
   defp get_previous_period(year, month), do: {year, month - 1}

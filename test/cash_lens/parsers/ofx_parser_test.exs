@@ -33,9 +33,10 @@ defmodule CashLens.Parsers.OFXParserTest do
       </OFX>
       """
 
-      transactions = CashLens.Parsers.OFXParser.parse(invalid_ofx, %{})
+      transactions = OFXParser.parse(invalid_ofx, %{})
       assert Enum.empty?(transactions)
     end
+
     test "correctly parses a standard OFX string" do
       transactions = OFXParser.parse(@sample_ofx, :standard)
 

@@ -184,12 +184,13 @@ defmodule CashLens.Transactions.TransferMatcherTest do
       # Create target account "BB Rende Fácil"
       rende_facil_acc = account_fixture(%{name: "BB Rende Fácil"})
 
-      tx = transaction_fixture(%{
-        account_id: a1.id,
-        category_id: cat.id,
-        description: "BB RENDE FÁCIL TRANSFER",
-        amount: Decimal.new("-100.00")
-      })
+      tx =
+        transaction_fixture(%{
+          account_id: a1.id,
+          category_id: cat.id,
+          description: "BB RENDE FÁCIL TRANSFER",
+          amount: Decimal.new("-100.00")
+        })
 
       updated_tx = Repo.get(Transaction, tx.id)
       assert updated_tx.transfer_key != nil

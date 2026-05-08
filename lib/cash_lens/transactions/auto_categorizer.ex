@@ -30,7 +30,6 @@ defmodule CashLens.Transactions.AutoCategorizer do
 
         match_word = Enum.find(keywords, fn k -> String.contains?(description, k) end)
 
-
         not is_nil(match_word)
       end)
 

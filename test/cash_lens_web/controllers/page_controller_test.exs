@@ -26,8 +26,20 @@ defmodule CashLensWeb.PageControllerTest do
     import CashLens.CategoriesFixtures
     category_fixed = category_fixture(%{type: "fixed", name: "Fixed Cat"})
     category_var = category_fixture(%{type: "variable", name: "Var Cat"})
-    transaction_fixture(%{account_id: account.id, amount: "-100.00", date: ~D[2026-03-01], category_id: category_fixed.id})
-    transaction_fixture(%{account_id: account.id, amount: "-50.00", date: ~D[2026-03-02], category_id: category_var.id})
+
+    transaction_fixture(%{
+      account_id: account.id,
+      amount: "-100.00",
+      date: ~D[2026-03-01],
+      category_id: category_fixed.id
+    })
+
+    transaction_fixture(%{
+      account_id: account.id,
+      amount: "-50.00",
+      date: ~D[2026-03-02],
+      category_id: category_var.id
+    })
 
     conn = get(conn, ~p"/")
     assert html_response(conn, 200) =~ "Dashboard Financeiro"
