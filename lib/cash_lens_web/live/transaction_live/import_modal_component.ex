@@ -18,6 +18,11 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
         max_entries: 100,
         max_file_size: 10_000_000
       )
+      |> allow_upload(:directory_statement,
+        accept: ~w(.csv .pdf .ofx),
+        max_entries: 1000,
+        max_file_size: 10_000_000
+      )
 
     {:ok, socket}
   end
@@ -33,13 +38,18 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   def handle_event("save_import", %{"account_id" => account_id}, socket) do
     account = Accounts.get_account!(account_id)
 
-    case consume_uploaded_entries(socket, :statement, &copy_to_temp/2) do
+    results =
+      consume_uploaded_entries(socket, :statement, &copy_to_temp/2) ++
+        consume_uploaded_entries(socket, :directory_statement, &copy_to_temp/2)
+
+    case results do
       [] ->
-        send(self(), {:import_error, "No files selected."})
+        send(self(), {:import_error, "No file selected."})
         {:noreply, socket}
 
-      results ->
-        file_paths = for {:ok, path} <- results, do: path
+      entries ->
+        file_paths = extract_file_paths(entries)
+
         start_bulk_import(account, {:files, file_paths})
         {:noreply, socket}
     end
@@ -55,14 +65,23 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   end
 
   @impl true
-  def handle_event("cancel-upload", %{"ref" => ref}, socket) do
-    {:noreply, cancel_upload(socket, :statement, ref)}
+  def handle_event("cancel-upload", %{"ref" => ref, "upload" => upload}, socket) do
+    {:noreply, cancel_upload(socket, String.to_existing_atom(upload), ref)}
   end
 
   @impl true
   def handle_event("close", _params, socket) do
     send(self(), :close_import_modal)
     {:noreply, socket}
+  end
+
+  defp extract_file_paths(entries) do
+    for entry <- entries do
+      case entry do
+        {:ok, path} -> path
+        path -> path
+      end
+    end
   end
 
   defp copy_to_temp(%{path: path}, entry) do
@@ -76,21 +95,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
     pid = self()
 
     process_import = fn ->
-      result =
-        case source do
-          {:files, file_paths} ->
-            results =
-              Enum.map(file_paths, fn path ->
-                res = Ingestor.import_file(account, path)
-                File.rm(path)
-                res
-              end)
-
-            summarize_import_results(results)
-
-          {:directory, dir_path} ->
-            Ingestor.import_directory(account, dir_path)
-        end
+      result = process_source(account, source)
 
       case result do
         {:ok, count} -> send(pid, {:import_success, count})
@@ -104,6 +109,21 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
       task_start = Application.get_env(:cash_lens, :task_start_fn, &Task.start/1)
       task_start.(process_import)
     end
+  end
+
+  defp process_source(account, {:files, file_paths}) do
+    results =
+      Enum.map(file_paths, fn path ->
+        res = Ingestor.import_file(account, path)
+        File.rm(path)
+        res
+      end)
+
+    summarize_import_results(results)
+  end
+
+  defp process_source(account, {:directory, dir_path}) do
+    Ingestor.import_directory(account, dir_path)
   end
 
   defp summarize_import_results(results) do
@@ -220,7 +240,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
                     Click to select<br />an entire folder
                   </p>
                   <.live_file_input
-                    upload={@uploads.statement}
+                    upload={@uploads.directory_statement}
                     webkitdirectory
                     class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
                   />
@@ -228,7 +248,10 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
               </div>
 
               <div
-                :if={!Enum.empty?(@uploads.statement.entries)}
+                :if={
+                  !Enum.empty?(@uploads.statement.entries) ||
+                    !Enum.empty?(@uploads.directory_statement.entries)
+                }
                 class="mt-4 max-h-40 overflow-y-auto space-y-2 p-1"
               >
                 <div
@@ -241,7 +264,33 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
                   </div>
                   <button
                     type="button"
-                    phx-click={JS.push("cancel-upload", value: %{ref: entry.ref}, target: @myself)}
+                    phx-click={
+                      JS.push("cancel-upload",
+                        value: %{ref: entry.ref, upload: "statement"},
+                        target: @myself
+                      )
+                    }
+                    class="btn btn-ghost btn-xs text-error"
+                  >
+                    <.icon name="hero-x-mark" class="size-3" />
+                  </button>
+                </div>
+                <div
+                  :for={entry <- @uploads.directory_statement.entries}
+                  class="p-2 bg-base-100 rounded-lg border border-base-300 flex items-center justify-between animate-in fade-in zoom-in-95"
+                >
+                  <div class="flex items-center gap-2 min-w-0">
+                    <.icon name="hero-document-text" class="size-4 text-primary shrink-0" />
+                    <span class="text-[10px] font-bold truncate">{entry.client_name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    phx-click={
+                      JS.push("cancel-upload",
+                        value: %{ref: entry.ref, upload: "directory_statement"},
+                        target: @myself
+                      )
+                    }
                     class="btn btn-ghost btn-xs text-error"
                   >
                     <.icon name="hero-x-mark" class="size-3" />
@@ -254,7 +303,10 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
               type="submit"
               class="btn btn-primary btn-lg w-full rounded-2xl shadow-lg shadow-primary/20"
               phx-disable-with="Processing..."
-              disabled={Enum.empty?(@uploads.statement.entries)}
+              disabled={
+                Enum.empty?(@uploads.statement.entries) &&
+                  Enum.empty?(@uploads.directory_statement.entries)
+              }
             >
               Start Import
             </button>
