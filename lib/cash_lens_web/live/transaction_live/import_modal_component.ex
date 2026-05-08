@@ -159,6 +159,16 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
             phx-submit="save_import"
             phx-change="validate_import"
           >
+            <button
+              id="import-dir-hidden-btn"
+              type="button"
+              phx-click="import_directory"
+              phx-target={@myself}
+              phx-value-account_id={@import_account_id}
+              class="hidden"
+            >
+              Import Dir
+            </button>
             <div class="form-control w-full mb-8">
               <label class="label">
                 <span class="label-text font-black uppercase opacity-40 text-[10px]">
