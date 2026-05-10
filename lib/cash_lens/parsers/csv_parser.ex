@@ -4,20 +4,27 @@ defmodule CashLens.Parsers.CSVParser do
   Module to parse financial statement CSV files with support for multiple bank formats.
   """
   alias NimbleCSV.RFC4180, as: CSV
+  NimbleCSV.define(CashLens.Parsers.CSVParser.Semicolon, separator: ";", escape: "\"")
 
   @doc """
   Parses a CSV string for Banco do Brasil format.
   """
   def parse(csv_content, :bb) do
+    # Banco do Brasil often exports with semicolons depending on the locale
+    parser =
+      if String.contains?(csv_content, "\";\"") or String.contains?(csv_content, ";"),
+        do: CashLens.Parsers.CSVParser.Semicolon,
+        else: CSV
+
     csv_content
-    |> CSV.parse_string(skip_headers: false)
+    |> parser.parse_string(skip_headers: false)
     |> Enum.drop(1)
     |> Enum.map(fn row -> parse_row(row, :bb) end)
     |> Enum.reject(&is_nil/1)
   end
 
-  # Banco do Brasil: Data, Dep, Term, Histórico, Doc, Valor, [Empty]
-  defp parse_row([date, _dep, _term, description, _doc, amount | _], :bb) do
+  # Banco do Brasil: Data, Dep, Histórico, Balancete, Doc, Valor
+  defp parse_row([date, _dep, description, _balancete, _doc, amount | _], :bb) do
     amount_decimal = parse_amount(amount)
     description_up = String.upcase(description || "")
 

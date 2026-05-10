@@ -21,7 +21,11 @@ defmodule CashLensWeb.AccountLive.Form do
         field={@form[:parser_type]}
         type="select"
         label="Extractor"
-        options={[{"Banco do Brasil (CSV)", "bb_csv"}, {"Sem Parar (PDF)", "sem_parar_pdf"}]}
+        options={[
+          {"Banco do Brasil (CSV)", "bb_csv"},
+          {"Sem Parar (PDF)", "sem_parar_pdf"},
+          {"Standard OFX", "standard_ofx"}
+        ]}
         prompt="Select an extractor"
       />
 
@@ -81,6 +85,7 @@ defmodule CashLensWeb.AccountLive.Form do
   end
 
   defp return_to("show"), do: "show"
+  defp return_to("transactions"), do: "transactions"
   defp return_to(_), do: "index"
 
   defp apply_action(socket, :edit, %{"id" => id}) do
@@ -139,4 +144,5 @@ defmodule CashLensWeb.AccountLive.Form do
 
   defp return_path("index", _account), do: ~p"/accounts"
   defp return_path("show", account), do: ~p"/accounts/#{account}"
+  defp return_path("transactions", _account), do: ~p"/transactions"
 end
