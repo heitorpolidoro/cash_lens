@@ -365,7 +365,11 @@ defmodule CashLens.Transactions do
   """
   def update_transaction_category(id, category_id) do
     transaction = get_transaction!(id)
-    transaction |> Ecto.Changeset.change(category_id: category_id) |> Repo.update()
+
+    transaction
+    |> Ecto.Changeset.cast(%{category_id: category_id}, [:category_id])
+    |> Ecto.Changeset.foreign_key_constraint(:category_id)
+    |> Repo.update()
   end
 
   @doc """

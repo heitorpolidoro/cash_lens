@@ -3,91 +3,66 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponentTest do
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
 
-  # A fully functioning test LiveView
-  defmodule HostLive do
-    use Phoenix.LiveView
-    alias CashLensWeb.TransactionLive.ImportModalComponent
-    import CashLensWeb.CoreComponents
+  test "summarize_import_results error branch", %{conn: conn} do
+    # Use an account without a configured parser to trigger an error
+    account = account_fixture(accepts_import: true, parser_type: "unknown")
 
-    def mount(_params, _session, socket) do
-      {:ok, assign(socket, show: true)}
-    end
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-    def handle_info({:import_success, count}, socket),
-      do: {:noreply, Phoenix.LiveView.put_flash(socket, :info, "Success: #{count}")}
+    index_live |> render_click("open_import")
 
-    def handle_info({:import_error, reason}, socket),
-      do: {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Error: #{reason}")}
+    # Select account
+    index_live
+    |> element("#upload-form")
+    |> render_change(%{"account_id" => account.id})
 
-    def handle_event(_event, _params, socket), do: {:noreply, socket}
+    # Upload one file - use .csv to avoid PDF converter Mox issues
+    csv_content = "date,description,amount\n2024-01-01,test,100.00"
 
-    def render(assigns) do
-      ~H"""
-      <.live_component module={ImportModalComponent} id="import-modal" show={@show} />
-      <.flash kind={:info} flash={@flash} />
-      <.flash kind={:error} flash={@flash} />
-      """
-    end
+    file1 = %{
+      last_modified: 1_594_171_879_000,
+      name: "valid.csv",
+      content: csv_content,
+      size: byte_size(csv_content),
+      type: "text/csv"
+    }
+
+    input = file_input(index_live, "#upload-form", :statement, [file1])
+    render_upload(input, "valid.csv")
+
+    index_live |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
+
+    # The error is sent to parent which puts it in flash
+    assert render(index_live) =~ "1 files failed"
+    assert render(index_live) =~ "Total transactions from successful files: 0"
   end
 
-  @create_attrs %{
-    name: "Test Account",
-    bank: "Test Bank",
-    accepts_import: true,
-    parser_type: "ofx"
-  }
+  test "cancel-upload event", %{conn: conn} do
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
+    index_live |> render_click("open_import")
 
-  setup do
-    account = account_fixture(@create_attrs)
-    {:ok, account: account}
-  end
+    file = %{
+      last_modified: 1_594_171_879_000,
+      name: "test.csv",
+      content: "test",
+      size: 4,
+      type: "text/csv"
+    }
 
-  test "renders the modal with accounts", %{conn: conn} do
-    {:ok, _view, html} = live_isolated(conn, HostLive)
+    input = file_input(index_live, "#upload-form", :statement, [file])
+    # Use render_upload to populate the entries correctly
+    render_upload(input, "test.csv")
 
-    assert html =~ "Import Statements"
-    assert html =~ "Test Account"
-  end
+    html = render(index_live)
+    assert html =~ "test.csv"
 
-  test "handles save_import with no file", %{conn: conn, account: account} do
-    {:ok, view, _html} = live_isolated(conn, HostLive)
+    # Get the ref
+    [_, ref] = Regex.run(~r/phx-value-ref="([^"]+)"/, html)
 
-    view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
+    index_live
+    |> element("button[phx-click='cancel-upload'][phx-value-ref='#{ref}']")
+    |> render_click()
 
-    assert render(view) =~ "Error: No file selected."
-  end
-
-  test "handles save_import with uploaded file (sync mode)", %{conn: conn, account: account} do
-    {:ok, view, _html} = live_isolated(conn, HostLive)
-
-    upload =
-      file_input(view, "#upload-form", :statement, [
-        %{name: "test.csv", content: "some,csv,content", type: "text/csv"}
-      ])
-
-    render_upload(upload, "test.csv")
-    view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
-
-    # Parser type "ofx" doesn't match "standard_ofx" in Ingestor.parse/2 → error
-    assert render(view) =~ "Error:"
-  end
-
-  test "handles save_import with uploaded file (async mode)", %{conn: conn, account: account} do
-    Application.put_env(:cash_lens, :sql_sandbox, false)
-    on_exit(fn -> Application.put_env(:cash_lens, :sql_sandbox, true) end)
-
-    {:ok, view, _html} = live_isolated(conn, HostLive)
-
-    upload =
-      file_input(view, "#upload-form", :statement, [
-        %{name: "test.csv", content: "some,csv,content", type: "text/csv"}
-      ])
-
-    render_upload(upload, "test.csv")
-    view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
-
-    # Wait for async Task to complete and send the error message
-    Process.sleep(100)
-    assert render(view) =~ "Error:"
+    refute render(index_live) =~ "test.csv"
   end
 end

@@ -159,8 +159,13 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponent do
     search = socket.assigns.reimbursement_search
 
     # 1. EXHAUSTIVE GLOBAL SEARCH for exact value matches
+    exact_filters = %{"amount" => Decimal.mult(target_amount, -1)}
+
+    exact_filters =
+      if search != "", do: Map.put(exact_filters, "search", search), else: exact_filters
+
     exact_matches =
-      Transactions.list_transactions(%{"amount" => Decimal.mult(target_amount, -1)}, 1, 100)
+      Transactions.list_transactions(exact_filters, 1, 100)
       |> Enum.filter(&is_nil(&1.reimbursement_link_key))
 
     # 2. CONTEXTUAL SEARCH (recent items or description match)

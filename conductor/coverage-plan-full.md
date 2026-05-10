@@ -33,6 +33,10 @@ Achieve 100% global test coverage for the entire CashLens project (currently at 
 
 ## Phased Implementation Steps
 
+### Phase 0: Fix Failing ImportModal Tests
+1. **Update `HostLive.handle_info/2`**: In both `import_modal_component_test.exs` and `import_modal_coverage_test.exs`, correct the `:import_error` handler to stop prepending `"No file selected. "` and instead use `"Error: #{reason}"`.
+2. **Update Assertions**: Correct the expected flash message strings in the tests (e.g., from `"No file selected."` to `"Error: 1 files failed. Total transactions from successful files: 0"` and `"Error: No file selected."`) to accurately reflect the system's behavior when dealing with unsupported parsers and missing files.
+
 ### Phase 1: Core Mop-up
 1.  **Transactions & Matchers:** Analyze `mix coveralls.json` for the last missed lines in `Transactions` context, `TransferMatcher`, and `AutoCategorizer`. Add the missing edge cases (e.g., error paths, default arguments) to their respective tests.
 2.  **Accounting & Parsers:** Cover the 4 missed lines in `accounting.ex` and the remaining 4 lines spread across `csv_parser.ex`, `ingestor.ex`, and `ofx_parser.ex`.

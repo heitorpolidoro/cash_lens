@@ -23,10 +23,32 @@ defmodule CashLens.Parsers.CSVParser do
     |> Enum.reject(&is_nil/1)
   end
 
-  # Banco do Brasil: Data, Dep, Histórico, Balancete, Doc, Valor
-  defp parse_row([date, _dep, description, _balancete, _doc, amount | _], :bb) do
+  # Banco do Brasil Standard (Comma or Semicolon)
+  # Try to match based on row length to handle different exports
+  defp parse_row(row, :bb) when length(row) >= 6 do
+    # Index 2 is usually History/Description, Index 5 is Valor
+    # If index 2 looks like a terminal number (numeric), try index 3
+    description = Enum.at(row, 2)
+    amount = Enum.at(row, 5)
+
+    # Heuristic: if column 3 (index 2) is a small number and column 4 exists, 
+    # it might be the Dep/Term format
+    {description, amount} =
+      if String.match?(description || "", ~r/^\d+$/) and length(row) >= 6 do
+        {Enum.at(row, 3), Enum.at(row, 5)}
+      else
+        {description, amount}
+      end
+
+    do_parse_row(Enum.at(row, 0), description, amount)
+  end
+
+  defp parse_row(_, _), do: nil
+
+  defp do_parse_row(date, description, amount) do
     amount_decimal = parse_amount(amount)
-    description_up = String.upcase(description || "")
+    description_val = description || ""
+    description_up = String.upcase(description_val)
 
     # Ignore summary rows and zero amounts
     if Decimal.eq?(amount_decimal, 0) or String.contains?(description_up, ["SALDO", "S A L D O"]) do
@@ -34,7 +56,7 @@ defmodule CashLens.Parsers.CSVParser do
     else
       # Extract metadata and CLEAN description
       {final_date, final_time, clean_description} =
-        extract_metadata_and_clean(description, parse_date(date))
+        extract_metadata_and_clean(description_val, parse_date(date))
 
       %{
         date: final_date,
@@ -44,8 +66,6 @@ defmodule CashLens.Parsers.CSVParser do
       }
     end
   end
-
-  defp parse_row(_, _), do: nil
 
   @doc """
   Extracts date (DD/MM) and time (HH:MM) from a string and returns a cleaned version of the string.
@@ -116,7 +136,8 @@ defmodule CashLens.Parsers.CSVParser do
         with {d_int, ""} <- Integer.parse(d),
              {m_int, ""} <- Integer.parse(m),
              {y_int, ""} <- Integer.parse(y),
-             {:ok, date} <- Date.new(y_int, m_int, d_int) do
+             year = if(y_int < 100, do: 2000 + y_int, else: y_int),
+             {:ok, date} <- Date.new(year, m_int, d_int) do
           date
         else
           _ -> Date.utc_today()

@@ -1,119 +1,81 @@
 defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponentTest do
   use CashLensWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
+  import CashLens.TransactionsFixtures
+  import CashLens.CategoriesFixtures
+
   alias CashLens.Transactions
-  alias CashLensWeb.TransactionLive.ReimbursementLinkComponent
-  alias Ecto.Adapters.SQL.Sandbox
 
-  @create_attrs %{description: "some description", amount: 100, date: ~D[2026-03-01]}
+  test "linking a reimbursement", %{conn: conn} do
+    credit = transaction_fixture(amount: "100.00", description: "Credit")
+    expense = transaction_fixture(amount: "-100.00", description: "Expense")
 
-  setup do
-    {:ok, account} =
-      CashLens.Accounts.create_account(%{
-        name: "Checking",
-        bank: "Bank A",
-        balance: 0,
-        accepts_import: true
-      })
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-    {:ok, credit_tx} =
-      Transactions.create_transaction(
-        Map.merge(@create_attrs, %{account_id: account.id, amount: 100})
-      )
+    # Open modal
+    index_live |> render_click("open_reimbursement_link", %{"id" => credit.id})
+    assert render(index_live) =~ "Vincular Reembolso"
+    assert render(index_live) =~ "Expense"
 
-    {:ok, expense_tx} =
-      Transactions.create_transaction(
-        Map.merge(@create_attrs, %{account_id: account.id, amount: -100})
-      )
-
-    {:ok, account: account, credit_tx: credit_tx, expense_tx: expense_tx}
-  end
-
-  defmodule HostLive do
-    use Phoenix.LiveView
-    alias CashLensWeb.TransactionLive.ReimbursementLinkComponent
-
-    def mount(_params, session, socket) do
-      {:ok,
-       assign(socket,
-         reimbursement_credit: session["reimbursement_credit"],
-         show: session["show"]
-       )}
-    end
-
-    def handle_info(:reimbursement_linked, socket) do
-      {:noreply, Phoenix.LiveView.put_flash(socket, :info, "linked")}
-    end
-
-    def handle_event(event, params, socket) do
-      send_update(ReimbursementLinkComponent,
-        id: "reimbursement-component",
-        event: event,
-        params: params
-      )
-
-      {:noreply, socket}
-    end
-
-    def render(assigns) do
-      ~H"""
-      <.live_component
-        module={ReimbursementLinkComponent}
-        id="reimbursement-component"
-        reimbursement_credit={@reimbursement_credit}
-        show={@show}
-      />
-      """
-    end
-  end
-
-  test "renders reimbursement modal", %{credit_tx: credit_tx} do
-    {:ok, _view, html} =
-      live_isolated(build_conn(), HostLive,
-        session: %{
-          "reimbursement_credit" => credit_tx,
-          "show" => true
-        }
-      )
-
-    assert html =~ "Vincular Reembolso"
-  end
-
-  test "links reimbursement", %{credit_tx: credit_tx, expense_tx: expense_tx} do
-    Sandbox.mode(CashLens.Repo, {:shared, self()})
-
-    {:ok, view, _html} =
-      live_isolated(build_conn(), HostLive,
-        session: %{
-          "reimbursement_credit" => credit_tx,
-          "show" => true
-        }
-      )
-
-    # Find the button and click it directly using element
-    view
-    |> element("button[phx-value-expense-id='#{expense_tx.id}']")
+    # Link it
+    index_live
+    |> element("button[phx-click='link_reimbursement'][phx-value-expense-id='#{expense.id}']")
     |> render_click()
 
-    # Reload from DB
-    updated_expense = Transactions.get_transaction!(expense_tx.id)
+    assert render(index_live) =~ "Reimbursement linked"
+
+    updated_credit = Transactions.get_transaction!(credit.id)
+    updated_expense = Transactions.get_transaction!(expense.id)
+
+    assert updated_credit.reimbursement_status == "paid"
     assert updated_expense.reimbursement_status == "paid"
+    assert updated_credit.reimbursement_link_key == updated_expense.reimbursement_link_key
   end
 
-  test "search reimbursement", %{credit_tx: credit_tx, expense_tx: expense_tx} do
-    {:ok, view, _html} =
-      live_isolated(build_conn(), HostLive,
-        session: %{
-          "reimbursement_credit" => credit_tx,
-          "show" => true
-        }
-      )
+  test "search in reimbursement modal", %{conn: conn} do
+    credit = transaction_fixture(amount: "100.00")
+    _expense1 = transaction_fixture(amount: "-100.00", description: "Match")
+    _expense2 = transaction_fixture(amount: "-100.00", description: "Hidden")
 
-    render_keyup(view, "reimbursement_search_change", %{
-      "value" => "some",
-      "myself" => "reimbursement-component"
-    })
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
+    index_live |> render_click("open_reimbursement_link", %{"id" => credit.id})
 
-    assert render(view) =~ expense_tx.description
+    # Search for "Match"
+    index_live
+    |> element("input[phx-keyup='reimbursement_search_change']")
+    |> render_keyup(%{"value" => "Match"})
+
+    assert render(index_live) =~ "Match"
+
+    # Check that "Hidden" is not in the modal content
+    refute index_live |> element("#reimbursement-link-modal") |> render() =~ "Hidden"
+  end
+
+  test "empty search results", %{conn: conn} do
+    credit = transaction_fixture(amount: "100.00")
+
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
+    index_live |> render_click("open_reimbursement_link", %{"id" => credit.id})
+
+    index_live
+    |> element("input[phx-keyup='reimbursement_search_change']")
+    |> render_keyup(%{"value" => "non-existent"})
+
+    assert render(index_live) =~ "Nenhuma despesa pendente de reembolso encontrada"
+  end
+
+  test "linking with category carry over", %{conn: conn} do
+    cat = category_fixture()
+    credit = transaction_fixture(amount: "100.00")
+    expense = transaction_fixture(amount: "-100.00", category_id: cat.id)
+
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
+    index_live |> render_click("open_reimbursement_link", %{"id" => credit.id})
+
+    index_live
+    |> element("button[phx-click='link_reimbursement'][phx-value-expense-id='#{expense.id}']")
+    |> render_click()
+
+    assert Transactions.get_transaction!(credit.id).category_id == cat.id
   end
 end

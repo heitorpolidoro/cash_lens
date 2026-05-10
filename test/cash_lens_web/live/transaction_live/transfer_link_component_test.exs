@@ -1,167 +1,71 @@
 defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
-  use CashLensWeb.ConnCase
+  use CashLensWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
+  import CashLens.TransactionsFixtures
+  import CashLens.AccountsFixtures
+  import CashLens.CategoriesFixtures
+
   alias CashLens.Transactions
-  alias CashLensWeb.TransactionLive.TransferLinkComponent
-  alias Ecto.Adapters.SQL.Sandbox
 
-  @create_attrs %{description: "Transfer", amount: -100, date: ~D[2026-03-01]}
+  test "linking a transfer", %{conn: conn} do
+    acc1 = account_fixture()
+    acc2 = account_fixture()
+    tx1 = transaction_fixture(account_id: acc1.id, amount: "100.00")
+    tx2 = transaction_fixture(account_id: acc2.id, amount: "-100.00")
 
-  setup do
-    {:ok, account1} =
-      CashLens.Accounts.create_account(%{
-        name: "Account 1",
-        bank: "Bank A",
-        balance: 0,
-        accepts_import: true
-      })
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-    {:ok, account2} =
-      CashLens.Accounts.create_account(%{
-        name: "Account 2",
-        bank: "Bank B",
-        balance: 0,
-        accepts_import: true
-      })
+    index_live |> render_click("open_transfer_link", %{"id" => tx1.id})
+    assert render(index_live) =~ "Link Transfer"
 
-    # Needs a 'transfer' category
-    {:ok, _} = CashLens.Categories.create_category(%{name: "Transfer", slug: "transfer"})
+    index_live
+    |> element("button[phx-click='link_transfer'][phx-value-pair-id='#{tx2.id}']")
+    |> render_click()
 
-    {:ok, origin_tx} =
-      Transactions.create_transaction(Map.merge(@create_attrs, %{account_id: account1.id}))
+    assert render(index_live) =~ "Transfer linked successfully!"
 
-    {:ok, pair_tx} =
-      Transactions.create_transaction(
-        Map.merge(@create_attrs, %{account_id: account2.id, amount: 100})
-      )
+    assert Transactions.get_transaction!(tx1.id).transfer_key != nil
 
-    {:ok, account1: account1, account2: account2, origin_tx: origin_tx, pair_tx: pair_tx}
+    assert Transactions.get_transaction!(tx1.id).transfer_key ==
+             Transactions.get_transaction!(tx2.id).transfer_key
   end
 
-  defmodule HostLive do
-    use Phoenix.LiveView
-    alias CashLensWeb.TransactionLive.TransferLinkComponent
+  test "quick transfer creation", %{conn: conn} do
+    acc1 = account_fixture()
+    acc2 = account_fixture()
+    # Slug will be "transfer"
+    category_fixture(name: "transfer")
+    tx1 = transaction_fixture(account_id: acc1.id, amount: "100.00", description: "From acc1")
 
-    def mount(_params, session, socket) do
-      {:ok,
-       assign(socket,
-         transfer_origin: session["transfer_origin"],
-         show_transfer_modal: session["show_transfer_modal"],
-         show_quick_transfer_modal: session["show_quick_transfer_modal"] || false,
-         accounts: session["accounts"] || [],
-         pending_transfers: session["pending_transfers"] || [],
-         quick_transfer_form: session["quick_transfer_form"]
-       )}
-    end
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-    def handle_event(event, params, socket) do
-      send_update(TransferLinkComponent, id: "transfer-component", event: event, params: params)
-      {:noreply, socket}
-    end
+    index_live |> render_click("open_transfer_link", %{"id" => tx1.id})
+    index_live |> element("button[phx-click='open_quick_transfer']") |> render_click()
 
-    def handle_info({:transfer_linked, _}, socket), do: {:noreply, socket}
-    def handle_info(:close_transfer_modal, socket), do: {:noreply, socket}
+    assert render(index_live) =~ "Create Transfer Pair"
 
-    def render(assigns) do
-      ~H"""
-      <.live_component
-        module={TransferLinkComponent}
-        id="transfer-component"
-        transfer_origin={@transfer_origin}
-        show_transfer_modal={@show_transfer_modal}
-        show_quick_transfer_modal={@show_quick_transfer_modal}
-        accounts={@accounts}
-        pending_transfers={@pending_transfers}
-        quick_transfer_form={@quick_transfer_form}
-      />
-      """
-    end
-  end
-
-  test "renders transfer modal", %{origin_tx: origin_tx} do
-    origin_tx = Transactions.get_transaction!(origin_tx.id) |> CashLens.Repo.preload([:account])
-
-    {:ok, _view, html} =
-      live_isolated(build_conn(), HostLive,
-        session: %{
-          "transfer_origin" => origin_tx,
-          "show_transfer_modal" => true
-        }
-      )
-
-    assert html =~ "Link Transfer"
-  end
-
-  test "links transfer", %{origin_tx: origin_tx, pair_tx: pair_tx} do
-    origin_tx = Transactions.get_transaction!(origin_tx.id) |> CashLens.Repo.preload([:account])
-    pair_tx = Transactions.get_transaction!(pair_tx.id) |> CashLens.Repo.preload([:account])
-
-    {:ok, view, _html} =
-      live_isolated(build_conn(), HostLive,
-        session: %{
-          "transfer_origin" => origin_tx,
-          "show_transfer_modal" => true,
-          "pending_transfers" => [pair_tx]
-        }
-      )
-
-    Sandbox.allow(CashLens.Repo, self(), view.pid)
-
-    # Triggering the event on the component
-    view |> element("button[phx-value-pair-id='#{pair_tx.id}']") |> render_click()
-
-    updated_origin = Transactions.get_transaction!(origin_tx.id)
-    assert updated_origin.transfer_key != nil
-  end
-
-  test "open quick transfer modal", %{origin_tx: origin_tx, account2: account2} do
-    origin_tx = Transactions.get_transaction!(origin_tx.id) |> CashLens.Repo.preload([:account])
-
-    {:ok, view, _html} =
-      live_isolated(build_conn(), HostLive,
-        session: %{
-          "transfer_origin" => origin_tx,
-          "show_transfer_modal" => true,
-          "accounts" => [account2]
-        }
-      )
-
-    Sandbox.allow(CashLens.Repo, self(), view.pid)
-
-    render_click(view, "open_quick_transfer", %{"myself" => "transfer-component"})
-
-    # Check if the modal exists in the rendered HTML
-    assert render(view) =~ "Modal Criar Par da Transferência"
-  end
-
-  test "save quick transfer", %{origin_tx: origin_tx, account2: account2} do
-    origin_tx = Transactions.get_transaction!(origin_tx.id) |> CashLens.Repo.preload([:account])
-
-    {:ok, view, _html} =
-      live_isolated(build_conn(), HostLive,
-        session: %{
-          "transfer_origin" => origin_tx,
-          "show_transfer_modal" => false,
-          "show_quick_transfer_modal" => true,
-          "accounts" => [account2],
-          "quick_transfer_form" =>
-            Phoenix.Component.to_form(%{
-              "date" => origin_tx.date,
-              "amount" => Decimal.mult(origin_tx.amount, -1),
-              "description" => origin_tx.description
-            })
-        }
-      )
-
-    render_submit(view, "save_quick_transfer", %{
-      "account_id" => account2.id,
-      "description" => "Test transfer",
-      "date" => "2026-03-01",
-      "amount" => "100.00",
-      "myself" => "transfer-component"
+    index_live
+    |> element("#quick-transfer-form")
+    |> render_submit(%{
+      "account_id" => acc2.id,
+      "description" => "To acc2",
+      "date" => tx1.date,
+      "amount" => "-100.00"
     })
 
-    # Assert successful linking by the redirect/message
-    assert render(view) =~ "Create Transfer Pair"
+    assert render(index_live) =~ "Transfer pair created and linked!"
+
+    # Verify new transaction
+    txs = Transactions.list_transactions(%{"account_id" => acc2.id})
+    assert Enum.any?(txs, fn tx -> tx.description == "To acc2" and tx.transfer_key != nil end)
+  end
+
+  test "empty pending transfers", %{conn: conn} do
+    tx = transaction_fixture(amount: "100.00")
+
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
+    index_live |> render_click("open_transfer_link", %{"id" => tx.id})
+
+    assert render(index_live) =~ "No matching pair found for this transfer"
   end
 end

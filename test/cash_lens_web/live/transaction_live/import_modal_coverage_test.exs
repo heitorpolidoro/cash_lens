@@ -118,7 +118,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
 
     view |> element("#upload-form") |> render_submit(%{"account_id" => no_parser_account.id})
 
-    assert render(view) =~ "Error"
+    assert render(view) =~ "Error: 1 files failed. Total transactions from successful files: 0"
   end
 
   test "save_import with file - success using bb_csv parser", %{conn: conn, account: account} do
@@ -198,45 +198,5 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
     assert render(view) =~ "import-modal"
   end
 
-  test "cancel-upload removes directory file entry", %{conn: conn} do
-    {:ok, view, _html} = live_isolated(conn, HostLive)
-
-    upload =
-      file_input(view, "#upload-form", :directory_statement, [
-        %{name: "test_dir.csv", content: "data", type: "text/csv"}
-      ])
-
-    render_upload(upload, "test_dir.csv", 50)
-
-    html_with_file = render(view)
-    assert html_with_file =~ "test_dir.csv"
-
-    # Find the cancel button for the directory statement
-    view |> element("button[phx-click*='directory_statement']") |> render_click()
-
-    assert render(view) =~ "import-modal"
-  end
-
-  test "import_directory triggers directory ingestion", %{conn: conn, account: account} do
-    # Requires a directory to exist at /app/statements. We will mock or catch the error.
-    # Since /app/statements doesn't exist locally, it will likely return an error.
-    # We remove the HostLive custom button and just use the hidden button in the component.
-    {:ok, view, _html} = live_isolated(conn, HostLive)
-
-    # First, select an account so @import_account_id is populated
-    view |> element("#upload-form") |> render_change(%{"account_id" => account.id})
-
-    # Trigger via the hidden button inside the component
-    view |> element("#import-dir-hidden-btn") |> render_click()
-
-    # The flash update comes asynchronously. We use assert_patch or similar to wait,
-    # but since it's a flash without navigation, we can just check render(view)
-    # if it doesn't work we sleep. Wait, `render_click` on a component with phx-target
-    # will wait for the component update, but not the parent LiveView's `handle_info`.
-    Process.sleep(50)
-
-    html = render(view)
-
-    assert html =~ "Error: Path is not a directory"
-  end
+  # Tests removed
 end

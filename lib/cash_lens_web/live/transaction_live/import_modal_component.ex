@@ -39,7 +39,12 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
         {:noreply, socket}
 
       results ->
-        file_paths = for {:ok, path} <- results, do: path
+        file_paths =
+          Enum.map(results, fn
+            {:ok, path} -> path
+            path when is_binary(path) -> path
+          end)
+
         start_bulk_import(account, {:files, file_paths})
         {:noreply, socket}
     end
@@ -228,7 +233,9 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
                   </div>
                   <button
                     type="button"
-                    phx-click={JS.push("cancel-upload", value: %{ref: entry.ref}, target: @myself)}
+                    phx-click="cancel-upload"
+                    phx-value-ref={entry.ref}
+                    phx-target={@myself}
                     class="btn btn-ghost btn-xs text-error"
                   >
                     <.icon name="hero-x-mark" class="size-3" />
