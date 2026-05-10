@@ -168,5 +168,12 @@ defmodule CashLens.CSVParserTest do
       transactions = CSVParser.parse(csv_content, :bb)
       assert List.first(transactions).description == ""
     end
+
+    test "handles 2-digit year in slashed date format" do
+      csv_content = "Data,Dep,Term,Hist,Doc,Valor,\n01/01/26,0,0,DESCRIPTION,1,-10.00,\n"
+      transactions = CSVParser.parse(csv_content, :bb)
+      assert length(transactions) == 1
+      assert List.first(transactions).date == ~D[2026-01-01]
+    end
   end
 end
