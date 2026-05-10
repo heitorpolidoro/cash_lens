@@ -10,8 +10,8 @@ defmodule CashLensWeb.PageController do
     latest_balances = Accounting.list_latest_balances()
 
     # Get historical data for the chart
-    historical_balances = Accounting.get_historical_balances()
-    historical_summary = Transactions.get_historical_summary()
+    historical_balances = Accounting.get_historical_balances(limit: 12)
+    historical_summary = Transactions.get_historical_summary(limit: 12)
 
     historical =
       Enum.map(historical_balances, fn hb ->
@@ -54,7 +54,7 @@ defmodule CashLensWeb.PageController do
       |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
 
     summary = Transactions.get_monthly_summary()
-    historical_categories = Transactions.get_historical_category_summary()
+    historical_categories = Transactions.get_historical_category_summary(limit: 12)
 
     fixed_data = extract_category_data(historical_categories, "fixed")
     variable_data = extract_category_data(historical_categories, "variable")

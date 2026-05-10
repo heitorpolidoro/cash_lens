@@ -232,7 +232,9 @@ defmodule CashLens.Transactions do
   @doc """
   Returns pure income and expenses history grouped by month, excluding transfers.
   """
-  def get_historical_summary do
+  def get_historical_summary(opts \\ []) do
+    limit = Keyword.get(opts, :limit)
+
     query =
       from t in Transaction,
         left_join: c in assoc(t, :category),
@@ -253,6 +255,8 @@ defmodule CashLens.Transactions do
           expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", t.amount, t.amount))
         }
 
+    query = if limit, do: limit(query, ^limit), else: query
+
     Repo.all(query)
     |> Enum.map(fn %{income: i, expenses: e} = row ->
       income = i || Decimal.new("0")
@@ -264,17 +268,27 @@ defmodule CashLens.Transactions do
         balance: Decimal.sub(income, expenses)
       })
     end)
+    |> then(fn res ->
+      if limit, do: Enum.sort_by(res, &{&1.year, &1.month}), else: res
+    end)
   end
 
   @doc """
   Returns expense totals grouped by month and category, excluding transfers.
   """
-  def get_historical_category_summary do
-    query_historical_category_totals()
-    |> Repo.all()
-    |> Enum.group_by(&group_by_month_year/1)
-    |> Enum.map(&format_month_summary/1)
-    |> Enum.sort_by(fn %{year: y, month: m} -> {y, m} end)
+  def get_historical_category_summary(opts \\ []) do
+    limit = Keyword.get(opts, :limit)
+
+    res =
+      query_historical_category_totals()
+      |> Repo.all()
+      |> Enum.group_by(&group_by_month_year/1)
+      |> Enum.map(&format_month_summary/1)
+      |> Enum.sort_by(fn %{year: y, month: m} -> {y, m} end, :desc)
+
+    res = if limit, do: Enum.take(res, limit), else: res
+
+    Enum.sort_by(res, fn %{year: y, month: m} -> {y, m} end)
   end
 
   defp query_historical_category_totals do

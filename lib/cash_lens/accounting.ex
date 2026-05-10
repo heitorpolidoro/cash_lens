@@ -269,11 +269,12 @@ defmodule CashLens.Accounting do
   @doc """
   Returns aggregated balance history grouped by year and month.
   """
-  def get_historical_balances do
+  def get_historical_balances(opts \\ []) do
+    limit = Keyword.get(opts, :limit)
+
     query =
       from b in Balance,
         group_by: [b.year, b.month],
-        order_by: [asc: b.year, asc: b.month],
         select: %{
           year: b.year,
           month: b.month,
@@ -283,7 +284,23 @@ defmodule CashLens.Accounting do
           final_balance: sum(b.final_balance)
         }
 
-    Repo.all(query)
+    query =
+      if limit do
+        query
+        |> order_by([b], desc: b.year, desc: b.month)
+        |> limit(^limit)
+      else
+        query
+        |> order_by([b], asc: b.year, asc: b.month)
+      end
+
+    res = Repo.all(query)
+
+    if limit do
+      Enum.sort_by(res, &{&1.year, &1.month})
+    else
+      res
+    end
   end
 
   def get_balance!(id), do: Repo.get!(Balance, id) |> Repo.preload(:account)
