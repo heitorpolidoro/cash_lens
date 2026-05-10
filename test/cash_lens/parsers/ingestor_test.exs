@@ -133,14 +133,15 @@ defmodule CashLens.Parsers.IngestorTest do
     test "handles unknown file extension with generic fallback" do
       account = account_fixture(parser_type: "bb_csv")
       file_path = "test/support/fixtures/files/generic_#{account.id}.txt"
+      on_exit(fn -> File.rm(file_path) end)
       File.write!(file_path, "Data,Dep,Term,Hist,Doc,Valor,\n")
       assert {:ok, 0} = Ingestor.import_file(account, file_path)
-      File.rm!(file_path)
     end
 
     test "handles invalid UTF-8 by converting from Latin1" do
       account = account_fixture(parser_type: "bb_csv")
       file_path = "test/support/fixtures/files/invalid_utf8_#{account.id}.csv"
+      on_exit(fn -> File.rm(file_path) end)
       # \xE1 is 'á' in Latin1 but invalid in UTF-8
       content = "Data,Dep,Term,Hist,Doc,Valor,\n01/01/2026,0,0,M\xE1-formado,1,-10.00,\n"
       File.write!(file_path, content)
@@ -149,7 +150,6 @@ defmodule CashLens.Parsers.IngestorTest do
 
       tx = CashLens.Repo.one(CashLens.Transactions.Transaction)
       assert tx.description == "M\u00E1-formado"
-      File.rm!(file_path)
     end
   end
 end

@@ -44,11 +44,6 @@ npm-debug.log
 /cash_lens.iml
 /statements/
 
-# Gemini CLI
-.gemini/
-.gemini.md
-
-
 # Universal
 .DS_Store
 .vscode/

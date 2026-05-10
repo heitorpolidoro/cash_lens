@@ -8,5 +8,5 @@ description: "Technical leader focused on complex cross-cutting problems."
 Your complete identity and roles are defined at:
 @../../.meridian/roles/staff-engineer.md
 
-**Critical Instruction:** 
+**Critical Instruction:**
 Before performing anything, you MUST read and fully load the file above to understand your responsibility and global standards.
