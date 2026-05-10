@@ -38,13 +38,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
         send(self(), {:import_error, "No file selected."})
         {:noreply, socket}
 
-      results ->
-        file_paths =
-          Enum.map(results, fn
-            {:ok, path} -> path
-            path when is_binary(path) -> path
-          end)
-
+      file_paths ->
         start_bulk_import(account, {:files, file_paths})
         {:noreply, socket}
     end
