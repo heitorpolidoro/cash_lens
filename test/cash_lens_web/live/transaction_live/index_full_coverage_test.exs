@@ -6,8 +6,8 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
 
-  alias CashLens.Transactions
   alias CashLens.Categories
+  alias CashLens.Transactions
 
   describe "Index full coverage" do
     test "auto_categorize_all event", %{conn: conn} do

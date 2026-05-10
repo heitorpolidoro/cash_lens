@@ -31,7 +31,7 @@ defmodule CashLens.Parsers.CSVParser do
     description = Enum.at(row, 2)
     amount = Enum.at(row, 5)
 
-    # Heuristic: if column 3 (index 2) is a small number and column 4 exists, 
+    # Heuristic: if column 3 (index 2) is a small number and column 4 exists,
     # it might be the Dep/Term format
     {description, amount} =
       if String.match?(description || "", ~r/^\d+$/) and length(row) >= 6 do
@@ -136,8 +136,7 @@ defmodule CashLens.Parsers.CSVParser do
         with {d_int, ""} <- Integer.parse(d),
              {m_int, ""} <- Integer.parse(m),
              {y_int, ""} <- Integer.parse(y),
-             year = if(y_int < 100, do: 2000 + y_int, else: y_int),
-             {:ok, date} <- Date.new(year, m_int, d_int) do
+             {:ok, date} <- Date.new(normalize_year(y_int), m_int, d_int) do
           date
         else
           _ -> Date.utc_today()
@@ -147,6 +146,9 @@ defmodule CashLens.Parsers.CSVParser do
         Date.utc_today()
     end
   end
+
+  defp normalize_year(y) when y < 100, do: 2000 + y
+  defp normalize_year(y), do: y
 
   defp parse_amount(amount_string) do
     clean_string =

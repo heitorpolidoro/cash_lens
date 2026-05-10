@@ -75,14 +75,9 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
       result =
         case source do
           {:files, file_paths} ->
-            results =
-              Enum.map(file_paths, fn path ->
-                res = Ingestor.import_file(account, path)
-                File.rm(path)
-                res
-              end)
-
-            summarize_import_results(results)
+            file_paths
+            |> Enum.map(&import_and_cleanup(account, &1))
+            |> summarize_import_results()
         end
 
       case result do
@@ -97,6 +92,12 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
       task_start = Application.get_env(:cash_lens, :task_start_fn, &Task.start/1)
       task_start.(process_import)
     end
+  end
+
+  defp import_and_cleanup(account, path) do
+    res = Ingestor.import_file(account, path)
+    File.rm(path)
+    res
   end
 
   defp summarize_import_results(results) do
