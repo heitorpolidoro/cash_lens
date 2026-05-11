@@ -47,6 +47,7 @@ defmodule CashLensWeb.Router do
       live "/admin/db/:table", AdminDatabaseLive, :show
 
       live "/admin/exclusion_rules", AutomationLive.BulkIgnore, :index
+      live "/admin/transfer_rules", AutomationLive.TransferRules, :index
     end
   end
 

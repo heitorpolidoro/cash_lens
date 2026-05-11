@@ -24,6 +24,27 @@ defmodule CashLens.TransactionsFixtures do
   end
 
   @doc """
+  Generate a transfer rule.
+  """
+  def transfer_rule_fixture(attrs \\ %{}) do
+    source_account = CashLens.AccountsFixtures.account_fixture()
+    destination_account = CashLens.AccountsFixtures.account_fixture()
+    unique_id = System.unique_integer([:positive])
+
+    {:ok, rule} =
+      attrs
+      |> Enum.into(%{
+        label: "Rule #{unique_id}",
+        description_patterns: ["pattern-#{unique_id}"],
+        source_account_id: source_account.id,
+        destination_account_id: destination_account.id
+      })
+      |> CashLens.Transactions.create_transfer_rule()
+
+    CashLens.Transactions.get_transfer_rule!(rule.id)
+  end
+
+  @doc """
   Generate a bulk ignore pattern.
   """
   def insert_bulk_ignore_pattern(attrs \\ %{}) do

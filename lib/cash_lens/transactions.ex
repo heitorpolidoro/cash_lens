@@ -9,6 +9,43 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.BulkIgnorePattern
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
+  alias CashLens.Transactions.TransferRule
+  alias CashLens.Transactions.TransferRuleApplier
+
+  @doc """
+  Returns the list of all transfer rules, preloading source and destination accounts.
+  """
+  def list_transfer_rules do
+    Repo.all(
+      from r in TransferRule,
+        order_by: [asc: r.inserted_at],
+        preload: [:source_account, :destination_account]
+    )
+  end
+
+  def get_transfer_rule!(id) do
+    Repo.get!(TransferRule, id) |> Repo.preload([:source_account, :destination_account])
+  end
+
+  def create_transfer_rule(attrs \\ %{}) do
+    %TransferRule{}
+    |> TransferRule.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def update_transfer_rule(%TransferRule{} = rule, attrs) do
+    rule
+    |> TransferRule.changeset(attrs)
+    |> Repo.update()
+  end
+
+  def delete_transfer_rule(%TransferRule{} = rule) do
+    Repo.delete(rule)
+  end
+
+  def change_transfer_rule(%TransferRule{} = rule, attrs \\ %{}) do
+    TransferRule.changeset(rule, attrs)
+  end
 
   @doc """
   Returns the list of all bulk ignore patterns.
@@ -353,6 +390,7 @@ defmodule CashLens.Transactions do
     |> Repo.insert()
     |> case do
       {:ok, transaction} ->
+        TransferRuleApplier.maybe_apply_rule(transaction)
         TransferMatcher.match_transfer(transaction)
         {:ok, transaction}
 

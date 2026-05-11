@@ -11,6 +11,7 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
+  alias CashLens.Transactions.TransferRuleApplier
   alias Ecto.UUID
 
   @doc """
@@ -151,10 +152,13 @@ defmodule CashLens.Parsers.Ingestor do
     # We use returning: true to get the actually inserted transactions for TransferMatcher
     {_count, inserted_transactions} = batch_insert_transactions(entries)
 
-    # 3. Run TransferMatcher for new transactions in batch
-    TransferMatcher.match_transfers(inserted_transactions)
+    # 3. Apply transfer rules for newly inserted transactions, creating mirrors as needed
+    mirror_transactions = TransferRuleApplier.apply_rules(inserted_transactions)
 
-    # 4. Collect affected periods for balance recalculation
+    # 4. Run TransferMatcher for new transactions (including mirrors) in batch
+    TransferMatcher.match_transfers(inserted_transactions ++ mirror_transactions)
+
+    # 5. Collect affected periods for balance recalculation
     collect_affected_periods(transactions_data, account_id)
   end
 

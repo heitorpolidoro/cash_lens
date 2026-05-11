@@ -52,6 +52,11 @@
               <.icon name="hero-no-symbol" class="size-4" /> Exclusion Rules
             </.link>
           </li>
+          <li>
+            <.link navigate={~p"/admin/transfer_rules"}>
+              <.icon name="hero-arrows-right-left" class="size-4" /> Transfer Rules
+            </.link>
+          </li>
           <div class="divider my-1"></div>
           <li>
             <button type="button" phx-click="confirm_delete_all" class="text-error">
@@ -486,7 +491,7 @@
                     <option value="">All</option>
                     <%= for account <- @accounts do %>
                       <option value={account.id} selected={@filters["account_id"] == account.id}>
-                        {account.name}
+                        {account_label(account)}
                       </option>
                     <% end %>
                   </select>
@@ -772,11 +777,37 @@
         <.icon name="hero-sparkles" class="size-8" />
       </div>
       <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Bulk Categorization</h2>
-      <p class="text-sm opacity-70 mb-6">
+      <p class="text-sm opacity-70 mb-4">
         We found <strong>{length(@bulk_confirmation.items)}</strong>
         more transactions with description <span class="font-mono bg-base-300 px-1 rounded">"{@bulk_confirmation.description}"</span>.
         Do you want to categorize all as <strong class="text-primary">{@bulk_confirmation.category_name}</strong>?
       </p>
+
+      <div class="overflow-x-auto mb-6 rounded-xl border border-base-300 max-h-64 overflow-y-auto">
+        <table class="table table-zebra table-xs w-full text-xs">
+          <thead class="bg-base-200/70 sticky top-0">
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Category</th>
+              <th class="text-right">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={tx <- @bulk_confirmation.items}>
+              <td class="whitespace-nowrap">{Calendar.strftime(tx.date, "%d/%m/%Y")}</td>
+              <td class="max-w-xs truncate">{tx.description}</td>
+              <td class="opacity-60">{if tx.category, do: tx.category.name, else: "—"}</td>
+              <td class={[
+                "text-right font-mono whitespace-nowrap",
+                if(Decimal.negative?(tx.amount), do: "text-error", else: "text-success")
+              ]}>
+                {format_currency(tx.amount)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <div class="flex flex-col sm:flex-row gap-3">
         <button

@@ -3,6 +3,8 @@ defmodule CashLensWeb.Formatters do
   Helpers for formatting data in the UI.
   """
 
+  def account_label(%{bank: bank, name: name}), do: "#{bank} - #{name}"
+
   @doc """
   Formats a decimal or float as Brazilian currency (BRL).
   Example: 1234.5 -> R$ 1.234,50

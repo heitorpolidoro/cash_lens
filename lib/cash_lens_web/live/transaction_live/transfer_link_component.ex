@@ -126,7 +126,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
               >
                 <option value="">Select the account that received/sent</option>
                 <%= for account <- Enum.reject(@accounts, & &1.id == @transfer_origin.account_id) do %>
-                  <option value={account.id}>{account.name}</option>
+                  <option value={account.id}>{account_label(account)}</option>
                 <% end %>
               </select>
             </div>

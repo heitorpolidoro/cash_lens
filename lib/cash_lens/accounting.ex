@@ -215,6 +215,44 @@ defmodule CashLens.Accounting do
   end
 
   @doc """
+  Rebuilds all Balance records for an account from scratch by deleting every existing
+  Balance and recalculating month by month in chronological order, seeding from the
+  current `account.balance` value.
+
+  This must be called whenever the account's initial balance (seed value) changes, as
+  `recalculate_all_balances/0` would otherwise preserve the stale root `initial_balance`.
+
+  If the account has no transactions the function is a no-op — no Balance records are created.
+  """
+  def rebuild_account_balances(account_id) do
+    Repo.delete_all(from b in Balance, where: b.account_id == ^account_id)
+
+    months =
+      from(t in Transaction,
+        where: t.account_id == ^account_id,
+        select: %{
+          year: fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
+          month: fragment("EXTRACT(MONTH FROM ?)::integer", t.date)
+        },
+        distinct: [
+          fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
+          fragment("EXTRACT(MONTH FROM ?)::integer", t.date)
+        ],
+        order_by: [
+          asc: fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
+          asc: fragment("EXTRACT(MONTH FROM ?)::integer", t.date)
+        ]
+      )
+      |> Repo.all()
+
+    Enum.each(months, fn %{year: year, month: month} ->
+      calculate_monthly_balance(account_id, year, month)
+    end)
+
+    :ok
+  end
+
+  @doc """
   Recalculates all existing balances in chronological order to ensure chained initial balances propagate correctly.
   """
   def recalculate_all_balances do

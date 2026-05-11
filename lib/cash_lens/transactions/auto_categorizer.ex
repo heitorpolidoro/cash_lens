@@ -6,6 +6,7 @@ defmodule CashLens.Transactions.AutoCategorizer do
 
   alias CashLens.Categories.Category
   alias CashLens.Repo
+  alias CashLens.Transactions.TransferRule
 
   @doc """
   Analyzes a transaction map or struct and assigns a category_id based on DB rules.
@@ -46,8 +47,33 @@ defmodule CashLens.Transactions.AutoCategorizer do
         params
       end
     else
-      # Fallback to hardcoded special rules if any (like transfer)
-      check_special_rules(transaction_params, description)
+      # Fallback: check transfer rules, then hardcoded special rules
+      check_transfer_rules(transaction_params) ||
+        check_special_rules(transaction_params, description)
+    end
+  end
+
+  defp check_transfer_rules(params) do
+    account_id = get_field_value(params, :account_id)
+    description_lower = String.downcase(get_field_value(params, :description) || "")
+
+    if account_id do
+      matching_rule =
+        Repo.one(
+          from r in TransferRule,
+            where: r.source_account_id == ^account_id,
+            where:
+              fragment(
+                "? = ANY(SELECT lower(p) FROM unnest(?) AS p)",
+                ^description_lower,
+                r.description_patterns
+              ),
+            limit: 1
+        )
+
+      if matching_rule do
+        assign_category_by_slug(params, "transfer")
+      end
     end
   end
 
@@ -58,6 +84,9 @@ defmodule CashLens.Transactions.AutoCategorizer do
       params
     end
   end
+
+  defp get_field_value(%_{} = struct, field), do: Map.get(struct, field)
+  defp get_field_value(map, field) when is_map(map), do: map[field] || map[Atom.to_string(field)]
 
   defp assign_category_by_slug(params, slug) do
     case Repo.get_by(Category, slug: slug) do

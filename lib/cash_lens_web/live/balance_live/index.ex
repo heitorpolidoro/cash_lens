@@ -37,7 +37,7 @@ defmodule CashLensWeb.BalanceLive.Index do
                       <option value="">All</option>
                       <%= for account <- @accounts do %>
                         <option value={account.id} selected={@filters["account_id"] == account.id}>
-                          {account.name}
+                          {account_label(account)}
                         </option>
                       <% end %>
                     </select>

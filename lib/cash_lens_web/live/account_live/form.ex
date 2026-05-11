@@ -1,6 +1,7 @@
 defmodule CashLensWeb.AccountLive.Form do
   use CashLensWeb, :live_view
 
+  alias CashLens.Accounting
   alias CashLens.Accounts
   alias CashLens.Accounts.Account
 
@@ -31,19 +32,7 @@ defmodule CashLensWeb.AccountLive.Form do
 
       <.input field={@form[:color]} type="text" label="Color (optional)" />
 
-      <div class="form-control">
-        <label class="label cursor-pointer justify-start gap-4">
-          <input type="hidden" name="account[accepts_import]" value="false" />
-          <input
-            type="checkbox"
-            name="account[accepts_import]"
-            value="true"
-            checked={@form[:accepts_import].value}
-            class="checkbox checkbox-primary"
-          />
-          <span class="label-text font-bold">Accepts statement imports?</span>
-        </label>
-      </div>
+      <.input field={@form[:accepts_import]} type="checkbox" label="Accepts statement imports?" />
 
       <div class="flex items-end gap-4">
         <div class="flex-1">
@@ -117,8 +106,14 @@ defmodule CashLensWeb.AccountLive.Form do
   end
 
   defp save_account(socket, :edit, account_params) do
+    previous_balance = socket.assigns.account.balance
+
     case Accounts.update_account(socket.assigns.account, account_params) do
       {:ok, account} ->
+        if not Decimal.equal?(previous_balance, account.balance) do
+          Accounting.rebuild_account_balances(account.id)
+        end
+
         {:noreply,
          socket
          |> put_flash(:info, "Account updated successfully")

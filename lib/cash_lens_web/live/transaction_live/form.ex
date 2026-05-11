@@ -47,7 +47,7 @@ defmodule CashLensWeb.TransactionLive.Form do
             field={f[:account_id]}
             type="select"
             label="Account"
-            options={Enum.map(@accounts, &{&1.name, &1.id})}
+            options={Enum.map(@accounts, &{account_label(&1), &1.id})}
             required
           />
         </div>

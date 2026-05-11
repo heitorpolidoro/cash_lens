@@ -4,6 +4,7 @@ defmodule CashLens.AccountingTest do
   alias CashLens.Accounting
   alias CashLens.Accounting.Balance
   import CashLens.AccountsFixtures
+  import CashLens.TransactionsFixtures
 
   describe "balances" do
     test "list_balances/1 returns all balances" do
@@ -177,6 +178,57 @@ defmodule CashLens.AccountingTest do
       {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
       assert {:ok, _} = Accounting.delete_balance(b)
       assert_raise Ecto.NoResultsError, fn -> Accounting.get_balance!(b.id) end
+    end
+  end
+
+  describe "rebuild_account_balances/1" do
+    test "is a no-op when the account has no transactions" do
+      acc = account_fixture(balance: "500")
+
+      assert :ok = Accounting.rebuild_account_balances(acc.id)
+      assert Repo.all(from b in Balance, where: b.account_id == ^acc.id) == []
+    end
+
+    test "deletes existing balances and rebuilds them with the new initial balance" do
+      acc = account_fixture(balance: "100")
+
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-01-15], amount: "50"})
+
+      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+
+      original = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 1)
+      assert Decimal.equal?(original.initial_balance, "100")
+
+      {:ok, updated_acc} = CashLens.Accounts.update_account(acc, %{balance: "200"})
+
+      assert :ok = Accounting.rebuild_account_balances(updated_acc.id)
+
+      rebuilt = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 1)
+      assert Decimal.equal?(rebuilt.initial_balance, "200")
+    end
+
+    test "chain propagates correctly across multiple months" do
+      acc = account_fixture(balance: "1000")
+
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-01-10], amount: "100"})
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-02-10], amount: "200"})
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-03-10], amount: "-50"})
+
+      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      Accounting.calculate_monthly_balance(acc.id, 2026, 2)
+      Accounting.calculate_monthly_balance(acc.id, 2026, 3)
+
+      {:ok, updated_acc} = CashLens.Accounts.update_account(acc, %{balance: "500"})
+
+      assert :ok = Accounting.rebuild_account_balances(updated_acc.id)
+
+      jan = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 1)
+      feb = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 2)
+      mar = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 3)
+
+      assert Decimal.equal?(jan.initial_balance, "500")
+      assert Decimal.equal?(feb.initial_balance, jan.final_balance)
+      assert Decimal.equal?(mar.initial_balance, feb.final_balance)
     end
   end
 
