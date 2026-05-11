@@ -20,8 +20,8 @@ defmodule CashLens.Categories do
   def list_categories do
     from(c in Category,
       left_join: p in assoc(c, :parent),
-      order_by: [asc: coalesce(p.name, c.name), asc: c.name],
-      preload: [:parent]
+      order_by: [asc: coalesce(p.name, c.name), asc_nulls_first: c.parent_id, asc: c.name],
+      preload: [parent: :parent]
     )
     |> Repo.all()
   end

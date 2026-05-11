@@ -55,8 +55,8 @@ defmodule CashLens.Categories.Category do
   @doc """
   Returns a display name in the format 'Parent > Child'
   """
-  def full_name(%__MODULE__{name: name, parent: %__MODULE__{name: parent_name}}),
-    do: "#{parent_name} > #{name}"
+  def full_name(%__MODULE__{name: name, parent: %__MODULE__{} = parent}),
+    do: "#{full_name(parent)} > #{name}"
 
   def full_name(%__MODULE__{name: name}), do: name
   def full_name(_), do: ""
