@@ -4,6 +4,7 @@ defmodule CashLens.Transactions do
   """
 
   import Ecto.Query, warn: false
+  alias CashLens.Categories.Category
   alias CashLens.Repo
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.BulkIgnorePattern
@@ -418,8 +419,20 @@ defmodule CashLens.Transactions do
   def update_transaction_category(id, category_id) do
     transaction = get_transaction!(id)
 
+    extra =
+      case category_id && Repo.get(Category, category_id) do
+        %Category{default_reimbursable: true} when is_nil(transaction.reimbursement_status) ->
+          %{reimbursement_status: "pending"}
+
+        _ ->
+          %{}
+      end
+
     transaction
-    |> Ecto.Changeset.cast(%{category_id: category_id}, [:category_id])
+    |> Ecto.Changeset.cast(Map.merge(%{category_id: category_id}, extra), [
+      :category_id,
+      :reimbursement_status
+    ])
     |> Ecto.Changeset.foreign_key_constraint(:category_id)
     |> Repo.update()
   end
