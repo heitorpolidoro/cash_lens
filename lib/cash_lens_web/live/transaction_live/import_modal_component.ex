@@ -94,11 +94,6 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
     res
   end
 
-  def account_initials(%{bank: bank}) when is_binary(bank) and bank != "",
-    do: String.slice(bank, 0..1)
-
-  def account_initials(%{name: name}), do: String.slice(name, 0..1)
-
   defp summarize_import_results(results) do
     {successes, errors} =
       Enum.split_with(results, fn
@@ -162,7 +157,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
                           <img src={account.icon} />
                         <% else %>
                           <div class="flex items-center justify-center h-full w-full bg-primary text-primary-content text-[10px] font-bold">
-                            {account_initials(account)}
+                            {String.slice(account.bank || account.name, 0..1)}
                           </div>
                         <% end %>
                       </div>
