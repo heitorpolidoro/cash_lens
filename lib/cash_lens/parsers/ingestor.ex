@@ -82,13 +82,14 @@ defmodule CashLens.Parsers.Ingestor do
         _ -> false
       end)
 
-    total_count = successes |> Enum.map(fn {:ok, count} -> count end) |> Enum.sum()
+    total_imported = successes |> Enum.map(fn {:ok, %{imported: n}} -> n end) |> Enum.sum()
+    all_failed = successes |> Enum.flat_map(fn {:ok, %{failed: f}} -> f end)
 
     if Enum.empty?(errors) do
-      {:ok, total_count}
+      {:ok, %{imported: total_imported, failed: all_failed}}
     else
       {:error,
-       "#{length(errors)} files failed to import. Total transactions from successful files: #{total_count}"}
+       "#{length(errors)} files failed to import. Total transactions from successful files: #{total_imported}"}
     end
   end
 
@@ -131,7 +132,9 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   defp finalize_import(transactions_data, account_id) do
-    periods = process_transactions_data(transactions_data, account_id)
+    {entries, failed} = prepare_entries(transactions_data, account_id)
+
+    periods = process_entries(entries, transactions_data, account_id)
 
     periods
     |> MapSet.to_list()
@@ -139,15 +142,32 @@ defmodule CashLens.Parsers.Ingestor do
       Accounting.calculate_monthly_balance(acc_id, year, month)
     end)
 
-    {:ok, length(transactions_data)}
+    {:ok, %{imported: length(entries), failed: failed}}
   end
 
-  defp process_transactions_data(transactions_data, account_id) do
+  defp prepare_entries(transactions_data, account_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    # 1. Prepare all entries
-    entries = Enum.map(transactions_data, &prepare_transaction_entry(&1, account_id, now))
+    {valid, failed} =
+      transactions_data
+      |> Enum.map(fn data ->
+        try do
+          {:ok, prepare_transaction_entry(data, account_id, now)}
+        rescue
+          e -> {:error, {data[:description] || "unknown", Exception.message(e)}}
+        end
+      end)
+      |> Enum.split_with(fn
+        {:ok, _} -> true
+        _ -> false
+      end)
 
+    entries = Enum.map(valid, fn {:ok, entry} -> entry end)
+    reasons = Enum.map(failed, fn {:error, reason} -> reason end)
+    {entries, reasons}
+  end
+
+  defp process_entries(entries, transactions_data, account_id) do
     # 2. Batch Insert with on_conflict: :nothing
     # We use returning: true to get the actually inserted transactions for TransferMatcher
     {_count, inserted_transactions} = batch_insert_transactions(entries)
