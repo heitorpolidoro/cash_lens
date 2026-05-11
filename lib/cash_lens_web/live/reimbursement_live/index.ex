@@ -41,9 +41,9 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">
             <h2 class="text-xs font-black uppercase opacity-40 mb-1">Total to Receive</h2>
-            <p class="text-3xl font-black text-primary">{format_currency(@total_pending)}</p>
+            <p class="text-3xl font-black text-primary">{format_currency(@total_to_receive)}</p>
             <p class="text-[10px] opacity-50 font-bold uppercase mt-2">
-              {@pending_count} expenses waiting
+              {@pending_count} pending + {@requested_count} requested
             </p>
           </div>
         </div>
@@ -454,6 +454,8 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     total_requested =
       Enum.reduce(requested, Decimal.new("0"), &Decimal.add(&2, &1.amount)) |> Decimal.abs()
 
+    total_to_receive = Decimal.add(total_pending, total_requested)
+
     total_recovered =
       Enum.reduce(paid, Decimal.new("0"), fn tx, acc ->
         if Decimal.gt?(tx.amount, 0), do: Decimal.add(acc, tx.amount), else: acc
@@ -464,6 +466,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     |> assign(:paid_groups, paid_groups)
     |> assign(:total_pending, total_pending)
     |> assign(:total_requested, total_requested)
+    |> assign(:total_to_receive, total_to_receive)
     |> assign(:pending_count, length(pending))
     |> assign(:requested_count, length(requested))
     |> assign(:total_recovered_month, total_recovered)
