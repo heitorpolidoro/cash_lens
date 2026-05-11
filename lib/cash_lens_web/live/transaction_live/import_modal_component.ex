@@ -75,7 +75,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
         end
 
       case result do
-        {:ok, count} -> send(pid, {:import_success, count})
+        {:ok, summary} -> send(pid, {:import_success, summary})
         {:error, reason} -> send(pid, {:import_error, reason})
       end
     end
@@ -95,19 +95,20 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
   end
 
   defp summarize_import_results(results) do
-    {successes, errors} =
+    {successes, file_errors} =
       Enum.split_with(results, fn
         {:ok, _} -> true
         _ -> false
       end)
 
-    total_count = successes |> Enum.map(fn {:ok, count} -> count end) |> Enum.sum()
+    total_imported = successes |> Enum.map(fn {:ok, %{imported: n}} -> n end) |> Enum.sum()
+    all_failed = successes |> Enum.flat_map(fn {:ok, %{failed: f}} -> f end)
 
-    if Enum.empty?(errors) do
-      {:ok, total_count}
+    if Enum.empty?(file_errors) do
+      {:ok, %{imported: total_imported, failed: all_failed}}
     else
       {:error,
-       "#{length(errors)} files failed. Total transactions from successful files: #{total_count}"}
+       "#{length(file_errors)} files failed. Total transactions from successful files: #{total_imported}"}
     end
   end
 
