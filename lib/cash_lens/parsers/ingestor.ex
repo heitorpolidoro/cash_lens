@@ -183,10 +183,12 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   defp prepare_transaction_entry(data, account_id, now) do
+    categorizer = Application.get_env(:cash_lens, :auto_categorizer, AutoCategorizer)
+
     attrs =
       data
       |> Map.put(:account_id, account_id)
-      |> AutoCategorizer.categorize()
+      |> categorizer.categorize()
 
     # Generate changeset to get fingerprint and validate
     changeset =

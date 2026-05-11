@@ -84,6 +84,19 @@ defmodule CashLens.Parsers.IngestorTest do
       File.rm!(file_path)
     end
 
+    test "quarantines rows that crash during entry preparation" do
+      defmodule CrashingCategorizer do
+        def categorize(_), do: raise("simulated crash")
+      end
+
+      Application.put_env(:cash_lens, :auto_categorizer, CrashingCategorizer)
+      on_exit(fn -> Application.delete_env(:cash_lens, :auto_categorizer) end)
+
+      account = account_fixture(parser_type: "bb_csv")
+      assert {:ok, %{imported: 0, failed: failed}} = Ingestor.import_file(account, @bb_sample)
+      assert length(failed) == 3
+    end
+
     test "returns error when file cannot be read" do
       account = account_fixture()
 
