@@ -49,14 +49,18 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
     {:ok, account: account}
   end
 
-  test "renders account bank abbreviation for accounts without icon", %{
-    conn: conn,
-    account: account
-  } do
+  test "renders account bank abbreviation for accounts without icon", %{conn: conn} do
+    account =
+      account_fixture(%{
+        name: "Test Account",
+        bank: "Bradesco",
+        accepts_import: true,
+        icon: nil
+      })
+
     {:ok, _view, html} = live_isolated(conn, HostLive, session: %{"account_id" => account.id})
 
-    # Accounts without icon show the first 2 chars of bank or name (String.slice branch)
-    assert html =~ String.slice(account.bank || account.name, 0..1)
+    assert html =~ "Br"
   end
 
   test "renders account icon when present", %{conn: conn} do
