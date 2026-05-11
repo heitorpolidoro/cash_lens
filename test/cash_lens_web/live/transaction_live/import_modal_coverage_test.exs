@@ -198,5 +198,20 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
     assert render(view) =~ "import-modal"
   end
 
-  # Tests removed
+  describe "account_initials/1" do
+    test "uses bank name when present" do
+      account = %{bank: "Nubank", name: "My Account"}
+      assert ImportModalComponent.account_initials(account) == "Nu"
+    end
+
+    test "falls back to account name when bank is nil" do
+      account = %{bank: nil, name: "Savings"}
+      assert ImportModalComponent.account_initials(account) == "Sa"
+    end
+
+    test "falls back to account name when bank is empty string" do
+      account = %{bank: "", name: "Checking"}
+      assert ImportModalComponent.account_initials(account) == "Ch"
+    end
+  end
 end
