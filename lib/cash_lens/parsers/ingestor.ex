@@ -94,9 +94,10 @@ defmodule CashLens.Parsers.Ingestor do
   defp process_imported_content(content, account, file_path) do
     content = prepare_content(content, account, file_path)
 
-    Logger.info(
+    log_msg =
       "INGESTOR: Processing #{file_path} for account #{account.name} (ID: #{account.id}) using parser #{account.parser_type}"
-    )
+
+    Logger.info(log_msg)
 
     case parse(content, account.parser_type) do
       {:error, reason} ->

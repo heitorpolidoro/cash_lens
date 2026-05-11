@@ -197,6 +197,4 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
 
     assert render(view) =~ "import-modal"
   end
-
-  # Tests removed
 end
