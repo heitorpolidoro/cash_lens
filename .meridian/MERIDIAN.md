@@ -139,11 +139,13 @@ All six steps must pass — failure in any blocks the pipeline:
 
 `mix precommit` (alias for `mix quality_check`) should be run locally before pushing. Consider hooking it via a Git pre-commit hook.
 
-### 🤖 Bot Authentication
-To use the GitHub App bot for automation, run:
+### 🤖 PR Workflow (use the bot — required)
+
+All Pull Requests MUST be created using the GitHub App bot token, not the personal account:
+
 ```bash
-GH_TOKEN=$(gh token generate --app-id 3677362 --key ~/workspace/meridian/meridianagent.2026-05-11.private-key.pem --token-only)
-gh <command>
+GH_TOKEN=$(gh token generate --app-id 3677362 --key ~/workspace/meridian/meridianagent.2026-05-11.private-key.pem --token-only) \
+  gh pr create ...
 ```
 
 ### 🚀 Auto-Merge

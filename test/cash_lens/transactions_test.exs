@@ -198,6 +198,13 @@ defmodule CashLens.TransactionsTest do
       assert updated.category_id == c.id
     end
 
+    test "update_transaction_category/2 sets reimbursement_status to pending for reimbursable category" do
+      t = transaction_fixture(%{reimbursement_status: nil})
+      c = CashLens.CategoriesFixtures.category_fixture(%{default_reimbursable: true})
+      assert {:ok, updated} = Transactions.update_transaction_category(t.id, c.id)
+      assert updated.reimbursement_status == "pending"
+    end
+
     test "unlink_reimbursement_by_key/1 handles nil" do
       assert Transactions.unlink_reimbursement_by_key(nil) == :ok
     end
