@@ -192,6 +192,33 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
       assert TransferRuleApplier.apply_rules([]) == []
     end
 
+    test "returns [] and logs warning when mirror insert fails" do
+      import Mox
+
+      create_transfer_category()
+      source = account_fixture()
+      destination = account_fixture()
+      create_rule(source.id, destination.id, ["salary payment"])
+
+      tx =
+        insert_raw_transaction(%{
+          account_id: source.id,
+          description: "Salary Payment",
+          amount: "1000.00",
+          date: ~D[2026-01-15]
+        })
+
+      Application.put_env(:cash_lens, :transfer_rule_repo, CashLens.Transactions.RepoMock)
+
+      expect(CashLens.Transactions.RepoMock, :insert, fn _changeset, _opts ->
+        {:error, :simulated_db_failure}
+      end)
+
+      assert TransferRuleApplier.apply_rules([tx]) == []
+    after
+      Application.delete_env(:cash_lens, :transfer_rule_repo)
+    end
+
     test "only matches rules for the transaction's source account" do
       create_transfer_category()
       source_a = account_fixture()
