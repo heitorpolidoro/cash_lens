@@ -63,5 +63,25 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
       result = AutoCategorizer.categorize(params_with_transfer_desc)
       assert result == params_with_transfer_desc
     end
+
+    test "assigns transfer category when a transfer rule matches description" do
+      import CashLens.AccountsFixtures
+      transfer_category = category_fixture(%{name: "Transfer", slug: "transfer"})
+      source = account_fixture()
+      dest = account_fixture()
+
+      {:ok, _rule} =
+        CashLens.Transactions.create_transfer_rule(%{
+          label: "Auto categorizer rule",
+          description_patterns: ["pix test pattern"],
+          source_account_id: source.id,
+          destination_account_id: dest.id
+        })
+
+      params = %{description: "pix test pattern", account_id: source.id}
+      result = AutoCategorizer.categorize(params)
+
+      assert result.category_id == transfer_category.id
+    end
   end
 end

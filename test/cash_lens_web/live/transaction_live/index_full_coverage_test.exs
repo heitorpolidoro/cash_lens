@@ -337,6 +337,36 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       assert render(index_live) =~ "UniqueDebit"
     end
 
+    test "type_match credit via stream_update_transaction", %{conn: conn} do
+      cat = category_fixture(name: "Food")
+      credit_tx = transaction_fixture(amount: "100.00", description: "CreditTx")
+
+      {:ok, index_live, _html} = live(conn, ~p"/transactions?type=credit")
+
+      # Update category of a credit transaction while type=credit filter is active
+      # This triggers stream_update_transaction -> matches_filters? -> type_match?(tx, "credit")
+      index_live
+      |> render_click("update_category", %{
+        "transaction_id" => credit_tx.id,
+        "category_id" => cat.id
+      })
+
+      assert render(index_live) =~ "CreditTx"
+    end
+
+    test "assign_transfer_category_id finds existing transfer category", %{conn: conn} do
+      transfer_cat = category_fixture(%{name: "Transfer", slug: "transfer"})
+      # Transaction with transfer category but no transfer_key — shows up in "unmatched" filter
+      tx = transaction_fixture(description: "UnmatchedTransfer", category_id: transfer_cat.id)
+
+      {:ok, index_live, _html} = live(conn, ~p"/transactions")
+
+      # Toggle unmatched: only shows tx with transfer_category_id and no transfer_key
+      index_live |> render_click("toggle_unmatched", %{})
+
+      assert render(index_live) =~ tx.description
+    end
+
     test "open_transfer_link", %{conn: conn} do
       tx = transaction_fixture(amount: "100.00")
       {:ok, index_live, _html} = live(conn, ~p"/transactions")

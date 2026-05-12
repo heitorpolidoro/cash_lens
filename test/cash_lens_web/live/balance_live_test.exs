@@ -27,6 +27,51 @@ defmodule CashLensWeb.BalanceLiveTest do
       assert html =~ "Listing Balances"
     end
 
+    test "filters balances by year", %{conn: conn, balance: balance} do
+      {:ok, index_live, _html} = live(conn, ~p"/balances")
+
+      html =
+        index_live
+        |> form("#filter-form", %{"year" => balance.year, "month" => "", "account_id" => ""})
+        |> render_change()
+
+      assert html =~ to_string(balance.year)
+    end
+
+    test "clears filters", %{conn: conn} do
+      {:ok, index_live, _html} = live(conn, ~p"/balances")
+
+      render_click(index_live, "clear_filters", %{})
+      assert render(index_live) =~ "Listing Balances"
+    end
+
+    test "recalculates all balances", %{conn: conn} do
+      {:ok, index_live, _html} = live(conn, ~p"/balances")
+
+      html = render_click(index_live, "recalculate_all", %{})
+      assert html =~ "recalculated"
+    end
+
+    test "cancels delete modal via close_modal", %{conn: conn, balance: balance} do
+      {:ok, index_live, _html} = live(conn, ~p"/balances")
+
+      index_live
+      |> element("#balances-#{balance.id} button[phx-click='confirm_delete']")
+      |> render_click()
+
+      assert render(index_live) =~ "Delete Balance?"
+
+      render_click(index_live, "close_modal", %{})
+      refute render(index_live) =~ "Delete Balance?"
+    end
+
+    test "renders balance with account that has no icon (shows initials)", %{conn: conn} do
+      account = account_fixture(%{bank: "MyBank", icon: nil})
+      balance_fixture(%{account_id: account.id})
+      {:ok, _live, html} = live(conn, ~p"/balances")
+      assert html =~ "My"
+    end
+
     test "saves new balance", %{conn: conn} do
       account = account_fixture()
       {:ok, index_live, _html} = live(conn, ~p"/balances")
@@ -83,6 +128,57 @@ defmodule CashLensWeb.BalanceLiveTest do
 
       assert index_live |> element("button", "Yes, Delete") |> render_click()
       refute has_element?(index_live, "#balances-#{balance.id}")
+    end
+  end
+
+  describe "Form :new" do
+    test "select_all and select_none", %{conn: conn} do
+      account = account_fixture()
+      {:ok, form_live, _html} = live(conn, ~p"/balances/new")
+
+      render_click(form_live, "select_all", %{})
+      assert render(form_live) =~ account.name
+
+      render_click(form_live, "select_none", %{})
+      assert render(form_live) =~ "Generate Selected Balances"
+    end
+
+    test "validate event updates form", %{conn: conn} do
+      account = account_fixture()
+      {:ok, form_live, _html} = live(conn, ~p"/balances/new")
+
+      html =
+        form_live
+        |> form("#balance-form", %{"account_ids" => [account.id], "month" => 3, "year" => 2025})
+        |> render_change()
+
+      assert html =~ account.name
+    end
+
+    test "save with no accounts selected shows error", %{conn: conn} do
+      {:ok, form_live, _html} = live(conn, ~p"/balances/new")
+
+      html =
+        form_live
+        |> form("#balance-form", %{"month" => 1, "year" => 2025})
+        |> render_submit()
+
+      assert html =~ "Please select at least one account"
+    end
+  end
+
+  describe "Form :edit error path" do
+    setup [:create_balance]
+
+    test "shows error when submitting invalid balance data", %{conn: conn, balance: balance} do
+      {:ok, form_live, _html} = live(conn, ~p"/balances/#{balance}/edit")
+
+      html =
+        form_live
+        |> form("#balance-form", balance: @invalid_attrs)
+        |> render_submit()
+
+      assert html =~ "can&#39;t be blank"
     end
   end
 

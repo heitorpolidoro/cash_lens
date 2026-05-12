@@ -45,6 +45,7 @@ config :phoenix,
 config :cash_lens, sql_sandbox: true
 
 config :cash_lens, :pdf_converter, CashLens.Parsers.PDFConverterMock
+config :cash_lens, :start_console_reporter, false
 
 # Configure Oban for testing
 config :cash_lens, Oban, testing: :manual

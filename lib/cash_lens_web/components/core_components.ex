@@ -208,11 +208,6 @@ defmodule CashLensWeb.CoreComponents do
   slot :actions
 
   def header(assigns) do
-    assigns =
-      assigns
-      |> assign_new(:subtitle, fn -> [] end)
-      |> assign_new(:actions, fn -> [] end)
-
     ~H"""
     <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
       <div>

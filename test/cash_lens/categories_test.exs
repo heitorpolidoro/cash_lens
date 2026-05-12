@@ -98,9 +98,8 @@ defmodule CashLens.CategoriesTest do
       parent = category_fixture()
       category_fixture(parent_id: parent.id)
 
-      assert_raise Ecto.ConstraintError, ~r/foreign_key_constraint/, fn ->
-        Categories.delete_category(parent)
-      end
+      assert {:error, changeset} = Categories.delete_category(parent)
+      assert changeset.errors[:children] != nil
     end
 
     test "create_category/1 fails when name is duplicated at the same level" do

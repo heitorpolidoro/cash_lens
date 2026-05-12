@@ -4,6 +4,17 @@ defmodule CashLensWeb.AutomationLive.BulkIgnoreTest do
   import Phoenix.LiveViewTest
   alias CashLens.Transactions
 
+  test "validate event updates form without saving", %{conn: conn} do
+    {:ok, live, _html} = live(conn, ~p"/admin/exclusion_rules")
+
+    html =
+      live
+      |> form("#ignore-form", %{"bulk_ignore_pattern" => %{"pattern" => ""}})
+      |> render_change()
+
+    assert html =~ "Pattern"
+  end
+
   test "renders, creates, and deletes patterns", %{conn: conn} do
     unique_id = System.unique_integer([:positive])
     pattern_str = "^PIX_#{unique_id}"

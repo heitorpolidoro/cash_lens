@@ -141,7 +141,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
 
     case Repo.query(query) do
       {:ok, %{rows: rows}} -> List.flatten(rows)
-      _ -> []
+      {:error, _} -> []
     end
   end
 
@@ -151,7 +151,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
 
     case Repo.query(query, [table]) do
       {:ok, %{rows: rows}} -> List.flatten(rows)
-      _ -> []
+      {:error, _} -> []
     end
   end
 
@@ -199,12 +199,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
   defp format_val(nil), do: "NULL"
 
   defp format_val(val) when is_binary(val) do
-    if String.valid?(val) do
-      val
-    else
-      # Likely a UUID or raw binary, convert to Hex
-      "0x" <> Base.encode16(val)
-    end
+    if String.valid?(val), do: val, else: inspect(val)
   end
 
   defp format_val(val), do: inspect(val)

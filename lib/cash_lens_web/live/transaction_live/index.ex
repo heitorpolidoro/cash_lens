@@ -797,7 +797,6 @@ defmodule CashLensWeb.TransactionLive.Index do
   defp type_match?(_tx, ""), do: true
   defp type_match?(tx, "debit"), do: Decimal.lt?(tx.amount, 0)
   defp type_match?(tx, "credit"), do: Decimal.gt?(tx.amount, 0)
-  defp type_match?(_tx, _), do: true
 
   defp unmatched_match?(_tx, "false", _), do: true
 
