@@ -31,7 +31,7 @@ defmodule CashLens.Parsers.IngestorTest do
 
     test "imports CSV file successfully" do
       account = account_fixture(parser_type: "bb_csv")
-      assert {:ok, 3} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, %{imported: 3, failed: []}} = Ingestor.import_file(account, @bb_sample)
       assert length(CashLens.Repo.all(CashLens.Transactions.Transaction)) == 3
     end
 
@@ -40,7 +40,7 @@ defmodule CashLens.Parsers.IngestorTest do
       file_path = "test/support/fixtures/files/test_#{account.id}.ofx"
       File.write!(file_path, "invalid_data")
       # Most parsers will just return 0 transactions for garbage data
-      assert {:ok, 0} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 0}} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)
     end
 
@@ -50,7 +50,7 @@ defmodule CashLens.Parsers.IngestorTest do
       # "Data,Valor,Hist\n" in Latin1
       content = <<68, 97, 116, 97, 44, 86, 97, 108, 111, 114, 44, 72, 105, 115, 116, 10>>
       File.write!(file_path, content)
-      assert {:ok, 0} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 0}} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)
     end
 
@@ -66,7 +66,7 @@ defmodule CashLens.Parsers.IngestorTest do
       file_path = "test/support/fixtures/files/bb_related_#{account.id}.csv"
       File.write!(file_path, content)
 
-      assert {:ok, 2} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 2}} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)
     end
 
@@ -80,8 +80,21 @@ defmodule CashLens.Parsers.IngestorTest do
       file_path = "test/support/fixtures/files/bb_missing_#{account.id}.csv"
       File.write!(file_path, content)
 
-      assert {:ok, 2} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 2}} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)
+    end
+
+    test "quarantines rows that crash during entry preparation" do
+      defmodule CrashingCategorizer do
+        def categorize(_), do: raise("simulated crash")
+      end
+
+      Application.put_env(:cash_lens, :auto_categorizer, CrashingCategorizer)
+      on_exit(fn -> Application.delete_env(:cash_lens, :auto_categorizer) end)
+
+      account = account_fixture(parser_type: "bb_csv")
+      assert {:ok, %{imported: 0, failed: failed}} = Ingestor.import_file(account, @bb_sample)
+      assert length(failed) == 3
     end
 
     test "returns error when file cannot be read" do
@@ -103,7 +116,7 @@ defmodule CashLens.Parsers.IngestorTest do
       end)
 
       # pdftotext will fail, returning the original content
-      assert {:ok, 0} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)
     end
 
@@ -111,7 +124,7 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture(parser_type: "bb_csv")
       file_path = "test/support/fixtures/files/empty_#{account.id}.csv"
       File.write!(file_path, "Data,Dep,Term,Hist,Doc,Valor,\n")
-      assert {:ok, 0} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)
     end
 
@@ -126,7 +139,7 @@ defmodule CashLens.Parsers.IngestorTest do
       end)
 
       # Even if pdftotext fails, it falls back to content and parses
-      assert {:ok, 1} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)
     end
 
@@ -135,7 +148,7 @@ defmodule CashLens.Parsers.IngestorTest do
       file_path = "test/support/fixtures/files/generic_#{account.id}.txt"
       on_exit(fn -> File.rm(file_path) end)
       File.write!(file_path, "Data,Dep,Term,Hist,Doc,Valor,\n")
-      assert {:ok, 0} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
     end
 
     test "handles invalid UTF-8 by converting from Latin1" do
@@ -146,7 +159,7 @@ defmodule CashLens.Parsers.IngestorTest do
       content = "Data,Dep,Term,Hist,Doc,Valor,\n01/01/2026,0,0,M\xE1-formado,1,-10.00,\n"
       File.write!(file_path, content)
 
-      assert {:ok, 1} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
 
       tx = CashLens.Repo.one(CashLens.Transactions.Transaction)
       assert tx.description == "M\u00E1-formado"
@@ -169,7 +182,7 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture(parser_type: "bb_csv")
       File.cp!(@bb_sample, Path.join(tmp_dir, "sample.csv"))
 
-      assert {:ok, 3} = Ingestor.import_directory(account, tmp_dir)
+      assert {:ok, %{imported: _}} = Ingestor.import_directory(account, tmp_dir)
     end
 
     test "returns error for a non-directory path" do
@@ -183,7 +196,7 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture(parser_type: "bb_csv")
       File.write!(Path.join(tmp_dir, "readme.txt"), "ignored")
 
-      assert {:ok, 0} = Ingestor.import_directory(account, tmp_dir)
+      assert {:ok, %{imported: _}} = Ingestor.import_directory(account, tmp_dir)
     end
 
     test "returns error summary when files fail to import", %{tmp_dir: tmp_dir} do

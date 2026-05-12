@@ -15,7 +15,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
       {:ok, assign(socket, show: true, account_id: session["account_id"] || "123")}
     end
 
-    def handle_info({:import_success, count}, socket),
+    def handle_info({:import_success, %{imported: count}}, socket),
       do: {:noreply, Phoenix.LiveView.put_flash(socket, :info, "Success: #{count}")}
 
     def handle_info({:import_error, reason}, socket) do

@@ -223,7 +223,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
 
       send(index_live.pid, :close_import_modal)
 
-      send(index_live.pid, {:import_success, 10})
+      send(index_live.pid, {:import_success, %{imported: 10, failed: []}})
       assert render(index_live) =~ "10 transactions imported"
 
       send(index_live.pid, {:import_error, "Failed"})

@@ -626,7 +626,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_info({:import_success, count}, socket) do
+  def handle_info({:import_success, %{imported: count, failed: []}}, socket) do
     {:noreply,
      socket
      |> assign(:show_import_modal, false)
@@ -634,6 +634,26 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:end_of_list?, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
      |> put_flash(:info, "Success! #{count} transactions imported.")
+     |> stream(
+       :transactions,
+       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
+       reset: true
+     )}
+  end
+
+  def handle_info({:import_success, %{imported: count, failed: failed}}, socket) do
+    failed_msg = Enum.map_join(failed, ", ", fn {desc, reason} -> "#{desc}: #{reason}" end)
+
+    {:noreply,
+     socket
+     |> assign(:show_import_modal, false)
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
+     |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> put_flash(
+       :info,
+       "#{count} transactions imported. #{length(failed)} rows skipped: #{failed_msg}"
+     )
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
