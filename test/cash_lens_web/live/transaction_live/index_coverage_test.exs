@@ -72,27 +72,6 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       assert render(index_live) =~ "Bulk categorized!"
     end
 
-    test "save_balance_correction ajuste_inicial", %{conn: conn} do
-      account = account_fixture(balance: "100.00")
-      {:ok, index_live, _html} = live(conn, ~p"/transactions")
-
-      index_live |> form("#transaction-filters", %{"account_id" => account.id}) |> render_change()
-      index_live |> element(".stats", "Balance") |> render_click()
-
-      render_click(index_live, "update_diff", %{"value" => "150.00"})
-      assert render(index_live) =~ "+R$ 50,00"
-
-      index_live
-      |> form("#balance-correction-form", %{
-        "new_balance" => "150.00",
-        "adjustment_type" => "ajuste_inicial"
-      })
-      |> render_submit()
-
-      updated_account = CashLens.Accounts.get_account!(account.id)
-      assert Decimal.equal?(updated_account.balance, Decimal.new("150.00"))
-    end
-
     test "handle_info category_created with target_transaction_id", %{conn: conn} do
       tx = transaction_fixture(description: "New Shop")
       {:ok, index_live, _html} = live(conn, ~p"/transactions")

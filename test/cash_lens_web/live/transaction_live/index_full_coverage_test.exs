@@ -3,10 +3,8 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
 
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
-  import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
 
-  alias CashLens.Categories
   alias CashLens.Transactions
 
   describe "Index full coverage" do
@@ -111,103 +109,6 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       index_live |> render_click("delete", %{"id" => tx.id})
 
       assert_raise Ecto.NoResultsError, fn -> Transactions.get_transaction!(tx.id) end
-    end
-
-    test "open_balance_correction and update_diff robust parsing", %{conn: conn} do
-      account = account_fixture(balance: "100.00")
-      {:ok, index_live, _html} = live(conn, ~p"/transactions?account_id=#{account.id}")
-
-      index_live |> render_click("open_balance_correction")
-
-      # Test robust parsing in update_diff
-      index_live |> render_click("update_diff", %{"value" => ""})
-      index_live |> render_click("update_diff", %{"value" => "-"})
-      index_live |> render_click("update_diff", %{"value" => "."})
-      # should be 0
-      index_live |> render_click("update_diff", %{"value" => "abc"})
-      index_live |> render_click("update_diff", %{"value" => "123.45"})
-
-      assert render(index_live) =~ "123.45"
-    end
-
-    test "save_balance_correction rendimentos", %{conn: conn} do
-      account = account_fixture(balance: "100.00")
-      {:ok, index_live, _html} = live(conn, ~p"/transactions?account_id=#{account.id}")
-
-      # Ensure "income" category exists or will be created
-
-      index_live
-      |> render_click("save_balance_correction", %{
-        "new_balance" => "150.00",
-        "adjustment_type" => "rendimentos"
-      })
-
-      assert render(index_live) =~ "Balance adjusted successfully!"
-      # Check if a transaction was created
-      txs = Transactions.list_transactions(%{"account_id" => account.id})
-      assert Enum.any?(txs, fn tx -> tx.description == "Balance Adjustment (Income)" end)
-    end
-
-    test "save_balance_correction rendimentos (force category creation)", %{conn: conn} do
-      # Delete income category if exists
-      if cat = Categories.get_category_by_slug("income") do
-        Categories.delete_category(cat)
-      end
-
-      account = account_fixture(balance: "100.00")
-      {:ok, index_live, _html} = live(conn, ~p"/transactions?account_id=#{account.id}")
-
-      index_live
-      |> render_click("save_balance_correction", %{
-        "new_balance" => "150.00",
-        "adjustment_type" => "rendimentos"
-      })
-
-      assert render(index_live) =~ "Balance adjusted successfully!"
-      assert Categories.get_category_by_slug("income") != nil
-    end
-
-    test "save_balance_correction ajuste_inicial with existing balance", %{conn: conn} do
-      account = account_fixture()
-      # Create an initial balance with matching final balance to make diff easy to reason about
-      CashLens.AccountingFixtures.balance_fixture(%{
-        account_id: account.id,
-        year: 2024,
-        month: 1,
-        initial_balance: "100.00",
-        final_balance: "100.00"
-      })
-
-      {:ok, index_live, _html} = live(conn, ~p"/transactions?account_id=#{account.id}")
-
-      index_live |> render_click("open_balance_correction")
-      # Current balance should be 100.00. We want to move it to 150.00, so diff is +50.00
-      index_live
-      |> render_click("save_balance_correction", %{
-        "new_balance" => "150.00",
-        "adjustment_type" => "ajuste_inicial"
-      })
-
-      oldest = CashLens.Accounting.get_oldest_balance_for_account(account.id)
-      assert oldest != nil
-      # Old initial (100.00) + diff (50.00) = 150.00
-      assert Decimal.equal?(oldest.initial_balance, "150.00")
-    end
-
-    test "save_balance_correction ajuste_inicial without existing balance", %{conn: conn} do
-      account = account_fixture(balance: "100.00")
-      {:ok, index_live, _html} = live(conn, ~p"/transactions?account_id=#{account.id}")
-
-      index_live |> render_click("open_balance_correction")
-
-      index_live
-      |> render_click("save_balance_correction", %{
-        "new_balance" => "150.00",
-        "adjustment_type" => "ajuste_inicial"
-      })
-
-      updated_account = CashLens.Accounts.get_account!(account.id)
-      assert Decimal.equal?(updated_account.balance, "150.00")
     end
 
     test "handle_info messages", %{conn: conn} do

@@ -16,14 +16,11 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_import_modal, false)
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
-     |> assign(:show_balance_correction, false)
      |> assign(:show_transfer_modal, false)
      |> assign(:show_quick_transfer_modal, false)
      |> assign(:transfer_origin, nil)
      |> assign(:pending_transfers, [])
-     |> assign(:balance_correction_form, to_form(%{"new_balance" => ""}))
      |> assign(:quick_transfer_form, to_form(%{}))
-     |> assign(:balance_diff, Decimal.new("0"))
      |> assign(:reimbursement_credit, nil)
      |> assign(:reimbursement_search, "")
      |> assign(:pending_reimbursements, [])
@@ -177,7 +174,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_import_modal, false)
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
-     |> assign(:show_balance_correction, false)
      |> assign(:show_transfer_modal, false)
      |> assign(:show_quick_transfer_modal, false)
      |> assign(:ai_result, nil)
@@ -464,116 +460,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:confirm_modal, nil)
      |> stream(:transactions, [], reset: true)
      |> assign(:pending_count, 0)}
-  end
-
-  @impl true
-  def handle_event("open_balance_correction", _params, socket) do
-    current_balance = socket.assigns.summary.current_balance
-
-    {:noreply,
-     socket
-     |> assign(:show_balance_correction, true)
-     |> assign(:balance_diff, Decimal.new("0"))
-     |> assign(
-       :balance_correction_form,
-       to_form(%{"new_balance" => Decimal.to_string(current_balance, :normal)})
-     )}
-  end
-
-  @impl true
-  def handle_event("update_diff", %{"value" => value}, socket) do
-    # Robust parsing: handle empty strings or partial decimals
-    # Decimal.parse returns {decimal, rest} or :error
-    new_val =
-      if value in ["", "-", ".", "-."],
-        do: Decimal.new("0"),
-        else:
-          Decimal.parse(value)
-          |> (case do
-                {d, _} -> d
-                _ -> Decimal.new("0")
-              end)
-
-    diff = Decimal.sub(new_val, socket.assigns.summary.current_balance)
-
-    {:noreply,
-     socket
-     |> assign(:balance_diff, diff)
-     |> assign(:balance_correction_form, to_form(%{"new_balance" => value}))}
-  end
-
-  @impl true
-  def handle_event(
-        "save_balance_correction",
-        %{"new_balance" => new_balance, "adjustment_type" => type},
-        socket
-      ) do
-    account_id = socket.assigns.filters["account_id"]
-    new_val = Decimal.new(new_balance)
-    current_val = socket.assigns.summary.current_balance
-    diff = Decimal.sub(new_val, current_val)
-
-    case type do
-      "rendimentos" ->
-        # Find or create "Income" category
-        category =
-          case Categories.get_category_by_slug("income") do
-            nil ->
-              {:ok, cat} =
-                Categories.create_category(%{
-                  name: "Income",
-                  slug: "income",
-                  type: "variable"
-                })
-
-              cat
-
-            cat ->
-              cat
-          end
-
-        today = Date.utc_today()
-
-        Transactions.create_transaction(%{
-          account_id: account_id,
-          category_id: category.id,
-          amount: diff,
-          date: today,
-          description: "Balance Adjustment (Income)"
-        })
-
-        # Recalculate balance for the current month
-        CashLens.Accounting.calculate_monthly_balance(account_id, today.year, today.month)
-
-      "ajuste_inicial" ->
-        # Find oldest balance for this account
-        oldest = CashLens.Accounting.get_oldest_balance_for_account(account_id)
-
-        if oldest do
-          new_initial = Decimal.add(oldest.initial_balance, diff)
-          CashLens.Accounting.update_balance(oldest, %{initial_balance: new_initial})
-          # Trigger global recalculation
-          CashLens.Accounting.recalculate_all_balances()
-        else
-          # If no balance exists, update account base balance
-          account = Accounts.get_account!(account_id)
-
-          Accounts.update_account(account, %{
-            balance: Decimal.add(account.balance || Decimal.new("0"), diff)
-          })
-        end
-    end
-
-    {:noreply,
-     socket
-     |> assign(:show_balance_correction, false)
-     |> put_flash(:info, "Balance adjusted successfully!")
-     |> calculate_summary()
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
   end
 
   @impl true
