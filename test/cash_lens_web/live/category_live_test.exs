@@ -108,6 +108,68 @@ defmodule CashLensWeb.CategoryLiveTest do
       assert index_live |> element("button", "Yes, Delete") |> render_click()
       refute has_element?(index_live, "#categories-#{category.id}")
     end
+
+    test "cancels delete modal via close_modal", %{conn: conn, category: category} do
+      {:ok, index_live, _html} = live(conn, ~p"/categories")
+
+      index_live
+      |> element("#categories-#{category.id} button[phx-click='confirm_delete']")
+      |> render_click()
+
+      assert render(index_live) =~ "Delete Category?"
+
+      render_click(index_live, "close_modal", %{})
+      refute render(index_live) =~ "Delete Category?"
+    end
+
+    test "shows delete error when category has child dependencies", %{conn: conn} do
+      parent = category_fixture(%{name: "Parent Cat"})
+      _child = category_fixture(%{name: "Child Cat", parent_id: parent.id})
+
+      {:ok, index_live, _html} = live(conn, ~p"/categories")
+
+      index_live
+      |> element("#categories-#{parent.id} button[phx-click='confirm_delete']")
+      |> render_click()
+
+      html = index_live |> element("button", "Yes, Delete") |> render_click()
+      assert html =~ "Could not delete category"
+    end
+
+    test "renders reimbursable icon for default_reimbursable category", %{conn: conn} do
+      category_fixture(%{name: "Reimbursable", default_reimbursable: true})
+      {:ok, _live, html} = live(conn, ~p"/categories")
+      assert html =~ "hero-banknotes"
+    end
+  end
+
+  describe "Form error paths" do
+    setup [:create_category]
+
+    test "shows error when submitting invalid category on new", %{conn: conn} do
+      {:ok, form_live, _html} = live(conn, ~p"/categories/new")
+
+      html =
+        form_live
+        |> form("#category-form", category: %{name: nil})
+        |> render_submit()
+
+      assert html =~ "can&#39;t be blank"
+    end
+
+    test "shows error when submitting invalid category on edit", %{
+      conn: conn,
+      category: category
+    } do
+      {:ok, form_live, _html} = live(conn, ~p"/categories/#{category}/edit")
+
+      html =
+        form_live
+        |> form("#category-form", category: %{name: nil})
+        |> render_submit()
+
+      assert html =~ "can&#39;t be blank"
+    end
   end
 
   describe "Show" do

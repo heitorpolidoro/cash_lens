@@ -107,8 +107,6 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponent do
     socket =
       socket
       |> assign(assigns)
-      |> assign_new(:reimbursement_search, fn -> "" end)
-      |> assign_new(:pending_reimbursements, fn -> [] end)
 
     socket =
       if assigns[:reimbursement_credit] do

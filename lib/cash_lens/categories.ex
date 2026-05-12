@@ -125,7 +125,10 @@ defmodule CashLens.Categories do
 
   """
   def delete_category(%Category{} = category) do
-    Repo.delete(category)
+    category
+    |> Ecto.Changeset.change()
+    |> Ecto.Changeset.no_assoc_constraint(:children)
+    |> Repo.delete()
     |> broadcast(:category_deleted)
   end
 

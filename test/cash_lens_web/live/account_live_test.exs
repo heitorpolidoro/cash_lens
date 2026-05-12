@@ -35,6 +35,28 @@ defmodule CashLensWeb.AccountLiveTest do
       assert html =~ account.name
     end
 
+    test "cancels delete modal via close_modal", %{conn: conn, account: account} do
+      {:ok, index_live, _html} = live(conn, ~p"/accounts")
+
+      index_live |> element("#accounts-#{account.id} button") |> render_click()
+      assert render(index_live) =~ "Delete Account?"
+
+      render_click(index_live, "close_modal", %{})
+      refute render(index_live) =~ "Delete Account?"
+    end
+
+    test "renders account without icon (shows initials)", %{conn: conn} do
+      account_fixture(%{name: "No Icon Account", bank: "TestBank", icon: nil})
+      {:ok, _live, html} = live(conn, ~p"/accounts")
+      assert html =~ "Te"
+    end
+
+    test "renders account with accepts_import false (shows x icon)", %{conn: conn} do
+      account_fixture(%{name: "No Import", accepts_import: false})
+      {:ok, _live, html} = live(conn, ~p"/accounts")
+      assert html =~ "hero-x-circle"
+    end
+
     test "saves new account", %{conn: conn} do
       {:ok, index_live, _html} = live(conn, ~p"/accounts")
 
@@ -93,6 +115,50 @@ defmodule CashLensWeb.AccountLiveTest do
       assert index_live |> element("#accounts-#{account.id} button") |> render_click()
       assert index_live |> element("button", "Yes, Delete") |> render_click()
       refute has_element?(index_live, "#accounts-#{account.id}")
+    end
+  end
+
+  describe "Form with return_to=transactions" do
+    setup [:create_account]
+
+    test "navigates to /transactions after save when return_to=transactions", %{
+      conn: conn,
+      account: account
+    } do
+      {:ok, form_live, _html} =
+        live(conn, ~p"/accounts/#{account}/edit?return_to=transactions")
+
+      assert render(form_live) =~ "Edit Account"
+
+      assert {:ok, _live, html} =
+               form_live
+               |> form("#account-form", account: @update_attrs)
+               |> render_submit()
+               |> follow_redirect(conn, ~p"/transactions")
+
+      assert html =~ "Account updated successfully"
+    end
+
+    test "shows error when submitting invalid data on edit", %{conn: conn, account: account} do
+      {:ok, form_live, _html} = live(conn, ~p"/accounts/#{account}/edit")
+
+      html =
+        form_live
+        |> form("#account-form", account: %{name: nil})
+        |> render_submit()
+
+      assert html =~ "can&#39;t be blank"
+    end
+
+    test "shows error when submitting invalid data on new", %{conn: conn} do
+      {:ok, form_live, _html} = live(conn, ~p"/accounts/new")
+
+      html =
+        form_live
+        |> form("#account-form", account: %{name: nil})
+        |> render_submit()
+
+      assert html =~ "can&#39;t be blank"
     end
   end
 

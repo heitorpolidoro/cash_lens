@@ -8,20 +8,19 @@ defmodule CashLensWeb.Telemetry do
 
   @impl true
   def init(_arg) do
-    children = [
-      # Telemetry poller will execute the given period measurements
-      # every 10_000ms. Learn more here: https://hexdocs.pm/telemetry_metrics
-      {:telemetry_poller, measurements: periodic_measurements(), period: 10_000}
-    ]
-
     children =
-      if Mix.env() == :test do
-        children
-      else
-        children ++ [{Telemetry.Metrics.ConsoleReporter, metrics: metrics()}]
-      end
+      [{:telemetry_poller, measurements: periodic_measurements(), period: 10_000}] ++
+        reporters()
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  def reporters do
+    if Application.get_env(:cash_lens, :start_console_reporter, true) do
+      [{Telemetry.Metrics.ConsoleReporter, metrics: metrics()}]
+    else
+      []
+    end
   end
 
   def metrics do

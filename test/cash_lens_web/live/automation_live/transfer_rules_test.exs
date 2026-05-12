@@ -56,6 +56,29 @@ defmodule CashLensWeb.AutomationLive.TransferRulesTest do
     assert html =~ "Pattern A"
   end
 
+  test "validate event updates form without saving", %{
+    conn: conn,
+    source: source,
+    destination: destination
+  } do
+    {:ok, live, _html} = live(conn, ~p"/admin/transfer_rules")
+
+    html =
+      live
+      |> form("#transfer-rule-form", %{
+        "transfer_rule" => %{
+          "label" => "Draft",
+          "description_patterns_raw" => "pattern",
+          "source_account_id" => source.id,
+          "destination_account_id" => destination.id
+        }
+      })
+      |> render_change()
+
+    assert html =~ "Draft"
+    assert Transactions.list_transfer_rules() == []
+  end
+
   test "shows validation error for missing required fields", %{conn: conn} do
     {:ok, live, _html} = live(conn, ~p"/admin/transfer_rules")
 

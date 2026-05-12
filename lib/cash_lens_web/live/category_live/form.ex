@@ -125,9 +125,7 @@ defmodule CashLensWeb.CategoryLive.Form do
 
   @impl true
   def handle_event("validate", %{"category" => category_params}, socket) do
-    # Auto-generate slug from name if empty
-    params = maybe_generate_slug(category_params)
-    changeset = Categories.change_category(socket.assigns.category, params)
+    changeset = Categories.change_category(socket.assigns.category, category_params)
     {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
   end
 
@@ -160,11 +158,4 @@ defmodule CashLensWeb.CategoryLive.Form do
         {:noreply, assign(socket, form: to_form(changeset))}
     end
   end
-
-  defp maybe_generate_slug(%{"name" => name, "slug" => ""} = params) when name != "" do
-    slug = name |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "_")
-    Map.put(params, "slug", slug)
-  end
-
-  defp maybe_generate_slug(params), do: params
 end

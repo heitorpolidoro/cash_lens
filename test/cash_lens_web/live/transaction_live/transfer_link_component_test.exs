@@ -60,6 +60,20 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
     assert Enum.any?(txs, fn tx -> tx.description == "To acc2" and tx.transfer_key != nil end)
   end
 
+  test "close_modal dismisses the transfer modal", %{conn: conn} do
+    tx = transaction_fixture(amount: "100.00")
+
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
+    index_live |> render_click("open_transfer_link", %{"id" => tx.id})
+
+    assert render(index_live) =~ "Link Transfer"
+
+    # Click the close button on the modal which triggers close_modal event on the component
+    index_live |> element("#transfer-modal button[aria-label='close']") |> render_click()
+
+    refute render(index_live) =~ "Link Transfer"
+  end
+
   test "empty pending transfers", %{conn: conn} do
     tx = transaction_fixture(amount: "100.00")
 

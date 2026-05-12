@@ -13,6 +13,10 @@ defmodule CashLensWeb.FormattersTest do
       assert Formatters.format_currency(5.5) == "R$ 5,50"
     end
 
+    test "formats whole number with no decimal part" do
+      assert Formatters.format_currency(Decimal.new("5")) == "R$ 5,00"
+    end
+
     test "formats negative amounts" do
       assert Formatters.format_currency(-1234.56) == "R$ -1.234,56"
       assert Formatters.format_currency(Decimal.new("-50.5")) == "R$ -50,50"
