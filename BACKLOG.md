@@ -49,6 +49,7 @@ Casa > Manutenção > Sofá
 - [ ] o "Mark automatically for reimbursement?" nãõ está funcionando
 - [ ] o "Total to Receive" do "Reimbursement" deveria mostrar a soma dos pending e requested
 
+- [ ] remover os warnings dos testes
 
 - [ ] Corrigir os salários antes de receber da Avant
 - [ ] Conferir se todos as consultas e cirurgia estào marcadas como reembolso

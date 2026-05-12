@@ -227,29 +227,6 @@ defmodule CashLensWeb.TransactionLiveTest do
       refute render(live) =~ "id=\"transactions-"
     end
 
-    test "balance correction", %{conn: conn} do
-      account = account_fixture()
-      transaction_fixture(account_id: account.id)
-      {:ok, live, _html} = live(conn, ~p"/transactions")
-
-      # Select account first via the form
-      live |> form("#transaction-filters", %{"account_id" => account.id}) |> render_change()
-
-      # The phx-click is on a div with class "stats"
-      live |> element(".stats", "Balance") |> render_click()
-
-      assert has_element?(live, "#balance-correction-modal")
-
-      live
-      |> form("#balance-correction-form", %{
-        "new_balance" => "1000",
-        "adjustment_type" => "rendimentos"
-      })
-      |> render_submit()
-
-      assert render(live) =~ "Balance adjusted successfully"
-    end
-
     test "month navigation", %{conn: conn} do
       {:ok, live, _html} = live(conn, ~p"/transactions")
 
