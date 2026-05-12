@@ -1,6 +1,7 @@
 defmodule CashLensWeb.AccountLive.Index do
   use CashLensWeb, :live_view
 
+  alias CashLens.Accounting
   alias CashLens.Accounts
 
   @impl true
@@ -25,6 +26,8 @@ defmodule CashLensWeb.AccountLive.Index do
               <th class="w-16 text-center">Icon</th>
               <th>Name</th>
               <th>Bank</th>
+              <th class="text-right">Initial Balance</th>
+              <th class="text-right">Current Balance</th>
               <th>Extractor</th>
               <th class="text-center">Import?</th>
               <th class="w-16"></th>
@@ -52,6 +55,12 @@ defmodule CashLensWeb.AccountLive.Index do
               </td>
               <td class="font-bold">{account.name}</td>
               <td class="opacity-70">{account.bank}</td>
+              <td class="text-right font-mono opacity-60">
+                {format_currency(account.balance)}
+              </td>
+              <td class="text-right font-mono font-black">
+                {format_currency(Map.get(@current_balances, account.id, account.balance))}
+              </td>
               <td class="opacity-70">
                 {translate_parser_type(account.parser_type)}
               </td>
@@ -112,10 +121,14 @@ defmodule CashLensWeb.AccountLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
+    latest_balances = Accounting.list_latest_balances()
+    current_balances = Map.new(latest_balances, fn b -> {b.account_id, b.final_balance} end)
+
     {:ok,
      socket
      |> assign(:page_title, "Listing Accounts")
      |> assign(:confirm_modal, nil)
+     |> assign(:current_balances, current_balances)
      |> stream(:accounts, Accounts.list_accounts())}
   end
 

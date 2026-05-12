@@ -9,16 +9,14 @@ defmodule CashLensWeb.BalanceLive.Index do
     ~H"""
     <div class="py-6 space-y-8">
       <.header>
-        Listing Balances
+        Balance History
+        <:subtitle>
+          Review your historical monthly balances. These are calculated based on your account seed and transactions.
+        </:subtitle>
         <:actions>
-          <button phx-click="recalculate_all" class="btn btn-outline btn-warning">
+          <button phx-click="recalculate_all" class="btn btn-outline btn-warning btn-sm">
             <.icon name="hero-arrow-path-rounded-square" class="mr-1" /> Recalculate All
           </button>
-          <.link navigate={~p"/balances/new"}>
-            <.button variant="primary">
-              <.icon name="hero-plus" class="mr-1" /> New Balance
-            </.button>
-          </.link>
         </:actions>
       </.header>
 
@@ -143,25 +141,8 @@ defmodule CashLensWeb.BalanceLive.Index do
                   {format_currency(balance.final_balance)}
                 </td>
 
-                <td class="text-right">
-                  <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <.link
-                      navigate={~p"/balances/#{balance}/edit"}
-                      class="btn btn-ghost btn-xs px-1"
-                      phx-click-stop
-                    >
-                      <.icon name="hero-pencil" class="size-3" />
-                    </.link>
-                    <button
-                      type="button"
-                      phx-click="confirm_delete"
-                      phx-value-id={balance.id}
-                      phx-click-stop
-                      class="btn btn-ghost btn-xs text-error px-1"
-                    >
-                      <.icon name="hero-trash" class="size-3" />
-                    </button>
-                  </div>
+                <td class="text-right opacity-40 italic">
+                  Read-only
                 </td>
               </tr>
             </tbody>
@@ -169,27 +150,6 @@ defmodule CashLensWeb.BalanceLive.Index do
         </form>
       </div>
     </div>
-
-    <!-- Modal de Confirmação -->
-    <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
-      <div class="p-4 text-center">
-        <div class="w-20 h-20 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
-          <.icon name="hero-trash" class="size-10" />
-        </div>
-        <h2 class="text-2xl font-black mb-2">Delete Balance?</h2>
-        <p class="text-base-content/60 mb-10">
-          Do you really want to delete this monthly balance record?
-        </p>
-        <div class="flex flex-col sm:flex-row gap-3">
-          <button phx-click={@confirm_modal.action} class="btn btn-error btn-lg flex-1 rounded-2xl">
-            Yes, Delete
-          </button>
-          <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
-            Cancel
-          </button>
-        </div>
-      </div>
-    </.modal>
     """
   end
 
@@ -198,7 +158,6 @@ defmodule CashLensWeb.BalanceLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Balances")
-     |> assign(:confirm_modal, nil)
      |> assign(:accounts, Accounts.list_accounts())
      |> assign(:filters, %{"account_id" => "", "month" => "", "year" => ""})
      |> stream(:balances, Accounting.list_balances())}
@@ -230,22 +189,6 @@ defmodule CashLensWeb.BalanceLive.Index do
      socket
      |> put_flash(:info, "All balances have been recalculated in cascade!")
      |> stream(:balances, Accounting.list_balances(socket.assigns.filters), reset: true)}
-  end
-
-  @impl true
-  def handle_event("confirm_delete", %{"id" => id}, socket) do
-    confirm = %{action: JS.push("delete", value: %{id: id})}
-    {:noreply, assign(socket, :confirm_modal, confirm)}
-  end
-
-  @impl true
-  def handle_event("close_modal", _, socket), do: {:noreply, assign(socket, :confirm_modal, nil)}
-
-  @impl true
-  def handle_event("delete", %{"id" => id}, socket) do
-    balance = Accounting.get_balance!(id)
-    {:ok, _} = Accounting.delete_balance(balance)
-    {:noreply, socket |> assign(:confirm_modal, nil) |> stream_delete(:balances, balance)}
   end
 
   defp translate_month_num(num) do
