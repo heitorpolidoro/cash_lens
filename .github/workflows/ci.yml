@@ -10,65 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Build and test
-    runs-on: ubuntu-latest
-    env:
-      MIX_ENV: test
-
-    services:
-      db:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: cash_lens_test
-        ports:
-          - 5432:5432
-        # Wait for postgres to be ready
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        ref: ${{ github.event.pull_request.head.sha || github.ref }}
-        fetch-depth: 0
-
-    - name: Set up Elixir
-      uses: erlef/setup-beam@v1
-      with:
-        elixir-version: '1.18.4'
-        otp-version: '28.0.4'
-
-    - name: Restore dependencies cache
-      uses: actions/cache@v5
-      with:
-        path: deps
-        key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
-        restore-keys: ${{ runner.os }}-mix-
-
-    - name: Install dependencies
-      run: mix deps.get
-
-    - name: Run Quality Checks
-      run: mix quality_check
-
-    - name: Generate Coverage Report
-      run: |
-        mix coveralls.xml
-        sed -i 's/file path="\//file path="/g' cover/excoveralls.xml
-
-    - name: SonarQube Scan
-      uses: sonarsource/sonarqube-scan-action@v6
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      with:
-        args: >
-          -Dsonar.organization=heitorpolidoro
-          -Dsonar.projectKey=heitorpolidoro_cash_lens
-          -Dsonar.host.url=https://sonarcloud.io
+  build:
+    uses: heitorpolidoro/.github/.github/workflows/elixir-standard-ci.yml@master
+    with:
+      postgres-db: "cash_lens_test"
+      sonar-project-key: "heitorpolidoro_cash_lens"
+    secrets: inherit
