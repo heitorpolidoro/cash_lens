@@ -104,6 +104,42 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
       assert mirrors == []
     end
 
+    test "links source to existing unlinked mirror in destination account" do
+      create_transfer_category()
+      source = account_fixture()
+      destination = account_fixture()
+      create_rule(source.id, destination.id, ["salary payment"])
+
+      # Pre-insert the mirror transaction in the destination account without a transfer_key
+      existing_mirror =
+        insert_raw_transaction(%{
+          account_id: destination.id,
+          description: "Salary Payment",
+          amount: "-1000.00",
+          date: ~D[2026-01-15]
+        })
+
+      assert is_nil(existing_mirror.transfer_key)
+
+      tx =
+        insert_raw_transaction(%{
+          account_id: source.id,
+          description: "Salary Payment",
+          amount: "1000.00",
+          date: ~D[2026-01-15]
+        })
+
+      # apply_rules should find the existing mirror and link both — no new transaction created
+      result = TransferRuleApplier.apply_rules([tx])
+      assert result == []
+
+      updated_tx = Repo.get!(Transaction, tx.id)
+      updated_mirror = Repo.get!(Transaction, existing_mirror.id)
+
+      refute is_nil(updated_tx.transfer_key)
+      assert updated_tx.transfer_key == updated_mirror.transfer_key
+    end
+
     test "idempotency: does not create mirror if one already exists" do
       create_transfer_category()
       source = account_fixture()
@@ -154,6 +190,33 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
     test "handles empty list of transactions" do
       create_transfer_category()
       assert TransferRuleApplier.apply_rules([]) == []
+    end
+
+    test "returns [] and logs warning when mirror insert fails" do
+      import Mox
+
+      create_transfer_category()
+      source = account_fixture()
+      destination = account_fixture()
+      create_rule(source.id, destination.id, ["salary payment"])
+
+      tx =
+        insert_raw_transaction(%{
+          account_id: source.id,
+          description: "Salary Payment",
+          amount: "1000.00",
+          date: ~D[2026-01-15]
+        })
+
+      Application.put_env(:cash_lens, :transfer_rule_repo, CashLens.Transactions.RepoMock)
+
+      expect(CashLens.Transactions.RepoMock, :insert, fn _changeset, _opts ->
+        {:error, :simulated_db_failure}
+      end)
+
+      assert TransferRuleApplier.apply_rules([tx]) == []
+    after
+      Application.delete_env(:cash_lens, :transfer_rule_repo)
     end
 
     test "only matches rules for the transaction's source account" do
