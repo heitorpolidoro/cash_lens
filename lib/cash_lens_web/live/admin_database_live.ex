@@ -139,16 +139,20 @@ defmodule CashLensWeb.AdminDatabaseLive do
     query =
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name"
 
-    {:ok, %{rows: rows}} = Repo.query(query)
-    List.flatten(rows)
+    case Repo.query(query) do
+      {:ok, %{rows: rows}} -> List.flatten(rows)
+      {:error, _} -> []
+    end
   end
 
   defp list_table_columns(table) do
     query =
       "SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND table_schema = 'public' ORDER BY ordinal_position"
 
-    {:ok, %{rows: rows}} = Repo.query(query, [table])
-    List.flatten(rows)
+    case Repo.query(query, [table]) do
+      {:ok, %{rows: rows}} -> List.flatten(rows)
+      {:error, _} -> []
+    end
   end
 
   defp fetch_rows(socket) do
@@ -193,6 +197,10 @@ defmodule CashLensWeb.AdminDatabaseLive do
   end
 
   defp format_val(nil), do: "NULL"
-  defp format_val(val) when is_binary(val), do: val
+
+  defp format_val(val) when is_binary(val) do
+    if String.valid?(val), do: val, else: inspect(val)
+  end
+
   defp format_val(val), do: inspect(val)
 end
