@@ -152,7 +152,7 @@ The `meridian-agent` script automates token generation, branch creation, bot-ide
 git add .
 
 # Run the simulation script (pointing to the meridian bin)
-/Users/heitor/workspace/meridian/bin/meridian-agent \
+bin/meridian-agent \
   -b feature/your-task-name \
   -m "feat: your commit message" \
   --pr \
