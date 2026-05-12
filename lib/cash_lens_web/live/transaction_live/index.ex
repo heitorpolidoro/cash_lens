@@ -47,12 +47,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
      |> assign(:return_to, nil)
-     |> assign(:summary, %{
-       current_balance: Decimal.new("0"),
-       income: Decimal.new("0"),
-       expenses: Decimal.new("0"),
-       month_name: ""
-     })
      |> assign(:pending_count, Transactions.count_pending_transactions())
      |> assign(:unmatched_transfers_count, 0)
      |> assign_transfer_category_id()}
@@ -720,48 +714,12 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   defp calculate_summary(socket) do
-    filters = socket.assigns.filters
-    mapped = map_filters(filters)
-    summary = Transactions.get_monthly_summary(nil, mapped)
+    mapped = map_filters(socket.assigns.filters)
 
     unmatched_count =
       Transactions.list_transactions(Map.put(mapped, "unmatched_transfers", "true")) |> length()
 
-    month_name =
-      summary.month
-      |> Calendar.strftime("%B")
-      |> translate_month()
-
-    socket
-    |> assign(:unmatched_transfers_count, unmatched_count)
-    |> assign(:summary, %{
-      current_balance: calculate_current_balance(socket, mapped["account_id"]),
-      income: summary.income,
-      expenses: summary.expenses,
-      month_name: month_name
-    })
-  end
-
-  defp calculate_current_balance(socket, account_id) when account_id in ["", nil] do
-    latest_balances = CashLens.Accounting.list_latest_balances()
-
-    socket.assigns.accounts
-    |> Enum.map(fn account ->
-      balance = Enum.find(latest_balances, &(&1.account_id == account.id))
-      if balance, do: balance.final_balance, else: account.balance
-    end)
-    |> Enum.reduce(Decimal.new("0"), &Decimal.add(&1, &2))
-  end
-
-  defp calculate_current_balance(socket, account_id) do
-    case Enum.find(socket.assigns.accounts, &(&1.id == account_id)) do
-      nil ->
-        Decimal.new("0")
-
-      account ->
-        latest_balance = CashLens.Accounting.get_latest_balance_for_account(account.id)
-        if latest_balance, do: latest_balance.final_balance, else: account.balance
-    end
+    assign(socket, :unmatched_transfers_count, unmatched_count)
   end
 
   defp map_filters(filters) do
@@ -777,9 +735,5 @@ defmodule CashLensWeb.TransactionLive.Index do
       "year" => filters["year"],
       "unmatched_transfers" => filters["unmatched_transfers"]
     }
-  end
-
-  defp translate_month(month) do
-    month
   end
 end
