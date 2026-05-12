@@ -136,10 +136,6 @@ defmodule CashLens.Transactions.TransferRuleApplier do
 
       case repo_mod().insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
         {:ok, mirror} ->
-          Logger.info(
-            "TransferRuleApplier: Created mirror transaction #{mirror.id} for rule #{rule.id}"
-          )
-
           link_pair(tx.id, mirror.id, link_id)
           [mirror]
 
