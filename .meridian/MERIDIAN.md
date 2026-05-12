@@ -138,3 +138,16 @@ All six steps must pass — failure in any blocks the pipeline:
 ### Pre-commit
 
 `mix precommit` (alias for `mix quality_check`) should be run locally before pushing. Consider hooking it via a Git pre-commit hook.
+
+### 🤖 Bot Authentication
+To use the GitHub App bot for automation, run:
+```bash
+GH_TOKEN=$(gh token generate --app-id 3677362 --key ~/workspace/meridian/meridianagent.2026-05-11.private-key.pem --token-only)
+gh <command>
+```
+
+### 🚀 Auto-Merge
+To enable automatic merging for Pull Requests that pass all status checks, run:
+```bash
+gh pr merge --auto --squash --delete-branch
+```
