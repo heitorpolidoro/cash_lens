@@ -143,24 +143,20 @@ All six steps must pass — failure in any blocks the pipeline:
 
 To maintain a consistent audit trail and simulate that actions (branches, commits, and Pull Requests) are performed by the **Meridian Agent**, you MUST use the automated helper script.
 
-#### Using the meridian-agent Script
-The `meridian-agent` script automates token generation, branch creation, bot-identity commits, and PR creation.
+#### Using the meridian-agent Wrapper
+The `.meridian/meridian-agent` script acts as a transparent proxy for `git` and `gh` commands, automatically injecting the agent's identity and authentication token.
 
 **Usage Example:**
 ```bash
-# Stage your changes first
-git add .
-
-# Run the simulation script (pointing to the meridian bin)
-bin/meridian-agent \
-  -b feature/your-task-name \
-  -m "feat: your commit message" \
-  --pr \
-  --auto-merge
+# Prefix your git/gh commands with the local meridian-agent
+.meridian/meridian-agent git checkout -b feature/agent-task
+.meridian/meridian-agent git add lib/
+.meridian/meridian-agent git commit -m "feat: simulate agent work"
+.meridian/meridian-agent gh pr create --title "..." --body "..."
 ```
 
 ### 🚀 Auto-Merge
-To enable automatic merging for Pull Requests that pass all status checks, run the following command (or use the `--auto-merge` flag in the script):
+To enable automatic merging for Pull Requests that pass all status checks, run the following command (this is a separate action from the agent simulation):
 ```bash
 gh pr merge --auto --squash --delete-branch
 ```
