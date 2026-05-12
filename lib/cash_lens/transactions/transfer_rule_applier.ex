@@ -134,7 +134,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
 
       changeset = Transaction.changeset(%Transaction{}, mirror_params)
 
-      case Repo.insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
+      case repo_mod().insert(changeset, on_conflict: :nothing, conflict_target: :fingerprint) do
         {:ok, mirror} ->
           Logger.info(
             "TransferRuleApplier: Created mirror transaction #{mirror.id} for rule #{rule.id}"
@@ -152,6 +152,8 @@ defmodule CashLens.Transactions.TransferRuleApplier do
       end
     end
   end
+
+  defp repo_mod, do: Application.get_env(:cash_lens, :transfer_rule_repo, CashLens.Repo)
 
   defp link_pair(tx_id, twin_id, link_id) do
     Repo.transaction(fn ->
