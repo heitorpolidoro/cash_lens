@@ -183,8 +183,10 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      mirrors = TransferRuleApplier.apply_rules([tx])
-      assert mirrors == []
+      assert ExUnit.CaptureLog.capture_log(fn ->
+               mirrors = TransferRuleApplier.apply_rules([tx])
+               assert mirrors == []
+             end) =~ "TransferRuleApplier: 'transfer' category not found"
     end
 
     test "handles empty list of transactions" do
@@ -214,9 +216,13 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
         {:error, :simulated_db_failure}
       end)
 
-      assert TransferRuleApplier.apply_rules([tx]) == []
-    after
-      Application.delete_env(:cash_lens, :transfer_rule_repo)
+      try do
+        assert ExUnit.CaptureLog.capture_log(fn ->
+                 assert TransferRuleApplier.apply_rules([tx]) == []
+               end) =~ "TransferRuleApplier: Failed to insert mirror transaction"
+      after
+        Application.delete_env(:cash_lens, :transfer_rule_repo)
+      end
     end
 
     test "only matches rules for the transaction's source account" do

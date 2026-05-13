@@ -28,6 +28,39 @@ defmodule CashLens.CategoriesTest do
              end)
     end
 
+    test "list_categories/0 sorts root categories first, then their children recursively" do
+      saude = category_fixture(name: "Saude")
+      _saude_consulta = category_fixture(name: "Consulta", parent_id: saude.id)
+
+      casa = category_fixture(name: "Casa")
+      casa_manutencao = category_fixture(name: "Manutencao", parent_id: casa.id)
+      casa_manutencao_sofa = category_fixture(name: "Sofa", parent_id: casa_manutencao.id)
+
+      _casa_manutencao_sofa_almofada =
+        category_fixture(name: "Almofada", parent_id: casa_manutencao_sofa.id)
+
+      # Add a root category that comes alphabetically between Casa and Manutencao
+      _d = category_fixture(name: "D Root")
+
+      categories = Categories.list_categories()
+      names = Enum.map(categories, & &1.name)
+
+      assert index_of(names, "Casa") < index_of(names, "Manutencao")
+      assert index_of(names, "Manutencao") < index_of(names, "Sofa")
+      assert index_of(names, "Saude") < index_of(names, "Consulta")
+
+      # Root should come before children AND children should be grouped under parents.
+      assert index_of(names, "Manutencao") + 1 == index_of(names, "Sofa")
+
+      # Verify full hierarchy display for deep levels
+      almofada = Enum.find(categories, &(&1.name == "Almofada"))
+      assert Category.full_name(almofada) == "Casa > Manutencao > Sofa > Almofada"
+    end
+
+    defp index_of(list, element) do
+      Enum.find_index(list, &(&1 == element))
+    end
+
     test "get_category!/1 returns the category with given id" do
       category = category_fixture()
       fetched = Categories.get_category!(category.id)

@@ -141,7 +141,8 @@ defmodule CashLens.Transactions do
         asc: t.date,
         asc_nulls_last: t.time,
         asc: t.inserted_at,
-        asc: t.description
+        asc: t.description,
+        asc: t.id
       )
 
   defp order_by_date(query, _),
@@ -150,7 +151,8 @@ defmodule CashLens.Transactions do
         desc: t.date,
         desc_nulls_last: t.time,
         desc: t.inserted_at,
-        asc: t.description
+        asc: t.description,
+        asc: t.id
       )
 
   defp join_associations(query) do

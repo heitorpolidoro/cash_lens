@@ -18,12 +18,28 @@ defmodule CashLens.Categories do
 
   """
   def list_categories do
-    from(c in Category,
-      left_join: p in assoc(c, :parent),
-      order_by: [asc: coalesce(p.name, c.name), asc_nulls_first: c.parent_id, asc: c.name],
-      preload: [parent: :parent]
-    )
-    |> Repo.all()
+    categories =
+      from(c in Category, order_by: [asc: c.slug])
+      |> Repo.all()
+
+    map = Map.new(categories, &{&1.id, &1})
+
+    Enum.map(categories, fn category ->
+      link_parents(category, map)
+    end)
+  end
+
+  defp link_parents(category, map) do
+    case category.parent_id do
+      nil ->
+        %{category | parent: nil}
+
+      parent_id ->
+        case Map.get(map, parent_id) do
+          nil -> %{category | parent: nil}
+          parent -> %{category | parent: link_parents(parent, map)}
+        end
+    end
   end
 
   @doc """

@@ -19,16 +19,20 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   Returns the list of newly created mirror transactions.
   """
   def apply_rules(transactions) when is_list(transactions) do
-    transfer_category = get_transfer_category()
+    rules_by_source = load_rules_by_source()
 
-    if is_nil(transfer_category) do
+    if rules_by_source == %{} do
       []
     else
-      rules_by_source = load_rules_by_source()
+      transfer_category = get_transfer_category()
 
-      Enum.flat_map(transactions, fn tx ->
-        apply_rules_to_transaction(tx, rules_by_source, transfer_category)
-      end)
+      if is_nil(transfer_category) do
+        []
+      else
+        Enum.flat_map(transactions, fn tx ->
+          apply_rules_to_transaction(tx, rules_by_source, transfer_category)
+        end)
+      end
     end
   end
 
@@ -38,13 +42,18 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   Returns a list of newly created mirror transactions (0 or 1 elements).
   """
   def maybe_apply_rule(%Transaction{} = transaction) do
-    transfer_category = get_transfer_category()
+    rules_by_source = load_rules_by_source()
 
-    if is_nil(transfer_category) do
+    if rules_by_source == %{} do
       []
     else
-      rules_by_source = load_rules_by_source()
-      apply_rules_to_transaction(transaction, rules_by_source, transfer_category)
+      transfer_category = get_transfer_category()
+
+      if is_nil(transfer_category) do
+        []
+      else
+        apply_rules_to_transaction(transaction, rules_by_source, transfer_category)
+      end
     end
   end
 
