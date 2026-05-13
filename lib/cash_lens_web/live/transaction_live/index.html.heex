@@ -358,11 +358,20 @@
                     </div>
                   </div>
                   <div
-                    :if={transaction.notes}
-                    class="text-[10px] opacity-70 italic mt-0.5 flex items-center gap-1"
+                    :if={transaction.notes || transaction.installment_group_id}
+                    class="text-[10px] opacity-70 italic mt-0.5 flex items-center gap-2"
                   >
-                    <.icon name="hero-document-text" class="size-2.5" />
-                    {transaction.notes}
+                    <span :if={transaction.notes} class="flex items-center gap-1">
+                      <.icon name="hero-document-text" class="size-2.5" />
+                      {transaction.notes}
+                    </span>
+                    <span
+                      :if={transaction.installment_group_id}
+                      class="flex items-center gap-1 bg-primary/10 text-primary not-italic font-black px-1 rounded"
+                    >
+                      <.icon name="hero-rectangle-group" class="size-2.5" />
+                      {transaction.installment_number} / {transaction.installment_group.installments}
+                    </span>
                   </div>
                   <div :if={transaction.reimbursement_status} class="flex items-center gap-1 mt-1">
                     <div class={[
@@ -544,6 +553,64 @@
                   >
                     <.icon name="hero-document-text" class="size-3" />
                   </button>
+
+                  <div class="dropdown dropdown-end">
+                    <button
+                      tabindex="0"
+                      class={[
+                        "btn btn-ghost btn-xs px-1",
+                        if(transaction.installment_group_id,
+                          do: "text-primary",
+                          else: "opacity-40"
+                        )
+                      ]}
+                      title="Link to Installment Group"
+                    >
+                      <.icon name="hero-rectangle-group" class="size-3" />
+                    </button>
+                    <ul
+                      tabindex="0"
+                      class="dropdown-content z-[1] menu p-2 shadow-2xl bg-base-100 border border-base-300 rounded-box w-52"
+                    >
+                      <%= if transaction.installment_group_id do %>
+                        <li>
+                          <button
+                            phx-click="unlink_installment"
+                            phx-value-id={transaction.id}
+                            class="text-error"
+                          >
+                            <.icon name="hero-no-symbol" class="size-4" /> Unlink Group
+                          </button>
+                        </li>
+                      <% else %>
+                        <% suggestion =
+                          CashLens.Transactions.suggest_installment_link(transaction) %>
+                        <li :if={suggestion} class="border-b border-base-200 mb-1 pb-1">
+                          <button
+                            phx-click="link_installment"
+                            phx-value-id={transaction.id}
+                            phx-value-group_id={suggestion.group_id}
+                            class="bg-primary/10 text-primary font-black animate-pulse"
+                          >
+                            <.icon name="hero-sparkles" class="size-4" />
+                            Link to {suggestion.group_name}? ({suggestion.next_installment}/{suggestion.total_installments})
+                          </button>
+                        </li>
+                        <li :for={group <- @installment_groups}>
+                          <button
+                            phx-click="link_installment"
+                            phx-value-id={transaction.id}
+                            phx-value-group_id={group.id}
+                          >
+                            {group.description_pattern}
+                          </button>
+                        </li>
+                        <li :if={Enum.empty?(@installment_groups)}>
+                          <span class="text-[10px] opacity-50 italic">No groups found</span>
+                        </li>
+                      <% end %>
+                    </ul>
+                  </div>
                 </div>
               </td>
             </tr>

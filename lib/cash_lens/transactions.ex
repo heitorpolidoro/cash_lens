@@ -516,6 +516,30 @@ defmodule CashLens.Transactions do
     Repo.aggregate(from(t in Transaction, where: is_nil(t.category_id)), :count)
   end
 
+  @doc """
+  Suggests an installment group and next installment number for a transaction.
+  """
+  def suggest_installment_link(%Transaction{} = tx) do
+    case CashLens.Installments.find_matching_group(tx.description) do
+      nil ->
+        nil
+
+      group ->
+        progress = CashLens.Installments.get_group_with_progress(group.id)
+
+        if progress.is_completed do
+          nil
+        else
+          %{
+            group_id: group.id,
+            group_name: group.description_pattern,
+            next_installment: progress.paid_count + 1,
+            total_installments: group.installments
+          }
+        end
+    end
+  end
+
   def change_transaction(%Transaction{} = transaction, attrs \\ %{}),
     do: Transaction.changeset(transaction, attrs)
 end

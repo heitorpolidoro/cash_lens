@@ -25,11 +25,25 @@ defmodule CashLensWeb.PageController do
           final_balance: Decimal.to_float(hb.final_balance),
           income: Decimal.to_float(summary.income),
           expenses: Decimal.to_float(summary.expenses),
-          balance: Decimal.to_float(summary.balance)
+          balance: Decimal.to_float(summary.balance),
+          is_projection: false
         }
       end)
 
-    chart_data = Jason.encode!(historical)
+    # 1. Calculate Averages (past 12 months)
+    {avg_income, avg_expenses} = calculate_averages(historical_summary)
+
+    # 2. Get active installment groups to factor into projections
+    active_groups = CashLens.Installments.list_installment_groups()
+
+    # 3. Generate 6 Projection Months
+    last_real =
+      List.last(historical) ||
+        %{final_balance: 0.0, year: Date.utc_today().year, month: Date.utc_today().month}
+
+    projections = generate_projections(last_real, avg_income, avg_expenses, active_groups, 6)
+
+    chart_data = Jason.encode!(historical ++ projections)
 
     # Get all accounts to find those without a balance yet
     all_accounts = Accounts.list_accounts()
@@ -112,5 +126,62 @@ defmodule CashLensWeb.PageController do
     }
 
     months[month] || month
+  end
+
+  defp calculate_averages([]), do: {0.0, 0.0}
+
+  defp calculate_averages(summary) do
+    count = length(summary)
+    total_income = Enum.reduce(summary, 0.0, fn s, acc -> acc + Decimal.to_float(s.income) end)
+
+    total_expenses =
+      Enum.reduce(summary, 0.0, fn s, acc -> acc + Decimal.to_float(s.expenses) end)
+
+    {total_income / count, total_expenses / count}
+  end
+
+  defp generate_projections(last_real, avg_income, avg_expenses, active_groups, count) do
+    Enum.reduce(1..count, {[], last_real}, fn _, {acc_proj, last} ->
+      {next_m, next_y} =
+        if last.month == 12, do: {1, last.year + 1}, else: {last.month + 1, last.year}
+
+      # Factor in installments for this specific future month
+      # We check how many installments are ALREADY paid to see what's remaining.
+      # For projection, we assume 1 installment is paid per month starting from next month.
+      installment_impact =
+        Enum.reduce(active_groups, 0.0, fn group, sum ->
+          _progress = CashLens.Installments.get_group_with_progress(group.id)
+
+          # Simplified: if it started before or on this month and isn't finished.
+          # We check month proximity relative to 'last_real'
+          months_since_start =
+            (next_y - group.start_date.year) * 12 + (next_m - group.start_date.month)
+
+          if months_since_start >= 0 and months_since_start < group.installments do
+            # It's an active month for this group
+            installment_val = Decimal.to_float(group.total_amount) / group.installments
+            sum + installment_val
+          else
+            sum
+          end
+        end)
+
+      proj_expenses = avg_expenses + installment_impact
+      proj_balance = avg_income - proj_expenses
+      proj_final = last.final_balance + proj_balance
+
+      new_proj = %{
+        year: next_y,
+        month: next_m,
+        final_balance: proj_final,
+        income: avg_income,
+        expenses: proj_expenses,
+        balance: proj_balance,
+        is_projection: true
+      }
+
+      {acc_proj ++ [new_proj], new_proj}
+    end)
+    |> elem(0)
   end
 end

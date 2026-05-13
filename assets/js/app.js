@@ -131,6 +131,8 @@ window.addEventListener("load", () => {
     if (rawData) {
       const history = JSON.parse(rawData);
       const labels = history.map(item => `${item.month}/${item.year}`);
+      const today = new Date();
+      const currentMonthLabel = `${today.getMonth() + 1}/${today.getFullYear()}`;
       
       const chart = new Chart(ctx, {
         type: 'line',
@@ -140,41 +142,95 @@ window.addEventListener("load", () => {
             {
               label: 'Saldo Final (Acumulado)',
               data: history.map(item => item.final_balance),
-              borderColor: 'rgb(59, 130, 246)', // Blue
+              borderColor: 'rgb(59, 130, 246)',
               backgroundColor: 'rgba(59, 130, 246, 0.1)',
               borderWidth: 3,
               fill: true,
-              tension: 0.4
+              tension: 0.4,
+              segment: {
+                borderDash: ctx => history[ctx.p1DataIndex].is_projection ? [6, 6] : []
+              }
             },
             {
               label: 'Entradas',
               data: history.map(item => item.income),
-              borderColor: 'rgb(34, 197, 94)', // Green
+              borderColor: 'rgb(34, 197, 94)',
               borderWidth: 2,
               borderDash: [5, 5],
-              tension: 0.4
+              tension: 0.4,
+              pointStyle: history.map(item => item.is_projection ? false : 'circle')
             },
             {
               label: 'Saídas',
               data: history.map(item => item.expenses),
-              borderColor: 'rgb(239, 68, 68)', // Red
+              borderColor: 'rgb(239, 68, 68)',
               borderWidth: 2,
               borderDash: [5, 5],
-              tension: 0.4
+              tension: 0.4,
+              pointStyle: history.map(item => item.is_projection ? false : 'circle')
             },
             {
               label: 'Balanço do Mês (Líquido)',
               type: 'bar',
               data: history.map(item => item.balance),
-              backgroundColor: history.map(item => item.balance >= 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'),
+              backgroundColor: history.map(item => {
+                if (item.is_projection) return 'rgba(156, 163, 175, 0.2)';
+                return item.balance >= 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+              }),
               borderRadius: 4
             }
           ]
         },
+        plugins: [{
+          id: 'verticalLine',
+          beforeDraw: (chart) => {
+            const firstProjectionIndex = history.findIndex(h => h.is_projection);
+            if (firstProjectionIndex === -1) return;
+
+            const {ctx, chartArea: {top, bottom}, scales: {x}} = chart;
+            const xPos = x.getPixelForValue(labels[firstProjectionIndex]) - (x.getPixelForValue(labels[firstProjectionIndex]) - x.getPixelForValue(labels[firstProjectionIndex-1])) / 2;
+
+            // Highlight Background for projection
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
+            ctx.fillRect(xPos, top, chart.chartArea.right - xPos, bottom - top);
+
+            // Draw Vertical Line
+            ctx.beginPath();
+            ctx.setLineDash([5, 5]);
+            ctx.moveTo(xPos, top);
+            ctx.lineTo(xPos, bottom);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(156, 163, 175, 0.5)';
+            ctx.stroke();
+            
+            // Label for projection
+            ctx.fillStyle = 'rgba(156, 163, 175, 0.8)';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('PROJEÇÃO (Média 12m)', xPos + 10, top + 20);
+            ctx.restore();
+          }
+        }],
         options: {
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
+          elements: {
+            point: {
+              radius: (ctx) => {
+                const item = history[ctx.dataIndex];
+                if (`${item.month}/${item.year}` === currentMonthLabel) return 8;
+                return item.is_projection ? 0 : 3;
+              },
+              hoverRadius: 10,
+              backgroundColor: (ctx) => {
+                const item = history[ctx.dataIndex];
+                if (`${item.month}/${item.year}` === currentMonthLabel) return 'rgb(59, 130, 246)';
+                return undefined;
+              }
+            }
+          },
           plugins: {
             tooltip: {
               callbacks: {

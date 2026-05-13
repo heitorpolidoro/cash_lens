@@ -51,17 +51,8 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:return_to, nil)
      |> assign(:pending_count, Transactions.count_pending_transactions())
      |> assign(:unmatched_transfers_count, 0)
+     |> assign(:installment_groups, CashLens.Installments.list_installment_groups())
      |> assign_transfer_category_id()}
-  end
-
-  defp assign_transfer_category_id(socket) do
-    id =
-      case Categories.get_category_by_slug("transfer") do
-        nil -> nil
-        cat -> cat.id
-      end
-
-    assign(socket, :transfer_category_id, id)
   end
 
   @impl true
@@ -82,6 +73,16 @@ defmodule CashLensWeb.TransactionLive.Index do
       )
 
     {:noreply, socket}
+  end
+
+  defp assign_transfer_category_id(socket) do
+    id =
+      case Categories.get_category_by_slug("transfer") do
+        nil -> nil
+        cat -> cat.id
+      end
+
+    assign(socket, :transfer_category_id, id)
   end
 
   @impl true
@@ -117,6 +118,39 @@ defmodule CashLensWeb.TransactionLive.Index do
 
       {:noreply, stream_insert(socket, :transactions, updated)}
     end
+  end
+
+  @impl true
+  def handle_event("link_installment", %{"id" => id, "group_id" => group_id}, socket) do
+    tx = Transactions.get_transaction!(id)
+    group = CashLens.Installments.get_group_with_progress(group_id)
+
+    case Transactions.update_transaction(tx, %{
+           installment_group_id: group_id,
+           installment_number: group.paid_count + 1
+         }) do
+      {:ok, updated_tx} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Linked to #{group.description_pattern}!")
+         |> stream_insert(:transactions, updated_tx)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Linking failed.")}
+    end
+  end
+
+  @impl true
+  def handle_event("unlink_installment", %{"id" => id}, socket) do
+    tx = Transactions.get_transaction!(id)
+
+    {:ok, updated_tx} =
+      Transactions.update_transaction(tx, %{
+        installment_group_id: nil,
+        installment_number: nil
+      })
+
+    {:noreply, stream_insert(socket, :transactions, updated_tx)}
   end
 
   @impl true

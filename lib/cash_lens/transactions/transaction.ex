@@ -14,8 +14,10 @@ defmodule CashLens.Transactions.Transaction do
     field :reimbursement_link_key, Ecto.UUID
     field :fingerprint, :string
     field :notes, :string
+    field :installment_number, :integer
     belongs_to :account, CashLens.Accounts.Account
     belongs_to :category, CashLens.Categories.Category
+    belongs_to :installment_group, CashLens.Installments.InstallmentGroup
 
     timestamps(type: :utc_datetime)
   end
@@ -34,7 +36,9 @@ defmodule CashLens.Transactions.Transaction do
       :transfer_key,
       :reimbursement_status,
       :reimbursement_link_key,
-      :notes
+      :notes,
+      :installment_group_id,
+      :installment_number
     ])
     |> validate_required([:date, :description, :amount, :account_id])
     |> generate_fingerprint()
