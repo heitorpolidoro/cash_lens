@@ -36,18 +36,8 @@ Este arquivo consolida as diretrizes estratégicas, decisões arquiteturais e o 
    - [ ] **Exportação de Dados**: Geração de relatórios mensais estáticos em Excel ou PDF.
 
 -----------
-- [x] Ordenar as categorias sempre com a raiz primeiro. Ex.:
-Saude
-Saúde > Consulta
-- [x] Mostrar toda a hirerarquia da categoria. Ex.:
-Casa > Manutenção > Sofá
-- [x] Está truncando a desciçãõ "ASSOCIACAO DOS PROPRIETARIOS DO RESI..."
 - [ ] Cria lógica de conta parcelada
 - - Incluir a informaçào de parcelas futuras
-- [x] Quando a lista de transaçòes está pequena, o dropdown de categorias fica "dentro" e escondido
-- [x] Quando digito algo, transaçòes do mesmo dia e sem hora ficam "dançando", como último item de ordenação coloque a descriçào
-
-- [x] remover os warnings dos testes
 
 - [ ] Corrigir os salários antes de receber da Avant
 - [ ] Conferir se todos as consultas e cirurgia estào marcadas como reembolso

@@ -347,13 +347,31 @@
                   </span>
                 </div>
               </td>
-              <td class="py-2 px-4">
+              <td class="py-2 px-4 group/desc">
                 <div class="flex flex-col">
+                  <div class="flex items-center gap-1">
+                    <div
+                      class="leading-relaxed font-medium"
+                      title={transaction.description}
+                    >
+                      {transaction.description}
+                    </div>
+                    <button
+                      type="button"
+                      phx-click="open_notes"
+                      phx-value-id={transaction.id}
+                      class="opacity-0 group-hover/desc:opacity-100 transition-opacity text-primary hover:text-primary-focus"
+                      title="Add/Edit Notes"
+                    >
+                      <.icon name="hero-pencil-square" class="size-3" />
+                    </button>
+                  </div>
                   <div
-                    class="leading-relaxed font-medium"
-                    title={transaction.description}
+                    :if={transaction.notes}
+                    class="text-[10px] opacity-70 italic mt-0.5 flex items-center gap-1"
                   >
-                    {transaction.description}
+                    <.icon name="hero-document-text" class="size-2.5" />
+                    {transaction.notes}
                   </div>
                   <div :if={transaction.reimbursement_status} class="flex items-center gap-1 mt-1">
                     <div class={[
@@ -590,6 +608,43 @@
     categories={@categories}
     category_form={@category_form}
   />
+
+  <.modal :if={@show_notes_modal} id="notes-modal" show on_cancel={JS.push("close_modal")}>
+    <div class="p-2">
+      <div class="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-6">
+        <.icon name="hero-document-text" class="size-8" />
+      </div>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Edit Notes</h2>
+      <p class="text-sm opacity-70 mb-4">
+        Add specific details for <strong class="text-primary">{@editing_transaction.description}</strong>.
+      </p>
+
+      <form phx-submit="save_notes" class="space-y-4">
+        <input type="hidden" name="tx_id" value={@editing_transaction.id} />
+        <textarea
+          name="notes"
+          class="textarea textarea-bordered w-full h-32 font-medium"
+          placeholder="Ex: desentopimento do ralo da cozinha..."
+          autofocus
+        >{@editing_transaction.notes}</textarea>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button
+            type="submit"
+            class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
+          >
+            Save Notes
+          </button>
+          <button
+            type="button"
+            phx-click="close_modal"
+            class="btn btn-ghost btn-lg flex-1 rounded-2xl"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </.modal>
 
   <.modal :if={@bulk_confirmation} id="bulk-modal" show on_cancel={JS.push("close_modal")}>
     <div class="p-2">

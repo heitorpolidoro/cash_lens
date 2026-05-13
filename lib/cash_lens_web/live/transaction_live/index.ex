@@ -18,6 +18,8 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_reimbursement_modal, false)
      |> assign(:show_transfer_modal, false)
      |> assign(:show_quick_transfer_modal, false)
+     |> assign(:show_notes_modal, false)
+     |> assign(:editing_transaction, nil)
      |> assign(:transfer_origin, nil)
      |> assign(:pending_transfers, [])
      |> assign(:quick_transfer_form, to_form(%{}))
@@ -146,6 +148,34 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
+  def handle_event("open_notes", %{"id" => id}, socket) do
+    transaction = Transactions.get_transaction!(id)
+
+    {:noreply,
+     socket
+     |> assign(:show_notes_modal, true)
+     |> assign(:editing_transaction, transaction)}
+  end
+
+  @impl true
+  def handle_event("save_notes", %{"tx_id" => id, "notes" => notes}, socket) do
+    transaction = Transactions.get_transaction!(id)
+
+    case Transactions.update_transaction(transaction, %{notes: notes}) do
+      {:ok, updated_tx} ->
+        {:noreply,
+         socket
+         |> assign(:show_notes_modal, false)
+         |> assign(:editing_transaction, nil)
+         |> put_flash(:info, "Notes updated!")
+         |> stream_insert(:transactions, updated_tx)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to update notes.")}
+    end
+  end
+
+  @impl true
   def handle_event("open_import", _params, socket) do
     {:noreply, assign(socket, :show_import_modal, true)}
   end
@@ -170,6 +200,8 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_reimbursement_modal, false)
      |> assign(:show_transfer_modal, false)
      |> assign(:show_quick_transfer_modal, false)
+     |> assign(:show_notes_modal, false)
+     |> assign(:editing_transaction, nil)
      |> assign(:ai_result, nil)
      |> assign(:ai_loading, false)
      |> assign(:confirm_modal, nil)

@@ -13,6 +13,32 @@ defmodule CashLens.TransactionsTest do
     :ok
   end
 
+  describe "transactions" do
+    test "update_transaction/2 updates notes" do
+      transaction = transaction_fixture()
+
+      assert {:ok, %Transaction{} = updated} =
+               Transactions.update_transaction(transaction, %{notes: "some notes"})
+
+      assert updated.notes == "some notes"
+    end
+
+    test "create_transaction/1 with notes" do
+      account = CashLens.AccountsFixtures.account_fixture()
+
+      valid_attrs = %{
+        date: ~D[2026-02-23],
+        description: "some description",
+        amount: "120.5",
+        account_id: account.id,
+        notes: "initial notes"
+      }
+
+      assert {:ok, %Transaction{} = transaction} = Transactions.create_transaction(valid_attrs)
+      assert transaction.notes == "initial notes"
+    end
+  end
+
   describe "list_transactions/1" do
     test "filters by search (description)" do
       transaction_fixture(%{description: "Supermarket shopping"})

@@ -60,6 +60,13 @@ defmodule CashLensWeb.TransactionLive.Form do
           prompt="Pending"
         />
 
+        <.input
+          field={f[:notes]}
+          type="textarea"
+          label="Notes"
+          placeholder="Add extra details here..."
+        />
+
         <div class="pt-4">
           <.button phx-disable-with="Saving..." variant="primary" class="w-full">
             Save Transaction

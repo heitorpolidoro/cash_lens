@@ -13,6 +13,7 @@ defmodule CashLens.Transactions.Transaction do
     field :reimbursement_status, :string
     field :reimbursement_link_key, Ecto.UUID
     field :fingerprint, :string
+    field :notes, :string
     belongs_to :account, CashLens.Accounts.Account
     belongs_to :category, CashLens.Categories.Category
 
@@ -32,7 +33,8 @@ defmodule CashLens.Transactions.Transaction do
       :account_id,
       :transfer_key,
       :reimbursement_status,
-      :reimbursement_link_key
+      :reimbursement_link_key,
+      :notes
     ])
     |> validate_required([:date, :description, :amount, :account_id])
     |> generate_fingerprint()
