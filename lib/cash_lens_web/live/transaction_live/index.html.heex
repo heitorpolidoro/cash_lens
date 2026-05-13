@@ -347,7 +347,7 @@
                   </span>
                 </div>
               </td>
-              <td class="py-2 px-4 group/desc">
+              <td class="py-2 px-4">
                 <div class="flex flex-col">
                   <div class="flex items-center gap-1">
                     <div
@@ -356,15 +356,6 @@
                     >
                       {transaction.description}
                     </div>
-                    <button
-                      type="button"
-                      phx-click="open_notes"
-                      phx-value-id={transaction.id}
-                      class="opacity-0 group-hover/desc:opacity-100 transition-opacity text-primary hover:text-primary-focus"
-                      title="Add/Edit Notes"
-                    >
-                      <.icon name="hero-pencil-square" class="size-3" />
-                    </button>
                   </div>
                   <div
                     :if={transaction.notes}
@@ -542,6 +533,16 @@
                     aria-label="Delete"
                   >
                     <.icon name="hero-trash" class="size-3" />
+                  </button>
+                  <button
+                    type="button"
+                    phx-click="open_notes"
+                    phx-value-id={transaction.id}
+                    class="btn btn-ghost btn-xs text-primary px-1"
+                    title="Add/Edit Notes"
+                    aria-label="Notes"
+                  >
+                    <.icon name="hero-document-text" class="size-3" />
                   </button>
                 </div>
               </td>
