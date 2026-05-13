@@ -50,6 +50,14 @@ const liveSocket = new LiveSocket("/live", Socket, {
         const txId = this.el.getAttribute('data-transaction-id');
         const categories = JSON.parse(this.el.getAttribute('data-categories'));
 
+        const positionDropdown = () => {
+          const rect = input.getBoundingClientRect();
+          dropdown.style.top = `${rect.bottom + 4}px`;
+          dropdown.style.left = `${rect.left}px`;
+          dropdown.style.width = `${rect.width}px`;
+          dropdown.style.minWidth = "250px";
+        };
+
         const renderOptions = (filter = "") => {
           const newOpt = list.querySelector('.new-option');
           list.innerHTML = '';
@@ -79,12 +87,23 @@ const liveSocket = new LiveSocket("/live", Socket, {
             list.appendChild(li);
           });
         };
-        input.addEventListener("focus", () => { dropdown.classList.remove('hidden'); renderOptions(input.value); });
-        input.addEventListener("input", (e) => { renderOptions(e.target.value); });
+        input.addEventListener("focus", () => { 
+          dropdown.classList.remove('hidden'); 
+          positionDropdown();
+          renderOptions(input.value); 
+        });
+        input.addEventListener("input", (e) => { 
+          renderOptions(e.target.value); 
+          positionDropdown();
+        });
         
+        // Reposition on scroll/resize
+        window.addEventListener('scroll', positionDropdown, true);
+        window.addEventListener('resize', positionDropdown);
+
         // Remove existing listener if any to avoid duplicates
         if (this.clickHandler) document.removeEventListener("click", this.clickHandler);
-        this.clickHandler = (e) => { if (!this.el.contains(e.target)) { dropdown.classList.add('hidden'); input.value = ""; } };
+        this.clickHandler = (e) => { if (!this.el.contains(e.target) && !dropdown.contains(e.target)) { dropdown.classList.add('hidden'); input.value = ""; } };
         document.addEventListener("click", this.clickHandler);
       }
     },

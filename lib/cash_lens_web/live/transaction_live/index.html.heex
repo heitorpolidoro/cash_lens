@@ -209,7 +209,7 @@
   
 <!-- Unified Table with Filters -->
   <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm">
-    <div class="overflow-x-auto min-h-[400px]">
+    <div class="overflow-x-auto">
       <form id="transaction-filters" phx-change="apply_filters" class="m-0 p-0">
         <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
         <input type="hidden" name="type" value={@filters["type"]} />
@@ -416,7 +416,7 @@
                         <.icon name="hero-x-mark" class="size-3" />
                       </button>
                     </div>
-                    <div class="dropdown-content hidden absolute z-[100] mt-1 w-64 bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
+                    <div class="dropdown-content hidden fixed z-[100] mt-1 w-64 bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
                       <ul class="menu menu-compact p-1">
                         <li class="new-option border-b border-base-200 mb-1">
                           <button
