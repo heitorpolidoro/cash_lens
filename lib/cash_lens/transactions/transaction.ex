@@ -23,6 +23,7 @@ defmodule CashLens.Transactions.Transaction do
   def changeset(transaction, attrs) do
     transaction
     |> cast(attrs, [
+      :id,
       :date,
       :time,
       :description,

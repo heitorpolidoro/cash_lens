@@ -125,7 +125,11 @@ defmodule CashLens.Transactions.TransferMatcher do
         # Note: Twin's fingerprint will naturally be different because account_id is different
         %Transaction{}
         |> Transaction.changeset(twin_params)
-        |> Repo.insert(on_conflict: :nothing, conflict_target: :fingerprint)
+        |> Repo.insert(
+          on_conflict: {:replace, [:updated_at]},
+          conflict_target: :fingerprint,
+          returning: true
+        )
       end)
 
       {:ok, :auto_matched}

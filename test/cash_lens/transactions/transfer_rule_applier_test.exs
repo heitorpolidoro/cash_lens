@@ -68,6 +68,43 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
       assert updated_mirror.transfer_key == updated_tx.transfer_key
     end
 
+    test "handles conflict gracefully when mirror already exists" do
+      create_transfer_category()
+      source = account_fixture()
+      destination = account_fixture()
+      create_rule(source.id, destination.id, ["salary payment"])
+
+      # Pre-create the mirror
+      existing_mirror =
+        insert_raw_transaction(%{
+          account_id: destination.id,
+          description: "Salary Payment",
+          amount: "-1000.00",
+          date: ~D[2026-01-15]
+        })
+
+      tx =
+        insert_raw_transaction(%{
+          account_id: source.id,
+          description: "Salary Payment",
+          amount: "1000.00",
+          date: ~D[2026-01-15]
+        })
+
+      # Should NOT crash and should return [] because it's not a NEW transaction
+      mirrors = TransferRuleApplier.apply_rules([tx])
+
+      assert mirrors == []
+
+      # Should be linked
+      updated_tx = Repo.get!(Transaction, tx.id)
+      assert updated_tx.transfer_key != nil
+
+      # Mirror should share the same transfer_key
+      updated_mirror = Repo.get!(Transaction, existing_mirror.id)
+      assert updated_mirror.transfer_key == updated_tx.transfer_key
+    end
+
     test "matching is case-insensitive" do
       create_transfer_category()
       source = account_fixture()
