@@ -79,6 +79,13 @@ defmodule CashLens.Installments do
   end
 
   @doc """
+  Returns an `%Ecto.Changeset{}` for tracking installment group changes.
+  """
+  def change_installment_group(%InstallmentGroup{} = group, attrs \\ %{}) do
+    InstallmentGroup.changeset(group, attrs)
+  end
+
+  @doc """
   Finds a matching installment group for a given description.
   """
   def find_matching_group(nil), do: nil

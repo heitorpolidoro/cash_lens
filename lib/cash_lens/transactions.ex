@@ -157,7 +157,7 @@ defmodule CashLens.Transactions do
 
   defp join_associations(query) do
     query
-    |> preload([:category, :account])
+    |> preload([:category, :account, :installment_group])
   end
 
   defp filter_by_date(query, nil), do: query
@@ -219,7 +219,7 @@ defmodule CashLens.Transactions do
       from t in Transaction,
         order_by: [desc: t.date, desc: t.inserted_at],
         limit: ^limit,
-        preload: [:category, :account]
+        preload: [:category, :account, :installment_group]
     )
   end
 
@@ -394,7 +394,8 @@ defmodule CashLens.Transactions do
   @doc """
   Gets a single transaction.
   """
-  def get_transaction!(id), do: Repo.get!(Transaction, id) |> Repo.preload([:category, :account])
+  def get_transaction!(id),
+    do: Repo.get!(Transaction, id) |> Repo.preload([:category, :account, :installment_group])
 
   @doc """
   Creates a transaction.

@@ -9,7 +9,10 @@ defmodule CashLensWeb.InstallmentLive.Index do
      socket
      |> assign(:groups, list_groups())
      |> assign(:show_modal, false)
-     |> assign(:form, to_form(Installments.create_installment_group()))}
+     |> assign(
+       :form,
+       to_form(Installments.change_installment_group(%Installments.InstallmentGroup{}))
+     )}
   end
 
   @impl true
