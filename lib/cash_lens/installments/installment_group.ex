@@ -19,7 +19,7 @@ defmodule CashLens.Installments.InstallmentGroup do
   def changeset(installment_group, attrs) do
     installment_group
     |> cast(attrs, [:description_pattern, :total_amount, :installments, :start_date])
-    |> validate_required([:description_pattern, :total_amount, :installments, :start_date])
+    |> validate_required([:description_pattern, :installments, :start_date])
     |> validate_number(:installments, greater_than: 1)
     |> unique_constraint(:description_pattern)
   end

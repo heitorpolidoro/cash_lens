@@ -201,7 +201,11 @@ defmodule CashLensWeb.PageController do
 
           if months_since_start >= 0 and months_since_start < group.installments do
             # It's an active month for this group
-            installment_val = Decimal.to_float(group.total_amount) / group.installments
+            installment_val =
+              if group.total_amount,
+                do: Decimal.to_float(group.total_amount) / group.installments,
+                else: 0.0
+
             sum + installment_val
           else
             sum

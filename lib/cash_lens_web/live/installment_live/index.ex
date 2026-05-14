@@ -75,7 +75,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
                     {group.description_pattern}
                   </h2>
                   <p class="text-2xl font-black text-primary">
-                    {format_currency(group.total_amount)}
+                    {if group.total_amount, do: format_currency(group.total_amount), else: "---"}
                   </p>
                 </div>
                 <button
@@ -129,8 +129,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
                 field={@form[:total_amount]}
                 type="number"
                 step="0.01"
-                label="Total Amount"
-                required
+                label="Total Amount (optional)"
               />
               <.input field={@form[:installments]} type="number" label="Total Installments" required />
             </div>
