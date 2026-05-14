@@ -9,26 +9,22 @@ defmodule CashLensWeb.PageController do
     # Get latest balances per account
     latest_balances = Accounting.list_latest_balances()
 
-    # Get historical data for the chart
-    historical_balances = Accounting.get_historical_balances(limit: 12)
-    historical_summary = Transactions.get_historical_summary(limit: 12)
+    # Get historical data for the chart (ensure we have 12 months of history)
+    today = Date.utc_today()
+    {start_m, start_y} = calculate_start_period(today, 11)
+
+    historical_balances = Accounting.get_historical_balances(limit: 24)
+    historical_summary = Transactions.get_historical_summary(limit: 24)
 
     historical =
-      Enum.map(historical_balances, fn hb ->
-        summary =
-          Enum.find(historical_summary, &(&1.year == hb.year and &1.month == hb.month)) ||
-            %{income: Decimal.new("0"), expenses: Decimal.new("0"), balance: Decimal.new("0")}
-
-        %{
-          year: hb.year,
-          month: hb.month,
-          final_balance: Decimal.to_float(hb.final_balance),
-          income: Decimal.to_float(summary.income),
-          expenses: Decimal.to_float(summary.expenses),
-          balance: Decimal.to_float(summary.balance),
-          is_projection: false
-        }
-      end)
+      generate_historical_series(
+        start_y,
+        start_m,
+        today.year,
+        today.month,
+        historical_balances,
+        historical_summary
+      )
 
     # 1. Calculate Averages (past 12 months)
     {avg_income, avg_expenses} = calculate_averages(historical_summary)
@@ -126,6 +122,52 @@ defmodule CashLensWeb.PageController do
     }
 
     months[month] || month
+  end
+
+  defp calculate_start_period(date, months_back) do
+    m = date.month - months_back
+    if m <= 0, do: {m + 12, date.year - 1}, else: {m, date.year}
+  end
+
+  defp generate_historical_series(start_y, start_m, _end_y, _end_m, balances, summaries) do
+    # Generate a list of {m, y} pairs for the range (exactly 12 months)
+    periods =
+      Enum.reduce(0..11, [], fn i, acc ->
+        m = start_m + i
+        y = start_y + div(m - 1, 12)
+        m = rem(m - 1, 12) + 1
+        acc ++ [{m, y}]
+      end)
+
+    Enum.map(periods, fn {m, y} ->
+      hb = Enum.find(balances, &(&1.year == y and &1.month == m))
+
+      summary =
+        Enum.find(summaries, &(&1.year == y and &1.month == m)) ||
+          %{income: Decimal.new("0"), expenses: Decimal.new("0"), balance: Decimal.new("0")}
+
+      # Use previous month's final balance if current month has no data yet
+      final_val = if hb, do: Decimal.to_float(hb.final_balance), else: 0.0
+
+      %{
+        year: y,
+        month: m,
+        final_balance: final_val,
+        income: Decimal.to_float(summary.income),
+        expenses: Decimal.to_float(summary.expenses),
+        balance: Decimal.to_float(summary.balance),
+        is_projection: false
+      }
+    end)
+    # Fill in missing final_balances by carrying forward
+    |> Enum.reduce([], fn item, acc ->
+      if item.final_balance == 0.0 and acc != [] do
+        last = List.last(acc)
+        acc ++ [%{item | final_balance: last.final_balance}]
+      else
+        acc ++ [item]
+      end
+    end)
   end
 
   defp calculate_averages([]), do: {0.0, 0.0}
