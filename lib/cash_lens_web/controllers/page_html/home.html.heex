@@ -69,6 +69,44 @@
       </div>
     </div>
   </div>
+  
+<!-- Histórico Mensal -->
+  <div class="card bg-base-100 shadow-sm border border-base-300">
+    <div class="card-body p-6">
+      <h2 class="card-title text-base-content mb-4 uppercase text-xs opacity-50 font-black">
+        Histórico Mensal
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="table table-xs w-full">
+          <thead>
+            <tr>
+              <th>Mês</th>
+              <th class="text-right">Entradas</th>
+              <th class="text-right">Saídas</th>
+              <th class="text-right">Saldo Final</th>
+            </tr>
+          </thead>
+          <tbody>
+            <%= for item <- Enum.reject(@historical, & &1.is_projection) do %>
+              <tr class="hover">
+                <td class="font-medium">
+                  <.link
+                    navigate={~p"/months/#{item.year}/#{item.month}"}
+                    class="hover:underline font-bold"
+                  >
+                    {month_label(item.month)} {item.year}
+                  </.link>
+                </td>
+                <td class="text-right text-success">{format_currency(item.income)}</td>
+                <td class="text-right text-error">{format_currency(item.expenses)}</td>
+                <td class="text-right font-black">{format_currency(item.final_balance)}</td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
     <!-- Gastos Fixos (Gráfico) -->

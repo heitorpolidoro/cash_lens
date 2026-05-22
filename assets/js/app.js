@@ -4,6 +4,7 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/cash_lens"
 import Chart from 'chart.js/auto';
 import DOMPurify from 'dompurify';
+import flatpickr from 'flatpickr';
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -58,16 +59,46 @@ const liveSocket = new LiveSocket("/live", Socket, {
           dropdown.style.minWidth = "250px";
         };
 
+        const targetInput = this.el.getAttribute('data-target')
+          ? document.querySelector(this.el.getAttribute('data-target'))
+          : null;
+
+        const selectCategory = (id, name) => {
+          if (targetInput) {
+            targetInput.value = id;
+            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+          } else {
+            this.pushEvent("update_category", { transaction_id: txId, category_id: id });
+          }
+          dropdown.classList.add('hidden');
+          input.value = "";
+          input.placeholder = name;
+        };
+
+        const clearCategory = () => {
+          if (targetInput) {
+            targetInput.value = "";
+            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          input.placeholder = txId ? "Pending" : "None";
+          input.value = "";
+        };
+
         const renderOptions = (filter = "") => {
           const newOpt = list.querySelector('.new-option');
           list.innerHTML = '';
           list.appendChild(newOpt);
-          const newLabel = filter ? `+ Criar "${filter}"...` : "+ Nova Categoria...";
-          newOpt.querySelector('span').innerText = newLabel;
-          newOpt.onclick = () => {
-            this.pushEvent("open_quick_category", { name: filter, id: txId });
-            dropdown.classList.add('hidden');
-          };
+          if (txId) {
+            const newLabel = filter ? `+ Criar "${filter}"...` : "+ Nova Categoria...";
+            newOpt.querySelector('span').innerText = newLabel;
+            newOpt.onclick = () => {
+              this.pushEvent("open_quick_category", { name: filter, id: txId });
+              dropdown.classList.add('hidden');
+            };
+            newOpt.classList.remove('hidden');
+          } else {
+            newOpt.classList.add('hidden');
+          }
           const filtered = categories
             .filter(c => c.name.toLowerCase().includes(filter.toLowerCase()))
             .sort((a, b) => a.name.localeCompare(b.name));
@@ -77,33 +108,47 @@ const liveSocket = new LiveSocket("/live", Socket, {
             btn.type = "button";
             btn.innerText = cat.name;
             btn.className = "text-[10px] py-1 font-medium";
-            btn.onclick = () => {
-              this.pushEvent("update_category", { transaction_id: txId, category_id: cat.id });
-              dropdown.classList.add('hidden');
-              input.value = "";
-              input.placeholder = cat.name;
-            };
+            btn.onclick = () => selectCategory(cat.id, cat.name);
             li.appendChild(btn);
             list.appendChild(li);
           });
         };
-        input.addEventListener("focus", () => { 
-          dropdown.classList.remove('hidden'); 
-          positionDropdown();
-          renderOptions(input.value); 
-        });
-        input.addEventListener("input", (e) => { 
-          renderOptions(e.target.value); 
-          positionDropdown();
-        });
-        
-        // Reposition on scroll/resize
-        window.addEventListener('scroll', positionDropdown, true);
-        window.addEventListener('resize', positionDropdown);
 
-        // Remove existing listener if any to avoid duplicates
+        // Clean up all previous listeners before re-attaching (prevents accumulation on updated())
+        if (this.focusHandler) input.removeEventListener("focus", this.focusHandler);
+        if (this.inputHandler) input.removeEventListener("input", this.inputHandler);
+        if (this.scrollHandler) window.removeEventListener('scroll', this.scrollHandler, true);
+        if (this.resizeHandler) window.removeEventListener('resize', this.resizeHandler);
         if (this.clickHandler) document.removeEventListener("click", this.clickHandler);
-        this.clickHandler = (e) => { if (!this.el.contains(e.target) && !dropdown.contains(e.target)) { dropdown.classList.add('hidden'); input.value = ""; } };
+
+        this.focusHandler = () => {
+          dropdown.classList.remove('hidden');
+          positionDropdown();
+          renderOptions(input.value);
+        };
+
+        this.inputHandler = (e) => {
+          // stopPropagation prevents the input event from bubbling to the parent
+          // phx-change="apply_filters" form, which would trigger a stream reset
+          // and close the dropdown on every keystroke
+          e.stopPropagation();
+          renderOptions(e.target.value);
+          positionDropdown();
+        };
+
+        this.scrollHandler = positionDropdown;
+        this.resizeHandler = positionDropdown;
+        this.clickHandler = (e) => {
+          if (!this.el.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+            input.value = "";
+          }
+        };
+
+        input.addEventListener("focus", this.focusHandler);
+        input.addEventListener("input", this.inputHandler);
+        window.addEventListener('scroll', this.scrollHandler, true);
+        window.addEventListener('resize', this.resizeHandler);
         document.addEventListener("click", this.clickHandler);
       }
     },
@@ -115,6 +160,47 @@ const liveSocket = new LiveSocket("/live", Socket, {
         const raw = this.el.getAttribute("data-content") || "";
         this.el.innerHTML = DOMPurify.sanitize(raw);
       }
+    },
+    DateRangePicker: {
+      mounted() {
+        const input = this.el.querySelector('input');
+        const clearBtn = this.el.querySelector('.date-clear-btn');
+        // Prevent flatpickr's input change events from bubbling to phx-change forms
+        input.addEventListener('change', e => e.stopPropagation());
+        this.fp = flatpickr(input, {
+          mode: 'range',
+          dateFormat: 'Y-m-d',
+          locale: { rangeSeparator: ' → ' },
+          onChange: (selectedDates) => {
+            if (selectedDates.length === 2) {
+              const fmt = d => d.toISOString().slice(0, 10);
+              clearBtn.classList.remove('hidden');
+              this.pushEvent('set_date_range', {
+                date_from: fmt(selectedDates[0]),
+                date_to: fmt(selectedDates[1])
+              });
+            } else if (selectedDates.length === 0) {
+              clearBtn.classList.add('hidden');
+              this.pushEvent('set_date_range', { date_from: '', date_to: '' });
+            }
+          }
+        });
+        clearBtn.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          this.fp.clear();
+        });
+      },
+      updated() {
+        const from = this.el.getAttribute('data-from');
+        const to = this.el.getAttribute('data-to');
+        if (from && to) {
+          this.fp.setDate([from, to], false);
+        } else if (!from && !to && this.fp.selectedDates.length === 0) {
+          this.fp.clear(false);
+        }
+      },
+      destroyed() { this.fp.destroy(); }
     }
   }
 })

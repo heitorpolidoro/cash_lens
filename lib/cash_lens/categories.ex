@@ -17,10 +17,19 @@ defmodule CashLens.Categories do
       [%Category{}, ...]
 
   """
-  def list_categories do
-    categories =
-      from(c in Category, order_by: [asc: c.slug])
-      |> Repo.all()
+  def list_categories(opts \\ []) do
+    name_filter = Keyword.get(opts, :name)
+
+    query = from(c in Category, order_by: [asc: c.slug])
+
+    query =
+      if name_filter && name_filter != "" do
+        from(c in query, where: ilike(c.name, ^"%#{name_filter}%"))
+      else
+        query
+      end
+
+    categories = Repo.all(query)
 
     map = Map.new(categories, &{&1.id, &1})
 

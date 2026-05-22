@@ -4,7 +4,7 @@ defmodule CashLensWeb.TelemetryTest do
   alias CashLensWeb.Telemetry, as: AppTelemetry
 
   test "metrics/0 returns a non-empty list of telemetry metrics" do
-    assert AppTelemetry.metrics() != []
+    assert [_ | _] = AppTelemetry.metrics()
   end
 
   test "reporters/0 returns ConsoleReporter when start_console_reporter is true" do

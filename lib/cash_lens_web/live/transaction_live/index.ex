@@ -3,6 +3,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   alias CashLens.Accounts
   alias CashLens.Categories
+  alias CashLens.Categories.Category
   alias CashLens.Transactions
 
   @impl true
@@ -27,9 +28,16 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:reimbursement_search, "")
      |> assign(:pending_reimbursements, [])
      |> assign(:bulk_confirmation, nil)
+     |> assign(:bulk_selected_ids, MapSet.new())
      |> assign(:pending_transaction_id, nil)
      |> assign(:import_account_id, nil)
-     |> assign(:category_form, to_form(%{"name" => ""}))
+     |> assign(
+       :category_form,
+       to_form(Categories.change_category(%Category{default_reimbursable: false}))
+     )
+     |> assign(:quick_category_parent, nil)
+     |> assign(:auto_categorizing, false)
+     |> assign(:filtered_count, nil)
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, accounts)
      |> assign(:import_accounts, Enum.filter(accounts, & &1.accepts_import))
@@ -39,6 +47,8 @@ defmodule CashLensWeb.TransactionLive.Index do
        "account_id" => "",
        "category_id" => "",
        "date" => "",
+       "date_from" => "",
+       "date_to" => "",
        "amount" => "",
        "sort_order" => "desc",
        "type" => "",
@@ -217,12 +227,14 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("open_quick_category", %{"name" => name, "id" => tx_id}, socket) do
     suggested_name = name |> String.split(" ") |> Enum.map_join(" ", &String.capitalize/1)
+    new_category = %Category{name: suggested_name, default_reimbursable: false}
 
     {:noreply,
      socket
      |> assign(:show_quick_category_modal, true)
      |> assign(:pending_transaction_id, tx_id)
-     |> assign(:category_form, to_form(%{"name" => suggested_name}))}
+     |> assign(:quick_category_parent, nil)
+     |> assign(:category_form, to_form(Categories.change_category(new_category)))}
   end
 
   @impl true
@@ -239,7 +251,8 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:ai_result, nil)
      |> assign(:ai_loading, false)
      |> assign(:confirm_modal, nil)
-     |> assign(:bulk_confirmation, nil)}
+     |> assign(:bulk_confirmation, nil)
+     |> assign(:bulk_selected_ids, MapSet.new())}
   end
 
   @impl true
@@ -268,14 +281,17 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("apply_bulk_category", _params, socket) do
     %{items: items, category_id: category_id} = socket.assigns.bulk_confirmation
+    selected_ids = socket.assigns.bulk_selected_ids
 
-    Enum.each(items, fn item -> Transactions.update_transaction_category(item.id, category_id) end)
+    selected_items = Enum.filter(items, &MapSet.member?(selected_ids, &1.id))
+    Enum.each(selected_items, &Transactions.update_transaction_category(&1.id, category_id))
 
     {:noreply,
      socket
      |> assign(:bulk_confirmation, nil)
+     |> assign(:bulk_selected_ids, MapSet.new())
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:info, "Bulk categorized!")
+     |> put_flash(:info, "#{length(selected_items)} transactions categorized!")
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -284,18 +300,34 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_event("auto_categorize_all", _params, socket) do
-    Transactions.reapply_auto_categorization()
+  def handle_event("toggle_bulk_tx", %{"id" => id}, socket) do
+    selected = socket.assigns.bulk_selected_ids
 
-    {:noreply,
-     socket
-     |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:info, "Rules applied!")
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
+    selected =
+      if MapSet.member?(selected, id),
+        do: MapSet.delete(selected, id),
+        else: MapSet.put(selected, id)
+
+    {:noreply, assign(socket, :bulk_selected_ids, selected)}
+  end
+
+  @impl true
+  def handle_event("toggle_bulk_all", _params, socket) do
+    items = socket.assigns.bulk_confirmation.items
+    selected = socket.assigns.bulk_selected_ids
+
+    new_selected =
+      if MapSet.size(selected) == length(items),
+        do: MapSet.new(),
+        else: MapSet.new(items, & &1.id)
+
+    {:noreply, assign(socket, :bulk_selected_ids, new_selected)}
+  end
+
+  @impl true
+  def handle_event("auto_categorize_all", _params, socket) do
+    send(self(), :do_auto_categorize)
+    {:noreply, assign(socket, :auto_categorizing, true)}
   end
 
   @impl true
@@ -332,9 +364,22 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_event("clear_filters", _params, socket) do
-    today = Date.utc_today()
+  def handle_event("clear_filter", %{"field" => field}, socket) do
+    new_filters = Map.put(socket.assigns.filters, field, "")
 
+    {:noreply,
+     socket
+     |> assign(:filters, new_filters)
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
+     |> calculate_summary()
+     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
+       reset: true
+     )}
+  end
+
+  @impl true
+  def handle_event("clear_filters", _params, socket) do
     filters = %{
       "search" => "",
       "account_id" => "",
@@ -343,9 +388,11 @@ defmodule CashLensWeb.TransactionLive.Index do
       "amount" => "",
       "sort_order" => "desc",
       "type" => "",
-      "month" => "#{today.month}",
-      "year" => "#{today.year}",
-      "unmatched_transfers" => ""
+      "month" => "",
+      "year" => "",
+      "unmatched_transfers" => "",
+      "date_from" => "",
+      "date_to" => ""
     }
 
     {:noreply,
@@ -360,9 +407,33 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
+  def handle_event("set_date_range", %{"date_from" => from, "date_to" => to}, socket) do
+    new_filters =
+      socket.assigns.filters
+      |> Map.put("date_from", from)
+      |> Map.put("date_to", to)
+      |> Map.put("date", "")
+
+    {:noreply,
+     socket
+     |> assign(:filters, new_filters)
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
+     |> calculate_summary()
+     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
+       reset: true
+     )}
+  end
+
+  @impl true
   def handle_event("toggle_unmatched", _params, socket) do
-    new_val = if socket.assigns.filters["unmatched_transfers"] == "true", do: "", else: "true"
-    new_filters = Map.put(socket.assigns.filters, "unmatched_transfers", new_val)
+    enabling = socket.assigns.filters["unmatched_transfers"] != "true"
+
+    new_filters =
+      socket.assigns.filters
+      |> Map.put("unmatched_transfers", if(enabling, do: "true", else: ""))
+      |> Map.put("type", "")
+      |> Map.put("category_id", "")
 
     {:noreply,
      socket
@@ -441,8 +512,14 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("toggle_pending", _params, socket) do
-    new_category_id = if socket.assigns.filters["category_id"] == "nil", do: "", else: "nil"
-    new_filters = Map.put(socket.assigns.filters, "category_id", new_category_id)
+    enabling = socket.assigns.filters["category_id"] != "nil"
+
+    new_filters =
+      socket.assigns.filters
+      |> Map.put("category_id", if(enabling, do: "nil", else: ""))
+      |> Map.put("type", "")
+      |> Map.put("unmatched_transfers", "")
+      |> Map.put("sort_order", if(enabling, do: "asc", else: "desc"))
 
     {:noreply,
      socket
@@ -458,7 +535,12 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("toggle_type", %{"type" => type}, socket) do
     new_type = if socket.assigns.filters["type"] == type, do: "", else: type
-    new_filters = Map.put(socket.assigns.filters, "type", new_type)
+
+    new_filters =
+      socket.assigns.filters
+      |> Map.put("type", new_type)
+      |> Map.put("category_id", "")
+      |> Map.put("unmatched_transfers", "")
 
     {:noreply,
      socket
@@ -523,6 +605,21 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
+  def handle_info(:do_auto_categorize, socket) do
+    Transactions.reapply_auto_categorization()
+
+    {:noreply,
+     socket
+     |> assign(:auto_categorizing, false)
+     |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> put_flash(:info, "Rules applied!")
+     |> stream(
+       :transactions,
+       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
+       reset: true
+     )}
+  end
+
   def handle_info(:reimbursement_linked, socket) do
     {:noreply,
      socket
@@ -569,6 +666,41 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_info(:close_import_modal, socket) do
     {:noreply, assign(socket, :show_import_modal, false)}
+  end
+
+  @impl true
+  def handle_info({:import_file_start, index, total, filename}, socket) do
+    send_update(CashLensWeb.TransactionLive.ImportModalComponent,
+      id: "import-modal",
+      progress_update: %{
+        file_index: index,
+        file_total: total,
+        current_file: filename,
+        current_file_lines: :parsing
+      }
+    )
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:import_file_parsed, n_lines}, socket) do
+    send_update(CashLensWeb.TransactionLive.ImportModalComponent,
+      id: "import-modal",
+      progress_update: %{current_file_lines: n_lines}
+    )
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:import_file_done, cumulative_lines}, socket) do
+    send_update(CashLensWeb.TransactionLive.ImportModalComponent,
+      id: "import-modal",
+      progress_update: %{lines_done: cumulative_lines, current_file_lines: nil}
+    )
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -634,12 +766,16 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     socket =
       if Enum.any?(bulk_items) do
-        assign(socket, :bulk_confirmation, %{
+        selected_ids = bulk_items |> Enum.filter(&is_nil(&1.category_id)) |> MapSet.new(& &1.id)
+
+        socket
+        |> assign(:bulk_confirmation, %{
           items: bulk_items,
           category_id: category.id,
           category_name: category.name,
           description: tx.description
         })
+        |> assign(:bulk_selected_ids, selected_ids)
       else
         socket
       end
@@ -688,18 +824,21 @@ defmodule CashLensWeb.TransactionLive.Index do
       socket
     else
       bulk_items =
-        Transactions.list_transactions(%{"search" => tx.description})
+        Transactions.list_transactions_by_description(tx.description)
         |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id))
 
       if Enum.any?(bulk_items) do
         cat = Enum.find(socket.assigns.categories, &(&1.id == category_id))
+        selected_ids = bulk_items |> Enum.filter(&is_nil(&1.category_id)) |> MapSet.new(& &1.id)
 
-        assign(socket, :bulk_confirmation, %{
+        socket
+        |> assign(:bulk_confirmation, %{
           items: bulk_items,
           category_id: category_id,
           category_name: cat.name,
           description: tx.description
         })
+        |> assign(:bulk_selected_ids, selected_ids)
       else
         socket
       end
@@ -783,9 +922,17 @@ defmodule CashLensWeb.TransactionLive.Index do
     mapped = map_filters(socket.assigns.filters)
 
     unmatched_count =
-      Transactions.list_transactions(Map.put(mapped, "unmatched_transfers", "true")) |> length()
+      Transactions.list_transactions(%{"unmatched_transfers" => "true"}) |> length()
 
-    assign(socket, :unmatched_transfers_count, unmatched_count)
+    active_filter? =
+      mapped["type"] != "" or mapped["category_id"] == "nil" or
+        mapped["unmatched_transfers"] == "true"
+
+    filtered_count = if active_filter?, do: Transactions.count_transactions(mapped), else: nil
+
+    socket
+    |> assign(:unmatched_transfers_count, unmatched_count)
+    |> assign(:filtered_count, filtered_count)
   end
 
   defp map_filters(filters) do
@@ -794,6 +941,8 @@ defmodule CashLensWeb.TransactionLive.Index do
       "account_id" => filters["account_id"],
       "category_id" => filters["category_id"],
       "date" => filters["date"],
+      "date_from" => filters["date_from"],
+      "date_to" => filters["date_to"],
       "amount" => filters["amount"],
       "sort_order" => filters["sort_order"],
       "type" => filters["type"],

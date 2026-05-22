@@ -55,6 +55,14 @@ defmodule CashLens.Transactions do
     Repo.all(from b in BulkIgnorePattern, order_by: [asc: b.pattern])
   end
 
+  def list_transactions_by_description(description) do
+    Repo.all(
+      from t in Transaction,
+        where: t.description == ^description,
+        order_by: [desc: t.date]
+    )
+  end
+
   def create_bulk_ignore_pattern(attrs \\ %{}) do
     %BulkIgnorePattern{}
     |> BulkIgnorePattern.changeset(attrs)
@@ -74,6 +82,28 @@ defmodule CashLens.Transactions do
   @doc """
   Returns the list of transactions based on filters and pagination.
   """
+  def count_transactions(filters \\ %{}) do
+    Transaction
+    |> join_associations()
+    |> filter_by_account(filters["account_id"])
+    |> filter_by_category(filters["category_id"])
+    |> filter_by_description(filters["search"])
+    |> filter_by_date(filters["date"])
+    |> filter_by_date_range(filters["date_from"], filters["date_to"])
+    |> filter_by_month_year(
+      filters["month"],
+      filters["year"],
+      filters["category_id"],
+      filters["unmatched_transfers"]
+    )
+    |> filter_by_amount(filters["amount"])
+    |> filter_by_amount_range(filters["amount_min"], filters["amount_max"])
+    |> filter_by_type(filters["type"])
+    |> filter_by_reimbursement_status(filters["reimbursement_status"])
+    |> filter_unmatched_transfers(filters["unmatched_transfers"])
+    |> Repo.aggregate(:count)
+  end
+
   def list_transactions(filters \\ %{}, page \\ 1, page_size \\ 50) do
     offset = (page - 1) * page_size
     sort_order = String.to_existing_atom(filters["sort_order"] || "desc")
@@ -84,6 +114,7 @@ defmodule CashLens.Transactions do
     |> filter_by_category(filters["category_id"])
     |> filter_by_description(filters["search"])
     |> filter_by_date(filters["date"])
+    |> filter_by_date_range(filters["date_from"], filters["date_to"])
     |> filter_by_month_year(
       filters["month"],
       filters["year"],
@@ -164,6 +195,20 @@ defmodule CashLens.Transactions do
   defp filter_by_date(query, ""), do: query
   defp filter_by_date(query, date), do: where(query, date: ^date)
 
+  defp filter_by_date_range(query, "", _), do: query
+  defp filter_by_date_range(query, nil, _), do: query
+  defp filter_by_date_range(query, _, ""), do: query
+  defp filter_by_date_range(query, _, nil), do: query
+
+  defp filter_by_date_range(query, from, to) do
+    with {:ok, date_from} <- Date.from_iso8601(from),
+         {:ok, date_to} <- Date.from_iso8601(to) do
+      where(query, [t], t.date >= ^date_from and t.date <= ^date_to)
+    else
+      _ -> query
+    end
+  end
+
   defp filter_by_amount(query, nil), do: query
   defp filter_by_amount(query, ""), do: query
 
@@ -243,6 +288,39 @@ defmodule CashLens.Transactions do
       expenses: (result && result.expenses) || Decimal.new("0"),
       month: first_of_month
     }
+  end
+
+  @doc """
+  Returns spending broken down by top-level category for a given month/year.
+  Excludes transfers, initial values, and reimbursed transactions.
+  Returns list of maps: %{name: str, category_id: binary, type: str, total: Decimal}
+  sorted by total descending.
+  """
+  def get_month_category_breakdown(year, month) when is_integer(year) and is_integer(month) do
+    first = Date.new!(year, month, 1)
+    last = Date.end_of_month(first)
+
+    from(t in Transaction,
+      join: c in assoc(t, :category),
+      left_join: p in assoc(c, :parent),
+      where: t.amount < 0,
+      where: t.date >= ^first and t.date <= ^last,
+      where: c.slug not in ["initial_value", "transfer"],
+      where: is_nil(t.reimbursement_link_key),
+      group_by: [
+        fragment("COALESCE(?, ?)", p.name, c.name),
+        fragment("COALESCE(?, ?)", p.id, c.id),
+        c.type
+      ],
+      select: %{
+        name: fragment("COALESCE(?, ?)", p.name, c.name),
+        category_id: fragment("COALESCE(?, ?)", p.id, c.id),
+        type: c.type,
+        total: sum(fragment("ABS(?)", t.amount))
+      },
+      order_by: [desc: sum(fragment("ABS(?)", t.amount))]
+    )
+    |> Repo.all()
   end
 
   defp get_summary_period(_target_date, %{"month" => m, "year" => y})

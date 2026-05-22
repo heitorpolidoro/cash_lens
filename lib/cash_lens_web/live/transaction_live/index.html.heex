@@ -1,3 +1,11 @@
+<div
+  :if={@auto_categorizing}
+  class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-base-100/80 backdrop-blur-sm"
+>
+  <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
+  <p class="text-sm font-black uppercase tracking-widest opacity-60">Applying rules...</p>
+</div>
+
 <div class="py-6 space-y-8">
   <div :if={@filters["account_id"] != ""} class="mb-2">
     <.link
@@ -19,6 +27,99 @@
       end}
     </:subtitle>
     <:actions>
+      <div class="dropdown dropdown-end">
+        <button
+          tabindex="0"
+          class={[
+            "btn btn-sm",
+            if(@filtered_count != nil,
+              do: "btn-primary",
+              else: "btn-outline border-base-300"
+            )
+          ]}
+        >
+          <.icon name="hero-funnel" class="size-4" /> Filters
+          <span :if={@filtered_count != nil} class="badge badge-xs badge-warning ml-1">
+            {@filtered_count}
+          </span>
+        </button>
+        <ul
+          tabindex="0"
+          class="dropdown-content z-[1] p-3 shadow bg-base-100 rounded-box w-72 mt-2 border border-base-200 space-y-2"
+        >
+          <li class="text-[9px] font-black uppercase opacity-40 tracking-widest px-1">Type</li>
+          <li>
+            <div class="join w-full shadow-sm border border-base-300 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                phx-click="toggle_type"
+                phx-value-type="debit"
+                class={[
+                  "join-item btn btn-sm flex-1",
+                  if(@filters["type"] == "debit",
+                    do: "btn-error",
+                    else: "bg-base-100 border-none hover:bg-base-200"
+                  )
+                ]}
+              >
+                <.icon name="hero-arrow-trending-down" class="size-3.5 mr-1" /> Debits
+              </button>
+              <button
+                type="button"
+                phx-click="toggle_type"
+                phx-value-type="credit"
+                class={[
+                  "join-item btn btn-sm flex-1",
+                  if(@filters["type"] == "credit",
+                    do: "btn-success",
+                    else: "bg-base-100 border-none hover:bg-base-200"
+                  )
+                ]}
+              >
+                <.icon name="hero-arrow-trending-up" class="size-3.5 mr-1" /> Credits
+              </button>
+            </div>
+          </li>
+          <div class="divider my-1"></div>
+          <li class="text-[9px] font-black uppercase opacity-40 tracking-widest px-1">Status</li>
+          <li>
+            <button
+              type="button"
+              phx-click="toggle_pending"
+              class={[
+                "btn btn-sm w-full justify-start gap-2",
+                if(@filters["category_id"] == "nil",
+                  do: "btn-warning",
+                  else: "btn-ghost"
+                )
+              ]}
+            >
+              <.icon name="hero-exclamation-triangle" class="size-4" /> Pending
+              <span class="ml-auto badge badge-xs">
+                {@pending_count}
+              </span>
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              phx-click="toggle_unmatched"
+              class={[
+                "btn btn-sm w-full justify-start gap-2",
+                if(@filters["unmatched_transfers"] == "true",
+                  do: "btn-secondary",
+                  else: "btn-ghost"
+                )
+              ]}
+            >
+              <.icon name="hero-link-slash" class="size-4" /> Unmatched Transfer
+              <span class="ml-auto badge badge-xs">
+                {@unmatched_transfers_count}
+              </span>
+            </button>
+          </li>
+        </ul>
+      </div>
       <div class="dropdown dropdown-end">
         <button tabindex="0" class="btn btn-outline border-base-300 btn-sm">
           <.icon name="hero-ellipsis-vertical" class="size-4" /> Actions
@@ -67,145 +168,6 @@
       </div>
     </:actions>
   </.header>
-
-  <div class="flex items-center justify-between flex-wrap gap-4 bg-base-100 p-4 rounded-2xl border border-base-300 shadow-sm">
-    <div class="flex items-center gap-4 flex-wrap">
-      <div class="join shadow-sm border border-base-300">
-        <button
-          type="button"
-          phx-click="toggle_type"
-          phx-value-type="debit"
-          class={[
-            "join-item btn btn-sm px-4",
-            if(@filters["type"] == "debit",
-              do: "btn-error",
-              else: "bg-base-100 border-none hover:bg-base-200"
-            )
-          ]}
-        >
-          <.icon name="hero-arrow-trending-down" class="size-4 mr-1" /> Debits
-        </button>
-        <button
-          type="button"
-          phx-click="toggle_type"
-          phx-value-type="credit"
-          class={[
-            "join-item btn btn-sm px-4",
-            if(@filters["type"] == "credit",
-              do: "btn-success",
-              else: "bg-base-100 border-none hover:bg-base-200"
-            )
-          ]}
-        >
-          <.icon name="hero-arrow-trending-up" class="size-4 mr-1" /> Credits
-        </button>
-      </div>
-
-      <div class={[
-        "join shadow-sm border border-base-300 bg-base-100 transition-opacity",
-        (@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true") &&
-          "opacity-30 pointer-events-none grayscale"
-      ]}>
-        <button
-          type="button"
-          phx-click="prev_month"
-          class="join-item btn btn-sm btn-ghost px-2"
-          title="Previous Month"
-          disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}
-        >
-          <.icon name="hero-chevron-left" class="size-4" />
-        </button>
-
-        <form id="month-selector" phx-change="apply_filters" class="m-0 p-0 flex">
-          <input type="hidden" name="type" value={@filters["type"]} />
-          <input type="hidden" name="search" value={@filters["search"]} />
-
-          <input type="hidden" name="account_id" value={@filters["account_id"]} />
-          <input type="hidden" name="category_id" value={@filters["category_id"]} />
-          <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
-          <input type="hidden" name="unmatched_transfers" value={@filters["unmatched_transfers"]} />
-
-          <select
-            name="month"
-            class="join-item select select-xs h-8 bg-transparent border-none focus:ring-0 font-bold uppercase text-[10px]"
-            disabled={
-              @filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"
-            }
-          >
-            <option value="" selected={@filters["month"] == ""}>All Months</option>
-            <%= for {m_name, m_val} <- [{"Jan", 1}, {"Feb", 2}, {"Mar", 3}, {"Apr", 4}, {"May", 5}, {"Jun", 6}, {"Jul", 7}, {"Aug", 8}, {"Sep", 9}, {"Oct", 10}, {"Nov", 11}, {"Dec", 12}] do %>
-              <option value={m_val} selected={@filters["month"] == "#{m_val}"}>{m_name}</option>
-            <% end %>
-          </select>
-
-          <input
-            :if={@filters["month"] == ""}
-            type="hidden"
-            name="year"
-            value={@filters["year"] || Date.utc_today().year}
-          />
-
-          <div :if={@filters["month"] != ""} class="join-item flex items-center px-1 opacity-20">
-            /
-          </div>
-
-          <select
-            :if={@filters["month"] != ""}
-            name="year"
-            class="join-item select select-xs h-8 bg-transparent border-none focus:ring-0 font-bold uppercase text-[10px]"
-            disabled={
-              @filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"
-            }
-          >
-            <%= for y <- (Date.utc_today().year - 5)..(Date.utc_today().year + 1) do %>
-              <option value={y} selected={@filters["year"] == "#{y}"}>{y}</option>
-            <% end %>
-          </select>
-        </form>
-
-        <button
-          type="button"
-          phx-click="next_month"
-          class="join-item btn btn-sm btn-ghost px-2"
-          title="Next Month"
-          disabled={@filters["category_id"] == "nil" or @filters["unmatched_transfers"] == "true"}
-        >
-          <.icon name="hero-chevron-right" class="size-4" />
-        </button>
-      </div>
-    </div>
-
-    <div class="flex items-center gap-2">
-      <button
-        type="button"
-        phx-click="toggle_pending"
-        class={[
-          "btn btn-sm shadow-sm",
-          if(@filters["category_id"] == "nil",
-            do: "btn-warning",
-            else: "btn-outline border-base-300"
-          )
-        ]}
-      >
-        <.icon name="hero-exclamation-triangle" class="size-4 mr-1" /> Pending ({@pending_count})
-      </button>
-
-      <button
-        type="button"
-        phx-click="toggle_unmatched"
-        class={[
-          "btn btn-sm shadow-sm",
-          if(@filters["unmatched_transfers"] == "true",
-            do: "btn-secondary",
-            else: "btn-outline border-base-300"
-          )
-        ]}
-      >
-        <.icon name="hero-link-slash" class="size-4 mr-1" />
-        Unmatched Transfers ({@unmatched_transfers_count})
-      </button>
-    </div>
-  </div>
   
 <!-- Unified Table with Filters -->
   <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm">
@@ -213,8 +175,6 @@
       <form id="transaction-filters" phx-change="apply_filters" class="m-0 p-0">
         <input type="hidden" name="sort_order" value={@filters["sort_order"]} />
         <input type="hidden" name="type" value={@filters["type"]} />
-        <input type="hidden" name="month" value={@filters["month"]} />
-        <input type="hidden" name="year" value={@filters["year"]} />
         <input type="hidden" name="unmatched_transfers" value={@filters["unmatched_transfers"]} />
         <table class="table table-zebra w-full text-xs table-fixed">
           <thead class="bg-base-200/50">
@@ -239,79 +199,136 @@
                       />
                     </button>
                   </div>
-                  <input
-                    type="date"
-                    name="date"
-                    value={@filters["date"]}
-                    class="input input-bordered input-xs font-normal w-full"
-                  />
+                  <div
+                    id="date-range-picker"
+                    phx-hook="DateRangePicker"
+                    phx-update="ignore"
+                    data-from={@filters["date_from"]}
+                    data-to={@filters["date_to"]}
+                    class="relative"
+                  >
+                    <input
+                      type="text"
+                      readonly
+                      placeholder="All dates"
+                      class="input input-bordered input-xs font-normal w-full cursor-pointer pr-6"
+                    />
+                    <button
+                      type="button"
+                      class="date-clear-btn absolute right-1 top-1/2 -translate-y-1/2 hidden text-base-content/40 hover:text-error"
+                    >
+                      <.icon name="hero-x-mark" class="size-3" />
+                    </button>
+                  </div>
                 </div>
               </th>
               <th class="px-4">
                 <div class="flex flex-col gap-1">
                   <span>Description</span>
-                  <input
-                    type="text"
-                    name="search"
-                    value={@filters["search"]}
-                    placeholder="Search..."
-                    class="input input-bordered input-xs font-normal w-full"
-                    phx-debounce="300"
-                  />
+                  <div class="relative">
+                    <input
+                      type="text"
+                      name="search"
+                      value={@filters["search"]}
+                      placeholder="Search..."
+                      class="input input-bordered input-xs font-normal w-full pr-5"
+                      phx-debounce="300"
+                    />
+                    <button
+                      :if={@filters["search"] != ""}
+                      type="button"
+                      phx-click="clear_filter"
+                      phx-value-field="search"
+                      class="absolute right-1 top-1/2 -translate-y-1/2 text-base-content/40 hover:text-error"
+                    >
+                      <.icon name="hero-x-mark" class="size-3" />
+                    </button>
+                  </div>
                 </div>
               </th>
               <th class="w-32 px-4">
                 <div class="flex flex-col gap-1 text-right">
                   <span>Amount</span>
-                  <input
-                    type="number"
-                    name="amount"
-                    value={@filters["amount"]}
-                    placeholder="0.00"
-                    step="any"
-                    class="input input-bordered input-xs font-normal w-full text-right"
-                    phx-debounce="300"
-                  />
+                  <div class="relative">
+                    <input
+                      type="number"
+                      name="amount"
+                      value={@filters["amount"]}
+                      placeholder="0.00"
+                      step="any"
+                      class="input input-bordered input-xs font-normal w-full text-right pr-5"
+                      phx-debounce="300"
+                    />
+                    <button
+                      :if={@filters["amount"] != ""}
+                      type="button"
+                      phx-click="clear_filter"
+                      phx-value-field="amount"
+                      class="absolute right-1 top-1/2 -translate-y-1/2 text-base-content/40 hover:text-error"
+                    >
+                      <.icon name="hero-x-mark" class="size-3" />
+                    </button>
+                  </div>
                 </div>
               </th>
               <th class="w-48 px-4">
                 <div class="flex flex-col gap-1">
-                  <div class="flex items-center justify-between pr-2">
-                    <span>Category</span>
-                  </div>
-                  <select
-                    name="category_id"
-                    class="select select-bordered select-xs font-normal w-full"
-                  >
-                    <option value="">All</option>
-                    <option value="nil" selected={@filters["category_id"] == "nil"}>
-                      Pending
-                    </option>
-                    <%= for category <- @categories do %>
-                      <option
-                        value={category.id}
-                        selected={@filters["category_id"] == category.id}
-                      >
-                        {CashLens.Categories.Category.full_name(category)}
+                  <span>Category</span>
+                  <div class="relative">
+                    <select
+                      name="category_id"
+                      class="select select-bordered select-xs font-normal w-full"
+                    >
+                      <option value="">All</option>
+                      <option value="nil" selected={@filters["category_id"] == "nil"}>
+                        Pending
                       </option>
-                    <% end %>
-                  </select>
+                      <%= for category <- @categories do %>
+                        <option
+                          value={category.id}
+                          selected={@filters["category_id"] == category.id}
+                        >
+                          {CashLens.Categories.Category.full_name(category)}
+                        </option>
+                      <% end %>
+                    </select>
+                    <button
+                      :if={@filters["category_id"] != ""}
+                      type="button"
+                      phx-click="clear_filter"
+                      phx-value-field="category_id"
+                      class="absolute right-6 top-1/2 -translate-y-1/2 text-base-content/40 hover:text-error"
+                    >
+                      <.icon name="hero-x-mark" class="size-3" />
+                    </button>
+                  </div>
                 </div>
               </th>
               <th class="w-40 px-4">
                 <div class="flex flex-col gap-1">
                   <span>Account</span>
-                  <select
-                    name="account_id"
-                    class="select select-bordered select-xs font-normal w-full"
-                  >
-                    <option value="">All</option>
-                    <%= for account <- @accounts do %>
-                      <option value={account.id} selected={@filters["account_id"] == account.id}>
-                        {account_label(account)}
-                      </option>
-                    <% end %>
-                  </select>
+                  <div class="relative">
+                    <select
+                      name="account_id"
+                      class="select select-bordered select-xs font-normal w-full"
+                    >
+                      <option value="">All</option>
+                      <%= for account <- @accounts do %>
+                        <option value={account.id} selected={@filters["account_id"] == account.id}>
+                          {account_label(account)}
+                        </option>
+                      <% end %>
+                    </select>
+                    <button
+                      :if={@filters["account_id"] != ""}
+                      type="button"
+                      phx-click="clear_filter"
+                      phx-value-field="account_id"
+                      class="absolute right-6 top-1/2 -translate-y-1/2 text-base-content/40 hover:text-error"
+                    >
+                      <.icon name="hero-x-mark" class="size-3" />
+                    </button>
+                  </div>
                 </div>
               </th>
               <th class="w-24 px-4">
@@ -479,95 +496,98 @@
               <td class="w-24 px-4 text-right">
                 <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <%= if transaction.reimbursement_status do %>
-                    <button
-                      type="button"
-                      phx-click="unmark_reimbursable"
-                      phx-value-id={transaction.id}
-                      class="btn btn-ghost btn-xs text-error"
-                      title="Remove reimbursement mark"
-                      aria-label="Remove Reimbursement"
-                    >
-                      <.icon name="hero-x-circle" class="size-3" />
-                    </button>
+                    <div class="tooltip tooltip-left" data-tip="Remove Reimbursement">
+                      <button
+                        type="button"
+                        phx-click="unmark_reimbursable"
+                        phx-value-id={transaction.id}
+                        class="btn btn-ghost btn-xs text-error"
+                      >
+                        <.icon name="hero-x-circle" class="size-3" />
+                      </button>
+                    </div>
                   <% end %>
 
                   <%= if Decimal.lt?(transaction.amount, 0) && is_nil(transaction.reimbursement_status) do %>
-                    <button
-                      type="button"
-                      phx-click="mark_reimbursable"
-                      phx-value-id={transaction.id}
-                      class="btn btn-ghost btn-xs text-primary"
-                      title="Mark Reimbursable"
-                      aria-label="Mark Reimbursable"
-                    >
-                      <.icon name="hero-banknotes" class="size-3" />
-                    </button>
+                    <div class="tooltip tooltip-left" data-tip="Mark Reimbursable">
+                      <button
+                        type="button"
+                        phx-click="mark_reimbursable"
+                        phx-value-id={transaction.id}
+                        class="btn btn-ghost btn-xs text-primary"
+                      >
+                        <.icon name="hero-banknotes" class="size-3" />
+                      </button>
+                    </div>
                   <% end %>
                   <%= if Decimal.gt?(transaction.amount, 0) && is_nil(transaction.reimbursement_link_key) do %>
-                    <button
-                      type="button"
-                      phx-click="open_reimbursement_link"
-                      phx-value-id={transaction.id}
-                      class="btn btn-ghost btn-xs text-success"
-                      title="This is a reimbursement"
-                      aria-label="Link Reimbursement"
-                    >
-                      <.icon name="hero-arrow-path" class="size-3" />
-                    </button>
+                    <div class="tooltip tooltip-left" data-tip="Link Reimbursement">
+                      <button
+                        type="button"
+                        phx-click="open_reimbursement_link"
+                        phx-value-id={transaction.id}
+                        class="btn btn-ghost btn-xs text-success"
+                      >
+                        <.icon name="hero-arrow-path" class="size-3" />
+                      </button>
+                    </div>
                   <% end %>
                   <%= if transaction.category && transaction.category.slug == "transfer" && is_nil(transaction.transfer_key) do %>
+                    <div class="tooltip tooltip-left" data-tip="Link Transfer">
+                      <button
+                        type="button"
+                        phx-click="open_transfer_link"
+                        phx-value-id={transaction.id}
+                        class="btn btn-ghost btn-xs text-primary"
+                      >
+                        <.icon name="hero-link" class="size-3" />
+                      </button>
+                    </div>
+                  <% end %>
+                  <div class="tooltip tooltip-left" data-tip="Edit">
+                    <.link
+                      navigate={~p"/transactions/#{transaction}/edit"}
+                      class="btn btn-ghost btn-xs px-1"
+                    >
+                      <.icon name="hero-pencil" class="size-3" />
+                    </.link>
+                  </div>
+                  <div class="tooltip tooltip-left" data-tip="Delete">
                     <button
                       type="button"
-                      phx-click="open_transfer_link"
+                      phx-click="confirm_delete"
                       phx-value-id={transaction.id}
-                      class="btn btn-ghost btn-xs text-primary"
-                      title="Link transfer pair"
-                      aria-label="Link Transfer"
+                      class="btn btn-ghost btn-xs text-error px-1"
                     >
-                      <.icon name="hero-link" class="size-3" />
+                      <.icon name="hero-trash" class="size-3" />
                     </button>
-                  <% end %>
-                  <.link
-                    navigate={~p"/transactions/#{transaction}/edit"}
-                    class="btn btn-ghost btn-xs px-1"
-                    aria-label="Edit"
-                  >
-                    <.icon name="hero-pencil" class="size-3" />
-                  </.link>
-                  <button
-                    type="button"
-                    phx-click="confirm_delete"
-                    phx-value-id={transaction.id}
-                    class="btn btn-ghost btn-xs text-error px-1"
-                    aria-label="Delete"
-                  >
-                    <.icon name="hero-trash" class="size-3" />
-                  </button>
-                  <button
-                    type="button"
-                    phx-click="open_notes"
-                    phx-value-id={transaction.id}
-                    class="btn btn-ghost btn-xs text-primary px-1"
-                    title="Add/Edit Notes"
-                    aria-label="Notes"
-                  >
-                    <.icon name="hero-document-text" class="size-3" />
-                  </button>
+                  </div>
+                  <div class="tooltip tooltip-left" data-tip="Notes">
+                    <button
+                      type="button"
+                      phx-click="open_notes"
+                      phx-value-id={transaction.id}
+                      class="btn btn-ghost btn-xs text-primary px-1"
+                    >
+                      <.icon name="hero-document-text" class="size-3" />
+                    </button>
+                  </div>
 
                   <div class="dropdown dropdown-end">
-                    <button
-                      tabindex="0"
-                      class={[
-                        "btn btn-ghost btn-xs px-1",
-                        if(transaction.installment_group_id,
-                          do: "text-primary",
-                          else: "opacity-40"
-                        )
-                      ]}
-                      title="Link to Installment Group"
-                    >
-                      <.icon name="hero-rectangle-group" class="size-3" />
-                    </button>
+                    <div class="tooltip tooltip-left" data-tip="Installment Group">
+                      <button
+                        tabindex="0"
+                        class={[
+                          "btn btn-ghost btn-xs px-1",
+                          if(transaction.installment_group_id,
+                            do: "text-primary",
+                            else: "opacity-40"
+                          )
+                        ]}
+                      >
+                        <.icon name="hero-rectangle-group" class="size-3" />
+                      </button>
+                    </div>
                     <ul
                       tabindex="0"
                       class="dropdown-content z-[1] menu p-2 shadow-2xl bg-base-100 border border-base-300 rounded-box w-52"
@@ -675,6 +695,7 @@
     target_transaction_id={@pending_transaction_id}
     categories={@categories}
     category_form={@category_form}
+    current_parent={@quick_category_parent}
   />
 
   <.modal :if={@show_notes_modal} id="notes-modal" show on_cancel={JS.push("close_modal")}>
@@ -723,13 +744,21 @@
       <p class="text-sm opacity-70 mb-4">
         We found <strong>{length(@bulk_confirmation.items)}</strong>
         more transactions with description <span class="font-mono bg-base-300 px-1 rounded">"{@bulk_confirmation.description}"</span>.
-        Do you want to categorize all as <strong class="text-primary">{@bulk_confirmation.category_name}</strong>?
+        Select which ones to categorize as <strong class="text-primary">{@bulk_confirmation.category_name}</strong>.
       </p>
 
       <div class="overflow-x-auto mb-6 rounded-xl border border-base-300 max-h-64 overflow-y-auto">
         <table class="table table-zebra table-xs w-full text-xs">
           <thead class="bg-base-200/70 sticky top-0">
             <tr>
+              <th class="w-8">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-primary checkbox-xs"
+                  checked={MapSet.size(@bulk_selected_ids) == length(@bulk_confirmation.items)}
+                  phx-click="toggle_bulk_all"
+                />
+              </th>
               <th>Date</th>
               <th>Description</th>
               <th>Category</th>
@@ -737,10 +766,32 @@
             </tr>
           </thead>
           <tbody>
-            <tr :for={tx <- @bulk_confirmation.items}>
-              <td class="whitespace-nowrap">{Calendar.strftime(tx.date, "%d/%m/%Y")}</td>
+            <tr
+              :for={tx <- @bulk_confirmation.items}
+              class={if MapSet.member?(@bulk_selected_ids, tx.id), do: "bg-primary/5", else: ""}
+            >
+              <td>
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-primary checkbox-xs"
+                  checked={MapSet.member?(@bulk_selected_ids, tx.id)}
+                  phx-click="toggle_bulk_tx"
+                  phx-value-id={tx.id}
+                />
+              </td>
+              <td class="whitespace-nowrap">
+                {Calendar.strftime(tx.date, "%d/%m/%Y")}
+                <span class="opacity-50 text-[10px] ml-1">
+                  {Calendar.strftime(tx.date, "%A")}
+                </span>
+              </td>
               <td class="max-w-xs truncate">{tx.description}</td>
-              <td class="opacity-60">{if tx.category, do: tx.category.name, else: "—"}</td>
+              <td class="opacity-60">
+                {if tx.category_id,
+                  do:
+                    Enum.find_value(@categories, "—", &if(&1.id == tx.category_id, do: &1.name)),
+                  else: "—"}
+              </td>
               <td class={[
                 "text-right font-mono whitespace-nowrap",
                 if(Decimal.negative?(tx.amount), do: "text-error", else: "text-success")
@@ -756,11 +807,16 @@
         <button
           phx-click="apply_bulk_category"
           class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
+          disabled={MapSet.size(@bulk_selected_ids) == 0}
         >
-          Yes, Categorize All
+          Apply to {MapSet.size(@bulk_selected_ids)} transaction{if MapSet.size(
+                                                                      @bulk_selected_ids
+                                                                    ) != 1,
+                                                                    do: "s",
+                                                                    else: ""}
         </button>
         <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
-          No, Only This One
+          Only This One
         </button>
       </div>
     </div>

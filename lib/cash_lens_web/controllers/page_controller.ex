@@ -83,7 +83,8 @@ defmodule CashLensWeb.PageController do
       summary_month: month_name,
       chart_data: chart_data,
       fixed_data: fixed_data,
-      variable_data: variable_data
+      variable_data: variable_data,
+      historical: historical
     )
   end
 

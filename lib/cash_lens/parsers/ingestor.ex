@@ -40,10 +40,12 @@ defmodule CashLens.Parsers.Ingestor do
   Reads a file, converts encoding/extracts text, parses and saves the transactions.
   Returns `{:ok, count}` or `{:error, reason}`.
   """
-  def import_file(account, file_path) do
+  def import_file(account, file_path, opts \\ []) do
+    notify_fn = Keyword.get(opts, :notify_fn)
+
     case File.read(file_path) do
       {:ok, content} ->
-        process_imported_content(content, account, file_path)
+        process_imported_content(content, account, file_path, notify_fn)
 
       {:error, reason} ->
         {:error, "Could not read file: #{reason}"}
@@ -93,13 +95,12 @@ defmodule CashLens.Parsers.Ingestor do
     end
   end
 
-  defp process_imported_content(content, account, file_path) do
+  defp process_imported_content(content, account, file_path, notify_fn) do
     content = prepare_content(content, account, file_path)
 
-    log_msg =
+    Logger.info(
       "INGESTOR: Processing #{file_path} for account #{account.name} (ID: #{account.id}) using parser #{account.parser_type}"
-
-    Logger.info(log_msg)
+    )
 
     case parse(content, account.parser_type) do
       {:error, reason} ->
@@ -108,6 +109,7 @@ defmodule CashLens.Parsers.Ingestor do
 
       transactions_data ->
         Logger.info("INGESTOR: Parser returned #{length(transactions_data)} transactions.")
+        if notify_fn, do: notify_fn.(length(transactions_data))
         finalize_import(transactions_data, account.id)
     end
   end

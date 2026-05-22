@@ -34,13 +34,60 @@ defmodule CashLensWeb.CategoryLive.Form do
 
           <div class="divider">Hierarchy</div>
 
-          <.input
-            field={f[:parent_id]}
-            type="select"
-            label="Parent Category (Optional)"
-            options={Enum.map(@parent_options, &{CashLens.Categories.Category.full_name(&1), &1.id})}
-            prompt="None (Main Category)"
-          />
+          <div class="form-control w-full">
+            <label class="label pb-1">
+              <span class="label-text text-sm font-semibold">Parent Category (Optional)</span>
+            </label>
+            <input
+              type="hidden"
+              id="parent_id_input"
+              name="category[parent_id]"
+              value={Phoenix.HTML.Form.input_value(f, :parent_id) || ""}
+            />
+            <div
+              id="parent-category-autocomplete"
+              phx-hook="CategoryAutocomplete"
+              phx-update="ignore"
+              data-target="#parent_id_input"
+              data-categories={
+                Jason.encode!(
+                  Enum.map(
+                    @parent_options,
+                    &%{id: &1.id, name: CashLens.Categories.Category.full_name(&1)}
+                  )
+                )
+              }
+              class="relative w-full overflow-visible"
+            >
+              <input
+                type="text"
+                placeholder={
+                  if @current_parent,
+                    do: CashLens.Categories.Category.full_name(@current_parent),
+                    else: "None (Main Category)"
+                }
+                class="input input-bordered w-full font-bold uppercase text-[10px] cursor-pointer"
+              />
+              <div class="dropdown-content hidden fixed z-[100] mt-1 w-64 bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
+                <ul class="menu menu-compact p-1">
+                  <li class="new-option border-b border-base-200 mb-1">
+                    <button type="button" class="font-black text-primary hover:bg-primary/10">
+                      <.icon name="hero-plus-circle" class="size-4" />
+                      <span>New Category</span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <button
+              :if={@current_parent}
+              type="button"
+              phx-click="clear_parent"
+              class="btn btn-ghost btn-xs text-error mt-1 self-start"
+            >
+              <.icon name="hero-x-mark" class="size-3 mr-1" /> Clear parent
+            </button>
+          </div>
 
           <div class="divider">Settings</div>
 
@@ -106,13 +153,14 @@ defmodule CashLensWeb.CategoryLive.Form do
 
   defp apply_action(socket, :edit, %{"id" => id}) do
     category = Categories.get_category!(id)
-    # Filter out current category from parents to avoid self-reference
     parents = Enum.reject(socket.assigns.parent_options, &(&1.id == id))
+    current_parent = if category.parent_id, do: Enum.find(parents, &(&1.id == category.parent_id))
 
     socket
     |> assign(:page_title, "Edit Category")
     |> assign(:category, category)
     |> assign(:parent_options, parents)
+    |> assign(:current_parent, current_parent)
     |> assign(:form, to_form(Categories.change_category(category)))
   end
 
@@ -120,13 +168,30 @@ defmodule CashLensWeb.CategoryLive.Form do
     socket
     |> assign(:page_title, "New Category")
     |> assign(:category, %Category{default_reimbursable: false})
+    |> assign(:current_parent, nil)
     |> assign(:form, to_form(Categories.change_category(%Category{default_reimbursable: false})))
   end
 
   @impl true
   def handle_event("validate", %{"category" => category_params}, socket) do
     changeset = Categories.change_category(socket.assigns.category, category_params)
-    {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
+
+    parent =
+      if category_params["parent_id"] != "",
+        do: Enum.find(socket.assigns.parent_options, &(&1.id == category_params["parent_id"]))
+
+    {:noreply,
+     socket
+     |> assign(:current_parent, parent)
+     |> assign(form: to_form(changeset, action: :validate))}
+  end
+
+  @impl true
+  def handle_event("clear_parent", _params, socket) do
+    changeset = Categories.change_category(socket.assigns.category, %{"parent_id" => nil})
+
+    {:noreply,
+     socket |> assign(:current_parent, nil) |> assign(form: to_form(changeset, action: :validate))}
   end
 
   def handle_event("save", %{"category" => category_params}, socket) do

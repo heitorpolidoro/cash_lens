@@ -18,6 +18,17 @@ defmodule CashLensWeb.CategoryLive.Index do
         </:actions>
       </.header>
 
+      <form phx-change="filter_name" class="flex gap-2">
+        <input
+          type="text"
+          name="name"
+          value={@name_filter}
+          placeholder="Filter by name..."
+          class="input input-bordered input-sm w-64"
+          phx-debounce="200"
+        />
+      </form>
+
       <div class="overflow-x-auto bg-base-100 rounded-2xl border border-base-300 shadow-sm">
         <table class="table table-zebra w-full text-xs">
           <thead class="bg-base-200/50">
@@ -60,22 +71,26 @@ defmodule CashLensWeb.CategoryLive.Index do
               <td class="max-w-xs truncate italic opacity-60">{category.keywords}</td>
               <td class="text-right">
                 <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-4">
-                  <.link
-                    navigate={~p"/categories/#{category}/edit"}
-                    class="btn btn-ghost btn-xs px-1"
-                    phx-click-stop
-                  >
-                    <.icon name="hero-pencil" class="size-3" />
-                  </.link>
-                  <button
-                    type="button"
-                    phx-click="confirm_delete"
-                    phx-value-id={category.id}
-                    phx-click-stop
-                    class="btn btn-ghost btn-xs text-error px-1"
-                  >
-                    <.icon name="hero-trash" class="size-3" />
-                  </button>
+                  <div class="tooltip tooltip-left" data-tip="Edit">
+                    <.link
+                      navigate={~p"/categories/#{category}/edit"}
+                      class="btn btn-ghost btn-xs px-1"
+                      phx-click-stop
+                    >
+                      <.icon name="hero-pencil" class="size-3" />
+                    </.link>
+                  </div>
+                  <div class="tooltip tooltip-left" data-tip="Delete">
+                    <button
+                      type="button"
+                      phx-click="confirm_delete"
+                      phx-value-id={category.id}
+                      phx-click-stop
+                      class="btn btn-ghost btn-xs text-error px-1"
+                    >
+                      <.icon name="hero-trash" class="size-3" />
+                    </button>
+                  </div>
                 </div>
               </td>
             </tr>
@@ -111,6 +126,7 @@ defmodule CashLensWeb.CategoryLive.Index do
      socket
      |> assign(:page_title, "Categories")
      |> assign(:confirm_modal, nil)
+     |> assign(:name_filter, "")
      |> stream(:categories, Categories.list_categories())}
   end
 
@@ -140,6 +156,14 @@ defmodule CashLensWeb.CategoryLive.Index do
            "Could not delete category '#{category.name}'. Check if there are dependencies."
          )}
     end
+  end
+
+  @impl true
+  def handle_event("filter_name", %{"name" => name}, socket) do
+    {:noreply,
+     socket
+     |> assign(:name_filter, name)
+     |> stream(:categories, Categories.list_categories(name: name), reset: true)}
   end
 
   @impl true
