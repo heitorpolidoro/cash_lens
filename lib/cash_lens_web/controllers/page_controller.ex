@@ -69,10 +69,7 @@ defmodule CashLensWeb.PageController do
     fixed_data = extract_category_data(historical_categories, "fixed")
     variable_data = extract_category_data(historical_categories, "variable")
 
-    month_name =
-      summary.month
-      |> Calendar.strftime("%B")
-      |> translate_month()
+    month_name = Calendar.strftime(summary.month, "%B")
 
     render(conn, :home,
       layout: {CashLensWeb.Layouts, :app},
@@ -104,25 +101,6 @@ defmodule CashLensWeb.PageController do
       |> Enum.filter(&(&1.type == type))
       |> Enum.map(fn cat -> Map.put(cat, :total, Decimal.to_float(cat.total)) end)
     end)
-  end
-
-  defp translate_month(month) do
-    months = %{
-      "January" => "Janeiro",
-      "February" => "Fevereiro",
-      "March" => "Março",
-      "April" => "Abril",
-      "May" => "Maio",
-      "June" => "Junho",
-      "July" => "Julho",
-      "August" => "Agosto",
-      "September" => "Setembro",
-      "October" => "Outubro",
-      "November" => "Novembro",
-      "December" => "Dezembro"
-    }
-
-    months[month] || month
   end
 
   defp calculate_start_period(date, months_back) do

@@ -82,6 +82,47 @@ defmodule CashLens.Transactions do
   @doc """
   Returns the list of transactions based on filters and pagination.
   """
+  @doc """
+  Returns income and expenses totals for the given filters.
+  Returns %{income: Decimal, expenses: Decimal}.
+  """
+  def get_filtered_summary(filters \\ %{}) do
+    base =
+      Transaction
+      |> filter_by_account(filters["account_id"])
+      |> filter_by_category(filters["category_id"])
+      |> filter_by_description(filters["search"])
+      |> filter_by_date(filters["date"])
+      |> filter_by_date_range(filters["date_from"], filters["date_to"])
+      |> filter_by_month_year(
+        filters["month"],
+        filters["year"],
+        filters["category_id"],
+        filters["unmatched_transfers"]
+      )
+      |> filter_by_amount(filters["amount"])
+      |> filter_by_amount_range(filters["amount_min"], filters["amount_max"])
+      |> filter_by_type(filters["type"])
+      |> filter_by_reimbursement_status(filters["reimbursement_status"])
+      |> filter_unmatched_transfers(filters["unmatched_transfers"])
+      |> select([t], %{amount: t.amount})
+
+    result =
+      from(row in subquery(base),
+        select: %{
+          income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", row.amount, row.amount)),
+          expenses:
+            sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", row.amount, row.amount))
+        }
+      )
+      |> Repo.one()
+
+    %{
+      income: (result && result.income) || Decimal.new("0"),
+      expenses: (result && result.expenses) || Decimal.new("0")
+    }
+  end
+
   def count_transactions(filters \\ %{}) do
     Transaction
     |> join_associations()
@@ -129,6 +170,68 @@ defmodule CashLens.Transactions do
     |> order_by_date(sort_order)
     |> limit(^page_size)
     |> offset(^offset)
+    |> Repo.all()
+  end
+
+  @excluded_reimbursement_slugs ["transfer", "initial_value", "salário", "salario"]
+
+  def list_reimbursement_credit_candidates(search \\ "") do
+    excluded_ids =
+      Enum.flat_map(@excluded_reimbursement_slugs, fn slug ->
+        case Repo.one(
+               from c in CashLens.Categories.Category, where: c.slug == ^slug, select: c.id
+             ) do
+          nil -> []
+          id -> CashLens.Categories.get_category_ids_with_children(id)
+        end
+      end)
+      |> Enum.uniq()
+
+    from(t in Transaction,
+      join: acct in assoc(t, :account),
+      left_join: c in assoc(t, :category),
+      where: t.amount > 0,
+      where: is_nil(t.reimbursement_link_key),
+      where: is_nil(t.transfer_key),
+      where: t.reimbursement_status != "paid" or is_nil(t.reimbursement_status),
+      where: is_nil(c.slug) or c.slug not in ["transfer", "initial_value"],
+      where: is_nil(t.category_id) or t.category_id not in ^excluded_ids,
+      where: not ilike(t.description, "Transferência%"),
+      order_by: [desc: t.date],
+      preload: [category: c, account: acct]
+    )
+    |> then(fn q ->
+      if search == "" do
+        q
+      else
+        where(q, [t], ilike(t.description, ^"%#{search}%"))
+      end
+    end)
+    |> Repo.all()
+  end
+
+  def list_all_transactions(filters \\ %{}) do
+    sort_order = String.to_existing_atom(filters["sort_order"] || "desc")
+
+    Transaction
+    |> join_associations()
+    |> filter_by_account(filters["account_id"])
+    |> filter_by_category(filters["category_id"])
+    |> filter_by_description(filters["search"])
+    |> filter_by_date(filters["date"])
+    |> filter_by_date_range(filters["date_from"], filters["date_to"])
+    |> filter_by_month_year(
+      filters["month"],
+      filters["year"],
+      filters["category_id"],
+      filters["unmatched_transfers"]
+    )
+    |> filter_by_amount(filters["amount"])
+    |> filter_by_amount_range(filters["amount_min"], filters["amount_max"])
+    |> filter_by_type(filters["type"])
+    |> filter_by_reimbursement_status(filters["reimbursement_status"])
+    |> filter_unmatched_transfers(filters["unmatched_transfers"])
+    |> order_by_date(sort_order)
     |> Repo.all()
   end
 
@@ -300,27 +403,48 @@ defmodule CashLens.Transactions do
     first = Date.new!(year, month, 1)
     last = Date.end_of_month(first)
 
-    from(t in Transaction,
-      join: c in assoc(t, :category),
-      left_join: p in assoc(c, :parent),
-      where: t.amount < 0,
-      where: t.date >= ^first and t.date <= ^last,
-      where: c.slug not in ["initial_value", "transfer"],
-      where: is_nil(t.reimbursement_link_key),
-      group_by: [
-        fragment("COALESCE(?, ?)", p.name, c.name),
-        fragment("COALESCE(?, ?)", p.id, c.id),
-        c.type
-      ],
-      select: %{
-        name: fragment("COALESCE(?, ?)", p.name, c.name),
-        category_id: fragment("COALESCE(?, ?)", p.id, c.id),
-        type: c.type,
-        total: sum(fragment("ABS(?)", t.amount))
-      },
-      order_by: [desc: sum(fragment("ABS(?)", t.amount))]
-    )
-    |> Repo.all()
+    categorized =
+      from(t in Transaction,
+        join: c in assoc(t, :category),
+        left_join: p in assoc(c, :parent),
+        left_join: g in assoc(p, :parent),
+        where: t.amount < 0,
+        where: t.date >= ^first and t.date <= ^last,
+        where: c.slug not in ["initial_value", "transfer"],
+        where: is_nil(t.reimbursement_link_key),
+        group_by: [
+          fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
+          fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
+          fragment("COALESCE(?, ?, ?)", g.type, p.type, c.type)
+        ],
+        select: %{
+          name: fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
+          category_id: type(fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id), :binary_id),
+          type: fragment("COALESCE(?, ?, ?)", g.type, p.type, c.type),
+          total: sum(fragment("ABS(?)", t.amount))
+        },
+        order_by: [desc: sum(fragment("ABS(?)", t.amount))]
+      )
+      |> Repo.all()
+
+    uncategorized_total =
+      from(t in Transaction,
+        where: is_nil(t.category_id),
+        where: t.amount < 0,
+        where: t.date >= ^first and t.date <= ^last,
+        where: is_nil(t.reimbursement_link_key),
+        select: sum(fragment("ABS(?)", t.amount))
+      )
+      |> Repo.one()
+
+    if is_nil(uncategorized_total) or Decimal.eq?(uncategorized_total, Decimal.new("0")) do
+      categorized
+    else
+      [
+        %{name: "Uncategorized", category_id: nil, type: nil, total: uncategorized_total}
+        | categorized
+      ]
+    end
   end
 
   defp get_summary_period(_target_date, %{"month" => m, "year" => y})

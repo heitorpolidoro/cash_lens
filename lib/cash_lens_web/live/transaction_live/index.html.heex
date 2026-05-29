@@ -168,6 +168,36 @@
       </div>
     </:actions>
   </.header>
+
+  <%!-- Summary cards --%>
+  <div class="grid grid-cols-3 gap-4">
+    <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
+      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Income</p>
+      <p class="text-2xl font-black text-success">{format_currency(@summary.income)}</p>
+    </div>
+    <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
+      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Expenses</p>
+      <p class="text-2xl font-black text-error">{format_currency(@summary.expenses)}</p>
+    </div>
+    <div class={[
+      "bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1",
+      if(Decimal.gte?(@summary.income, @summary.expenses),
+        do: "border-success/30",
+        else: "border-error/30"
+      )
+    ]}>
+      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Balance</p>
+      <p class={[
+        "text-2xl font-black",
+        if(Decimal.gte?(@summary.income, @summary.expenses),
+          do: "text-success",
+          else: "text-error"
+        )
+      ]}>
+        {format_currency(Decimal.sub(@summary.income, @summary.expenses))}
+      </p>
+    </div>
+  </div>
   
 <!-- Unified Table with Filters -->
   <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm">

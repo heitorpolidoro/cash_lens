@@ -2,8 +2,8 @@
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <h1 class="text-3xl font-bold text-base-content">Dashboard Financeiro</h1>
     <div class="flex gap-2">
-      <.link href={~p"/transactions"} class="btn btn-outline btn-sm">
-        <.icon name="hero-arrow-up-tray" class="size-4 mr-1" /> Importar Extrato
+      <.link href={~p"/transactions?open_import=true"} class="btn btn-outline btn-sm">
+        <.icon name="hero-arrow-up-tray" class="size-4 mr-1" /> Import Statement
       </.link>
     </div>
   </div>
@@ -70,24 +70,24 @@
     </div>
   </div>
   
-<!-- Histórico Mensal -->
+<!-- Monthly History -->
   <div class="card bg-base-100 shadow-sm border border-base-300">
     <div class="card-body p-6">
       <h2 class="card-title text-base-content mb-4 uppercase text-xs opacity-50 font-black">
-        Histórico Mensal
+        Monthly History
       </h2>
       <div class="overflow-x-auto">
         <table class="table table-xs w-full">
           <thead>
             <tr>
-              <th>Mês</th>
-              <th class="text-right">Entradas</th>
-              <th class="text-right">Saídas</th>
-              <th class="text-right">Saldo Final</th>
+              <th>Month</th>
+              <th class="text-right">Income</th>
+              <th class="text-right">Expenses</th>
+              <th class="text-right">Balance</th>
             </tr>
           </thead>
           <tbody>
-            <%= for item <- Enum.reject(@historical, & &1.is_projection) do %>
+            <%= for item <- @historical |> Enum.reject(& &1.is_projection) |> Enum.reverse() do %>
               <tr class="hover">
                 <td class="font-medium">
                   <.link
@@ -99,7 +99,12 @@
                 </td>
                 <td class="text-right text-success">{format_currency(item.income)}</td>
                 <td class="text-right text-error">{format_currency(item.expenses)}</td>
-                <td class="text-right font-black">{format_currency(item.final_balance)}</td>
+                <td class={[
+                  "text-right font-black",
+                  if(item.balance >= 0, do: "text-success", else: "text-error")
+                ]}>
+                  {format_currency(item.balance)}
+                </td>
               </tr>
             <% end %>
           </tbody>

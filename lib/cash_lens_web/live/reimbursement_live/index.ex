@@ -98,8 +98,10 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                       />
                     </td>
                     <td class="whitespace-nowrap font-medium">{format_date(tx.date)}</td>
-                    <td class="font-bold">{tx.description}</td>
-                    <td class="opacity-60 uppercase font-bold text-[10px]">{tx.account.name}</td>
+                    <td class="font-bold max-w-xs truncate">{tx.description}</td>
+                    <td class="opacity-60 uppercase font-bold text-[10px] whitespace-nowrap">
+                      {tx.account.name}
+                    </td>
                     <td>
                       <div class={[
                         "badge badge-xs uppercase font-black text-[8px]",
@@ -109,9 +111,22 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                         {translate_reimbursement_status(tx.reimbursement_status, tx.amount)}
                       </div>
                     </td>
-                    <td class="text-right font-black text-error">{format_currency(tx.amount)}</td>
+                    <td class={[
+                      "text-right font-black whitespace-nowrap",
+                      if(Decimal.gt?(tx.amount, 0), do: "text-success", else: "text-error")
+                    ]}>
+                      {format_currency(tx.amount)}
+                    </td>
                     <td class="text-center">
                       <div class="flex justify-center gap-1">
+                        <button
+                          phx-click="link_single_expense"
+                          phx-value-id={tx.id}
+                          class="btn btn-ghost btn-xs text-success"
+                          title="Link Receipt"
+                        >
+                          <.icon name="hero-link" class="size-4" />
+                        </button>
                         <%= if tx.reimbursement_status == "pending" do %>
                           <button
                             phx-click="mark_requested"
@@ -122,17 +137,24 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                             <.icon name="hero-paper-airplane" class="size-4" />
                           </button>
                         <% end %>
-
                         <%= if tx.reimbursement_status == "requested" do %>
                           <button
-                            phx-click="link_single_expense"
+                            phx-click="mark_pending"
                             phx-value-id={tx.id}
-                            class="btn btn-ghost btn-xs text-success"
-                            title="Link Receipt"
+                            class="btn btn-ghost btn-xs text-warning opacity-50 hover:opacity-100"
+                            title="Revert to Pending"
                           >
-                            <.icon name="hero-link" class="size-4" />
+                            <.icon name="hero-arrow-uturn-left" class="size-4" />
                           </button>
                         <% end %>
+                        <button
+                          phx-click="remove_reimbursable"
+                          phx-value-id={tx.id}
+                          class="btn btn-ghost btn-xs text-error opacity-30 hover:opacity-100"
+                          title="Not reimbursable"
+                        >
+                          <.icon name="hero-x-mark" class="size-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -244,12 +266,44 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-success">
           Link Receipt
         </h2>
-        <p class="text-xs opacity-60 mb-6">
-          Select the credit that covers the total of <strong>{format_currency(@total_selected)}</strong>.
-        </p>
+
+        <%!-- Expense being reimbursed --%>
+        <div class="bg-base-200 rounded-xl p-3 mb-4 space-y-1">
+          <%= for tx <- Enum.filter(@all_reimbursable_list, &MapSet.member?(@selected_ids, &1.id)) do %>
+            <div class="flex items-center justify-between text-xs">
+              <div>
+                <span class="opacity-50 mr-2">{format_date(tx.date)}</span>
+                <span class="font-semibold">{tx.description}</span>
+              </div>
+              <span class="font-mono text-error font-bold">{format_currency(tx.amount)}</span>
+            </div>
+          <% end %>
+          <div class="border-t border-base-300 pt-1 mt-1 flex justify-between text-xs font-black">
+            <span class="opacity-50 uppercase tracking-wider">Expense total</span>
+            <span class="text-error">{format_currency(@total_selected)}</span>
+          </div>
+        </div>
+
+        <%!-- Running total of selected credits --%>
+        <div
+          :if={MapSet.size(@selected_credit_ids) > 0}
+          class="bg-success/10 border border-success/30 rounded-xl p-3 mb-4 flex items-center justify-between text-xs"
+        >
+          <span class="font-bold opacity-70">
+            {MapSet.size(@selected_credit_ids)} credit(s) selected
+          </span>
+          <div class="text-right">
+            <span class="font-black text-success">{format_currency(@total_credits_selected)}</span>
+            <%= if Decimal.eq?(Decimal.round(@total_credits_selected, 2), Decimal.round(Decimal.abs(@total_selected), 2)) do %>
+              <div class="text-[8px] text-success font-black uppercase">Perfect Match!</div>
+            <% end %>
+          </div>
+        </div>
+
+        <p class="text-xs opacity-50 mb-4">Select one or more credits that cover this expense:</p>
         
     <!-- Search Field -->
-        <div class="mb-6">
+        <div class="mb-4">
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <.icon name="hero-magnifying-glass" class="size-4 opacity-30" />
@@ -265,52 +319,60 @@ defmodule CashLensWeb.ReimbursementLive.Index do
           </div>
         </div>
 
-        <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
+        <div class="space-y-2 max-h-72 overflow-y-auto pr-2 mb-4">
           <%= if Enum.empty?(@available_credits) do %>
             <div class="text-center py-10 opacity-40 italic">
-              No available credits found for this amount or search.
+              No available credits found.
             </div>
           <% end %>
 
           <%= for credit <- @available_credits do %>
             <button
               type="button"
-              phx-click="confirm_link"
+              phx-click="toggle_credit"
               phx-value-credit-id={credit.id}
               class={[
-                "w-full text-left flex items-center justify-between p-3 border-2 rounded-xl hover:border-success hover:bg-success/5 transition-all group",
-                if(Decimal.eq?(Decimal.round(credit.amount, 2), Decimal.round(@total_selected, 2)),
-                  do: "border-success bg-success/5 shadow-lg shadow-success/10",
+                "w-full text-left flex items-center gap-3 p-3 border-2 rounded-xl hover:border-success hover:bg-success/5 transition-all",
+                if(MapSet.member?(@selected_credit_ids, credit.id),
+                  do: "border-success bg-success/5 shadow-sm shadow-success/10",
                   else: "border-base-300"
                 )
               ]}
             >
-              <div class="flex flex-col">
-                <span class="text-[9px] font-bold uppercase opacity-50">
+              <div class={[
+                "size-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                if(MapSet.member?(@selected_credit_ids, credit.id),
+                  do: "border-success bg-success",
+                  else: "border-base-300"
+                )
+              ]}>
+                <.icon
+                  :if={MapSet.member?(@selected_credit_ids, credit.id)}
+                  name="hero-check"
+                  class="size-3 text-success-content"
+                />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-[9px] font-bold uppercase opacity-50">
                   {format_date(credit.date)} — {credit.account.name}
-                </span>
-                <span class="font-black text-md group-hover:text-success">{credit.description}</span>
-                <div
-                  :if={is_nil(credit.category_id)}
-                  class="text-[8px] text-warning font-bold uppercase mt-0.5"
-                >
-                  No Category
                 </div>
+                <div class="font-black text-sm truncate">{credit.description}</div>
               </div>
-              <div class="text-right">
-                <span class="font-black text-md text-success">{format_currency(credit.amount)}</span>
-                <div
-                  :if={
-                    Decimal.eq?(Decimal.round(credit.amount, 2), Decimal.round(@total_selected, 2))
-                  }
-                  class="text-[8px] text-success font-black uppercase mt-0.5"
-                >
-                  Perfect Match!
-                </div>
-              </div>
+              <span class="font-black text-success shrink-0">{format_currency(credit.amount)}</span>
             </button>
           <% end %>
         </div>
+
+        <%!-- Confirm button --%>
+        <button
+          type="button"
+          phx-click="confirm_link"
+          disabled={MapSet.size(@selected_credit_ids) == 0}
+          class="btn btn-success w-full rounded-2xl font-black disabled:opacity-30"
+        >
+          <.icon name="hero-link" class="size-4 mr-2" />
+          Link {MapSet.size(@selected_credit_ids)} Credit(s)
+        </button>
       </div>
     </.modal>
     """
@@ -324,6 +386,8 @@ defmodule CashLensWeb.ReimbursementLive.Index do
      |> assign(:total_selected, Decimal.new("0"))
      |> assign(:show_linker_modal, false)
      |> assign(:linker_search, "")
+     |> assign(:selected_credit_ids, MapSet.new())
+     |> assign(:total_credits_selected, Decimal.new("0"))
      |> fetch_data()}
   end
 
@@ -359,6 +423,20 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   @impl true
+  def handle_event("mark_pending", %{"id" => id}, socket) do
+    tx = Transactions.get_transaction!(id)
+    {:ok, _} = Transactions.update_transaction(tx, %{reimbursement_status: "pending"})
+    {:noreply, fetch_data(socket)}
+  end
+
+  @impl true
+  def handle_event("remove_reimbursable", %{"id" => id}, socket) do
+    tx = Transactions.get_transaction!(id)
+    {:ok, _} = Transactions.update_transaction(tx, %{reimbursement_status: nil})
+    {:noreply, fetch_data(socket)}
+  end
+
+  @impl true
   def handle_event("link_single_expense", %{"id" => id}, socket) do
     new_selection = MapSet.new([id])
 
@@ -373,13 +451,17 @@ defmodule CashLensWeb.ReimbursementLive.Index do
      |> assign(selected_ids: new_selection, total_selected: total)
      |> assign(:show_linker_modal, true)
      |> assign(:linker_search, "")
+     |> assign(:selected_credit_ids, MapSet.new())
+     |> assign(:total_credits_selected, Decimal.new("0"))
      |> update_linker_list()}
   end
 
   @impl true
   def handle_event("unlink_reimbursement", %{"link-key" => link_key}, socket) do
     Transactions.unlink_reimbursement_by_key(link_key)
-    {:noreply, socket |> put_flash(:info, "Reimbursement unlinked successfully.") |> fetch_data()}
+
+    {:noreply,
+     socket |> put_flash(:success, "Reimbursement unlinked successfully.") |> fetch_data()}
   end
 
   @impl true
@@ -388,6 +470,8 @@ defmodule CashLensWeb.ReimbursementLive.Index do
      socket
      |> assign(:show_linker_modal, true)
      |> assign(:linker_search, "")
+     |> assign(:selected_credit_ids, MapSet.new())
+     |> assign(:total_credits_selected, Decimal.new("0"))
      |> update_linker_list()}
   end
 
@@ -397,17 +481,38 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   @impl true
-  def handle_event("confirm_link", %{"credit-id" => credit_id}, socket) do
-    selected_ids = socket.assigns.selected_ids
-    credit = Transactions.get_transaction!(credit_id)
+  def handle_event("toggle_credit", %{"credit-id" => credit_id}, socket) do
+    selected = socket.assigns.selected_credit_ids
+
+    new_selected =
+      if MapSet.member?(selected, credit_id),
+        do: MapSet.delete(selected, credit_id),
+        else: MapSet.put(selected, credit_id)
+
+    total =
+      socket.assigns.available_credits
+      |> Enum.filter(&MapSet.member?(new_selected, &1.id))
+      |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
+
+    {:noreply,
+     socket
+     |> assign(:selected_credit_ids, new_selected)
+     |> assign(:total_credits_selected, total)}
+  end
+
+  @impl true
+  def handle_event("confirm_link", _params, socket) do
+    selected_expense_ids = socket.assigns.selected_ids
+    selected_credit_ids = socket.assigns.selected_credit_ids
     link_key = Ecto.UUID.generate()
 
-    first_expense =
-      socket.assigns.all_reimbursable_list |> Enum.find(&MapSet.member?(selected_ids, &1.id))
+    expense =
+      socket.assigns.all_reimbursable_list
+      |> Enum.find(&MapSet.member?(selected_expense_ids, &1.id))
 
-    cat_id = first_expense.category_id
+    cat_id = expense && expense.category_id
 
-    Enum.each(selected_ids, fn id ->
+    Enum.each(selected_expense_ids, fn id ->
       tx = Transactions.get_transaction!(id)
 
       Transactions.update_transaction(tx, %{
@@ -416,32 +521,42 @@ defmodule CashLensWeb.ReimbursementLive.Index do
       })
     end)
 
-    {:ok, _} =
-      Transactions.update_transaction(credit, %{
+    Enum.each(selected_credit_ids, fn id ->
+      tx = Transactions.get_transaction!(id)
+
+      Transactions.update_transaction(tx, %{
         reimbursement_status: "paid",
         reimbursement_link_key: link_key,
-        category_id: cat_id
+        category_id: tx.category_id || cat_id
       })
+    end)
 
     {:noreply,
      socket
      |> assign(:show_linker_modal, false)
      |> assign(:selected_ids, MapSet.new())
      |> assign(:total_selected, Decimal.new("0"))
-     |> put_flash(:info, "#{MapSet.size(selected_ids)} expenses linked!")
+     |> assign(:selected_credit_ids, MapSet.new())
+     |> assign(:total_credits_selected, Decimal.new("0"))
+     |> put_flash(:success, "Linked #{MapSet.size(selected_credit_ids)} credit(s) to expense!")
      |> fetch_data()}
   end
 
   @impl true
-  def handle_event("close_modal", _, socket),
-    do: {:noreply, assign(socket, :show_linker_modal, false)}
+  def handle_event("close_modal", _, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_linker_modal, false)
+     |> assign(:selected_credit_ids, MapSet.new())
+     |> assign(:total_credits_selected, Decimal.new("0"))}
+  end
 
   defp fetch_data(socket) do
-    pending = Transactions.list_transactions(%{"reimbursement_status" => "pending"})
-    requested = Transactions.list_transactions(%{"reimbursement_status" => "requested"})
-    paid = Transactions.list_transactions(%{"reimbursement_status" => "paid"})
+    pending = Transactions.list_all_transactions(%{"reimbursement_status" => "pending"})
+    requested = Transactions.list_all_transactions(%{"reimbursement_status" => "requested"})
+    paid = Transactions.list_all_transactions(%{"reimbursement_status" => "paid"})
 
-    all_reimbursable = (pending ++ requested) |> Enum.sort_by(& &1.date, {:desc, Date})
+    all_reimbursable = (pending ++ requested) |> Enum.sort_by(& &1.date, {:asc, Date})
 
     paid_groups =
       paid
@@ -474,30 +589,48 @@ defmodule CashLensWeb.ReimbursementLive.Index do
 
   defp update_linker_list(socket) do
     target_amount = socket.assigns.total_selected |> Decimal.round(2)
-    search = socket.assigns.linker_search
+    search = String.downcase(socket.assigns.linker_search)
 
-    filters = %{"amount_min" => 0.01}
-    filters = if search != "", do: Map.put(filters, "search", search), else: filters
+    expense_date =
+      socket.assigns.all_reimbursable_list
+      |> Enum.find(&MapSet.member?(socket.assigns.selected_ids, &1.id))
+      |> then(&(&1 && &1.date))
 
-    credits =
-      Transactions.list_transactions(filters, 1, 500)
-      |> Enum.filter(&is_nil(&1.reimbursement_link_key))
+    # Pass description search to DB; filter amount matches in memory
+    desc_search = if Decimal.parse(search) == :error, do: search, else: ""
+    all_credits = Transactions.list_reimbursement_credit_candidates(desc_search)
+
+    filtered =
+      if search == "" do
+        all_credits
+      else
+        Enum.filter(all_credits, fn tx ->
+          String.contains?(String.downcase(tx.description), search) ||
+            String.contains?(Decimal.to_string(tx.amount), search)
+        end)
+      end
+
+    sorted =
+      filtered
       |> Enum.sort(fn a, b ->
-        amount_a = Decimal.round(a.amount, 2)
-        amount_b = Decimal.round(b.amount, 2)
-        exact_a = Decimal.eq?(amount_a, target_amount)
-        exact_b = Decimal.eq?(amount_b, target_amount)
-        pending_a = is_nil(a.category_id)
-        pending_b = is_nil(b.category_id)
+        exact_a = Decimal.eq?(Decimal.round(a.amount, 2), target_amount)
+        exact_b = Decimal.eq?(Decimal.round(b.amount, 2), target_amount)
 
         cond do
-          exact_a != exact_b -> exact_a
-          pending_a != pending_b -> pending_a
-          true -> Date.compare(a.date, b.date) != :lt
+          exact_a != exact_b ->
+            exact_a
+
+          expense_date != nil ->
+            diff_a = abs(Date.diff(a.date, expense_date))
+            diff_b = abs(Date.diff(b.date, expense_date))
+            diff_a <= diff_b
+
+          true ->
+            Date.compare(a.date, b.date) != :lt
         end
       end)
       |> Enum.take(30)
 
-    assign(socket, :available_credits, credits)
+    assign(socket, :available_credits, sorted)
   end
 end

@@ -3,8 +3,8 @@ defmodule CashLensWeb.MonthLive.Show do
 
   alias CashLens.Transactions
 
-  @month_names ~w(Janeiro Fevereiro Março Abril Maio Junho
-                  Julho Agosto Setembro Outubro Novembro Dezembro)
+  @month_names ~w(January February March April May June
+                  July August September October November December)
 
   @impl true
   def mount(%{"year" => year_str, "month" => month_str}, _session, socket) do
@@ -38,11 +38,42 @@ defmodule CashLensWeb.MonthLive.Show do
        |> assign(:summary, summary)
        |> assign(:breakdown, breakdown_with_pct)
        |> assign(:prev, prev)
-       |> assign(:next, next)}
+       |> assign(:next, next)
+       |> assign(:expanded_categories, MapSet.new())
+       |> assign(:category_transactions, %{})}
     else
       _ ->
         today = Date.utc_today()
         {:ok, push_navigate(socket, to: ~p"/months/#{today.year}/#{today.month}")}
+    end
+  end
+
+  @impl true
+  def handle_event("toggle_category", %{"category_id" => row_key}, socket) do
+    expanded = socket.assigns.expanded_categories
+
+    if MapSet.member?(expanded, row_key) do
+      {:noreply,
+       socket
+       |> assign(:expanded_categories, MapSet.delete(expanded, row_key))}
+    else
+      transactions =
+        Map.get_lazy(socket.assigns.category_transactions, row_key, fn ->
+          Transactions.list_all_transactions(%{
+            "category_id" => row_key,
+            "month" => to_string(socket.assigns.month),
+            "year" => to_string(socket.assigns.year),
+            "sort_order" => "asc"
+          })
+        end)
+
+      {:noreply,
+       socket
+       |> assign(:expanded_categories, MapSet.put(expanded, row_key))
+       |> assign(
+         :category_transactions,
+         Map.put(socket.assigns.category_transactions, row_key, transactions)
+       )}
     end
   end
 
@@ -124,23 +155,46 @@ defmodule CashLensWeb.MonthLive.Show do
           <thead class="bg-base-200/50">
             <tr>
               <th>Category</th>
-              <th>Type</th>
               <th class="text-right">Amount</th>
               <th class="text-right w-24">% of total</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
             <%= for row <- @breakdown do %>
-              <tr class="hover">
-                <td class="font-semibold">{row.name}</td>
+              <% row_key = row.category_id || "nil" %>
+              <% expanded = MapSet.member?(@expanded_categories, row_key) %>
+              <tr
+                class="hover cursor-pointer select-none"
+                phx-click="toggle_category"
+                phx-value-category_id={row_key}
+              >
                 <td>
-                  <span class={[
-                    "badge badge-xs font-bold uppercase",
-                    if(row.type == "fixed", do: "badge-info", else: "badge-warning")
-                  ]}>
-                    {row.type}
-                  </span>
+                  <div class="flex items-center gap-2">
+                    <.icon
+                      name={
+                        if expanded, do: "hero-chevron-down-micro", else: "hero-chevron-right-micro"
+                      }
+                      class="size-3 opacity-50 shrink-0"
+                    />
+                    <div>
+                      <div class="font-semibold">{row.name}</div>
+                      <div
+                        :if={not is_nil(row.type)}
+                        class={[
+                          "text-[9px] font-bold uppercase tracking-wider mt-0.5",
+                          if(row.type == "fixed", do: "text-info", else: "text-warning")
+                        ]}
+                      >
+                        {row.type}
+                      </div>
+                      <div
+                        :if={is_nil(row.type)}
+                        class="text-[9px] opacity-30 uppercase tracking-wider mt-0.5"
+                      >
+                        no category
+                      </div>
+                    </div>
+                  </div>
                 </td>
                 <td class="text-right font-mono text-error">{format_currency(row.total)}</td>
                 <td class="text-right">
@@ -155,17 +209,46 @@ defmodule CashLensWeb.MonthLive.Show do
                     <span class="w-10 text-right opacity-70">{row.pct}%</span>
                   </div>
                 </td>
-                <td class="text-right">
-                  <.link
-                    navigate={
-                      ~p"/transactions?month=#{@month}&year=#{@year}&category_id=#{row.category_id}"
-                    }
-                    class="btn btn-ghost btn-xs opacity-50 hover:opacity-100"
-                  >
-                    <.icon name="hero-arrow-top-right-on-square" class="size-3" />
-                  </.link>
-                </td>
               </tr>
+              <%= if expanded do %>
+                <% txns = Map.get(@category_transactions, row_key, []) %>
+                <tr>
+                  <td colspan="3" class="p-0 bg-base-200/40">
+                    <div :if={txns == []} class="px-10 py-3 text-xs opacity-40 italic">
+                      No transactions found.
+                    </div>
+                    <table :if={txns != []} class="table table-xs w-full text-xs">
+                      <tbody>
+                        <%= for t <- txns do %>
+                          <tr class="hover">
+                            <td class="pl-10 w-24 font-mono opacity-60 whitespace-nowrap">
+                              {Calendar.strftime(t.date, "%b %d")}
+                            </td>
+                            <td class="truncate max-w-xs">
+                              <div class="font-medium">{t.description}</div>
+                              <div
+                                :if={t.category}
+                                class="text-[9px] opacity-50 uppercase tracking-wider"
+                              >
+                                {t.category.name}
+                              </div>
+                            </td>
+                            <td class="text-right font-mono whitespace-nowrap">
+                              <span class={
+                                if Decimal.lt?(t.amount, Decimal.new("0")),
+                                  do: "text-error",
+                                  else: "text-success"
+                              }>
+                                {format_currency(t.amount)}
+                              </span>
+                            </td>
+                          </tr>
+                        <% end %>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              <% end %>
             <% end %>
           </tbody>
         </table>
