@@ -69,7 +69,7 @@ defmodule CashLensWeb.PageController do
     fixed_data = extract_category_data(historical_categories, "fixed")
     variable_data = extract_category_data(historical_categories, "variable")
 
-    month_name = Calendar.strftime(summary.month, "%B")
+    month_name = CashLensWeb.Formatters.month_name(summary.month.month)
 
     render(conn, :home,
       layout: {CashLensWeb.Layouts, :app},

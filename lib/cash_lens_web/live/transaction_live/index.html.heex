@@ -174,29 +174,37 @@
   <div class="grid grid-cols-3 gap-4">
     <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
       <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Receitas</p>
-      <p class="text-2xl font-black text-success">{format_currency(@summary.income)}</p>
+      <p :if={@filters_active?} class="text-2xl font-black text-success">
+        {format_currency(@summary.income)}
+      </p>
+      <p :if={!@filters_active?} class="text-2xl font-black opacity-20">—</p>
     </div>
     <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
       <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Despesas</p>
-      <p class="text-2xl font-black text-error">{format_currency(@summary.expenses)}</p>
+      <p :if={@filters_active?} class="text-2xl font-black text-error">
+        {format_currency(@summary.expenses)}
+      </p>
+      <p :if={!@filters_active?} class="text-2xl font-black opacity-20">—</p>
     </div>
     <div class={[
       "bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1",
-      if(Decimal.gte?(@summary.income, @summary.expenses),
-        do: "border-success/30",
-        else: "border-error/30"
-      )
+      @filters_active? && Decimal.gte?(@summary.income, @summary.expenses) && "border-success/30",
+      @filters_active? && !Decimal.gte?(@summary.income, @summary.expenses) && "border-error/30"
     ]}>
       <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Saldo</p>
-      <p class={[
-        "text-2xl font-black",
-        if(Decimal.gte?(@summary.income, @summary.expenses),
-          do: "text-success",
-          else: "text-error"
-        )
-      ]}>
+      <p
+        :if={@filters_active?}
+        class={[
+          "text-2xl font-black",
+          if(Decimal.gte?(@summary.income, @summary.expenses),
+            do: "text-success",
+            else: "text-error"
+          )
+        ]}
+      >
         {format_currency(Decimal.sub(@summary.income, @summary.expenses))}
       </p>
+      <p :if={!@filters_active?} class="text-2xl font-black opacity-20">—</p>
     </div>
   </div>
   
@@ -823,7 +831,7 @@
               <td class="whitespace-nowrap">
                 {Calendar.strftime(tx.date, "%d/%m/%Y")}
                 <span class="opacity-50 text-[10px] ml-1">
-                  {Calendar.strftime(tx.date, "%A")}
+                  {format_weekday_full(tx.date)}
                 </span>
               </td>
               <td class="max-w-xs truncate">{tx.description}</td>

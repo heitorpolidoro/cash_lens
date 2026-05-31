@@ -222,7 +222,7 @@ defmodule CashLensWeb.MonthLive.Show do
                         <%= for t <- txns do %>
                           <tr class="hover">
                             <td class="pl-10 w-24 font-mono opacity-60 whitespace-nowrap">
-                              {Calendar.strftime(t.date, "%b %d")}
+                              {Calendar.strftime(t.date, "%d")} {month_label(t.date.month)}
                             </td>
                             <td class="truncate max-w-xs">
                               <div class="font-medium">{t.description}</div>

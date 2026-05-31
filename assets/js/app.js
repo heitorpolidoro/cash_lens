@@ -64,12 +64,10 @@ const liveSocket = new LiveSocket("/live", Socket, {
           : null;
 
         const selectCategory = (id, name) => {
-          console.log("[CategoryAutocomplete] selectCategory called", { id, name, txId, hasTargetInput: !!targetInput });
           if (targetInput) {
             targetInput.value = id;
             targetInput.dispatchEvent(new Event('input', { bubbles: true }));
           } else {
-            console.log("[CategoryAutocomplete] pushing update_category event");
             this.pushEvent("update_category", { transaction_id: txId, category_id: id });
           }
           dropdown.classList.add('hidden');

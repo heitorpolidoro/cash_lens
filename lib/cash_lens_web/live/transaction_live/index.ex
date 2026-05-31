@@ -38,26 +38,14 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:quick_category_parent, nil)
      |> assign(:auto_categorizing, false)
      |> assign(:filtered_count, nil)
+     |> assign(:filters_active?, false)
      |> assign(:summary, %{income: Decimal.new("0"), expenses: Decimal.new("0")})
      |> assign(:transfer_pairs, %{})
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, accounts)
      |> assign(:import_accounts, Enum.filter(accounts, & &1.accepts_import))
      |> assign(:categories, Categories.list_categories())
-     |> assign(:filters, %{
-       "search" => "",
-       "account_id" => "",
-       "category_id" => "",
-       "date" => "",
-       "date_from" => "",
-       "date_to" => "",
-       "amount" => "",
-       "sort_order" => "desc",
-       "type" => "",
-       "month" => "",
-       "year" => "",
-       "unmatched_transfers" => ""
-     })
+     |> assign(:filters, default_filters())
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
      |> assign(:return_to, nil)
@@ -269,14 +257,8 @@ defmodule CashLensWeb.TransactionLive.Index do
       ) do
     category_id = if category_id == "", do: nil, else: category_id
 
-    require Logger
-
-    Logger.info("update_category: tx=#{id} cat=#{inspect(category_id)}")
-
     case Transactions.update_transaction_category(id, category_id) do
       {:ok, updated_tx} ->
-        Logger.info("update_category: saved ok, new cat=#{inspect(updated_tx.category_id)}")
-
         socket =
           socket
           |> assign(:pending_count, Transactions.count_pending_transactions())
@@ -286,8 +268,9 @@ defmodule CashLensWeb.TransactionLive.Index do
         {:noreply, socket}
 
       {:error, changeset} ->
-        Logger.error("update_category failed: #{inspect(changeset.errors)}")
-        {:noreply, put_flash(socket, :error, "Update failed: #{inspect(changeset.errors)}")}
+        {:noreply,
+         socket
+         |> put_flash(:error, "Falha ao atualizar categoria: #{inspect(changeset.errors)}")}
     end
   end
 
@@ -393,20 +376,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
-    filters = %{
-      "search" => "",
-      "account_id" => "",
-      "category_id" => "",
-      "date" => "",
-      "amount" => "",
-      "sort_order" => "desc",
-      "type" => "",
-      "month" => "",
-      "year" => "",
-      "unmatched_transfers" => "",
-      "date_from" => "",
-      "date_to" => ""
-    }
+    filters = default_filters()
 
     {:noreply,
      socket
@@ -533,6 +503,8 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> Map.put("type", "")
       |> Map.put("unmatched_transfers", "")
       |> Map.put("sort_order", if(enabling, do: "asc", else: "desc"))
+      |> Map.put("month", "")
+      |> Map.put("year", "")
 
     {:noreply,
      socket
@@ -949,6 +921,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     socket
     |> assign(:unmatched_transfers_count, unmatched_count)
     |> assign(:filtered_count, filtered_count)
+    |> assign(:filters_active?, filters_active?(socket.assigns.filters))
     |> assign(:summary, summary)
   end
 
@@ -961,6 +934,32 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     new_pairs = Transactions.get_transfer_pairs(keys)
     assign(socket, :transfer_pairs, Map.merge(socket.assigns.transfer_pairs, new_pairs))
+  end
+
+  defp default_filters do
+    %{
+      "search" => "",
+      "account_id" => "",
+      "category_id" => "",
+      "date" => "",
+      "date_from" => "",
+      "date_to" => "",
+      "amount" => "",
+      "sort_order" => "desc",
+      "type" => "",
+      "month" => "",
+      "year" => "",
+      "unmatched_transfers" => ""
+    }
+  end
+
+  # A filter is considered "active" when any field other than sort_order
+  # has a non-empty value.
+  defp filters_active?(filters) do
+    filters
+    |> Map.drop(["sort_order"])
+    |> Map.values()
+    |> Enum.any?(&(&1 not in [nil, ""]))
   end
 
   defp map_filters(filters) do

@@ -413,10 +413,8 @@ defmodule CashLens.Transactions do
         join: c in assoc(t, :category),
         left_join: p in assoc(c, :parent),
         left_join: g in assoc(p, :parent),
-        where: t.amount < 0,
         where: t.date >= ^first and t.date <= ^last,
         where: c.slug not in ["initial_value", "transfer"],
-        where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
@@ -426,11 +424,13 @@ defmodule CashLens.Transactions do
           name: fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           category_id: type(fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id), :binary_id),
           type: fragment("COALESCE(?, ?, ?)", g.type, p.type, c.type),
-          total: sum(fragment("ABS(?)", t.amount))
+          total: sum(t.amount)
         },
-        order_by: [desc: sum(fragment("ABS(?)", t.amount))]
+        having: sum(t.amount) < 0,
+        order_by: [asc: sum(t.amount)]
       )
       |> Repo.all()
+      |> Enum.map(fn row -> %{row | total: Decimal.abs(row.total)} end)
 
     uncategorized_total =
       from(t in Transaction,
