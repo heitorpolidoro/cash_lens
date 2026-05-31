@@ -7,8 +7,19 @@ defmodule CashLens.Parsers.CSVParser do
   NimbleCSV.define(CashLens.Parsers.CSVParser.Semicolon, separator: ";", escape: "\"")
 
   @doc """
-  Parses a CSV string for Banco do Brasil format.
+  Parses a CSV string. Supported formats:
+  - `:bradesco_csv` — Bradesco bank statement (semicolon-separated, BOM prefix)
+  - `:bb` — Banco do Brasil (comma or semicolon)
   """
+  def parse(csv_content, :bradesco_csv) do
+    csv_content
+    |> String.replace("﻿", "")
+    |> CashLens.Parsers.CSVParser.Semicolon.parse_string(skip_headers: false)
+    |> Enum.drop_while(&(not bradesco_date_row?(&1)))
+    |> Enum.map(&parse_bradesco_row/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
   def parse(csv_content, :bb) do
     # Banco do Brasil often exports with semicolons depending on the locale
     parser =
@@ -23,11 +34,64 @@ defmodule CashLens.Parsers.CSVParser do
     |> Enum.reject(&is_nil/1)
   end
 
-  # Banco do Brasil Standard (Comma or Semicolon)
+  # --- Bradesco helpers ---
+
+  defp bradesco_date_row?([date | _]),
+    do: Regex.match?(~r/^\d{2}\/\d{2}\/\d{4}$/, String.trim(date))
+
+  defp bradesco_date_row?(_), do: false
+
+  # Data;Histórico;Docto.;Crédito (R$);Débito (R$);Saldo (R$)
+  defp parse_bradesco_row([raw_date, description, _docto, credit_str, debit_str | _]) do
+    date_str = String.trim(raw_date)
+
+    with true <- Regex.match?(~r/^\d{2}\/\d{2}\/\d{4}$/, date_str),
+         date <- parse_slashed_date(date_str),
+         credit <- parse_br_amount(credit_str),
+         debit <- parse_br_amount(debit_str),
+         amount <- resolve_bradesco_amount(credit, debit),
+         false <- Decimal.eq?(amount, Decimal.new("0")),
+         clean_desc <- String.trim(description),
+         false <- skip_bradesco_description?(clean_desc) do
+      %{date: date, time: nil, description: clean_desc, amount: amount}
+    else
+      _ -> nil
+    end
+  end
+
+  defp parse_bradesco_row(_), do: nil
+
+  defp resolve_bradesco_amount(credit, debit) do
+    cond do
+      not Decimal.eq?(credit, Decimal.new("0")) -> credit
+      not Decimal.eq?(debit, Decimal.new("0")) -> Decimal.negate(debit)
+      true -> Decimal.new("0")
+    end
+  end
+
+  defp skip_bradesco_description?(desc) do
+    upper = String.upcase(desc)
+    String.contains?(upper, ["SALDO", "S A L D O", "COD. LANC. 0", "ÚLTIMOS LANC"])
+  end
+
+  # Parses Brazilian number format: "3.591,96" → Decimal 3591.96
+  defp parse_br_amount(str) do
+    clean =
+      (str || "")
+      |> String.trim()
+      |> String.replace(".", "")
+      |> String.replace(",", ".")
+
+    case Decimal.cast(clean) do
+      {:ok, d} -> d
+      :error -> Decimal.new("0")
+    end
+  end
+
+  # --- Banco do Brasil helpers ---
+
   # Try to match based on row length to handle different exports
   defp parse_row(row, :bb) when length(row) >= 6 do
-    # Index 2 is usually History/Description, Index 5 is Valor
-    # If index 2 looks like a terminal number (numeric), try index 3
     description = Enum.at(row, 2)
     amount = Enum.at(row, 5)
 
@@ -54,7 +118,6 @@ defmodule CashLens.Parsers.CSVParser do
     if Decimal.eq?(amount_decimal, 0) or String.contains?(description_up, ["SALDO", "S A L D O"]) do
       nil
     else
-      # Extract metadata and CLEAN description
       {final_date, final_time, clean_description} =
         extract_metadata_and_clean(description_val, parse_date(date))
 
@@ -67,12 +130,13 @@ defmodule CashLens.Parsers.CSVParser do
     end
   end
 
+  # --- Shared helpers ---
+
   @doc """
-  Extracts date (DD/MM) and time (HH:MM) from a string and returns a cleaned version of the string.
+  Extracts date (DD/MM) and time (HH:MM) from a string and returns a cleaned version.
   Returns {date, time, clean_text}.
   """
   def extract_metadata_and_clean(text, base_date) do
-    # Regex for DD/MM and HH:MM
     date_match = Regex.run(~r/(\d{2})\/(\d{2})/, text)
     time_match = Regex.run(~r/(\d{2}):(\d{2})/, text)
 
@@ -100,18 +164,12 @@ defmodule CashLens.Parsers.CSVParser do
           nil
       end
 
-    # CLEANING: Remove date, time, and common separators that become trailing/leading
     clean_text =
       text
-      # Remove DD/MM
       |> String.replace(~r/\d{2}\/\d{2}/, "")
-      # Remove HH:MM
       |> String.replace(~r/\d{2}:\d{2}/, "")
-      # Remove leading dashes/dots/spaces
       |> String.replace(~r/^[\s\-\.]+/, "")
-      # Remove trailing dashes/dots/spaces
       |> String.replace(~r/[\s\-\.]+$/, "")
-      # Normalize spaces
       |> String.replace(~r/\s+/, " ")
       |> String.trim()
 
@@ -122,11 +180,8 @@ defmodule CashLens.Parsers.CSVParser do
     date_string = String.trim(date_string || "")
 
     case Date.from_iso8601(date_string) do
-      {:ok, date} ->
-        date
-
-      _ ->
-        parse_slashed_date(date_string)
+      {:ok, date} -> date
+      _ -> parse_slashed_date(date_string)
     end
   end
 

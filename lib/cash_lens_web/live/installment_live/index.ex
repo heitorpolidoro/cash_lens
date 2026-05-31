@@ -33,7 +33,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
          socket
          |> assign(:show_modal, false)
          |> assign(:groups, list_groups())
-         |> put_flash(:info, "Installment group created!")}
+         |> put_flash(:success, "Grupo de parcelamento criado!")}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset))}
@@ -58,10 +58,10 @@ defmodule CashLensWeb.InstallmentLive.Index do
     <div class="py-6 space-y-8">
       <div class="flex items-center justify-between">
         <h1 class="text-3xl font-bold text-base-content uppercase tracking-tighter">
-          Installment Groups
+          Grupos de Parcelamento
         </h1>
         <button phx-click="open_modal" class="btn btn-primary btn-sm rounded-xl">
-          <.icon name="hero-plus" class="size-4 mr-1" /> New Group
+          <.icon name="hero-plus" class="size-4 mr-1" /> Novo Grupo
         </button>
       </div>
 
@@ -89,8 +89,8 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
               <div class="mt-6 space-y-2">
                 <div class="flex items-center justify-between text-[10px] font-bold uppercase">
-                  <span class="opacity-50">Progress</span>
-                  <span>{group.paid_count} / {group.installments} paid</span>
+                  <span class="opacity-50">Progresso</span>
+                  <span>{group.paid_count} / {group.installments} pagos</span>
                 </div>
                 <progress
                   class="progress progress-primary w-full h-2"
@@ -99,7 +99,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
                 >
                 </progress>
                 <p class="text-[10px] opacity-40 font-medium">
-                  Started on {format_date(group.start_date)}
+                  Iniciado em {format_date(group.start_date)}
                 </p>
               </div>
             </div>
@@ -112,16 +112,18 @@ defmodule CashLensWeb.InstallmentLive.Index do
           <div class="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-6">
             <.icon name="hero-rectangle-group" class="size-8" />
           </div>
-          <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">New Installment Group</h2>
+          <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">
+            Novo Grupo de Parcelamento
+          </h2>
           <p class="text-sm opacity-70 mb-8">
-            Create a group to track a long-term debt and its installments.
+            Crie um grupo para acompanhar uma dívida de longo prazo e suas parcelas.
           </p>
 
           <.form for={@form} phx-submit="save" class="space-y-4">
             <.input
               field={@form[:description_pattern]}
-              label="Description Pattern (matches bank imports)"
-              placeholder="Ex: NUBANK, RENT..."
+              label="Padrão de Descrição (corresponde às importações do banco)"
+              placeholder="Ex: NUBANK, ALUGUEL..."
               required
             />
             <div class="grid grid-cols-2 gap-4">
@@ -129,25 +131,25 @@ defmodule CashLensWeb.InstallmentLive.Index do
                 field={@form[:total_amount]}
                 type="number"
                 step="0.01"
-                label="Total Amount (optional)"
+                label="Valor Total (opcional)"
               />
-              <.input field={@form[:installments]} type="number" label="Total Installments" required />
+              <.input field={@form[:installments]} type="number" label="Total de Parcelas" required />
             </div>
-            <.input field={@form[:start_date]} type="date" label="Start Date" required />
+            <.input field={@form[:start_date]} type="date" label="Data de Início" required />
 
             <div class="flex flex-col sm:flex-row gap-3 pt-4">
               <button
                 type="submit"
                 class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
               >
-                Create Group
+                Criar Grupo
               </button>
               <button
                 type="button"
                 phx-click="close_modal"
                 class="btn btn-ghost btn-lg flex-1 rounded-2xl"
               >
-                Cancel
+                Cancelar
               </button>
             </div>
           </.form>

@@ -10,48 +10,53 @@ defmodule CashLensWeb.AccountLive.Form do
     ~H"""
     <.header>
       {@page_title}
-      <:subtitle>Use this form to manage your bank account data and balances.</:subtitle>
+      <:subtitle>
+        Use este formulário para gerenciar os dados e saldos da sua conta bancária.
+      </:subtitle>
     </.header>
 
     <.form for={@form} id="account-form" phx-change="validate" phx-submit="save">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-base-200/30 p-6 rounded-2xl border border-base-300 mb-8">
         <div class="space-y-4">
-          <h3 class="text-sm font-black uppercase tracking-wider opacity-40">Account Details</h3>
-          <.input field={@form[:name]} type="text" label="Name" />
-          <.input field={@form[:bank]} type="text" label="Bank" />
+          <h3 class="text-sm font-black uppercase tracking-wider opacity-40">Dados da Conta</h3>
+          <.input field={@form[:name]} type="text" label="Nome" />
+          <.input field={@form[:bank]} type="text" label="Banco" />
           <.input
             field={@form[:parser_type]}
             type="select"
-            label="Extractor"
+            label="Extrator"
             options={[
+              {"Bradesco (CSV)", "bradesco_csv"},
               {"Banco do Brasil (CSV)", "bb_csv"},
               {"Sem Parar (PDF)", "sem_parar_pdf"},
               {"Standard OFX", "standard_ofx"}
             ]}
-            prompt="Select an extractor"
+            prompt="Selecione um extrator"
           />
         </div>
 
         <div class="space-y-4">
-          <h3 class="text-sm font-black uppercase tracking-wider opacity-40">Balance Management</h3>
-          <.input field={@form[:balance]} type="number" label="Initial Balance (Seed)" step="any" />
+          <h3 class="text-sm font-black uppercase tracking-wider opacity-40">
+            Gerenciamento de Saldo
+          </h3>
+          <.input field={@form[:balance]} type="number" label="Saldo Inicial (Base)" step="any" />
 
           <div :if={@live_action == :edit} class="space-y-1">
             <.input
               field={@form[:current_balance]}
               type="number"
-              label="Current Balance (Adjust)"
+              label="Saldo Atual (Ajustar)"
               step="any"
               phx-debounce="blur"
             />
             <p class="text-[10px] opacity-50 px-1">
-              Adjusting this value will automatically shift the Initial Balance to match.
+              Ajustar este valor irá alterar automaticamente o Saldo Inicial para corresponder.
             </p>
           </div>
 
           <div :if={@live_action == :new} class="bg-info/10 p-3 rounded-lg border border-info/20">
             <p class="text-xs text-info leading-relaxed">
-              For new accounts, the Initial Balance is the starting point. Current Balance will be calculated based on transactions.
+              Para novas contas, o Saldo Inicial é o ponto de partida. O Saldo Atual será calculado com base nas transações.
             </p>
           </div>
         </div>
@@ -59,13 +64,17 @@ defmodule CashLensWeb.AccountLive.Form do
 
       <div class="space-y-6">
         <div class="flex flex-wrap gap-6">
-          <.input field={@form[:accepts_import]} type="checkbox" label="Accepts statement imports?" />
-          <.input field={@form[:color]} type="text" label="Color (optional)" class="w-32" />
+          <.input
+            field={@form[:accepts_import]}
+            type="checkbox"
+            label="Aceita importação de extratos?"
+          />
+          <.input field={@form[:color]} type="text" label="Cor (opcional)" class="w-32" />
         </div>
 
         <div class="flex items-end gap-4">
           <div class="flex-1">
-            <.input field={@form[:icon]} type="text" label="Icon URL (optional)" />
+            <.input field={@form[:icon]} type="text" label="URL do Ícone (opcional)" />
           </div>
           <div class="avatar pb-2">
             <div class="w-12 rounded-full border border-base-300 bg-base-200 flex items-center justify-center overflow-hidden">
@@ -80,15 +89,15 @@ defmodule CashLensWeb.AccountLive.Form do
       </div>
 
       <div class="mt-8 flex flex-col sm:flex-row gap-3">
-        <.button phx-disable-with="Saving..." variant="primary" class="flex-1">
-          Save Account
+        <.button phx-disable-with="Salvando..." variant="primary" class="flex-1">
+          Salvar Conta
         </.button>
         <.button
           type="button"
           navigate={return_path(@return_to, @account)}
           class="btn btn-error btn-outline flex-1"
         >
-          Cancel
+          Cancelar
         </.button>
       </div>
     </.form>
@@ -113,7 +122,7 @@ defmodule CashLensWeb.AccountLive.Form do
     current_balance = if latest_balance, do: latest_balance.final_balance, else: account.balance
 
     socket
-    |> assign(:page_title, "Edit Account")
+    |> assign(:page_title, "Editar Conta")
     |> assign(:account, account)
     |> assign(:current_balance_on_load, current_balance)
     |> assign(
@@ -126,7 +135,7 @@ defmodule CashLensWeb.AccountLive.Form do
     account = %Account{}
 
     socket
-    |> assign(:page_title, "New Account")
+    |> assign(:page_title, "Nova Conta")
     |> assign(:account, account)
     |> assign(:current_balance_on_load, nil)
     |> assign(:form, to_form(Accounts.change_account(account)))
@@ -177,7 +186,7 @@ defmodule CashLensWeb.AccountLive.Form do
 
         {:noreply,
          socket
-         |> put_flash(:info, "Account updated successfully")
+         |> put_flash(:success, "Conta atualizada com sucesso")
          |> push_navigate(to: return_path(socket.assigns.return_to, account))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -191,7 +200,7 @@ defmodule CashLensWeb.AccountLive.Form do
         # No need to rebuild for new account (no transactions yet)
         {:noreply,
          socket
-         |> put_flash(:info, "Account created successfully")
+         |> put_flash(:success, "Conta criada com sucesso")
          |> push_navigate(to: return_path(socket.assigns.return_to, account))}
 
       {:error, %Ecto.Changeset{} = changeset} ->

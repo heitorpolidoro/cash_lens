@@ -41,6 +41,7 @@ defmodule CashLensWeb.Router do
       live "/months/:year/:month", MonthLive.Show, :show
 
       live "/reimbursements", ReimbursementLive.Index, :index
+      live "/transfers", TransferLive.Index, :index
       live "/installments", InstallmentLive.Index, :index
 
       live "/admin/db", AdminDatabaseLive, :index

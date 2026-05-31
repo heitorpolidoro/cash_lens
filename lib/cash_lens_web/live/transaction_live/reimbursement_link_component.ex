@@ -17,10 +17,19 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponent do
           <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-success">
             Vincular Reembolso
           </h2>
-          <p class="text-xs opacity-60 mb-6">
-            Selecione abaixo a despesa que foi coberta por este recebimento de {format_currency(
-              @reimbursement_credit.amount
-            )}.
+          <div class="bg-base-200 rounded-xl p-3 mb-6 flex items-center justify-between">
+            <div>
+              <div class="text-[9px] font-bold uppercase opacity-50 mb-0.5">
+                {format_date(@reimbursement_credit.date)}
+              </div>
+              <div class="font-black text-sm">{@reimbursement_credit.description}</div>
+            </div>
+            <div class="font-black text-success text-lg">
+              {format_currency(@reimbursement_credit.amount)}
+            </div>
+          </div>
+          <p class="text-xs opacity-50 mb-4">
+            Selecione a despesa coberta por este recebimento:
           </p>
           
     <!-- Campo de Busca -->

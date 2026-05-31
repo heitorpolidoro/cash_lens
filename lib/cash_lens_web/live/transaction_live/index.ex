@@ -13,7 +13,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Transactions")
+     |> assign(:page_title, "Transações")
      |> assign(:show_import_modal, false)
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
@@ -39,6 +39,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:auto_categorizing, false)
      |> assign(:filtered_count, nil)
      |> assign(:summary, %{income: Decimal.new("0"), expenses: Decimal.new("0")})
+     |> assign(:transfer_pairs, %{})
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, accounts)
      |> assign(:import_accounts, Enum.filter(accounts, & &1.accepts_import))
@@ -73,6 +74,8 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     filters = Map.merge(socket.assigns.filters, filters_param || %{})
 
+    txs = Transactions.list_transactions(map_filters(filters), 1)
+
     socket =
       socket
       |> assign(:filters, filters)
@@ -80,10 +83,10 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> assign(:show_import_modal, open_import == "true")
       |> assign(:page, 1)
       |> assign(:end_of_list?, false)
+      |> assign(:transfer_pairs, %{})
       |> calculate_summary()
-      |> stream(:transactions, Transactions.list_transactions(map_filters(filters), 1),
-        reset: true
-      )
+      |> load_transfer_pairs(txs)
+      |> stream(:transactions, txs, reset: true)
 
     {:noreply, socket}
   end
@@ -116,7 +119,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
       {:noreply,
        socket
-       |> put_flash(:success, "Reimbursement link removed.")
+       |> put_flash(:success, "Vínculo de reembolso removido.")
        |> stream(
          :transactions,
          Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -145,11 +148,11 @@ defmodule CashLensWeb.TransactionLive.Index do
       {:ok, updated_tx} ->
         {:noreply,
          socket
-         |> put_flash(:success, "Linked to #{group.description_pattern}!")
+         |> put_flash(:success, "Vinculado a #{group.description_pattern}!")
          |> stream_insert(:transactions, updated_tx)}
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Linking failed.")}
+        {:noreply, put_flash(socket, :error, "Falha ao vincular.")}
     end
   end
 
@@ -214,11 +217,11 @@ defmodule CashLensWeb.TransactionLive.Index do
          socket
          |> assign(:show_notes_modal, false)
          |> assign(:editing_transaction, nil)
-         |> put_flash(:success, "Notes updated!")
+         |> put_flash(:success, "Notas atualizadas!")
          |> stream_insert(:transactions, updated_tx)}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update notes.")}
+        {:noreply, put_flash(socket, :error, "Falha ao atualizar notas.")}
     end
   end
 
@@ -266,8 +269,14 @@ defmodule CashLensWeb.TransactionLive.Index do
       ) do
     category_id = if category_id == "", do: nil, else: category_id
 
+    require Logger
+
+    Logger.info("update_category: tx=#{id} cat=#{inspect(category_id)}")
+
     case Transactions.update_transaction_category(id, category_id) do
       {:ok, updated_tx} ->
+        Logger.info("update_category: saved ok, new cat=#{inspect(updated_tx.category_id)}")
+
         socket =
           socket
           |> assign(:pending_count, Transactions.count_pending_transactions())
@@ -276,8 +285,9 @@ defmodule CashLensWeb.TransactionLive.Index do
 
         {:noreply, socket}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Update failed")}
+      {:error, changeset} ->
+        Logger.error("update_category failed: #{inspect(changeset.errors)}")
+        {:noreply, put_flash(socket, :error, "Update failed: #{inspect(changeset.errors)}")}
     end
   end
 
@@ -294,7 +304,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:success, "#{length(selected_items)} transactions categorized!")
+     |> put_flash(:success, "#{length(selected_items)} transações categorizadas!")
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -568,6 +578,7 @@ defmodule CashLensWeb.TransactionLive.Index do
        socket
        |> assign(:page, next_page)
        |> assign(:end_of_list?, Enum.empty?(items))
+       |> load_transfer_pairs(items)
        |> stream_insert_many(:transactions, items)}
     end
   end
@@ -615,7 +626,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:auto_categorizing, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:success, "Rules applied!")
+     |> put_flash(:success, "Regras aplicadas!")
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -627,7 +638,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:show_reimbursement_modal, false)
-     |> put_flash(:success, "Reimbursement linked and categorized!")
+     |> put_flash(:success, "Reembolso vinculado e categorizado!")
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -714,7 +725,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:success, "Success! #{count} transactions imported.")
+     |> put_flash(:success, "Sucesso! #{count} transações importadas.")
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -733,7 +744,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:pending_count, Transactions.count_pending_transactions())
      |> put_flash(
        :info,
-       "#{count} transactions imported. #{length(failed)} rows skipped: #{failed_msg}"
+       "#{count} transações importadas. #{length(failed)} linhas ignoradas: #{failed_msg}"
      )
      |> stream(
        :transactions,
@@ -744,7 +755,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_info({:import_error, reason}, socket) do
-    {:noreply, put_flash(socket, :error, "Import error: #{reason}")}
+    {:noreply, put_flash(socket, :error, "Erro na importação: #{reason}")}
   end
 
   @impl true
@@ -763,7 +774,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> assign(:show_quick_category_modal, false)
       |> assign(:categories, Categories.list_categories())
       |> assign(:pending_count, Transactions.count_pending_transactions())
-      |> put_flash(:success, "Category created!")
+      |> put_flash(:success, "Categoria criada!")
 
     bulk_items = get_bulk_items_for_tx(tx, category.id)
 
@@ -939,6 +950,17 @@ defmodule CashLensWeb.TransactionLive.Index do
     |> assign(:unmatched_transfers_count, unmatched_count)
     |> assign(:filtered_count, filtered_count)
     |> assign(:summary, summary)
+  end
+
+  defp load_transfer_pairs(socket, transactions) do
+    keys =
+      transactions
+      |> Enum.map(& &1.transfer_key)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    new_pairs = Transactions.get_transfer_pairs(keys)
+    assign(socket, :transfer_pairs, Map.merge(socket.assigns.transfer_pairs, new_pairs))
   end
 
   defp map_filters(filters) do

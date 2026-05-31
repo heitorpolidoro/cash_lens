@@ -15,7 +15,7 @@ defmodule CashLensWeb.CoreComponents do
   attr :id, :string, doc: "the optional id of flash container"
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
-  attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+  attr :kind, :atom, values: [:info, :error, :success], doc: "used for styling and flash lookup"
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -27,6 +27,7 @@ defmodule CashLensWeb.CoreComponents do
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
+      phx-hook="FlashAutoClose"
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
       class="toast toast-bottom toast-end z-50"
@@ -34,11 +35,13 @@ defmodule CashLensWeb.CoreComponents do
     >
       <div class={[
         "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
+        @kind == :info && "bg-info text-info-content",
+        @kind == :error && "bg-error text-error-content",
+        @kind == :success && "bg-success text-success-content"
       ]}>
         <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
         <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
+        <.icon :if={@kind == :success} name="hero-check-circle" class="size-5 shrink-0" />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>

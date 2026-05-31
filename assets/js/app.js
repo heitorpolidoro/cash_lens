@@ -64,10 +64,12 @@ const liveSocket = new LiveSocket("/live", Socket, {
           : null;
 
         const selectCategory = (id, name) => {
+          console.log("[CategoryAutocomplete] selectCategory called", { id, name, txId, hasTargetInput: !!targetInput });
           if (targetInput) {
             targetInput.value = id;
             targetInput.dispatchEvent(new Event('input', { bubbles: true }));
           } else {
+            console.log("[CategoryAutocomplete] pushing update_category event");
             this.pushEvent("update_category", { transaction_id: txId, category_id: id });
           }
           dropdown.classList.add('hidden');
@@ -80,7 +82,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
             targetInput.value = "";
             targetInput.dispatchEvent(new Event('input', { bubbles: true }));
           }
-          input.placeholder = txId ? "Pending" : "None";
+          input.placeholder = txId ? "Pendente" : "Nenhuma";
           input.value = "";
         };
 
@@ -159,6 +161,18 @@ const liveSocket = new LiveSocket("/live", Socket, {
         // TODO: Implement a robust Markdown-to-HTML renderer (e.g., using a library like marked or shiki)
         const raw = this.el.getAttribute("data-content") || "";
         this.el.innerHTML = DOMPurify.sanitize(raw);
+      }
+    },
+    FlashAutoClose: {
+      mounted() {
+        this.timer = setTimeout(() => {
+          this.el.style.transition = "opacity 0.5s ease";
+          this.el.style.opacity = "0";
+          setTimeout(() => this.el.remove(), 500);
+        }, 5000);
+      },
+      destroyed() {
+        clearTimeout(this.timer);
       }
     },
     DateRangePicker: {

@@ -1,0 +1,22 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "local",
+      "runtimeExecutable": "mix",
+      "runtimeArgs": ["phx.server"],
+      "cwd": ".",
+      "port": 4000,
+      "env": {
+        "SECRET_KEY_BASE": "70NLq9pxYF2jWdmvqdkREiQ3rkqig4gb+R68EUwERBxNMOSFRlQ++1XNL3BTf/XO"
+      }
+    },
+    {
+      "name": "Docker",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "--profile", "cash_lens", "up", "--build"],
+      "cwd": "..",
+      "port": 4000
+    }
+  ]
+}

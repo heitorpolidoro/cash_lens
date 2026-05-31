@@ -9,10 +9,10 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
     ~H"""
     <div class="py-6 space-y-8">
       <.header>
-        Transfer Rules
+        Regras de Transferência
         <:subtitle>
-          Define rules that automatically create mirrored transactions in a destination account
-          when a transaction with a matching description is found in the source account.
+          Defina regras que criam automaticamente transações espelhadas em uma conta de destino
+          quando uma transação com descrição correspondente é encontrada na conta de origem.
         </:subtitle>
       </.header>
 
@@ -22,7 +22,7 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
           <div class="card bg-base-100 shadow-sm border border-base-300">
             <div class="card-body p-6">
               <h2 class="text-sm font-black uppercase opacity-50 mb-4">
-                {if @current_rule, do: "Edit Rule", else: "New Rule"}
+                {if @current_rule, do: "Editar Regra", else: "Nova Regra"}
               </h2>
               <.form
                 for={@form}
@@ -34,39 +34,39 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
                 <.input
                   field={@form[:label]}
                   type="text"
-                  label="Label (optional)"
-                  placeholder="e.g. Savings Transfer"
+                  label="Rótulo (opcional)"
+                  placeholder="ex. Transferência para Poupança"
                 />
                 <.input
                   field={@form[:description_patterns_raw]}
                   type="text"
-                  label="Description Patterns (comma-separated)"
-                  placeholder="e.g. Transfer to Savings, SAVINGS XFER"
+                  label="Padrões de Descrição (separados por vírgula)"
+                  placeholder="ex. Transfer para Poupança, SAVINGS XFER"
                   required
                 />
                 <.input
                   field={@form[:source_account_id]}
                   type="select"
-                  label="Source Account"
+                  label="Conta de Origem"
                   options={account_options(@accounts)}
-                  prompt="Select source account"
+                  prompt="Selecione a conta de origem"
                   required
                 />
                 <.input
                   field={@form[:destination_account_id]}
                   type="select"
-                  label="Destination Account"
+                  label="Conta de Destino"
                   options={account_options(@accounts)}
-                  prompt="Select destination account"
+                  prompt="Selecione a conta de destino"
                   required
                 />
                 <div class="pt-2 flex gap-2">
                   <button
                     type="submit"
                     class="btn btn-primary flex-1 rounded-xl"
-                    phx-disable-with="Saving..."
+                    phx-disable-with="Salvando..."
                   >
-                    Save Rule
+                    Salvar Regra
                   </button>
                   <button
                     :if={@current_rule}
@@ -74,7 +74,7 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
                     phx-click="cancel_edit"
                     class="btn btn-ghost rounded-xl"
                   >
-                    Cancel
+                    Cancelar
                   </button>
                 </div>
               </.form>
@@ -89,10 +89,10 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
               <table class="table table-zebra w-full text-xs">
                 <thead class="bg-base-200/50">
                   <tr>
-                    <th>Label</th>
-                    <th>Patterns</th>
-                    <th>Source Account</th>
-                    <th>Destination Account</th>
+                    <th>Rótulo</th>
+                    <th>Padrões</th>
+                    <th>Conta de Origem</th>
+                    <th>Conta de Destino</th>
                     <th class="w-20"></th>
                   </tr>
                 </thead>
@@ -116,7 +116,7 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
                         <button
                           phx-click="delete"
                           phx-value-id={rule.id}
-                          data-confirm="Are you sure you want to delete this rule?"
+                          data-confirm="Tem certeza que deseja excluir esta regra?"
                           class="btn btn-ghost btn-xs text-error"
                         >
                           <.icon name="hero-trash" class="size-4" />
@@ -130,7 +130,7 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
                 id="no-rules-msg"
                 class="p-10 text-center opacity-30 italic only:block hidden"
               >
-                No transfer rules configured.
+                Nenhuma regra de transferência configurada.
               </div>
             </div>
           </div>
@@ -183,7 +183,7 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
 
         {:noreply,
          socket
-         |> put_flash(:info, "Transfer rule saved!")
+         |> put_flash(:success, "Regra de transferência salva!")
          |> stream_insert(:transfer_rules, rule)
          |> assign(:current_rule, nil)
          |> assign(:form, build_form(%TransferRule{}))}
@@ -220,7 +220,7 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
     {:noreply,
      socket
      |> stream_delete(:transfer_rules, rule)
-     |> put_flash(:info, "Transfer rule deleted.")}
+     |> put_flash(:success, "Regra de transferência excluída.")}
   end
 
   defp build_form(rule) do

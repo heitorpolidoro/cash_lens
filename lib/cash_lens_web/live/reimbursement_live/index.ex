@@ -14,36 +14,36 @@ defmodule CashLensWeb.ReimbursementLive.Index do
       >
         <div class="flex flex-col">
           <span class="text-[10px] font-black uppercase opacity-70 text-white">
-            Total Selected ({MapSet.size(@selected_ids)} items)
+            Total Selecionado ({MapSet.size(@selected_ids)} itens)
           </span>
           <span class="text-2xl font-black text-white">{format_currency(@total_selected)}</span>
         </div>
         <div class="flex gap-2">
           <button phx-click="open_batch_linker" class="btn btn-white btn-md rounded-xl font-black">
-            <.icon name="hero-link" class="size-4 mr-1" /> Link Receipt
+            <.icon name="hero-link" class="size-4 mr-1" /> Vincular Recebimento
           </button>
           <button
             phx-click="clear_selection"
             class="btn btn-ghost btn-sm text-white/70 hover:text-white"
           >
-            Cancel
+            Cancelar
           </button>
         </div>
       </div>
 
       <.header>
-        Reimbursement Management
-        <:subtitle>Track reimbursable expenses and reconcile with receipts.</:subtitle>
+        Gerenciamento de Reembolsos
+        <:subtitle>Acompanhe despesas reembolsáveis e reconcilie com recebimentos.</:subtitle>
       </.header>
       
     <!-- Macro Summary -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">
-            <h2 class="text-xs font-black uppercase opacity-40 mb-1">Total to Receive</h2>
+            <h2 class="text-xs font-black uppercase opacity-40 mb-1">Total a Receber</h2>
             <p class="text-3xl font-black text-primary">{format_currency(@total_to_receive)}</p>
             <p class="text-[10px] opacity-50 font-bold uppercase mt-2">
-              {@pending_count} pending + {@requested_count} requested
+              {@pending_count} pendentes + {@requested_count} solicitados
             </p>
           </div>
         </div>
@@ -51,11 +51,11 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-6">
             <h2 class="text-xs font-black uppercase opacity-40 mb-1">
-              Requested (Awaiting Plan)
+              Solicitados (Aguardando Pagamento)
             </h2>
             <p class="text-3xl font-black text-info">{format_currency(@total_requested)}</p>
             <p class="text-[10px] opacity-50 font-bold uppercase mt-2">
-              {@requested_count} requests sent
+              {@requested_count} solicitações enviadas
             </p>
           </div>
         </div>
@@ -65,7 +65,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
       <div class="card bg-base-100 shadow-sm border border-base-300 overflow-hidden">
         <div class="card-body p-0">
           <div class="p-6 border-b border-base-200 flex justify-between items-center bg-base-200/10">
-            <h2 class="text-sm font-black uppercase opacity-50">Reimbursable Expenses List</h2>
+            <h2 class="text-sm font-black uppercase opacity-50">Lista de Despesas Reembolsáveis</h2>
             <div class="flex gap-2">
               <span class="badge badge-warning badge-xs text-[8px] uppercase">Pending</span>
               <span class="badge badge-info badge-xs text-[8px] uppercase">Requested</span>
@@ -77,12 +77,12 @@ defmodule CashLensWeb.ReimbursementLive.Index do
               <thead class="bg-base-200/50">
                 <tr>
                   <th class="w-12"></th>
-                  <th>Date</th>
-                  <th>Description</th>
-                  <th>Account</th>
+                  <th>Data</th>
+                  <th>Descrição</th>
+                  <th>Conta</th>
                   <th>Status</th>
-                  <th class="text-right">Amount</th>
-                  <th class="text-center">Actions</th>
+                  <th class="text-right">Valor</th>
+                  <th class="text-center">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -123,7 +123,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                           phx-click="link_single_expense"
                           phx-value-id={tx.id}
                           class="btn btn-ghost btn-xs text-success"
-                          title="Link Receipt"
+                          title="Vincular Recebimento"
                         >
                           <.icon name="hero-link" class="size-4" />
                         </button>
@@ -132,7 +132,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                             phx-click="mark_requested"
                             phx-value-id={tx.id}
                             class="btn btn-ghost btn-xs text-info"
-                            title="Mark as Requested"
+                            title="Marcar como Solicitado"
                           >
                             <.icon name="hero-paper-airplane" class="size-4" />
                           </button>
@@ -142,7 +142,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                             phx-click="mark_pending"
                             phx-value-id={tx.id}
                             class="btn btn-ghost btn-xs text-warning opacity-50 hover:opacity-100"
-                            title="Revert to Pending"
+                            title="Reverter para Pendente"
                           >
                             <.icon name="hero-arrow-uturn-left" class="size-4" />
                           </button>
@@ -151,7 +151,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                           phx-click="remove_reimbursable"
                           phx-value-id={tx.id}
                           class="btn btn-ghost btn-xs text-error opacity-30 hover:opacity-100"
-                          title="Not reimbursable"
+                          title="Não é reembolsável"
                         >
                           <.icon name="hero-x-mark" class="size-4" />
                         </button>
@@ -162,7 +162,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                 <%= if Enum.empty?(@all_reimbursable_list) do %>
                   <tr>
                     <td colspan="7" class="text-center py-20 opacity-30 italic text-sm">
-                      No reimbursable expenses found.
+                      Nenhuma despesa reembolsável encontrada.
                     </td>
                   </tr>
                 <% end %>
@@ -177,13 +177,13 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         <div class="card-body p-0">
           <div class="p-6 border-b border-base-200 bg-success/5">
             <h2 class="text-sm font-black uppercase text-success">
-              Completed Reimbursements History
+              Histórico de Reembolsos Concluídos
             </h2>
           </div>
           <div class="p-6 space-y-4">
             <%= if Enum.empty?(@paid_groups) do %>
               <p class="text-center py-10 opacity-30 italic text-sm">
-                No completed reimbursements yet.
+                Nenhum reembolso concluído ainda.
               </p>
             <% end %>
 
@@ -194,7 +194,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                 <div class="flex-1 flex flex-col md:flex-row gap-6 items-center w-full">
                   <!-- Expenses Side -->
                   <div class="flex-1 space-y-1 w-full">
-                    <p class="text-[8px] font-black uppercase opacity-40">Covered Expenses</p>
+                    <p class="text-[8px] font-black uppercase opacity-40">Despesas Cobertas</p>
                     <%= for ex <- expenses do %>
                       <div class="flex justify-between items-center bg-base-100 p-2 rounded-lg border border-base-300/50">
                         <div class="flex flex-col">
@@ -218,7 +218,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                   
     <!-- Credit Side -->
                   <div class="flex-1 space-y-1 w-full">
-                    <p class="text-[8px] font-black uppercase opacity-40">Plan Receipt</p>
+                    <p class="text-[8px] font-black uppercase opacity-40">Recebimento</p>
                     <div
                       :if={credit}
                       class="flex justify-between items-center bg-success/10 p-2 rounded-lg border border-success/20"
@@ -236,7 +236,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                       </span>
                     </div>
                     <p :if={!credit} class="text-[10px] text-warning italic">
-                      Credit not found or deleted.
+                      Crédito não encontrado ou excluído.
                     </p>
                   </div>
                 </div>
@@ -250,7 +250,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                     phx-value-link-key={link_key}
                     class="btn btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100 transition-opacity"
                   >
-                    <.icon name="hero-link-slash" class="size-4 mr-1" /> Unlink
+                    <.icon name="hero-link-slash" class="size-4 mr-1" /> Desvincular
                   </button>
                 </div>
               </div>
@@ -264,7 +264,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     <.modal :if={@show_linker_modal} id="linker-modal" show on_cancel={JS.push("close_modal")}>
       <div class="p-2">
         <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-success">
-          Link Receipt
+          Vincular Recebimento
         </h2>
 
         <%!-- Expense being reimbursed --%>
@@ -279,7 +279,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
             </div>
           <% end %>
           <div class="border-t border-base-300 pt-1 mt-1 flex justify-between text-xs font-black">
-            <span class="opacity-50 uppercase tracking-wider">Expense total</span>
+            <span class="opacity-50 uppercase tracking-wider">Total de despesas</span>
             <span class="text-error">{format_currency(@total_selected)}</span>
           </div>
         </div>
@@ -290,17 +290,17 @@ defmodule CashLensWeb.ReimbursementLive.Index do
           class="bg-success/10 border border-success/30 rounded-xl p-3 mb-4 flex items-center justify-between text-xs"
         >
           <span class="font-bold opacity-70">
-            {MapSet.size(@selected_credit_ids)} credit(s) selected
+            {MapSet.size(@selected_credit_ids)} crédito(s) selecionado(s)
           </span>
           <div class="text-right">
             <span class="font-black text-success">{format_currency(@total_credits_selected)}</span>
             <%= if Decimal.eq?(Decimal.round(@total_credits_selected, 2), Decimal.round(Decimal.abs(@total_selected), 2)) do %>
-              <div class="text-[8px] text-success font-black uppercase">Perfect Match!</div>
+              <div class="text-[8px] text-success font-black uppercase">Match Perfeito!</div>
             <% end %>
           </div>
         </div>
 
-        <p class="text-xs opacity-50 mb-4">Select one or more credits that cover this expense:</p>
+        <p class="text-xs opacity-50 mb-4">Selecione um ou mais créditos que cubram esta despesa:</p>
         
     <!-- Search Field -->
         <div class="mb-4">
@@ -310,7 +310,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
             </div>
             <input
               type="text"
-              placeholder="Search by description or amount..."
+              placeholder="Buscar por descrição ou valor..."
               class="input input-bordered w-full pl-10 h-12 rounded-2xl bg-base-200 border-none focus:ring-success"
               phx-keyup="linker_search_change"
               phx-debounce="300"
@@ -322,7 +322,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         <div class="space-y-2 max-h-72 overflow-y-auto pr-2 mb-4">
           <%= if Enum.empty?(@available_credits) do %>
             <div class="text-center py-10 opacity-40 italic">
-              No available credits found.
+              Nenhum crédito disponível encontrado.
             </div>
           <% end %>
 
@@ -371,7 +371,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
           class="btn btn-success w-full rounded-2xl font-black disabled:opacity-30"
         >
           <.icon name="hero-link" class="size-4 mr-2" />
-          Link {MapSet.size(@selected_credit_ids)} Credit(s)
+          Vincular {MapSet.size(@selected_credit_ids)} Crédito(s)
         </button>
       </div>
     </.modal>
@@ -461,7 +461,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     Transactions.unlink_reimbursement_by_key(link_key)
 
     {:noreply,
-     socket |> put_flash(:success, "Reimbursement unlinked successfully.") |> fetch_data()}
+     socket |> put_flash(:success, "Reembolso desvinculado com sucesso.") |> fetch_data()}
   end
 
   @impl true
@@ -538,7 +538,10 @@ defmodule CashLensWeb.ReimbursementLive.Index do
      |> assign(:total_selected, Decimal.new("0"))
      |> assign(:selected_credit_ids, MapSet.new())
      |> assign(:total_credits_selected, Decimal.new("0"))
-     |> put_flash(:success, "Linked #{MapSet.size(selected_credit_ids)} credit(s) to expense!")
+     |> put_flash(
+       :success,
+       "#{MapSet.size(selected_credit_ids)} crédito(s) vinculado(s) à despesa!"
+     )
      |> fetch_data()}
   end
 

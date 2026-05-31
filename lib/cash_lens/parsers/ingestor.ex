@@ -19,6 +19,10 @@ defmodule CashLens.Parsers.Ingestor do
   """
   def parse(content, parser_type) do
     case parser_type do
+      "bradesco_csv" ->
+        Logger.info("Using Bradesco CSV Parser")
+        CSVParser.parse(content, :bradesco_csv)
+
       "bb_csv" ->
         Logger.info("Using BB CSV Parser")
         CSVParser.parse(content, :bb)

@@ -49,7 +49,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
 
     case consume_uploaded_entries(socket, :statement, &copy_to_temp/2) do
       [] ->
-        send(self(), {:import_error, "No file selected."})
+        send(self(), {:import_error, "Nenhum arquivo selecionado."})
         {:noreply, socket}
 
       file_paths ->
@@ -147,7 +147,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
       {:ok, %{imported: total_imported, failed: all_failed}}
     else
       {:error,
-       "#{length(file_errors)} files failed. Total transactions from successful files: #{total_imported}"}
+       "#{length(file_errors)} arquivo(s) com falha. Total de transações dos arquivos bem-sucedidos: #{total_imported}"}
     end
   end
 
@@ -177,11 +177,11 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
     ~H"""
     <div class="py-2 space-y-6 min-h-[200px]">
       <h2 class="text-2xl font-black uppercase tracking-tighter text-primary">
-        Importing...
+        Importando...
       </h2>
 
       <div>
-        <p class="text-[10px] font-black uppercase opacity-40 mb-2">Current File</p>
+        <p class="text-[10px] font-black uppercase opacity-40 mb-2">Arquivo Atual</p>
         <div class="flex items-center gap-2">
           <.icon name="hero-document-text" class="size-4 text-primary shrink-0" />
           <span class="text-sm font-bold truncate">{@progress.current_file}</span>
@@ -190,7 +190,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
 
       <div :if={@progress.file_total > 1}>
         <div class="flex justify-between items-center mb-2">
-          <span class="text-[10px] font-black uppercase opacity-40">Files</span>
+          <span class="text-[10px] font-black uppercase opacity-40">Arquivos</span>
           <span class="text-[10px] font-black opacity-60 tabular-nums">
             {@progress.file_index} / {@progress.file_total}
           </span>
@@ -204,17 +204,17 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
 
       <div>
         <div class="flex justify-between items-center mb-2">
-          <span class="text-[10px] font-black uppercase opacity-40">Transactions</span>
+          <span class="text-[10px] font-black uppercase opacity-40">Transações</span>
           <span class="text-[10px] font-black opacity-60 tabular-nums">
             {cond do
               @progress.current_file_lines == :parsing ->
-                "#{@progress.lines_done} + parsing..."
+                "#{@progress.lines_done} + lendo..."
 
               is_integer(@progress.current_file_lines) ->
-                "#{@progress.lines_done + @progress.current_file_lines} found"
+                "#{@progress.lines_done + @progress.current_file_lines} encontradas"
 
               true ->
-                "#{@progress.lines_done} imported"
+                "#{@progress.lines_done} importadas"
             end}
           </span>
         </div>
@@ -236,7 +236,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
     ~H"""
     <div>
       <h2 class="text-2xl font-black mb-6 uppercase tracking-tighter text-primary">
-        Import Statements
+        Importar Extratos
       </h2>
 
       <form
@@ -248,7 +248,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
         <div class="form-control w-full mb-8">
           <label class="label">
             <span class="label-text font-black uppercase opacity-40 text-[10px]">
-              1. Select Destination Account
+              1. Selecione a Conta de Destino
             </span>
           </label>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
@@ -304,7 +304,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
               </div>
               <div class="min-w-0">
                 <span class="block font-bold text-sm opacity-60 group-hover:text-primary">
-                  Add Account
+                  Adicionar Conta
                 </span>
               </div>
             </.link>
@@ -314,7 +314,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
         <div class="form-control w-full mb-8">
           <label class="label">
             <span class="label-text font-black uppercase opacity-40 text-[10px]">
-              2. Select Source
+              2. Selecione o Arquivo
             </span>
           </label>
 
@@ -328,7 +328,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
               class="size-12 opacity-20 mb-4 group-hover:text-primary group-hover:opacity-100 transition-all"
             />
             <p class="text-sm font-medium opacity-40 text-center">
-              Drag your files or click to select
+              Arraste os arquivos ou clique para selecionar
             </p>
           </div>
 
@@ -360,10 +360,10 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
         <button
           type="submit"
           class="btn btn-primary btn-lg w-full rounded-2xl shadow-lg shadow-primary/20"
-          phx-disable-with="Processing..."
+          phx-disable-with="Processando..."
           disabled={Enum.empty?(@uploads.statement.entries)}
         >
-          Start Import
+          Iniciar Importação
         </button>
       </form>
     </div>

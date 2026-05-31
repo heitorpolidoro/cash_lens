@@ -9,13 +9,13 @@ defmodule CashLensWeb.BalanceLive.Index do
     ~H"""
     <div class="py-6 space-y-8">
       <.header>
-        Balance History
+        Histórico de Saldos
         <:subtitle>
-          Review your historical monthly balances. These are calculated based on your account seed and transactions.
+          Revise seus saldos mensais históricos. Estes são calculados com base no saldo inicial da conta e nas transações.
         </:subtitle>
         <:actions>
           <button phx-click="recalculate_all" class="btn btn-outline btn-warning btn-sm">
-            <.icon name="hero-arrow-path-rounded-square" class="mr-1" /> Recalculate All
+            <.icon name="hero-arrow-path-rounded-square" class="mr-1" /> Recalcular Tudo
           </button>
         </:actions>
       </.header>
@@ -27,12 +27,12 @@ defmodule CashLensWeb.BalanceLive.Index do
               <tr>
                 <th class="w-48">
                   <div class="flex flex-col gap-1">
-                    <span>Account</span>
+                    <span>Conta</span>
                     <select
                       name="account_id"
                       class="select select-bordered select-xs font-normal w-full"
                     >
-                      <option value="">All</option>
+                      <option value="">Todas</option>
                       <%= for account <- @accounts do %>
                         <option value={account.id} selected={@filters["account_id"] == account.id}>
                           {account_label(account)}
@@ -43,9 +43,9 @@ defmodule CashLensWeb.BalanceLive.Index do
                 </th>
                 <th class="w-24">
                   <div class="flex flex-col gap-1">
-                    <span>Year</span>
+                    <span>Ano</span>
                     <select name="year" class="select select-bordered select-xs font-normal w-full">
-                      <option value="">All</option>
+                      <option value="">Todos</option>
                       <%= for year <- 2024..2030 do %>
                         <option value={year} selected={@filters["year"] == to_string(year)}>
                           {year}
@@ -56,9 +56,9 @@ defmodule CashLensWeb.BalanceLive.Index do
                 </th>
                 <th class="w-32">
                   <div class="flex flex-col gap-1">
-                    <span>Month</span>
+                    <span>Mês</span>
                     <select name="month" class="select select-bordered select-xs font-normal w-full">
-                      <option value="">All</option>
+                      <option value="">Todos</option>
                       <%= for {name, num} <- month_options() do %>
                         <option value={num} selected={@filters["month"] == to_string(num)}>
                           {name}
@@ -69,25 +69,25 @@ defmodule CashLensWeb.BalanceLive.Index do
                 </th>
                 <th class="text-right">
                   <div class="flex flex-col gap-1">
-                    <span>Initial Balance</span>
+                    <span>Saldo Inicial</span>
                     <div class="h-6"></div>
                   </div>
                 </th>
                 <th class="text-right">
                   <div class="flex flex-col gap-1">
-                    <span>Income</span>
+                    <span>Receitas</span>
                     <div class="h-6"></div>
                   </div>
                 </th>
                 <th class="text-right">
                   <div class="flex flex-col gap-1">
-                    <span>Expenses</span>
+                    <span>Despesas</span>
                     <div class="h-6"></div>
                   </div>
                 </th>
                 <th class="text-right">
                   <div class="flex flex-col gap-1 font-black">
-                    <span>Final Balance</span>
+                    <span>Saldo Final</span>
                     <div class="h-6"></div>
                   </div>
                 </th>
@@ -128,7 +128,7 @@ defmodule CashLensWeb.BalanceLive.Index do
                       </div>
                     </div>
                     <span class="font-bold truncate max-w-[120px]">
-                      {if balance.account, do: balance.account.name, else: "Deleted account"}
+                      {if balance.account, do: balance.account.name, else: "Conta excluída"}
                     </span>
                   </div>
                 </td>
@@ -142,7 +142,7 @@ defmodule CashLensWeb.BalanceLive.Index do
                 </td>
 
                 <td class="text-right opacity-40 italic">
-                  Read-only
+                  Somente leitura
                 </td>
               </tr>
             </tbody>
@@ -157,7 +157,7 @@ defmodule CashLensWeb.BalanceLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Balances")
+     |> assign(:page_title, "Saldos")
      |> assign(:accounts, Accounts.list_accounts())
      |> assign(:filters, %{"account_id" => "", "month" => "", "year" => ""})
      |> stream(:balances, Accounting.list_balances())}
@@ -187,31 +187,31 @@ defmodule CashLensWeb.BalanceLive.Index do
 
     {:noreply,
      socket
-     |> put_flash(:info, "All balances have been recalculated in cascade!")
+     |> put_flash(:success, "Todos os saldos foram recalculados em cascata!")
      |> stream(:balances, Accounting.list_balances(socket.assigns.filters), reset: true)}
   end
 
   defp translate_month_num(num) do
     Enum.at(
-      ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+      ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
       num - 1
     )
   end
 
   defp month_options do
     [
-      {"January", 1},
-      {"February", 2},
-      {"March", 3},
-      {"April", 4},
-      {"May", 5},
-      {"June", 6},
-      {"July", 7},
-      {"August", 8},
-      {"September", 9},
-      {"October", 10},
-      {"November", 11},
-      {"December", 12}
+      {"Janeiro", 1},
+      {"Fevereiro", 2},
+      {"Março", 3},
+      {"Abril", 4},
+      {"Maio", 5},
+      {"Junho", 6},
+      {"Julho", 7},
+      {"Agosto", 8},
+      {"Setembro", 9},
+      {"Outubro", 10},
+      {"Novembro", 11},
+      {"Dezembro", 12}
     ]
   end
 end

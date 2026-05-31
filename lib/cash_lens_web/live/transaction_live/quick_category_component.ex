@@ -16,8 +16,10 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
       >
         <div class="p-2">
           <.header>
-            New Category
-            <:subtitle>Organize your financial hierarchy and define identification rules.</:subtitle>
+            Nova Categoria
+            <:subtitle>
+              Organize sua hierarquia financeira e defina regras de identificação.
+            </:subtitle>
           </.header>
 
           <.form
@@ -32,16 +34,16 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
             <.input
               field={f[:name]}
               type="text"
-              label="Category Name"
-              placeholder="Ex: Housing, Netflix..."
+              label="Nome da Categoria"
+              placeholder="Ex: Moradia, Netflix..."
               required
             />
 
-            <div class="divider">Hierarchy</div>
+            <div class="divider">Hierarquia</div>
 
             <div class="form-control w-full">
               <label class="label pb-1">
-                <span class="label-text text-sm font-semibold">Parent Category (Optional)</span>
+                <span class="label-text text-sm font-semibold">Categoria Pai (Opcional)</span>
               </label>
               <input
                 type="hidden"
@@ -66,7 +68,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
                   placeholder={
                     if @current_parent,
                       do: Category.full_name(@current_parent),
-                      else: "None (Main Category)"
+                      else: "Nenhuma (Categoria Principal)"
                   }
                   class="input input-bordered w-full font-bold uppercase text-[10px] cursor-pointer"
                 />
@@ -75,7 +77,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
                     <li class="new-option border-b border-base-200 mb-1">
                       <button type="button" class="font-black text-primary hover:bg-primary/10">
                         <.icon name="hero-plus-circle" class="size-4" />
-                        <span>New Category</span>
+                        <span>Nova Categoria</span>
                       </button>
                     </li>
                   </ul>
@@ -88,49 +90,49 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
                 phx-target={@myself}
                 class="btn btn-ghost btn-xs text-error mt-1 self-start"
               >
-                <.icon name="hero-x-mark" class="size-3 mr-1" /> Clear parent
+                <.icon name="hero-x-mark" class="size-3 mr-1" /> Limpar pai
               </button>
             </div>
 
-            <div class="divider">Settings</div>
+            <div class="divider">Configurações</div>
 
             <.input
               field={f[:type]}
               type="select"
-              label="Spending Type"
+              label="Tipo de Gasto"
               options={[
-                {"Fixed (Essential Bills)", "fixed"},
-                {"Variable (Lifestyle)", "variable"}
+                {"Fixo (Contas Essenciais)", "fixed"},
+                {"Variável (Estilo de Vida)", "variable"}
               ]}
             />
 
             <.input
               field={f[:default_reimbursable]}
               type="checkbox"
-              label="Mark automatically for reimbursement?"
+              label="Marcar automaticamente para reembolso?"
             />
             <p class="text-[10px] opacity-50 px-1 -mt-4 mb-4">
-              Transactions in this category will be created with "Pending" reimbursement status.
+              Transações nesta categoria serão criadas com status de reembolso "Pendente".
             </p>
 
             <.input
               field={f[:keywords]}
               type="textarea"
-              label="Keywords (Comma separated)"
+              label="Palavras-chave (separadas por vírgula)"
               placeholder="Ex: UBER, 99APP, TAXI..."
               rows="3"
             />
             <p class="text-[10px] opacity-50 italic">
-              Whenever a transaction contains one of these words, it will be automatically categorized here.
+              Sempre que uma transação contiver uma dessas palavras, será automaticamente categorizada aqui.
             </p>
 
             <div class="pt-2">
               <.button
                 type="submit"
-                phx-disable-with="Creating..."
+                phx-disable-with="Criando..."
                 class="w-full btn-primary btn-lg shadow-xl shadow-primary/20 rounded-2xl"
               >
-                <.icon name="hero-check-circle" class="size-5 mr-2" /> Save Category
+                <.icon name="hero-check-circle" class="size-5 mr-2" /> Salvar Categoria
               </.button>
             </div>
           </.form>

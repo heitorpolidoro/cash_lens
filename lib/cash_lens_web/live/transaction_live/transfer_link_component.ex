@@ -17,16 +17,18 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
       >
         <div class="p-2">
           <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
-            Link Transfer
+            Vincular Transferência
           </h2>
           <p class="text-xs opacity-60 mb-6">
-            Select the matching pair below for this entry of {format_currency(@transfer_origin.amount)}.
+            Selecione o par correspondente abaixo para este lançamento de {format_currency(
+              @transfer_origin.amount
+            )}.
           </p>
 
           <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
             <%= if Enum.empty?(@pending_transfers) do %>
               <div class="text-center py-10 opacity-40 italic">
-                No matching pair found for this transfer.
+                Nenhum par correspondente encontrado para esta transferência.
               </div>
             <% end %>
             <%= for pending <- @pending_transfers do %>
@@ -65,7 +67,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
               class="btn btn-outline btn-primary w-full rounded-2xl"
             >
               <.icon name="hero-plus-circle" class="size-4 mr-1" />
-              I didn't find the pair, create manually
+              Não encontrei o par, criar manualmente
             </button>
           </div>
         </div>
@@ -80,10 +82,10 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
       >
         <div class="p-2">
           <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
-            Create Transfer Pair
+            Criar Par de Transferência
           </h2>
           <p class="text-xs opacity-60 mb-6">
-            Confirm the details below to create the corresponding transaction in the destination account.
+            Confirme os dados abaixo para criar a transação correspondente na conta de destino.
           </p>
 
           <.form
@@ -95,11 +97,11 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
             class="space-y-6"
           >
             <div class="grid grid-cols-2 gap-4">
-              <.input field={f[:date]} type="date" label="Date" required readonly class="bg-base-200" />
+              <.input field={f[:date]} type="date" label="Data" required readonly class="bg-base-200" />
               <.input
                 field={f[:amount]}
                 type="number"
-                label="Amount"
+                label="Valor"
                 step="0.01"
                 required
                 readonly
@@ -110,21 +112,21 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
             <.input
               field={f[:description]}
               type="text"
-              label="Description"
+              label="Descrição"
               required
-              placeholder="Ex: Transfer between accounts..."
+              placeholder="Ex: Transferência entre contas..."
             />
 
             <div class="form-control w-full">
               <label class="label">
-                <span class="label-text font-bold text-primary">Destination Account</span>
+                <span class="label-text font-bold text-primary">Conta de Destino</span>
               </label>
               <select
                 name="account_id"
                 class="select select-bordered w-full rounded-2xl h-12"
                 required
               >
-                <option value="">Select the account that received/sent</option>
+                <option value="">Selecione a conta que recebeu/enviou</option>
                 <%= for account <- Enum.reject(@accounts, & &1.id == @transfer_origin.account_id) do %>
                   <option value={account.id}>{account_label(account)}</option>
                 <% end %>
@@ -132,8 +134,8 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
             </div>
 
             <div class="pt-2">
-              <.button phx-disable-with="Creating and linking..." variant="primary" class="w-full">
-                Confirm and Link
+              <.button phx-disable-with="Criando e vinculando..." variant="primary" class="w-full">
+                Confirmar e Vincular
               </.button>
             </div>
           </.form>
@@ -164,7 +166,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
     {:ok, _} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
     {:ok, _} = Transactions.update_transaction(pair_tx, %{transfer_key: transfer_key})
 
-    send(self(), {:transfer_linked, "Transfer linked successfully!"})
+    send(self(), {:transfer_linked, "Transferência vinculada com sucesso!"})
 
     {:noreply, socket}
   end
@@ -229,7 +231,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
       pair_tx.date.month
     )
 
-    send(self(), {:transfer_linked, "Transfer pair created and linked!"})
+    send(self(), {:transfer_linked, "Par de transferência criado e vinculado!"})
 
     {:noreply, socket}
   end

@@ -3,7 +3,7 @@
   class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-base-100/80 backdrop-blur-sm"
 >
   <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
-  <p class="text-sm font-black uppercase tracking-widest opacity-60">Applying rules...</p>
+  <p class="text-sm font-black uppercase tracking-widest opacity-60">Aplicando regras...</p>
 </div>
 
 <div class="py-6 space-y-8">
@@ -15,14 +15,14 @@
       <.icon
         name="hero-arrow-left"
         class="size-3 group-hover:-translate-x-1 transition-transform"
-      /> Back to {if @return_to == "accounts", do: "Accounts", else: "Dashboard"}
+      /> Voltar para {if @return_to == "accounts", do: "Contas", else: "Painel"}
     </.link>
   </div>
   <.header>
-    Transactions
+    Transações
     <:subtitle :if={@filters["account_id"] not in ["", nil]}>
-      Filtering by account: {case Enum.find(@accounts, &(&1.id == @filters["account_id"])) do
-        nil -> "Unknown"
+      Filtrando por conta: {case Enum.find(@accounts, &(&1.id == @filters["account_id"])) do
+        nil -> "Desconhecida"
         acc -> acc.name
       end}
     </:subtitle>
@@ -38,7 +38,7 @@
             )
           ]}
         >
-          <.icon name="hero-funnel" class="size-4" /> Filters
+          <.icon name="hero-funnel" class="size-4" /> Filtros
           <span :if={@filtered_count != nil} class="badge badge-xs badge-warning ml-1">
             {@filtered_count}
           </span>
@@ -47,7 +47,7 @@
           tabindex="0"
           class="dropdown-content z-[1] p-3 shadow bg-base-100 rounded-box w-72 mt-2 border border-base-200 space-y-2"
         >
-          <li class="text-[9px] font-black uppercase opacity-40 tracking-widest px-1">Type</li>
+          <li class="text-[9px] font-black uppercase opacity-40 tracking-widest px-1">Tipo</li>
           <li>
             <div class="join w-full shadow-sm border border-base-300 rounded-lg overflow-hidden">
               <button
@@ -62,7 +62,7 @@
                   )
                 ]}
               >
-                <.icon name="hero-arrow-trending-down" class="size-3.5 mr-1" /> Debits
+                <.icon name="hero-arrow-trending-down" class="size-3.5 mr-1" /> Débitos
               </button>
               <button
                 type="button"
@@ -76,12 +76,13 @@
                   )
                 ]}
               >
-                <.icon name="hero-arrow-trending-up" class="size-3.5 mr-1" /> Credits
+                <.icon name="hero-arrow-trending-up" class="size-3.5 mr-1" /> Créditos
               </button>
             </div>
           </li>
           <div class="divider my-1"></div>
           <li class="text-[9px] font-black uppercase opacity-40 tracking-widest px-1">Status</li>
+
           <li>
             <button
               type="button"
@@ -94,7 +95,7 @@
                 )
               ]}
             >
-              <.icon name="hero-exclamation-triangle" class="size-4" /> Pending
+              <.icon name="hero-exclamation-triangle" class="size-4" /> Pendentes
               <span class="ml-auto badge badge-xs">
                 {@pending_count}
               </span>
@@ -112,7 +113,7 @@
                 )
               ]}
             >
-              <.icon name="hero-link-slash" class="size-4" /> Unmatched Transfer
+              <.icon name="hero-link-slash" class="size-4" /> Transferência Não Vinculada
               <span class="ml-auto badge badge-xs">
                 {@unmatched_transfers_count}
               </span>
@@ -122,7 +123,7 @@
       </div>
       <div class="dropdown dropdown-end">
         <button tabindex="0" class="btn btn-outline border-base-300 btn-sm">
-          <.icon name="hero-ellipsis-vertical" class="size-4" /> Actions
+          <.icon name="hero-ellipsis-vertical" class="size-4" /> Ações
         </button>
         <ul
           tabindex="0"
@@ -130,38 +131,38 @@
         >
           <li>
             <.link navigate={~p"/transactions/new"}>
-              <.icon name="hero-plus" class="size-4" /> New Transaction
+              <.icon name="hero-plus" class="size-4" /> Nova Transação
             </.link>
           </li>
           <li>
             <button type="button" phx-click="open_import">
-              <.icon name="hero-arrow-up-tray" class="size-4" /> Import Statements
+              <.icon name="hero-arrow-up-tray" class="size-4" /> Importar Extratos
             </button>
           </li>
           <li>
             <button type="button" phx-click="auto_categorize_all">
-              <.icon name="hero-sparkles" class="size-4" /> Auto-Categorize
+              <.icon name="hero-sparkles" class="size-4" /> Auto-Categorizar
             </button>
           </li>
           <li>
             <.link navigate={~p"/reimbursements"}>
-              <.icon name="hero-banknotes" class="size-4" /> Reimbursements
+              <.icon name="hero-banknotes" class="size-4" /> Reembolsos
             </.link>
           </li>
           <li>
             <.link navigate={~p"/admin/exclusion_rules"}>
-              <.icon name="hero-no-symbol" class="size-4" /> Exclusion Rules
+              <.icon name="hero-no-symbol" class="size-4" /> Regras de Exclusão
             </.link>
           </li>
           <li>
             <.link navigate={~p"/admin/transfer_rules"}>
-              <.icon name="hero-arrows-right-left" class="size-4" /> Transfer Rules
+              <.icon name="hero-arrows-right-left" class="size-4" /> Regras de Transferência
             </.link>
           </li>
           <div class="divider my-1"></div>
           <li>
             <button type="button" phx-click="confirm_delete_all" class="text-error">
-              <.icon name="hero-trash" class="size-4" /> Clear All
+              <.icon name="hero-trash" class="size-4" /> Limpar Tudo
             </button>
           </li>
         </ul>
@@ -172,11 +173,11 @@
   <%!-- Summary cards --%>
   <div class="grid grid-cols-3 gap-4">
     <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
-      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Income</p>
+      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Receitas</p>
       <p class="text-2xl font-black text-success">{format_currency(@summary.income)}</p>
     </div>
     <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
-      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Expenses</p>
+      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Despesas</p>
       <p class="text-2xl font-black text-error">{format_currency(@summary.expenses)}</p>
     </div>
     <div class={[
@@ -186,7 +187,7 @@
         else: "border-error/30"
       )
     ]}>
-      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Balance</p>
+      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Saldo</p>
       <p class={[
         "text-2xl font-black",
         if(Decimal.gte?(@summary.income, @summary.expenses),
@@ -212,7 +213,7 @@
               <th class="w-40 px-4">
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center justify-between pr-2">
-                    <span>Date</span>
+                    <span>Data</span>
                     <button
                       type="button"
                       phx-click="toggle_sort"
@@ -240,7 +241,7 @@
                     <input
                       type="text"
                       readonly
-                      placeholder="All dates"
+                      placeholder="Todas as datas"
                       class="input input-bordered input-xs font-normal w-full cursor-pointer pr-6"
                     />
                     <button
@@ -254,13 +255,13 @@
               </th>
               <th class="px-4">
                 <div class="flex flex-col gap-1">
-                  <span>Description</span>
+                  <span>Descrição</span>
                   <div class="relative">
                     <input
                       type="text"
                       name="search"
                       value={@filters["search"]}
-                      placeholder="Search..."
+                      placeholder="Buscar..."
                       class="input input-bordered input-xs font-normal w-full pr-5"
                       phx-debounce="300"
                     />
@@ -278,7 +279,7 @@
               </th>
               <th class="w-32 px-4">
                 <div class="flex flex-col gap-1 text-right">
-                  <span>Amount</span>
+                  <span>Valor</span>
                   <div class="relative">
                     <input
                       type="number"
@@ -303,15 +304,15 @@
               </th>
               <th class="w-48 px-4">
                 <div class="flex flex-col gap-1">
-                  <span>Category</span>
+                  <span>Categoria</span>
                   <div class="relative">
                     <select
                       name="category_id"
                       class="select select-bordered select-xs font-normal w-full"
                     >
-                      <option value="">All</option>
+                      <option value="">Todas</option>
                       <option value="nil" selected={@filters["category_id"] == "nil"}>
-                        Pending
+                        Pendente
                       </option>
                       <%= for category <- @categories do %>
                         <option
@@ -336,13 +337,13 @@
               </th>
               <th class="w-40 px-4">
                 <div class="flex flex-col gap-1">
-                  <span>Account</span>
+                  <span>Conta</span>
                   <div class="relative">
                     <select
                       name="account_id"
                       class="select select-bordered select-xs font-normal w-full"
                     >
-                      <option value="">All</option>
+                      <option value="">Todas</option>
                       <%= for account <- @accounts do %>
                         <option value={account.id} selected={@filters["account_id"] == account.id}>
                           {account_label(account)}
@@ -380,7 +381,10 @@
             <tr
               :for={{id, transaction} <- @streams.transactions}
               id={id}
-              class="hover group border-b border-base-200 overflow-visible"
+              class={[
+                "hover group border-b border-base-200 overflow-visible",
+                if(transaction.transfer_key, do: "border-l-2 border-l-secondary/50")
+              ]}
             >
               <td class="whitespace-nowrap w-40 px-4">
                 <div class="flex flex-col">
@@ -461,7 +465,7 @@
                         placeholder={
                           if transaction.category,
                             do: CashLens.Categories.Category.full_name(transaction.category),
-                            else: "Pending"
+                            else: "Pendente"
                         }
                         class={[
                           "input input-bordered input-xs w-full font-bold uppercase text-[9px] cursor-pointer",
@@ -476,7 +480,7 @@
                         phx-value-transaction_id={transaction.id}
                         phx-value-category_id=""
                         class="btn btn-ghost btn-xs p-0 text-error min-h-0 h-5 w-5 opacity-0 group-hover/cat:opacity-100 transition-opacity"
-                        title="Clear Category"
+                        title="Limpar Categoria"
                       >
                         <.icon name="hero-x-mark" class="size-3" />
                       </button>
@@ -490,7 +494,7 @@
                           >
                             <.icon name="hero-plus-circle" class="size-4" />
                             <span>
-                              New Category
+                              Nova Categoria
                             </span>
                           </button>
                         </li>
@@ -500,8 +504,8 @@
                   <%= if transaction.category && transaction.category.slug == "transfer" do %>
                     <span title={
                       if transaction.transfer_key,
-                        do: "Linked transfer",
-                        else: "Transfer pending link"
+                        do: "Transferência vinculada",
+                        else: "Transferência pendente de vínculo"
                     }>
                       <.icon
                         :if={transaction.transfer_key}
@@ -515,18 +519,23 @@
                       />
                     </span>
                   <% end %>
-                  <span :if={transaction.reimbursement_link_key} title="Reimbursed">
+                  <span :if={transaction.reimbursement_link_key} title="Reembolsado">
                     <.icon name="hero-shield-check" class="size-3 text-success" />
                   </span>
                 </div>
               </td>
               <td class="w-40 px-4 text-xs opacity-60 truncate">
-                {if transaction.account, do: transaction.account.name, else: "..."}
+                <%= if transaction.account do %>
+                  <div class="font-medium truncate">{transaction.account.bank}</div>
+                  <div class="opacity-50 truncate">{transaction.account.name}</div>
+                <% else %>
+                  ...
+                <% end %>
               </td>
               <td class="w-24 px-4 text-right">
                 <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <%= if transaction.reimbursement_status do %>
-                    <div class="tooltip tooltip-left" data-tip="Remove Reimbursement">
+                    <div class="tooltip tooltip-left" data-tip="Remover Reembolso">
                       <button
                         type="button"
                         phx-click="unmark_reimbursable"
@@ -539,7 +548,7 @@
                   <% end %>
 
                   <%= if Decimal.lt?(transaction.amount, 0) && is_nil(transaction.reimbursement_status) do %>
-                    <div class="tooltip tooltip-left" data-tip="Mark Reimbursable">
+                    <div class="tooltip tooltip-left" data-tip="Marcar como Reembolsável">
                       <button
                         type="button"
                         phx-click="mark_reimbursable"
@@ -551,7 +560,7 @@
                     </div>
                   <% end %>
                   <%= if Decimal.gt?(transaction.amount, 0) && is_nil(transaction.reimbursement_link_key) do %>
-                    <div class="tooltip tooltip-left" data-tip="Link Reimbursement">
+                    <div class="tooltip tooltip-left" data-tip="Vincular Reembolso">
                       <button
                         type="button"
                         phx-click="open_reimbursement_link"
@@ -563,7 +572,7 @@
                     </div>
                   <% end %>
                   <%= if transaction.category && transaction.category.slug == "transfer" && is_nil(transaction.transfer_key) do %>
-                    <div class="tooltip tooltip-left" data-tip="Link Transfer">
+                    <div class="tooltip tooltip-left" data-tip="Vincular Transferência">
                       <button
                         type="button"
                         phx-click="open_transfer_link"
@@ -574,7 +583,7 @@
                       </button>
                     </div>
                   <% end %>
-                  <div class="tooltip tooltip-left" data-tip="Edit">
+                  <div class="tooltip tooltip-left" data-tip="Editar">
                     <.link
                       navigate={~p"/transactions/#{transaction}/edit"}
                       class="btn btn-ghost btn-xs px-1"
@@ -582,7 +591,7 @@
                       <.icon name="hero-pencil" class="size-3" />
                     </.link>
                   </div>
-                  <div class="tooltip tooltip-left" data-tip="Delete">
+                  <div class="tooltip tooltip-left" data-tip="Excluir">
                     <button
                       type="button"
                       phx-click="confirm_delete"
@@ -592,7 +601,7 @@
                       <.icon name="hero-trash" class="size-3" />
                     </button>
                   </div>
-                  <div class="tooltip tooltip-left" data-tip="Notes">
+                  <div class="tooltip tooltip-left" data-tip="Notas">
                     <button
                       type="button"
                       phx-click="open_notes"
@@ -604,7 +613,7 @@
                   </div>
 
                   <div class="dropdown dropdown-end">
-                    <div class="tooltip tooltip-left" data-tip="Installment Group">
+                    <div class="tooltip tooltip-left" data-tip="Grupo de Parcelamento">
                       <button
                         tabindex="0"
                         class={[
@@ -629,7 +638,7 @@
                             phx-value-id={transaction.id}
                             class="text-error"
                           >
-                            <.icon name="hero-no-symbol" class="size-4" /> Unlink Group
+                            <.icon name="hero-no-symbol" class="size-4" /> Desvincular Grupo
                           </button>
                         </li>
                       <% else %>
@@ -643,7 +652,7 @@
                             class="bg-primary/10 text-primary font-black animate-pulse"
                           >
                             <.icon name="hero-sparkles" class="size-4" />
-                            Link to {suggestion.group_name}? ({suggestion.next_installment}/{suggestion.total_installments})
+                            Vincular a {suggestion.group_name}? ({suggestion.next_installment}/{suggestion.total_installments})
                           </button>
                         </li>
                         <li :for={group <- @installment_groups}>
@@ -656,7 +665,9 @@
                           </button>
                         </li>
                         <li :if={Enum.empty?(@installment_groups)}>
-                          <span class="text-[10px] opacity-50 italic">No groups found</span>
+                          <span class="text-[10px] opacity-50 italic">
+                            Nenhum grupo encontrado
+                          </span>
                         </li>
                       <% end %>
                     </ul>
@@ -697,16 +708,16 @@
       <div class="w-20 h-20 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-6">
         <.icon name="hero-trash" class="size-10" />
       </div>
-      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Delete Transaction?</h2>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Excluir Transação?</h2>
       <p class="text-base-content/60 mb-10">
-        Do you really want to delete this transaction? This action cannot be undone.
+        Deseja mesmo excluir esta transação? Esta ação não pode ser desfeita.
       </p>
       <div class="flex flex-col sm:flex-row gap-3">
         <button phx-click={@confirm_modal.action} class="btn btn-error btn-lg flex-1 rounded-2xl">
-          Yes, Delete
+          Sim, Excluir
         </button>
         <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
-          Cancel
+          Cancelar
         </button>
       </div>
     </div>
@@ -733,9 +744,9 @@
       <div class="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-6">
         <.icon name="hero-document-text" class="size-8" />
       </div>
-      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Edit Notes</h2>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Editar Notas</h2>
       <p class="text-sm opacity-70 mb-4">
-        Add specific details for <strong class="text-primary">{@editing_transaction.description}</strong>.
+        Adicione detalhes específicos para <strong class="text-primary">{@editing_transaction.description}</strong>.
       </p>
 
       <form phx-submit="save_notes" class="space-y-4">
@@ -751,14 +762,14 @@
             type="submit"
             class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
           >
-            Save Notes
+            Salvar Notas
           </button>
           <button
             type="button"
             phx-click="close_modal"
             class="btn btn-ghost btn-lg flex-1 rounded-2xl"
           >
-            Cancel
+            Cancelar
           </button>
         </div>
       </form>
@@ -770,11 +781,11 @@
       <div class="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-6">
         <.icon name="hero-sparkles" class="size-8" />
       </div>
-      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Bulk Categorization</h2>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Categorização em Lote</h2>
       <p class="text-sm opacity-70 mb-4">
-        We found <strong>{length(@bulk_confirmation.items)}</strong>
-        more transactions with description <span class="font-mono bg-base-300 px-1 rounded">"{@bulk_confirmation.description}"</span>.
-        Select which ones to categorize as <strong class="text-primary">{@bulk_confirmation.category_name}</strong>.
+        Encontramos <strong>{length(@bulk_confirmation.items)}</strong>
+        outras transações com a descrição <span class="font-mono bg-base-300 px-1 rounded">"{@bulk_confirmation.description}"</span>.
+        Selecione quais categorizar como <strong class="text-primary">{@bulk_confirmation.category_name}</strong>.
       </p>
 
       <div class="overflow-x-auto mb-6 rounded-xl border border-base-300 max-h-64 overflow-y-auto">
@@ -789,10 +800,10 @@
                   phx-click="toggle_bulk_all"
                 />
               </th>
-              <th>Date</th>
-              <th>Description</th>
-              <th>Category</th>
-              <th class="text-right">Value</th>
+              <th>Data</th>
+              <th>Descrição</th>
+              <th>Categoria</th>
+              <th class="text-right">Valor</th>
             </tr>
           </thead>
           <tbody>
@@ -839,14 +850,13 @@
           class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
           disabled={MapSet.size(@bulk_selected_ids) == 0}
         >
-          Apply to {MapSet.size(@bulk_selected_ids)} transaction{if MapSet.size(
-                                                                      @bulk_selected_ids
-                                                                    ) != 1,
-                                                                    do: "s",
-                                                                    else: ""}
+          Aplicar a {MapSet.size(@bulk_selected_ids)} transaç{if MapSet.size(@bulk_selected_ids) !=
+                                                                   1,
+                                                                 do: "ões",
+                                                                 else: "ão"}
         </button>
         <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
-          Only This One
+          Apenas Esta
         </button>
       </div>
     </div>

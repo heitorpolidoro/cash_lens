@@ -12,7 +12,11 @@ defmodule CashLens.Transactions.AutoCategorizer do
   Analyzes a transaction map or struct and assigns a category_id based on DB rules.
   """
   def categorize(transaction_params) do
-    description = String.upcase(transaction_params.description || "")
+    description =
+      (transaction_params.description || "")
+      |> String.upcase()
+      |> String.replace(~r/\s+/, " ")
+      |> String.trim()
 
     # 1. Get all categories that have keywords defined
     rules = Repo.all(from c in Category, where: not is_nil(c.keywords) and c.keywords != "")

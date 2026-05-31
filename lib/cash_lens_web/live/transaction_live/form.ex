@@ -132,7 +132,7 @@ defmodule CashLensWeb.TransactionLive.Form do
       {:ok, transaction} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Transaction updated successfully")
+         |> put_flash(:success, "Transaction updated successfully")
          |> push_navigate(to: return_path(socket.assigns.return_to, transaction))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -145,7 +145,7 @@ defmodule CashLensWeb.TransactionLive.Form do
       {:ok, transaction} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Transaction created successfully")
+         |> put_flash(:success, "Transaction created successfully")
          |> push_navigate(to: return_path(socket.assigns.return_to, transaction))}
 
       {:error, %Ecto.Changeset{} = changeset} ->

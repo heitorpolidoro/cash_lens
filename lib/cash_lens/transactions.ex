@@ -244,9 +244,14 @@ defmodule CashLens.Transactions do
   defp filter_unmatched_transfers(query, _), do: query
 
   defp filter_by_month_year(query, month, year, category_id, unmatched_transfers) do
-    # Skip date filtering if we are looking for pending or unmatched items
-    # This allows seeing ALL pending items regardless of month
-    if category_id == "nil" or unmatched_transfers == "true" do
+    # Skip date filtering only when looking for pending/unmatched WITHOUT a specific month/year.
+    # If month/year are specified, always apply them (e.g. month detail page uncategorized expand).
+    has_month_year = month not in [nil, ""] or year not in [nil, ""]
+
+    skip_date =
+      not has_month_year and (category_id == "nil" or unmatched_transfers == "true")
+
+    if skip_date do
       query
     else
       query
@@ -552,6 +557,7 @@ defmodule CashLens.Transactions do
       where: t.amount < 0,
       where: c.slug not in ["initial_value", "transfer"],
       where: is_nil(t.reimbursement_link_key),
+      where: t.reimbursement_status != "pending" or is_nil(t.reimbursement_status),
       select: %{
         year: fragment("EXTRACT(YEAR FROM ?)", t.date),
         month: fragment("EXTRACT(MONTH FROM ?)", t.date),
@@ -713,10 +719,147 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
+  Given a list of transfer_keys, returns a map %{transfer_key => [tx, tx]}
+  with both sides of each pair preloaded with account.
+  """
+  def get_transfer_pairs([]), do: %{}
+
+  def get_transfer_pairs(transfer_keys) do
+    from(t in Transaction,
+      where: t.transfer_key in ^transfer_keys,
+      preload: [:account]
+    )
+    |> Repo.all()
+    |> Enum.group_by(& &1.transfer_key)
+  end
+
+  @doc """
   Returns the count of transactions without a category.
   """
   def count_pending_transactions do
     Repo.aggregate(from(t in Transaction, where: is_nil(t.category_id)), :count)
+  end
+
+  @doc """
+  Returns suggested transfer pairs: same date, opposite amounts, different accounts,
+  both unmatched and both categorized as 'transfer'.
+  Returns a list of {tx_out, tx_in} tuples sorted by date desc.
+  """
+  def list_transfer_suggestions do
+    transfer_cat = CashLens.Categories.get_category_by_slug("transfer")
+
+    if is_nil(transfer_cat) do
+      []
+    else
+      cat_id = transfer_cat.id
+
+      from(a in Transaction,
+        join: b in Transaction,
+        on:
+          a.date == b.date and
+            a.amount == fragment("? * -1", b.amount) and
+            a.account_id != b.account_id and
+            a.id < b.id,
+        where: is_nil(a.transfer_key) and is_nil(b.transfer_key),
+        where: a.category_id == ^cat_id or b.category_id == ^cat_id,
+        order_by: [desc: a.date],
+        select: {a, b}
+      )
+      |> Repo.all()
+      |> Enum.map(fn {a, b} ->
+        a = Repo.preload(a, [:account, :category])
+        b = Repo.preload(b, [:account, :category])
+        if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
+      end)
+    end
+  end
+
+  @doc """
+  Returns unmatched transfers (transfer category, no transfer_key) that have
+  no auto-suggestion pair.
+  """
+  def list_unmatched_transfers_without_suggestion do
+    transfer_cat = CashLens.Categories.get_category_by_slug("transfer")
+
+    if is_nil(transfer_cat) do
+      []
+    else
+      cat_id = transfer_cat.id
+
+      # IDs that appear in suggestions
+      paired_ids =
+        from(a in Transaction,
+          join: b in Transaction,
+          on:
+            a.date == b.date and
+              a.amount == fragment("? * -1", b.amount) and
+              a.account_id != b.account_id,
+          where: is_nil(a.transfer_key) and is_nil(b.transfer_key),
+          where: a.category_id == ^cat_id or b.category_id == ^cat_id,
+          select: a.id
+        )
+        |> Repo.all()
+
+      from(t in Transaction,
+        where: is_nil(t.transfer_key),
+        where: t.category_id == ^cat_id,
+        where: t.id not in ^paired_ids,
+        order_by: [desc: t.date],
+        preload: [:account, :category]
+      )
+      |> Repo.all()
+    end
+  end
+
+  @doc """
+  Returns all linked transfer pairs as {tx_out, tx_in} tuples, sorted by date desc.
+  """
+  def list_linked_transfer_pairs do
+    from(a in Transaction,
+      join: b in Transaction,
+      on: a.transfer_key == b.transfer_key and a.id < b.id,
+      where: not is_nil(a.transfer_key),
+      order_by: [desc: a.date],
+      select: {a, b}
+    )
+    |> Repo.all()
+    |> Enum.map(fn {a, b} ->
+      a = Repo.preload(a, [:account])
+      b = Repo.preload(b, [:account])
+      if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
+    end)
+  end
+
+  @doc """
+  Links two transactions as a transfer pair and ensures both are categorized as 'transfer'.
+  """
+  def link_transfer_pair(tx_id_a, tx_id_b) do
+    link_key = Ecto.UUID.generate()
+    transfer_cat = CashLens.Categories.get_category_by_slug("transfer")
+    cat_id = transfer_cat && transfer_cat.id
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    Repo.transaction(fn ->
+      from(t in Transaction, where: t.id in [^tx_id_a, ^tx_id_b])
+      |> Repo.update_all(set: [transfer_key: link_key, category_id: cat_id, updated_at: now])
+    end)
+
+    {:ok, link_key}
+  end
+
+  @doc """
+  Unlinks a transfer pair by clearing the transfer_key from both transactions.
+  """
+  def unlink_transfer_pair(transfer_key) do
+    Repo.transaction(fn ->
+      from(t in Transaction, where: t.transfer_key == ^transfer_key)
+      |> Repo.update_all(
+        set: [
+          transfer_key: nil,
+          updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        ]
+      )
+    end)
   end
 
   @doc """

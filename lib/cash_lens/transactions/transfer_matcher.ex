@@ -63,80 +63,11 @@ defmodule CashLens.Transactions.TransferMatcher do
 
     case Repo.one(query) do
       nil ->
-        check_for_auto_pairing(tx)
+        :no_twin_found
 
       twin ->
         link_id = Ecto.UUID.generate()
         link_pair(tx.id, twin.id, link_id)
-    end
-  end
-
-  defp check_for_auto_pairing(tx) do
-    description = String.upcase(tx.description || "")
-
-    cond do
-      String.contains?(description, "BB MM OURO") ->
-        create_virtual_twin(tx, "BB MM Ouro")
-
-      String.contains?(description, ["BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
-        create_virtual_twin(tx, "BB Rende Fácil")
-
-      true ->
-        :no_twin_found
-    end
-  end
-
-  defp create_virtual_twin(tx, target_account_name) do
-    target_account =
-      Repo.one(
-        from a in CashLens.Accounts.Account,
-          where: ilike(a.name, ^target_account_name),
-          limit: 1
-      )
-
-    if target_account do
-      log_msg =
-        "Creating virtual twin for '#{tx.description}' in account '#{target_account_name}'"
-
-      Logger.info(log_msg)
-
-      link_id = Ecto.UUID.generate()
-
-      twin_params = %{
-        date: tx.date,
-        description: tx.description,
-        amount: Decimal.negate(tx.amount),
-        account_id: target_account.id,
-        category_id: tx.category_id,
-        transfer_key: link_id
-      }
-
-      Repo.transaction(fn ->
-        # 1. Update original by ID (avoids StaleEntryError)
-        from(t in Transaction, where: t.id == ^tx.id)
-        |> Repo.update_all(
-          set: [
-            transfer_key: link_id,
-            updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
-          ]
-        )
-
-        # 2. Insert the twin (only if it doesn't exist by fingerprint)
-        # Note: Twin's fingerprint will naturally be different because account_id is different
-        %Transaction{}
-        |> Transaction.changeset(twin_params)
-        |> Repo.insert(
-          on_conflict: {:replace, [:updated_at]},
-          conflict_target: :fingerprint,
-          returning: true
-        )
-      end)
-
-      {:ok, :auto_matched}
-    else
-      warn_msg = "Account '#{target_account_name}' not found for auto-pairing."
-      Logger.warning(warn_msg)
-      :no_account_found
     end
   end
 

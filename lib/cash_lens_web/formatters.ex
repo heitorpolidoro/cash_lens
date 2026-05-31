@@ -91,10 +91,10 @@ defmodule CashLensWeb.Formatters do
   def translate_reimbursement_status(other, _amount), do: String.capitalize(other)
 
   @doc """
-  Returns abbreviated month name (Portuguese) for a 1-based month integer.
+  Returns abbreviated month name for a 1-based month integer.
   """
   def month_label(m) do
-    ~w(Jan Fev Mar Abr Mai Jun Jul Ago Set Out Nov Dez) |> Enum.at(m - 1)
+    ~w(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec) |> Enum.at(m - 1)
   end
 
   @doc """

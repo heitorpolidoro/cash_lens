@@ -3,8 +3,8 @@ defmodule CashLensWeb.MonthLive.Show do
 
   alias CashLens.Transactions
 
-  @month_names ~w(January February March April May June
-                  July August September October November December)
+  @month_names ~w(Janeiro Fevereiro Março Abril Maio Junho
+                  Julho Agosto Setembro Outubro Novembro Dezembro)
 
   @impl true
   def mount(%{"year" => year_str, "month" => month_str}, _session, socket) do
@@ -101,7 +101,7 @@ defmodule CashLensWeb.MonthLive.Show do
             navigate={~p"/transactions?month=#{@month}&year=#{@year}"}
             class="text-xs opacity-50 hover:opacity-100 underline"
           >
-            View all transactions →
+            Ver todas as transações →
           </.link>
         </div>
 
@@ -113,11 +113,11 @@ defmodule CashLensWeb.MonthLive.Show do
       <%!-- Summary cards --%>
       <div class="grid grid-cols-3 gap-4">
         <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
-          <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Income</p>
+          <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Receitas</p>
           <p class="text-2xl font-black text-success">{format_currency(@summary.income)}</p>
         </div>
         <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
-          <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Expenses</p>
+          <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Despesas</p>
           <p class="text-2xl font-black text-error">{format_currency(@summary.expenses)}</p>
         </div>
         <div class={[
@@ -127,7 +127,7 @@ defmodule CashLensWeb.MonthLive.Show do
             else: "border-error/30"
           )
         ]}>
-          <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Balance</p>
+          <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Saldo</p>
           <p class={[
             "text-2xl font-black",
             if(Decimal.gt?(@summary.income, @summary.expenses),
@@ -143,20 +143,20 @@ defmodule CashLensWeb.MonthLive.Show do
       <%!-- Category breakdown --%>
       <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">
         <div class="px-6 py-4 border-b border-base-300 flex items-center justify-between">
-          <h2 class="font-black uppercase tracking-tight text-sm">Spending by Category</h2>
-          <span class="text-xs opacity-50">{length(@breakdown)} categories</span>
+          <h2 class="font-black uppercase tracking-tight text-sm">Gastos por Categoria</h2>
+          <span class="text-xs opacity-50">{length(@breakdown)} categorias</span>
         </div>
 
         <div :if={@breakdown == []} class="px-6 py-12 text-center opacity-40 text-sm">
-          No expenses recorded for this month.
+          Nenhuma despesa registrada neste mês.
         </div>
 
         <table :if={@breakdown != []} class="table table-sm w-full text-xs">
           <thead class="bg-base-200/50">
             <tr>
-              <th>Category</th>
-              <th class="text-right">Amount</th>
-              <th class="text-right w-24">% of total</th>
+              <th>Categoria</th>
+              <th class="text-right">Valor</th>
+              <th class="text-right w-24">% do total</th>
             </tr>
           </thead>
           <tbody>
@@ -191,7 +191,7 @@ defmodule CashLensWeb.MonthLive.Show do
                         :if={is_nil(row.type)}
                         class="text-[9px] opacity-30 uppercase tracking-wider mt-0.5"
                       >
-                        no category
+                        sem categoria
                       </div>
                     </div>
                   </div>
@@ -215,7 +215,7 @@ defmodule CashLensWeb.MonthLive.Show do
                 <tr>
                   <td colspan="3" class="p-0 bg-base-200/40">
                     <div :if={txns == []} class="px-10 py-3 text-xs opacity-40 italic">
-                      No transactions found.
+                      Nenhuma transação encontrada.
                     </div>
                     <table :if={txns != []} class="table table-xs w-full text-xs">
                       <tbody>
