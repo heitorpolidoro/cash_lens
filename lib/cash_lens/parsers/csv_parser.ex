@@ -5,6 +5,7 @@ defmodule CashLens.Parsers.CSVParser do
   """
   alias NimbleCSV.RFC4180, as: CSV
   NimbleCSV.define(CashLens.Parsers.CSVParser.Semicolon, separator: ";", escape: "\"")
+  alias CashLens.Parsers.CSVParser.Semicolon
 
   @doc """
   Parses a CSV string. Supported formats:
@@ -14,7 +15,7 @@ defmodule CashLens.Parsers.CSVParser do
   def parse(csv_content, :bradesco_csv) do
     csv_content
     |> String.replace("﻿", "")
-    |> CashLens.Parsers.CSVParser.Semicolon.parse_string(skip_headers: false)
+    |> Semicolon.parse_string(skip_headers: false)
     |> Enum.drop_while(&(not bradesco_date_row?(&1)))
     |> Enum.map(&parse_bradesco_row/1)
     |> Enum.reject(&is_nil/1)
@@ -24,7 +25,7 @@ defmodule CashLens.Parsers.CSVParser do
     # Banco do Brasil often exports with semicolons depending on the locale
     parser =
       if String.contains?(csv_content, "\";\"") or String.contains?(csv_content, ";"),
-        do: CashLens.Parsers.CSVParser.Semicolon,
+        do: Semicolon,
         else: CSV
 
     csv_content

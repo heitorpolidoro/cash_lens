@@ -872,7 +872,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   defp category_name(socket, category_id) do
     case Enum.find(socket.assigns.categories, &(&1.id == category_id)) do
       nil -> "categoria"
-      cat -> CashLens.Categories.Category.full_name(cat)
+      cat -> Category.full_name(cat)
     end
   end
 

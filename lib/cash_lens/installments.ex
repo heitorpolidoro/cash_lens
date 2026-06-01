@@ -111,20 +111,20 @@ defmodule CashLens.Installments do
     0..count
     |> Enum.map(fn i ->
       month = add_months(start_month, i)
-
-      total =
-        Enum.reduce(groups, Decimal.new("0"), fn g, acc ->
-          if parcel_due_in_month?(g, month),
-            do: Decimal.add(acc, parcel_value(g)),
-            else: acc
-        end)
-
+      total = month_installment_total(groups, month)
       %{date: month, total: total, pending: Date.compare(month, current) == :lt}
     end)
     # Drop trailing future months with nothing due (keep pending past months).
     |> Enum.reverse()
     |> Enum.drop_while(&(not &1.pending and Decimal.eq?(&1.total, 0)))
     |> Enum.reverse()
+  end
+
+  # Sum of the parcels due in a given month across all installment groups.
+  defp month_installment_total(groups, month) do
+    groups
+    |> Enum.filter(&parcel_due_in_month?(&1, month))
+    |> Enum.reduce(Decimal.new("0"), fn g, acc -> Decimal.add(acc, parcel_value(g)) end)
   end
 
   # First month whose installment data isn't fully imported (based on the latest
@@ -240,42 +240,7 @@ defmodule CashLens.Installments do
       # at most a few cents (the first carries the rounding remainder), while distinct
       # purchases at the same merchant differ by reais — so round to the nearest real.
       |> Enum.group_by(fn {tx, d} -> {d.base, d.total, amount_key(tx.amount)} end)
-      |> Enum.reduce(0, fn {{base, total, amount_key}, items}, acc ->
-        # When 2+ parcels share one date, the OFX listed them all at the purchase
-        # date, so spread each to its billing month (purchase + number-1). When the
-        # parcels already have distinct dates (e.g. recurring annuity charges billed
-        # monthly), they are already correct and must not be shifted.
-        purchase_date = bunched_purchase_date(Enum.map(items, fn {tx, _} -> tx.date end))
-        today = Date.utc_today()
-
-        dated =
-          Enum.map(items, fn {tx, d} ->
-            billed = if purchase_date, do: add_months(purchase_date, d.number - 1), else: tx.date
-            {tx, d, billed}
-          end)
-
-        # A parcel billed in a future month has not actually been charged yet, so it
-        # is not a real transaction — drop it from the database.
-        {future, present} =
-          Enum.split_with(dated, fn {_tx, _d, billed} -> Date.compare(billed, today) == :gt end)
-
-        Enum.each(future, fn {tx, _d, _billed} -> Repo.delete(tx) end)
-
-        if present == [] do
-          acc
-        else
-          group =
-            find_or_create_group(
-              base,
-              total,
-              amount_key,
-              Enum.map(present, fn {tx, d, _} -> {tx, d} end)
-            )
-
-          Enum.each(present, fn {tx, d, billed} -> link_and_clean(tx, group, d, billed) end)
-          acc + length(present)
-        end
-      end)
+      |> Enum.reduce(0, fn {key, items}, acc -> acc + apply_installment_group(key, items) end)
 
     # Re-dating parcels moves them across months, so rebuild the affected accounts'
     # balance chains to keep monthly summaries correct.
@@ -285,6 +250,47 @@ defmodule CashLens.Installments do
     |> Enum.each(&CashLens.Accounting.rebuild_account_balances/1)
 
     count
+  end
+
+  # Spreads one purchase's parcels to their billing months, drops not-yet-charged
+  # future parcels, links the rest to a group, and returns how many were applied.
+  defp apply_installment_group({base, total, amount_key}, items) do
+    # When 2+ parcels share one date, the OFX listed them all at the purchase
+    # date, so spread each to its billing month (purchase + number-1). When the
+    # parcels already have distinct dates (e.g. recurring annuity charges billed
+    # monthly), they are already correct and must not be shifted.
+    purchase_date = bunched_purchase_date(Enum.map(items, fn {tx, _} -> tx.date end))
+    today = Date.utc_today()
+
+    dated =
+      Enum.map(items, fn {tx, d} ->
+        billed = if purchase_date, do: add_months(purchase_date, d.number - 1), else: tx.date
+        {tx, d, billed}
+      end)
+
+    # A parcel billed in a future month has not actually been charged yet, so it
+    # is not a real transaction — drop it from the database.
+    {future, present} =
+      Enum.split_with(dated, fn {_tx, _d, billed} -> Date.compare(billed, today) == :gt end)
+
+    Enum.each(future, fn {tx, _d, _billed} -> Repo.delete(tx) end)
+
+    apply_present_parcels(base, total, amount_key, present)
+  end
+
+  defp apply_present_parcels(_base, _total, _amount_key, []), do: 0
+
+  defp apply_present_parcels(base, total, amount_key, present) do
+    group =
+      find_or_create_group(
+        base,
+        total,
+        amount_key,
+        Enum.map(present, fn {tx, d, _} -> {tx, d} end)
+      )
+
+    Enum.each(present, fn {tx, d, billed} -> link_and_clean(tx, group, d, billed) end)
+    length(present)
   end
 
   # Rounds the absolute amount to the nearest whole real, as an integer.

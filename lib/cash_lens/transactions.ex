@@ -834,12 +834,16 @@ defmodule CashLens.Transactions do
         select: {a, b}
       )
       |> Repo.all()
-      |> Enum.map(fn {a, b} ->
-        a = Repo.preload(a, [:account, :category])
-        b = Repo.preload(b, [:account, :category])
-        if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
-      end)
+      |> Enum.map(&order_transfer_pair/1)
     end
+  end
+
+  # Preloads both sides of a suggested transfer pair and orders them so the
+  # debit (negative amount) comes first.
+  defp order_transfer_pair({a, b}) do
+    a = Repo.preload(a, [:account, :category])
+    b = Repo.preload(b, [:account, :category])
+    if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
   end
 
   @doc """

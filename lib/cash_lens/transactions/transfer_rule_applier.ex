@@ -19,20 +19,14 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   Returns the list of newly created mirror transactions.
   """
   def apply_rules(transactions) when is_list(transactions) do
-    rules_by_source = load_rules_by_source()
-
-    if rules_by_source == %{} do
-      []
-    else
-      transfer_category = get_transfer_category()
-
-      if is_nil(transfer_category) do
+    case rules_and_category() do
+      nil ->
         []
-      else
+
+      {rules_by_source, transfer_category} ->
         Enum.flat_map(transactions, fn tx ->
           apply_rules_to_transaction(tx, rules_by_source, transfer_category)
         end)
-      end
     end
   end
 
@@ -42,18 +36,27 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   Returns a list of newly created mirror transactions (0 or 1 elements).
   """
   def maybe_apply_rule(%Transaction{} = transaction) do
-    rules_by_source = load_rules_by_source()
-
-    if rules_by_source == %{} do
-      []
-    else
-      transfer_category = get_transfer_category()
-
-      if is_nil(transfer_category) do
+    case rules_and_category() do
+      nil ->
         []
-      else
+
+      {rules_by_source, transfer_category} ->
         apply_rules_to_transaction(transaction, rules_by_source, transfer_category)
-      end
+    end
+  end
+
+  # Returns {rules_by_source, transfer_category} when both transfer rules and the
+  # "transfer" category exist; otherwise nil so callers can short-circuit.
+  defp rules_and_category do
+    case load_rules_by_source() do
+      rules when rules == %{} ->
+        nil
+
+      rules ->
+        case get_transfer_category() do
+          nil -> nil
+          category -> {rules, category}
+        end
     end
   end
 
@@ -131,20 +134,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
            returning: true
          ) do
       {:ok, mirror} ->
-        is_new = mirror.id == mirror_id
-
-        # If the mirror already has a transfer_key, it was already linked to something else (or this same tx)
-        if is_nil(mirror.transfer_key) || mirror.transfer_key == link_id do
-          link_pair(tx.id, mirror.id, link_id)
-
-          if is_new do
-            [%{mirror | transfer_key: link_id}]
-          else
-            []
-          end
-        else
-          []
-        end
+        link_mirror(tx, mirror, link_id, mirror.id == mirror_id)
 
       {:error, reason} ->
         Logger.warning(
@@ -152,6 +142,18 @@ defmodule CashLens.Transactions.TransferRuleApplier do
         )
 
         []
+    end
+  end
+
+  # Links the mirror to its source transaction. A mirror that already carries a
+  # different transfer_key was linked elsewhere, so it is left untouched. Only a
+  # freshly inserted mirror is returned to the caller.
+  defp link_mirror(tx, mirror, link_id, is_new) do
+    if is_nil(mirror.transfer_key) || mirror.transfer_key == link_id do
+      link_pair(tx.id, mirror.id, link_id)
+      if is_new, do: [%{mirror | transfer_key: link_id}], else: []
+    else
+      []
     end
   end
 

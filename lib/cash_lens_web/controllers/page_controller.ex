@@ -167,29 +167,7 @@ defmodule CashLensWeb.PageController do
         if last.month == 12, do: {1, last.year + 1}, else: {last.month + 1, last.year}
 
       # Factor in installments for this specific future month
-      # We check how many installments are ALREADY paid to see what's remaining.
-      # For projection, we assume 1 installment is paid per month starting from next month.
-      installment_impact =
-        Enum.reduce(active_groups, 0.0, fn group, sum ->
-          _progress = CashLens.Installments.get_group_with_progress(group.id)
-
-          # Simplified: if it started before or on this month and isn't finished.
-          # We check month proximity relative to 'last_real'
-          months_since_start =
-            (next_y - group.start_date.year) * 12 + (next_m - group.start_date.month)
-
-          if months_since_start >= 0 and months_since_start < group.installments do
-            # It's an active month for this group
-            installment_val =
-              if group.total_amount,
-                do: Decimal.to_float(group.total_amount) / group.installments,
-                else: 0.0
-
-            sum + installment_val
-          else
-            sum
-          end
-        end)
+      installment_impact = installment_impact_for(active_groups, next_y, next_m)
 
       proj_expenses = avg_expenses + installment_impact
       proj_balance = avg_income - proj_expenses
@@ -209,4 +187,24 @@ defmodule CashLensWeb.PageController do
     end)
     |> elem(0)
   end
+
+  # Projected installment burden for a given future month: assumes one installment
+  # is paid per month, counting only groups still active in that month.
+  defp installment_impact_for(active_groups, year, month) do
+    active_groups
+    |> Enum.filter(&group_active_in_month?(&1, year, month))
+    |> Enum.reduce(0.0, fn group, sum -> sum + group_installment_value(group) end)
+  end
+
+  defp group_active_in_month?(group, year, month) do
+    months_since_start =
+      (year - group.start_date.year) * 12 + (month - group.start_date.month)
+
+    months_since_start >= 0 and months_since_start < group.installments
+  end
+
+  defp group_installment_value(%{total_amount: nil}), do: 0.0
+
+  defp group_installment_value(%{total_amount: total, installments: count}),
+    do: Decimal.to_float(total) / count
 end
