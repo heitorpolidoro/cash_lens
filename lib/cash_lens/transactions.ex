@@ -105,6 +105,9 @@ defmodule CashLens.Transactions do
       |> filter_by_type(filters["type"])
       |> filter_by_reimbursement_status(filters["reimbursement_status"])
       |> filter_unmatched_transfers(filters["unmatched_transfers"])
+      # Paired transfers net out across accounts, so they don't count toward the
+      # income/expense totals (unpaired transfers remain as real movements).
+      |> where([t], is_nil(t.transfer_key))
       |> select([t], %{amount: t.amount})
 
     result =
@@ -414,7 +417,9 @@ defmodule CashLens.Transactions do
         left_join: p in assoc(c, :parent),
         left_join: g in assoc(p, :parent),
         where: t.date >= ^first and t.date <= ^last,
-        where: c.slug not in ["initial_value", "transfer"],
+        where: c.slug != "initial_value",
+        # Exclude only paired transfers (they net out across accounts); unpaired ones count.
+        where: is_nil(t.transfer_key),
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
@@ -466,7 +471,9 @@ defmodule CashLens.Transactions do
   defp build_summary_base_query(query) do
     from t in query,
       left_join: c in assoc(t, :category),
-      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+      where: is_nil(c.slug) or c.slug != "initial_value",
+      # Exclude only paired transfers (they net out across accounts); unpaired ones count.
+      where: is_nil(t.transfer_key),
       where: is_nil(t.reimbursement_link_key)
   end
 
@@ -497,7 +504,9 @@ defmodule CashLens.Transactions do
     query =
       from t in Transaction,
         left_join: c in assoc(t, :category),
-        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+        where: is_nil(c.slug) or c.slug != "initial_value",
+        # Exclude only paired transfers (they net out across accounts); unpaired ones count.
+        where: is_nil(t.transfer_key),
         where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
@@ -555,7 +564,10 @@ defmodule CashLens.Transactions do
       join: c in assoc(t, :category),
       left_join: p in assoc(c, :parent),
       where: t.amount < 0,
-      where: c.slug not in ["initial_value", "transfer"],
+      where: c.slug != "initial_value",
+      # Only paired transfers (with a transfer_key) net out across accounts and are
+      # excluded; an unpaired "transfer" is a real outflow and still counts.
+      where: is_nil(t.transfer_key),
       where: is_nil(t.reimbursement_link_key),
       where: t.reimbursement_status != "pending" or is_nil(t.reimbursement_status),
       select: %{
