@@ -16,6 +16,16 @@ defmodule CashLensWeb.InstallmentLive.Index do
   end
 
   @impl true
+  def handle_event("detect_installments", _params, socket) do
+    count = Installments.scan_and_apply_all()
+
+    {:noreply,
+     socket
+     |> assign(:groups, list_groups())
+     |> put_flash(:success, "#{count} transação(ões) parcelada(s) detectada(s) e agrupada(s).")}
+  end
+
+  @impl true
   def handle_event("open_modal", _params, socket) do
     {:noreply, assign(socket, :show_modal, true)}
   end
@@ -50,6 +60,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
   defp list_groups do
     Installments.list_installment_groups()
     |> Enum.map(fn g -> Installments.get_group_with_progress(g.id) end)
+    |> Enum.reject(& &1.is_finished)
   end
 
   @impl true
@@ -60,9 +71,18 @@ defmodule CashLensWeb.InstallmentLive.Index do
         <h1 class="text-3xl font-bold text-base-content uppercase tracking-tighter">
           Grupos de Parcelamento
         </h1>
-        <button phx-click="open_modal" class="btn btn-primary btn-sm rounded-xl">
-          <.icon name="hero-plus" class="size-4 mr-1" /> Novo Grupo
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            phx-click="detect_installments"
+            phx-disable-with="Detectando..."
+            class="btn btn-ghost btn-sm rounded-xl"
+          >
+            <.icon name="hero-sparkles" class="size-4 mr-1" /> Detectar Parcelamentos
+          </button>
+          <button phx-click="open_modal" class="btn btn-primary btn-sm rounded-xl">
+            <.icon name="hero-plus" class="size-4 mr-1" /> Novo Grupo
+          </button>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

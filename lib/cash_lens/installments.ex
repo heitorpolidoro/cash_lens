@@ -7,6 +7,7 @@ defmodule CashLens.Installments do
   alias CashLens.Repo
 
   alias CashLens.Installments.InstallmentGroup
+  alias CashLens.Transactions.InstallmentDetector
   alias CashLens.Transactions.Transaction
 
   @doc """
@@ -61,8 +62,32 @@ defmodule CashLens.Installments do
     Map.merge(group, %{
       paid_count: paid_count,
       remaining_count: max(0, group.installments - paid_count),
-      is_completed: paid_count >= group.installments
+      is_completed: paid_count >= group.installments,
+      is_finished: finished?(group)
     })
+  end
+
+  # A plan is "finished" once its last parcel's billing month is already in the past.
+  # start_date holds the original purchase date; the final parcel bills
+  # (installments - 1) months later.
+  defp finished?(%{start_date: nil}), do: false
+
+  defp finished?(%{start_date: start_date, installments: installments}) do
+    last_billing = add_months(start_date, installments - 1)
+    today = Date.utc_today()
+    current_month_start = Date.new!(today.year, today.month, 1)
+    Date.compare(last_billing, current_month_start) == :lt
+  end
+
+  # Adds n calendar months to a date, clamping the day to the target month's length.
+  def add_months(date, 0), do: date
+
+  def add_months(%Date{year: y, month: m, day: d}, n) do
+    total = y * 12 + (m - 1) + n
+    ny = div(total, 12)
+    nm = rem(total, 12) + 1
+    last_day = Date.days_in_month(Date.new!(ny, nm, 1))
+    Date.new!(ny, nm, min(d, last_day))
   end
 
   @doc """
@@ -99,6 +124,113 @@ defmodule CashLens.Installments do
       from g in InstallmentGroup,
         where: fragment("? ILIKE '%' || ? || '%'", ^desc, g.description_pattern),
         limit: 1
+    )
+  end
+
+  @doc """
+  Scans every transaction whose description still contains an installment marker
+  ("PARC X/Y") and groups them. Returns the number of transactions linked.
+
+  Used both for one-off backfills and for the "detect installments" UI action.
+  """
+  def scan_and_apply_all do
+    Transaction
+    |> where([t], like(t.description, "%PARC %"))
+    |> where([t], is_nil(t.installment_group_id))
+    |> Repo.all()
+    |> detect_and_apply()
+  end
+
+  @doc """
+  Detects installment markers in the given transactions, creating/reusing one
+  `InstallmentGroup` per (merchant base, total installments) and linking each
+  transaction to it.
+
+  The transaction description is cleaned to the merchant base, while the original
+  `fingerprint` is preserved (we use `update_all`, bypassing the changeset) so that
+  re-importing the same statement still de-duplicates correctly.
+
+  Returns the number of transactions linked.
+  """
+  def detect_and_apply(transactions) when is_list(transactions) do
+    detected =
+      transactions
+      |> Enum.map(fn tx -> {tx, InstallmentDetector.detect(tx.description)} end)
+      |> Enum.reject(fn {_tx, detection} -> is_nil(detection) end)
+
+    count =
+      detected
+      # Group by merchant + total + rounded value: parcels of one purchase differ by
+      # at most a few cents (the first carries the rounding remainder), while distinct
+      # purchases at the same merchant differ by reais — so round to the nearest real.
+      |> Enum.group_by(fn {tx, d} -> {d.base, d.total, amount_key(tx.amount)} end)
+      |> Enum.reduce(0, fn {{base, total, amount_key}, items}, acc ->
+        group = find_or_create_group(base, total, amount_key, items)
+        Enum.each(items, fn {tx, d} -> link_and_clean(tx, group, d) end)
+        acc + length(items)
+      end)
+
+    # Re-dating parcels moves them across months, so rebuild the affected accounts'
+    # balance chains to keep monthly summaries correct.
+    detected
+    |> Enum.map(fn {tx, _d} -> tx.account_id end)
+    |> Enum.uniq()
+    |> Enum.each(&CashLens.Accounting.rebuild_account_balances/1)
+
+    count
+  end
+
+  # Rounds the absolute amount to the nearest whole real, as an integer.
+  defp amount_key(amount) do
+    amount |> Decimal.abs() |> Decimal.round(0) |> Decimal.to_integer()
+  end
+
+  defp find_or_create_group(base, total, amount_key, items) do
+    pattern = "#{base} (#{total}x · R$#{amount_key})"
+
+    case Repo.get_by(InstallmentGroup, description_pattern: pattern) do
+      nil ->
+        {tx, _d} = hd(items)
+        # All parcels carry the original purchase date (OFX DTPOSTED), so use it as
+        # the group's start date — the basis for projecting the plan's end.
+        start_date = items |> Enum.map(fn {t, _} -> t.date end) |> Enum.min(Date)
+        total_amount = tx.amount |> Decimal.abs() |> Decimal.mult(total)
+
+        {:ok, group} =
+          create_installment_group(%{
+            description_pattern: pattern,
+            installments: total,
+            start_date: start_date,
+            total_amount: total_amount
+          })
+
+        group
+
+      group ->
+        group
+    end
+  end
+
+  # Links a parcel to its group, cleans the description to the merchant base, and
+  # shifts the date to the month it was actually billed: the OFX reports every parcel
+  # on the original purchase date, but parcel X bills (X - 1) months later.
+  #
+  # The update is done via `update_all` (not the changeset) so the original
+  # `fingerprint` — derived from the raw date and description — is preserved and
+  # re-importing the same statement still de-duplicates.
+  defp link_and_clean(tx, group, detection) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    billed_date = add_months(tx.date, detection.number - 1)
+
+    from(t in Transaction, where: t.id == ^tx.id)
+    |> Repo.update_all(
+      set: [
+        description: detection.base,
+        date: billed_date,
+        installment_group_id: group.id,
+        installment_number: detection.number,
+        updated_at: now
+      ]
     )
   end
 end
