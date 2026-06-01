@@ -45,6 +45,38 @@ defmodule CashLensWeb.PageControllerTest do
     assert html_response(conn, 200) =~ "Dashboard Financeiro"
   end
 
+  test "GET / factors active installments into projections", %{conn: conn} do
+    account = account_fixture()
+    today = Date.utc_today()
+
+    balance_fixture(%{
+      account_id: account.id,
+      year: today.year,
+      month: today.month,
+      final_balance: "1000.00"
+    })
+
+    # Active group: starts this month, spans into the projected months.
+    {:ok, _group} =
+      CashLens.Installments.create_installment_group(%{
+        description_pattern: "PROJ (6x)",
+        total_amount: "600.00",
+        installments: 6,
+        start_date: Date.new!(today.year, today.month, 1)
+      })
+
+    # A group with no total_amount exercises the nil branch of the projection helper.
+    {:ok, _g2} =
+      CashLens.Installments.create_installment_group(%{
+        description_pattern: "SEM VALOR (3x)",
+        installments: 3,
+        start_date: Date.new!(today.year, today.month, 1)
+      })
+
+    conn = get(conn, ~p"/")
+    assert html_response(conn, 200) =~ "Dashboard Financeiro"
+  end
+
   test "GET /.well-known/appspecific/com.chrome.devtools.json", %{conn: conn} do
     conn = get(conn, "/.well-known/appspecific/com.chrome.devtools.json")
     assert response(conn, 204) == ""

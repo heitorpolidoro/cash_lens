@@ -57,6 +57,12 @@ defmodule CashLensWeb.TransferLive.Index do
   end
 
   @impl true
+  def handle_event("unlink", %{"key" => key}, socket) do
+    Transactions.unlink_transfer_pair(key)
+    {:noreply, socket |> put_flash(:success, "Transferência desvinculada.") |> load_data()}
+  end
+
+  @impl true
   def handle_info(:close_transfer_modal, socket) do
     {:noreply,
      socket

@@ -21,6 +21,26 @@ defmodule CashLens.Parsers.IngestorTest do
       assert length(transactions) == 1
     end
 
+    test "dispatches to bradesco_csv parser" do
+      content =
+        "﻿Data;Histórico;Docto.;Crédito (R$);Débito (R$);Saldo (R$)\n" <>
+          "01/03/2026;COMPRA;000;;120,50;3.000,00\n"
+
+      [tx] = Ingestor.parse(content, "bradesco_csv")
+      assert tx.description == "COMPRA"
+      assert tx.amount == Decimal.new("-120.50")
+    end
+
+    test "dispatches to ourocard_ofx parser" do
+      content =
+        "<STMTTRN><TRNTYPE>PAYMENT</TRNTYPE><DTPOSTED>20260415</DTPOSTED>" <>
+          "<TRNAMT>-66.00</TRNAMT><MEMO>VALE EVENTOS   SAO PAULO  BR</MEMO></STMTTRN>"
+
+      [tx] = Ingestor.parse(content, "ourocard_ofx")
+      assert tx.description == "VALE EVENTOS SAO PAULO BR"
+      assert tx.amount == Decimal.new("-66.00")
+    end
+
     test "returns error for unknown parser" do
       assert {:error, _} = Ingestor.parse("any", "unknown")
     end

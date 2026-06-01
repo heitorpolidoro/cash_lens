@@ -333,10 +333,13 @@ defmodule CashLens.Transactions do
     where(query, amount: ^amount)
   end
 
-  defp filter_by_type(query, nil), do: query
-  defp filter_by_type(query, ""), do: query
-  defp filter_by_type(query, "debit"), do: where(query, [t], t.amount < 0)
-  defp filter_by_type(query, "credit"), do: where(query, [t], t.amount > 0)
+  defp filter_by_type(query, type) when type in ["debit", "expense"],
+    do: where(query, [t], t.amount < 0)
+
+  defp filter_by_type(query, type) when type in ["credit", "income"],
+    do: where(query, [t], t.amount > 0)
+
+  defp filter_by_type(query, _), do: query
 
   defp filter_by_amount_range(query, min, max) do
     query

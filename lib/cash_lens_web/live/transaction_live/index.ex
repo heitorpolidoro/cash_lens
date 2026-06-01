@@ -135,10 +135,11 @@ defmodule CashLensWeb.TransactionLive.Index do
            installment_number: group.paid_count + 1
          }) do
       {:ok, updated_tx} ->
+        # Reload so the installment_group association is preloaded for rendering.
         {:noreply,
          socket
          |> put_flash(:success, "Vinculado a #{group.description_pattern}!")
-         |> stream_insert(:transactions, updated_tx)}
+         |> stream_insert(:transactions, Transactions.get_transaction!(updated_tx.id))}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Falha ao vincular.")}

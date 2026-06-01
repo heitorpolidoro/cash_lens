@@ -176,4 +176,44 @@ defmodule CashLens.CSVParserTest do
       assert List.first(transactions).date == ~D[2026-01-01]
     end
   end
+
+  describe "parse/2 with :bradesco_csv" do
+    @bradesco_header "﻿Data;Histórico;Docto.;Crédito (R$);Débito (R$);Saldo (R$)\n"
+
+    test "parses debits and credits, skipping header and balance rows" do
+      content =
+        @bradesco_header <>
+          "01/03/2026;COMPRA SUPERMERCADO;000123;;120,50;3.000,00\n" <>
+          "02/03/2026;DEPOSITO SALARIO;000124;1.500,00;;4.500,00\n" <>
+          "03/03/2026;SALDO ANTERIOR;000000;;;3.120,50\n"
+
+      transactions = CSVParser.parse(content, :bradesco_csv)
+
+      assert length(transactions) == 2
+
+      expense = Enum.find(transactions, &(&1.description == "COMPRA SUPERMERCADO"))
+      assert expense.amount == Decimal.new("-120.50")
+      assert expense.date == ~D[2026-03-01]
+
+      income = Enum.find(transactions, &(&1.description == "DEPOSITO SALARIO"))
+      assert income.amount == Decimal.new("1500.00")
+      assert income.date == ~D[2026-03-02]
+
+      # The "SALDO ANTERIOR" row is dropped.
+      refute Enum.any?(transactions, &String.contains?(&1.description, "SALDO"))
+    end
+
+    test "drops rows with zero/unparseable amounts" do
+      content =
+        @bradesco_header <>
+          "01/03/2026;LANCAMENTO INVALIDO;000;abc;xyz;0,00\n"
+
+      assert CSVParser.parse(content, :bradesco_csv) == []
+    end
+
+    test "returns empty when there are no date rows" do
+      content = @bradesco_header <> "Período: 01/03/2026 a 31/03/2026\n"
+      assert CSVParser.parse(content, :bradesco_csv) == []
+    end
+  end
 end

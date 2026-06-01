@@ -91,7 +91,10 @@ defmodule CashLensWeb.FormattersTest do
   describe "translate_parser_type/1" do
     test "translates known parser types" do
       assert Formatters.translate_parser_type("bb_csv") == "Banco do Brasil (CSV)"
+      assert Formatters.translate_parser_type("bradesco_csv") == "Bradesco (CSV)"
+      assert Formatters.translate_parser_type("ourocard_ofx") == "Ourocard (OFX)"
       assert Formatters.translate_parser_type("sem_parar_pdf") == "Sem Parar (PDF)"
+      assert Formatters.translate_parser_type("standard_ofx") == "OFX Padrão"
     end
 
     test "returns default for unknown types" do

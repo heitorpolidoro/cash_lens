@@ -76,6 +76,21 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
     assert Categories.get_category_by_slug("my-new-category") != nil
   end
 
+  test "validate selects a parent and clear_parent resets it", %{conn: conn} do
+    parent = category_fixture(name: "Pai")
+    {:ok, view, _html} = live_isolated(conn, HostLive)
+
+    html =
+      view
+      |> element("#quick-category-form")
+      |> render_change(%{"category" => %{"name" => "Filha", "parent_id" => parent.id}})
+
+    assert html =~ "Limpar pai"
+
+    html = view |> element("button[phx-click='clear_parent']") |> render_click()
+    refute html =~ "Limpar pai"
+  end
+
   test "creates a category with a parent", %{conn: conn} do
     parent = category_fixture()
     {:ok, view, _html} = live_isolated(conn, HostLive)
