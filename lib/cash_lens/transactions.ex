@@ -463,6 +463,58 @@ defmodule CashLens.Transactions do
     end
   end
 
+  @doc """
+  Returns income broken down by top-level category for a given month/year.
+  Mirrors `get_month_category_breakdown/2` but for net-positive (income) categories.
+  Returns list of maps: %{name, category_id, type, total} sorted by total descending.
+  """
+  def get_month_income_breakdown(year, month) when is_integer(year) and is_integer(month) do
+    first = Date.new!(year, month, 1)
+    last = Date.end_of_month(first)
+
+    categorized =
+      from(t in Transaction,
+        join: c in assoc(t, :category),
+        left_join: p in assoc(c, :parent),
+        left_join: g in assoc(p, :parent),
+        where: t.date >= ^first and t.date <= ^last,
+        where: c.slug not in ["initial_value", "transfer"],
+        group_by: [
+          fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
+          fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
+          fragment("COALESCE(?, ?, ?)", g.type, p.type, c.type)
+        ],
+        select: %{
+          name: fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
+          category_id: type(fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id), :binary_id),
+          type: fragment("COALESCE(?, ?, ?)", g.type, p.type, c.type),
+          total: sum(t.amount)
+        },
+        having: sum(t.amount) > 0,
+        order_by: [desc: sum(t.amount)]
+      )
+      |> Repo.all()
+
+    uncategorized_total =
+      from(t in Transaction,
+        where: is_nil(t.category_id),
+        where: t.amount > 0,
+        where: t.date >= ^first and t.date <= ^last,
+        where: is_nil(t.reimbursement_link_key),
+        select: sum(t.amount)
+      )
+      |> Repo.one()
+
+    if is_nil(uncategorized_total) or Decimal.eq?(uncategorized_total, Decimal.new("0")) do
+      categorized
+    else
+      [
+        %{name: "Uncategorized", category_id: nil, type: nil, total: uncategorized_total}
+        | categorized
+      ]
+    end
+  end
+
   defp get_summary_period(_target_date, %{"month" => m, "year" => y})
        when is_binary(m) and m != "" and is_binary(y) and y != "" do
     first = Date.new!(String.to_integer(y), String.to_integer(m), 1)
