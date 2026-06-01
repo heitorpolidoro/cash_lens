@@ -122,6 +122,20 @@ defmodule CashLens.InstallmentsApplyTest do
       assert group.description_pattern == "DROGARIA SAO (3x · R$191)"
     end
 
+    test "drops parcels billed in a future month (not yet charged)", %{account: account} do
+      today = Date.utc_today()
+      # Bunched purchase on today's date: parcel 1 = this month (kept), 2 and 3 future.
+      p1 = ourocard_tx(account.id, "LOJA Z PARC 01/03 BR", "-30.00", today)
+      p2 = ourocard_tx(account.id, "LOJA Z PARC 02/03 BR", "-30.00", today)
+      p3 = ourocard_tx(account.id, "LOJA Z PARC 03/03 BR", "-30.00", today)
+
+      Installments.detect_and_apply([p1, p2, p3])
+
+      assert Repo.get(Transaction, p1.id)
+      refute Repo.get(Transaction, p2.id)
+      refute Repo.get(Transaction, p3.id)
+    end
+
     test "is idempotent: re-running does not duplicate groups", %{account: account} do
       t1 = ourocard_tx(account.id, "LOJA X PARC 01/02 BR", "-10.00", ~D[2026-01-01])
       Installments.detect_and_apply([t1])

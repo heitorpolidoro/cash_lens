@@ -165,21 +165,40 @@ defmodule CashLens.Installments do
       # purchases at the same merchant differ by reais — so round to the nearest real.
       |> Enum.group_by(fn {tx, d} -> {d.base, d.total, amount_key(tx.amount)} end)
       |> Enum.reduce(0, fn {{base, total, amount_key}, items}, acc ->
-        group = find_or_create_group(base, total, amount_key, items)
         # When 2+ parcels share one date, the OFX listed them all at the purchase
         # date, so spread each to its billing month (purchase + number-1). When the
         # parcels already have distinct dates (e.g. recurring annuity charges billed
         # monthly), they are already correct and must not be shifted.
         purchase_date = bunched_purchase_date(Enum.map(items, fn {tx, _} -> tx.date end))
+        today = Date.utc_today()
 
-        Enum.each(items, fn {tx, d} ->
-          billed_date =
-            if purchase_date, do: add_months(purchase_date, d.number - 1), else: tx.date
+        dated =
+          Enum.map(items, fn {tx, d} ->
+            billed = if purchase_date, do: add_months(purchase_date, d.number - 1), else: tx.date
+            {tx, d, billed}
+          end)
 
-          link_and_clean(tx, group, d, billed_date)
-        end)
+        # A parcel billed in a future month has not actually been charged yet, so it
+        # is not a real transaction — drop it from the database.
+        {future, present} =
+          Enum.split_with(dated, fn {_tx, _d, billed} -> Date.compare(billed, today) == :gt end)
 
-        acc + length(items)
+        Enum.each(future, fn {tx, _d, _billed} -> Repo.delete(tx) end)
+
+        if present == [] do
+          acc
+        else
+          group =
+            find_or_create_group(
+              base,
+              total,
+              amount_key,
+              Enum.map(present, fn {tx, d, _} -> {tx, d} end)
+            )
+
+          Enum.each(present, fn {tx, d, billed} -> link_and_clean(tx, group, d, billed) end)
+          acc + length(present)
+        end
       end)
 
     # Re-dating parcels moves them across months, so rebuild the affected accounts'
