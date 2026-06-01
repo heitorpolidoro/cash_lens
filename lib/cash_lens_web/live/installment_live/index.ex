@@ -7,12 +7,18 @@ defmodule CashLensWeb.InstallmentLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:groups, list_groups())
      |> assign(:show_modal, false)
      |> assign(
        :form,
        to_form(Installments.change_installment_group(%Installments.InstallmentGroup{}))
-     )}
+     )
+     |> load_data()}
+  end
+
+  defp load_data(socket) do
+    socket
+    |> assign(:groups, list_groups())
+    |> assign(:upcoming, Installments.upcoming_installments())
   end
 
   @impl true
@@ -21,7 +27,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
     {:noreply,
      socket
-     |> assign(:groups, list_groups())
+     |> load_data()
      |> put_flash(:success, "#{count} transação(ões) parcelada(s) detectada(s) e agrupada(s).")}
   end
 
@@ -42,7 +48,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
         {:noreply,
          socket
          |> assign(:show_modal, false)
-         |> assign(:groups, list_groups())
+         |> load_data()
          |> put_flash(:success, "Grupo de parcelamento criado!")}
 
       {:error, changeset} ->
@@ -54,7 +60,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
   def handle_event("delete", %{"id" => id}, socket) do
     group = Installments.get_installment_group!(id)
     {:ok, _} = Installments.delete_installment_group(group)
-    {:noreply, assign(socket, :groups, list_groups())}
+    {:noreply, load_data(socket)}
   end
 
   defp list_groups do
@@ -85,19 +91,72 @@ defmodule CashLensWeb.InstallmentLive.Index do
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <%= for group <- @groups do %>
-          <div class="card bg-base-100 border border-base-300 shadow-sm overflow-hidden">
-            <div class="card-body p-6">
-              <div class="flex items-start justify-between">
-                <div>
-                  <h2 class="text-xs font-black uppercase opacity-50 mb-1">
-                    {group.description_pattern}
-                  </h2>
-                  <p class="text-2xl font-black text-primary">
-                    {if group.total_amount, do: format_currency(group.total_amount), else: "---"}
-                  </p>
+      <%!-- Projeção de gastos com parcelas nos próximos meses --%>
+      <div :if={@upcoming != []} class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-5">
+        <h2 class="text-[11px] font-black uppercase tracking-widest opacity-50 mb-3">
+          Parcelas nos próximos meses
+        </h2>
+        <div class="flex gap-3 overflow-x-auto pb-1">
+          <div
+            :for={m <- @upcoming}
+            class="shrink-0 min-w-[120px] rounded-xl border border-base-300 bg-base-200/40 px-4 py-3"
+          >
+            <div class="text-[10px] font-bold uppercase opacity-50">
+              {month_name(m.date.month)}/{m.date.year}
+            </div>
+            <div class="text-lg font-black text-primary">{format_currency(m.total)}</div>
+          </div>
+        </div>
+      </div>
+
+      <%!-- Lista de grupos de parcelamento --%>
+      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">
+        <div :if={@groups == []} class="px-6 py-12 text-center opacity-40 text-sm">
+          Nenhum parcelamento ativo.
+        </div>
+
+        <table :if={@groups != []} class="table table-sm w-full">
+          <thead class="bg-base-200/50 text-[10px] uppercase tracking-wider">
+            <tr>
+              <th>Descrição</th>
+              <th class="text-right">Valor Total</th>
+              <th class="text-right">Parcela</th>
+              <th class="text-center w-40">Progresso</th>
+              <th class="text-right">Início</th>
+              <th class="w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :for={group <- @groups} class="hover">
+              <td class="font-bold text-xs">{group.description_pattern}</td>
+              <td class="text-right font-mono">
+                {if group.total_amount, do: format_currency(group.total_amount), else: "---"}
+              </td>
+              <td class="text-right font-mono text-xs opacity-70">
+                {if group.total_amount && group.installments > 0,
+                  do:
+                    format_currency(
+                      Decimal.round(Decimal.div(group.total_amount, group.installments), 2)
+                    ),
+                  else: "---"}
+              </td>
+              <td>
+                <div class="flex flex-col gap-1">
+                  <span class="text-[10px] font-bold text-center">
+                    {group.paid_count} / {group.installments}
+                  </span>
+                  <progress
+                    class="progress progress-primary w-full h-1.5"
+                    value={group.paid_count}
+                    max={group.installments}
+                  >
+                  </progress>
                 </div>
+              </td>
+              <td class="text-right text-xs opacity-60 whitespace-nowrap">
+                {format_date(group.start_date)}
+              </td>
+              <td class="text-right">
                 <button
                   phx-click="delete"
                   phx-value-id={group.id}
@@ -105,26 +164,10 @@ defmodule CashLensWeb.InstallmentLive.Index do
                 >
                   <.icon name="hero-trash" class="size-4" />
                 </button>
-              </div>
-
-              <div class="mt-6 space-y-2">
-                <div class="flex items-center justify-between text-[10px] font-bold uppercase">
-                  <span class="opacity-50">Progresso</span>
-                  <span>{group.paid_count} / {group.installments} pagos</span>
-                </div>
-                <progress
-                  class="progress progress-primary w-full h-2"
-                  value={group.paid_count}
-                  max={group.installments}
-                >
-                </progress>
-                <p class="text-[10px] opacity-40 font-medium">
-                  Iniciado em {format_date(group.start_date)}
-                </p>
-              </div>
-            </div>
-          </div>
-        <% end %>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <.modal :if={@show_modal} id="group-modal" show on_cancel={JS.push("close_modal")}>

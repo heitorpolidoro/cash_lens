@@ -91,6 +91,53 @@ defmodule CashLens.Installments do
   end
 
   @doc """
+  Projects the installment burden for the upcoming months.
+
+  For each month from the current one forward (until the last pending parcel,
+  capped at 12 months), sums the per-parcel value of every group that still has a
+  parcel due that month. Returns `[%{date: Date.t(), total: Decimal.t()}]`.
+  """
+  def upcoming_installments(max_months \\ 12) do
+    today = Date.utc_today()
+    current = Date.new!(today.year, today.month, 1)
+    groups = list_installment_groups()
+
+    0..(max_months - 1)
+    |> Enum.map(fn i ->
+      month = add_months(current, i)
+
+      total =
+        Enum.reduce(groups, Decimal.new("0"), fn g, acc ->
+          if parcel_due_in_month?(g, month),
+            do: Decimal.add(acc, parcel_value(g)),
+            else: acc
+        end)
+
+      %{date: month, total: total}
+    end)
+    # Drop trailing months with nothing due.
+    |> Enum.reverse()
+    |> Enum.drop_while(&Decimal.eq?(&1.total, 0))
+    |> Enum.reverse()
+  end
+
+  defp parcel_value(%{total_amount: nil}), do: Decimal.new("0")
+
+  defp parcel_value(%{total_amount: total, installments: n}) when n > 0 do
+    Decimal.div(total, n) |> Decimal.round(2)
+  end
+
+  defp parcel_value(_), do: Decimal.new("0")
+
+  defp parcel_due_in_month?(%{start_date: nil}, _month), do: false
+
+  defp parcel_due_in_month?(%{start_date: start_date, installments: n}, month) do
+    start_month = Date.new!(start_date.year, start_date.month, 1)
+    last_month = add_months(start_month, n - 1)
+    Date.compare(month, start_month) != :lt and Date.compare(month, last_month) != :gt
+  end
+
+  @doc """
   Returns all active (non-completed) installment groups.
   """
   def list_active_groups do
