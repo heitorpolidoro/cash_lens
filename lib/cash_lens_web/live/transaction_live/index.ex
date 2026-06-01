@@ -298,9 +298,17 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     case Transactions.update_transaction_category(id, category_id) do
       {:ok, updated_tx} ->
+        # Explicit feedback so the action is never silent — especially under the
+        # "Pendentes" filter, where a just-categorized row correctly leaves the list.
+        flash_msg =
+          if category_id,
+            do: "Categoria aplicada: #{category_name(socket, category_id)}.",
+            else: "Categoria removida."
+
         socket =
           socket
           |> assign(:pending_count, Transactions.count_pending_transactions())
+          |> put_flash(:success, flash_msg)
           |> handle_bulk_suggestion(updated_tx, category_id)
           |> stream_update_transaction(updated_tx)
 
@@ -838,6 +846,13 @@ defmodule CashLensWeb.TransactionLive.Index do
     if matches_filters?(tx, socket.assigns.filters, socket.assigns.transfer_category_id),
       do: stream_insert(socket, :transactions, tx),
       else: stream_delete(socket, :transactions, tx)
+  end
+
+  defp category_name(socket, category_id) do
+    case Enum.find(socket.assigns.categories, &(&1.id == category_id)) do
+      nil -> "categoria"
+      cat -> CashLens.Categories.Category.full_name(cat)
+    end
   end
 
   defp handle_bulk_suggestion(socket, _tx, nil), do: socket
