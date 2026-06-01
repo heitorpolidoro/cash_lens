@@ -197,6 +197,46 @@ const liveSocket = new LiveSocket("/live", Socket, {
         this.el.innerHTML = DOMPurify.sanitize(raw);
       }
     },
+    BarChart: {
+      mounted() { this.draw(); },
+      updated() { this.draw(); },
+      destroyed() { if (this.chart) this.chart.destroy(); },
+      draw() {
+        const data = JSON.parse(this.el.dataset.chart || "[]");
+        if (this.chart) this.chart.destroy();
+        this.chart = new Chart(this.el, {
+          type: 'bar',
+          data: {
+            labels: data.map(d => d.label),
+            datasets: [{
+              data: data.map(d => d.value),
+              backgroundColor: '#3b82f6',
+              borderRadius: 6,
+              maxBarThickness: 48
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (c) => 'R$ ' + c.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { callback: (v) => 'R$ ' + v.toLocaleString('pt-BR') }
+              },
+              x: { grid: { display: false } }
+            }
+          }
+        });
+      }
+    },
     FlashAutoClose: {
       mounted() {
         this.timer = setTimeout(() => {

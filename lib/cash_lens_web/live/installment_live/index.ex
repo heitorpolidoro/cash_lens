@@ -16,9 +16,20 @@ defmodule CashLensWeb.InstallmentLive.Index do
   end
 
   defp load_data(socket) do
+    upcoming = Installments.upcoming_installments()
+
+    chart_data =
+      Enum.map(upcoming, fn m ->
+        %{
+          label: "#{month_label(m.date.month)}/#{m.date.year - 2000}",
+          value: Decimal.to_float(m.total)
+        }
+      end)
+
     socket
     |> assign(:groups, list_groups())
-    |> assign(:upcoming, Installments.upcoming_installments())
+    |> assign(:upcoming, upcoming)
+    |> assign(:upcoming_chart, Jason.encode!(chart_data))
   end
 
   @impl true
@@ -67,6 +78,8 @@ defmodule CashLensWeb.InstallmentLive.Index do
     Installments.list_installment_groups()
     |> Enum.map(fn g -> Installments.get_group_with_progress(g.id) end)
     |> Enum.reject(& &1.is_finished)
+    # Fewest remaining parcels first (closest to finishing on top).
+    |> Enum.sort_by(& &1.remaining_count)
   end
 
   @impl true
@@ -96,16 +109,8 @@ defmodule CashLensWeb.InstallmentLive.Index do
         <h2 class="text-[11px] font-black uppercase tracking-widest opacity-50 mb-3">
           Parcelas nos próximos meses
         </h2>
-        <div class="flex gap-3 overflow-x-auto pb-1">
-          <div
-            :for={m <- @upcoming}
-            class="shrink-0 min-w-[120px] rounded-xl border border-base-300 bg-base-200/40 px-4 py-3"
-          >
-            <div class="text-[10px] font-bold uppercase opacity-50">
-              {month_name(m.date.month)}/{m.date.year}
-            </div>
-            <div class="text-lg font-black text-primary">{format_currency(m.total)}</div>
-          </div>
+        <div class="h-64">
+          <canvas id="upcoming-chart" phx-hook="BarChart" data-chart={@upcoming_chart}></canvas>
         </div>
       </div>
 
