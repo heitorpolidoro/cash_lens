@@ -20,6 +20,20 @@ defmodule CashLens.AccountingTest do
       assert balance.month == 1
     end
 
+    test "calculate_monthly_balance/3 succeeds with multiple prior-month balances" do
+      # Regression: find_latest_balance_before/3 used Repo.one without a limit,
+      # so an account with 2+ balances before the target month raised
+      # Ecto.MultipleResultsError (froze multi-month statement imports).
+      acc = account_fixture()
+      assert {:ok, _} = Accounting.calculate_monthly_balance(acc.id, 2025, 10)
+      assert {:ok, _} = Accounting.calculate_monthly_balance(acc.id, 2025, 11)
+      assert {:ok, _} = Accounting.calculate_monthly_balance(acc.id, 2025, 12)
+
+      # Two+ balances now exist before 2026-01; this must not crash.
+      assert {:ok, %Balance{year: 2026, month: 1}} =
+               Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+    end
+
     test "list_balances/1 with filters and pagination" do
       acc = account_fixture()
       Accounting.calculate_monthly_balance(acc.id, 2026, 1)

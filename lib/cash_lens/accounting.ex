@@ -111,6 +111,7 @@ defmodule CashLens.Accounting do
     |> where([b], b.account_id == ^account_id)
     |> where([b], b.year < ^year or (b.year == ^year and b.month < ^month))
     |> order_by([b], desc: b.year, desc: b.month)
+    |> limit(1)
     |> Repo.one()
   end
 

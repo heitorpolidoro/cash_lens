@@ -93,35 +93,45 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
     total = length(file_paths)
 
     process_import = fn ->
-      {results, _lines_acc} =
-        file_paths
-        |> Enum.with_index(1)
-        |> Enum.reduce({[], 0}, fn {path, index}, {results, lines_acc} ->
-          filename = Path.basename(path)
-          send(pid, {:import_file_start, index, total, filename})
+      # Wrap the whole pipeline: a raised exception in a Task.start/1 process dies
+      # silently, leaving the modal stuck on "Importando..." forever. Always report
+      # back so the UI can recover.
+      try do
+        {results, _lines_acc} =
+          file_paths
+          |> Enum.with_index(1)
+          |> Enum.reduce({[], 0}, fn {path, index}, {results, lines_acc} ->
+            filename = Path.basename(path)
+            send(pid, {:import_file_start, index, total, filename})
 
-          res =
-            Ingestor.import_file(account, path, notify_fn: &send(pid, {:import_file_parsed, &1}))
+            res =
+              Ingestor.import_file(account, path,
+                notify_fn: &send(pid, {:import_file_parsed, &1})
+              )
 
-          File.rm(path)
+            File.rm(path)
 
-          new_lines_acc =
-            case res do
-              {:ok, %{imported: n}} ->
-                cumulative = lines_acc + n
-                send(pid, {:import_file_done, cumulative})
-                cumulative
+            new_lines_acc =
+              case res do
+                {:ok, %{imported: n}} ->
+                  cumulative = lines_acc + n
+                  send(pid, {:import_file_done, cumulative})
+                  cumulative
 
-              _ ->
-                lines_acc
-            end
+                _ ->
+                  lines_acc
+              end
 
-          {results ++ [res], new_lines_acc}
-        end)
+            {results ++ [res], new_lines_acc}
+          end)
 
-      case summarize_import_results(results) do
-        {:ok, summary} -> send(pid, {:import_success, summary})
-        {:error, reason} -> send(pid, {:import_error, reason})
+        case summarize_import_results(results) do
+          {:ok, summary} -> send(pid, {:import_success, summary})
+          {:error, reason} -> send(pid, {:import_error, reason})
+        end
+      rescue
+        e ->
+          send(pid, {:import_error, "Erro inesperado: #{Exception.message(e)}"})
       end
     end
 
