@@ -510,21 +510,21 @@
                     </div>
                   </div>
                   <%= if transaction.category && transaction.category.slug == "transfer" do %>
-                    <span title={
-                      if transaction.transfer_key,
-                        do: "Transferência vinculada",
-                        else: "Transferência pendente de vínculo"
-                    }>
-                      <.icon
-                        :if={transaction.transfer_key}
-                        name="hero-link"
-                        class="size-3 text-primary"
-                      />
-                      <.icon
-                        :if={!transaction.transfer_key}
-                        name="hero-exclamation-triangle"
-                        class="size-3 text-warning"
-                      />
+                    <button
+                      :if={transaction.transfer_key}
+                      type="button"
+                      phx-click="open_transfer_pair"
+                      phx-value-key={transaction.transfer_key}
+                      title="Transferência vinculada — clique para ver/desvincular"
+                      class="hover:scale-125 transition-transform"
+                    >
+                      <.icon name="hero-link" class="size-3 text-primary" />
+                    </button>
+                    <span
+                      :if={!transaction.transfer_key}
+                      title="Transferência pendente de vínculo"
+                    >
+                      <.icon name="hero-exclamation-triangle" class="size-3 text-warning" />
                     </span>
                   <% end %>
                   <span :if={transaction.reimbursement_link_key} title="Reembolsado">
@@ -781,6 +781,61 @@
           </button>
         </div>
       </form>
+    </div>
+  </.modal>
+
+  <.modal
+    :if={@transfer_pair_view}
+    id="transfer-pair-modal"
+    show
+    on_cancel={JS.push("close_modal")}
+  >
+    <div class="p-2">
+      <div class="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-6">
+        <.icon name="hero-link" class="size-8" />
+      </div>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Transferência Vinculada</h2>
+      <p class="text-sm opacity-70 mb-4">
+        Estas duas transações estão vinculadas como uma transferência entre contas.
+      </p>
+
+      <div class="space-y-3 mb-6">
+        <div
+          :for={tx <- @transfer_pair_view}
+          class="flex items-center justify-between gap-3 p-3 rounded-xl border border-base-300 bg-base-200/30"
+        >
+          <div class="min-w-0">
+            <div class="font-bold text-sm truncate">{tx.description}</div>
+            <div class="text-[10px] opacity-60 uppercase tracking-wider">
+              {if tx.account, do: account_label(tx.account), else: "—"} · {format_date(tx.date)}
+            </div>
+          </div>
+          <span class={[
+            "font-mono font-black whitespace-nowrap",
+            if(Decimal.lt?(tx.amount, 0), do: "text-error", else: "text-success")
+          ]}>
+            {format_currency(tx.amount)}
+          </span>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button
+          type="button"
+          phx-click="unlink_transfer_pair"
+          phx-value-key={@transfer_pair_view |> List.first() |> Map.get(:transfer_key)}
+          class="btn btn-error btn-outline btn-lg flex-1 rounded-2xl"
+        >
+          <.icon name="hero-link-slash" class="size-4 mr-1" /> Desvincular
+        </button>
+        <button
+          type="button"
+          phx-click="close_modal"
+          class="btn btn-ghost btn-lg flex-1 rounded-2xl"
+        >
+          Fechar
+        </button>
+      </div>
     </div>
   </.modal>
 

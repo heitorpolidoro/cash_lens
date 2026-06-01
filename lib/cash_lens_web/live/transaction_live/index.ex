@@ -20,6 +20,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_transfer_modal, false)
      |> assign(:show_quick_transfer_modal, false)
      |> assign(:show_notes_modal, false)
+     |> assign(:transfer_pair_view, nil)
      |> assign(:editing_transaction, nil)
      |> assign(:transfer_origin, nil)
      |> assign(:pending_transfers, [])
@@ -245,8 +246,46 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:ai_result, nil)
      |> assign(:ai_loading, false)
      |> assign(:confirm_modal, nil)
+     |> assign(:transfer_pair_view, nil)
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())}
+  end
+
+  @impl true
+  def handle_event("open_transfer_pair", %{"key" => key}, socket) do
+    pair =
+      case Transactions.get_transfer_pairs([key]) do
+        %{^key => txs} -> Enum.sort_by(txs, &Decimal.to_float(&1.amount))
+        _ -> []
+      end
+
+    if pair == [] do
+      {:noreply, put_flash(socket, :error, "Par de transferência não encontrado.")}
+    else
+      {:noreply, assign(socket, :transfer_pair_view, pair)}
+    end
+  end
+
+  @impl true
+  def handle_event("unlink_transfer_pair", %{"key" => key}, socket) do
+    pair = Transactions.get_transfer_pairs([key]) |> Map.get(key, [])
+    Transactions.unlink_transfer_pair(key)
+
+    # Pairing affects each account's balance split, so rebuild the affected chains.
+    pair
+    |> Enum.map(& &1.account_id)
+    |> Enum.uniq()
+    |> Enum.each(&CashLens.Accounting.rebuild_account_balances/1)
+
+    socket =
+      pair
+      |> Enum.reduce(socket, fn tx, acc ->
+        stream_update_transaction(acc, Transactions.get_transaction!(tx.id))
+      end)
+      |> assign(:transfer_pair_view, nil)
+      |> put_flash(:success, "Transferência desvinculada.")
+
+    {:noreply, socket}
   end
 
   @impl true
