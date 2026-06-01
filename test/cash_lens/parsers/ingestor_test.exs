@@ -35,6 +35,27 @@ defmodule CashLens.Parsers.IngestorTest do
       assert length(CashLens.Repo.all(CashLens.Transactions.Transaction)) == 3
     end
 
+    test "does not import transactions dated in the future" do
+      account = account_fixture(parser_type: "bb_csv")
+      file_path = "test/support/fixtures/files/future_#{account.id}.csv"
+      future = Date.utc_today() |> Date.add(60) |> Calendar.strftime("%d/%m/%Y")
+
+      content =
+        "Data,Dep,Term,Hist,Doc,Valor,\n" <>
+          "01/01/2026,0,0,COMPRA PASSADA,1,-100.00,\n" <>
+          "#{future},0,0,COMPRA FUTURA,1,-50.00,\n"
+
+      File.write!(file_path, content)
+      assert {:ok, %{imported: 1}} = Ingestor.import_file(account, file_path)
+      File.rm!(file_path)
+
+      descriptions =
+        CashLens.Repo.all(CashLens.Transactions.Transaction) |> Enum.map(& &1.description)
+
+      assert "COMPRA PASSADA" in descriptions
+      refute "COMPRA FUTURA" in descriptions
+    end
+
     test "handles unparseable files correctly" do
       account = account_fixture(parser_type: "standard_ofx")
       file_path = "test/support/fixtures/files/test_#{account.id}.ofx"

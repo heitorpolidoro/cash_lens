@@ -142,6 +142,10 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   defp finalize_import(transactions_data, account_id) do
+    # Never persist transactions dated in the future — they have not happened yet.
+    today = Date.utc_today()
+    transactions_data = Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
+
     {entries, failed} = prepare_entries(transactions_data, account_id)
 
     periods = process_entries(entries, transactions_data, account_id)
