@@ -91,10 +91,6 @@ const liveSocket = new LiveSocket("/live", Socket, {
           if (txId) {
             const newLabel = filter ? `+ Criar "${filter}"...` : "+ Nova Categoria...";
             newOpt.querySelector('span').innerText = newLabel;
-            newOpt.onclick = () => {
-              this.pushEvent("open_quick_category", { name: filter, id: txId });
-              dropdown.classList.add('hidden');
-            };
             newOpt.classList.remove('hidden');
           } else {
             newOpt.classList.add('hidden');
@@ -108,7 +104,10 @@ const liveSocket = new LiveSocket("/live", Socket, {
             btn.type = "button";
             btn.innerText = cat.name;
             btn.className = "text-[10px] py-1 font-medium";
-            btn.onclick = () => selectCategory(cat.id, cat.name);
+            // No per-button onclick closure (those would go stale after a LiveView
+            // re-render/reconnect). Clicks are handled by delegation below.
+            btn.dataset.catId = cat.id;
+            btn.dataset.catName = cat.name;
             li.appendChild(btn);
             list.appendChild(li);
           });
@@ -150,6 +149,37 @@ const liveSocket = new LiveSocket("/live", Socket, {
         window.addEventListener('scroll', this.scrollHandler, true);
         window.addEventListener('resize', this.resizeHandler);
         document.addEventListener("click", this.clickHandler);
+
+        // Delegated click handler on the dropdown. Stored on the element so a re-mount
+        // (after a LiveView re-render/reconnect) replaces the previous one and the
+        // handler always belongs to the CURRENT hook instance — clicks never go to a
+        // stale, dead pushEvent.
+        if (dropdown.__catOptHandler) {
+          dropdown.removeEventListener("click", dropdown.__catOptHandler);
+        }
+
+        dropdown.__catOptHandler = (e) => {
+          const connected = window.liveSocket && window.liveSocket.isConnected();
+
+          if (e.target.closest(".new-option")) {
+            console.log("[CategoryAutocomplete] new category", { txId, connected });
+            this.pushEvent("open_quick_category", { name: input.value || "", id: txId });
+            dropdown.classList.add("hidden");
+            return;
+          }
+
+          const optBtn = e.target.closest("button[data-cat-id]");
+          if (optBtn) {
+            console.log("[CategoryAutocomplete] select", {
+              txId,
+              catId: optBtn.dataset.catId,
+              connected
+            });
+            selectCategory(optBtn.dataset.catId, optBtn.dataset.catName);
+          }
+        };
+
+        dropdown.addEventListener("click", dropdown.__catOptHandler);
       }
     },
     MarkdownRenderer: {
