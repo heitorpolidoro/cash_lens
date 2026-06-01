@@ -417,9 +417,9 @@ defmodule CashLens.Transactions do
         left_join: p in assoc(c, :parent),
         left_join: g in assoc(p, :parent),
         where: t.date >= ^first and t.date <= ^last,
-        where: c.slug != "initial_value",
-        # Exclude only paired transfers (they net out across accounts); unpaired ones count.
-        where: is_nil(t.transfer_key),
+        # Transfers are not spending categories, so exclude the whole transfer
+        # category (paired or not) along with initial values.
+        where: c.slug not in ["initial_value", "transfer"],
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
@@ -564,10 +564,9 @@ defmodule CashLens.Transactions do
       join: c in assoc(t, :category),
       left_join: p in assoc(c, :parent),
       where: t.amount < 0,
-      where: c.slug != "initial_value",
-      # Only paired transfers (with a transfer_key) net out across accounts and are
-      # excluded; an unpaired "transfer" is a real outflow and still counts.
-      where: is_nil(t.transfer_key),
+      # Category breakdown graphs: transfers are not spending, so the whole
+      # transfer category is excluded (paired or not), along with initial values.
+      where: c.slug not in ["initial_value", "transfer"],
       where: is_nil(t.reimbursement_link_key),
       where: t.reimbursement_status != "pending" or is_nil(t.reimbursement_status),
       select: %{
