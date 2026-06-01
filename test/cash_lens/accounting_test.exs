@@ -20,27 +20,26 @@ defmodule CashLens.AccountingTest do
       assert balance.month == 1
     end
 
-    test "calculate_monthly_balance/3 separates paired transfers from real income/expenses" do
+    test "calculate_monthly_balance/3 separates transfers from real income/expenses" do
       acc = account_fixture(%{balance: "0"})
+      transfer_cat = CashLens.CategoriesFixtures.category_fixture(%{name: "transfer"})
 
       # Real movements
       transaction_fixture(%{account_id: acc.id, amount: "1000.00", date: ~D[2026-01-05]})
       transaction_fixture(%{account_id: acc.id, amount: "-200.00", date: ~D[2026-01-06]})
-      # Paired transfers (transfer_key set) — must not count as income/expense
-      key = Ecto.UUID.generate()
-
+      # Transfers (category "transfer") — must not count as income/expense
       transaction_fixture(%{
         account_id: acc.id,
         amount: "500.00",
         date: ~D[2026-01-07],
-        transfer_key: key
+        category_id: transfer_cat.id
       })
 
       transaction_fixture(%{
         account_id: acc.id,
         amount: "-300.00",
         date: ~D[2026-01-08],
-        transfer_key: key
+        category_id: transfer_cat.id
       })
 
       assert {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)

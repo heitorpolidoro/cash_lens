@@ -32,18 +32,19 @@ defmodule CashLens.Accounting do
     # Check if we are updating an existing balance
     existing_balance = Repo.get_by(Balance, account_id: account_id, year: year, month: month)
 
-    # 1. Get transactions for the specific month
+    # 1. Get transactions for the specific month (with category to detect transfers)
     query =
       from t in Transaction,
         where: t.account_id == ^account_id,
-        where: t.date >= ^first_of_month and t.date <= ^last_of_month
+        where: t.date >= ^first_of_month and t.date <= ^last_of_month,
+        preload: [:category]
 
     transactions = Repo.all(query)
 
-    # Split real movements from paired transfers (transfer_key set). Paired transfers
-    # just move money between the user's own accounts, so they are tracked separately
-    # from real income/expenses while still affecting the account's final balance.
-    {transfers, real} = Enum.split_with(transactions, &(not is_nil(&1.transfer_key)))
+    # Split real movements from transfers (category "transfer"). Transfers just move
+    # money between the user's own accounts, so they are tracked separately from real
+    # income/expenses while still affecting the account's final balance.
+    {transfers, real} = Enum.split_with(transactions, &transfer?/1)
 
     income = sum_positive(real)
     expenses = real |> sum_negative() |> Decimal.abs()
@@ -88,6 +89,9 @@ defmodule CashLens.Accounting do
       returning: true
     )
   end
+
+  defp transfer?(%{category: %{slug: "transfer"}}), do: true
+  defp transfer?(_), do: false
 
   defp sum_positive(transactions) do
     transactions

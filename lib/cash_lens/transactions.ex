@@ -105,9 +105,7 @@ defmodule CashLens.Transactions do
       |> filter_by_type(filters["type"])
       |> filter_by_reimbursement_status(filters["reimbursement_status"])
       |> filter_unmatched_transfers(filters["unmatched_transfers"])
-      # Paired transfers net out across accounts, so they don't count toward the
-      # income/expense totals (unpaired transfers remain as real movements).
-      |> where([t], is_nil(t.transfer_key))
+      |> exclude_transfer_category()
       |> select([t], %{amount: t.amount})
 
     result =
@@ -245,6 +243,14 @@ defmodule CashLens.Transactions do
   end
 
   defp filter_unmatched_transfers(query, _), do: query
+
+  # Excludes transactions categorized as transfers from income/expense aggregates.
+  defp exclude_transfer_category(query) do
+    case Repo.one(from(c in Category, where: c.slug == "transfer", select: c.id)) do
+      nil -> query
+      id -> where(query, [t], is_nil(t.category_id) or t.category_id != ^id)
+    end
+  end
 
   defp filter_by_month_year(query, month, year, category_id, unmatched_transfers) do
     # Skip date filtering only when looking for pending/unmatched WITHOUT a specific month/year.
@@ -471,9 +477,9 @@ defmodule CashLens.Transactions do
   defp build_summary_base_query(query) do
     from t in query,
       left_join: c in assoc(t, :category),
-      where: is_nil(c.slug) or c.slug != "initial_value",
-      # Exclude only paired transfers (they net out across accounts); unpaired ones count.
-      where: is_nil(t.transfer_key),
+      # Transfers (category "transfer") move money between the user's own accounts,
+      # so they never count as income/expense — paired or not.
+      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
       where: is_nil(t.reimbursement_link_key)
   end
 
@@ -504,9 +510,8 @@ defmodule CashLens.Transactions do
     query =
       from t in Transaction,
         left_join: c in assoc(t, :category),
-        where: is_nil(c.slug) or c.slug != "initial_value",
-        # Exclude only paired transfers (they net out across accounts); unpaired ones count.
-        where: is_nil(t.transfer_key),
+        # Transfers (category "transfer") are excluded from income/expenses, paired or not.
+        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
         where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
