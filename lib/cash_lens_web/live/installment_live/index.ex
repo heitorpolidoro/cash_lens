@@ -69,6 +69,19 @@ defmodule CashLensWeb.InstallmentLive.Index do
     |> Enum.reject(& &1.is_finished)
     # Fewest remaining parcels first (closest to finishing on top).
     |> Enum.sort_by(& &1.remaining_count)
+    |> zebra_by_remaining()
+  end
+
+  # Adds a :band (0/1) that flips whenever the remaining-parcels count changes, so the
+  # table can be striped by "parcelas faltantes" (each remaining-count block one shade).
+  defp zebra_by_remaining(groups) do
+    {rows, _prev, _band} =
+      Enum.reduce(groups, {[], nil, 0}, fn g, {acc, prev, band} ->
+        band = if prev != nil and g.remaining_count != prev, do: 1 - band, else: band
+        {[Map.put(g, :band, band) | acc], g.remaining_count, band}
+      end)
+
+    Enum.reverse(rows)
   end
 
   @impl true
@@ -101,12 +114,29 @@ defmodule CashLensWeb.InstallmentLive.Index do
         <div class="flex gap-3 overflow-x-auto pb-1">
           <div
             :for={m <- @upcoming}
-            class="shrink-0 min-w-[120px] rounded-xl border border-base-300 bg-base-200/40 px-4 py-3"
+            class={[
+              "shrink-0 min-w-[120px] rounded-xl border px-4 py-3",
+              if(m.pending,
+                do: "border-warning/40 bg-warning/10",
+                else: "border-base-300 bg-base-200/40"
+              )
+            ]}
           >
             <div class="text-[10px] font-bold uppercase opacity-50">
               {month_name(m.date.month)}/{m.date.year}
             </div>
-            <div class="text-lg font-black text-primary">{format_currency(m.total)}</div>
+            <div class={[
+              "text-lg font-black",
+              if(m.pending, do: "text-warning", else: "text-primary")
+            ]}>
+              {format_currency(m.total)}
+            </div>
+            <div
+              :if={m.pending}
+              class="text-[9px] font-bold uppercase text-warning flex items-center gap-1 mt-0.5"
+            >
+              <.icon name="hero-exclamation-triangle-micro" class="size-3" /> Falta importar
+            </div>
           </div>
         </div>
       </div>
@@ -129,7 +159,10 @@ defmodule CashLensWeb.InstallmentLive.Index do
             </tr>
           </thead>
           <tbody>
-            <tr :for={group <- @groups} class="hover">
+            <tr
+              :for={group <- @groups}
+              class={["hover", if(group.band == 0, do: "bg-base-100", else: "bg-base-200/50")]}
+            >
               <td class="font-bold text-xs">{group.description_pattern}</td>
               <td class="text-right font-mono">
                 {if group.total_amount, do: format_currency(group.total_amount), else: "---"}

@@ -91,20 +91,26 @@ defmodule CashLens.Installments do
   end
 
   @doc """
-  Projects the installment burden for the upcoming months.
+  Projects the installment burden per month.
 
-  For each month from the current one forward (until the last pending parcel,
-  capped at 12 months), sums the per-parcel value of every group that still has a
-  parcel due that month. Returns `[%{date: Date.t(), total: Decimal.t()}]`.
+  Starts at the first month whose installment data isn't fully imported yet (so a
+  past month still missing its statement shows up flagged as pending) and goes
+  forward up to `max_months` from the current month. Each entry is
+  `%{date: Date.t(), total: Decimal.t(), pending: boolean()}`, where `pending` marks
+  a month that already passed but whose statement hasn't been imported.
   """
   def upcoming_installments(max_months \\ 12) do
     today = Date.utc_today()
     current = Date.new!(today.year, today.month, 1)
     groups = list_installment_groups()
 
-    0..(max_months - 1)
+    start_month = min_date(first_incomplete_month(), current)
+    last_month = add_months(current, max_months - 1)
+    count = month_diff(start_month, last_month)
+
+    0..count
     |> Enum.map(fn i ->
-      month = add_months(current, i)
+      month = add_months(start_month, i)
 
       total =
         Enum.reduce(groups, Decimal.new("0"), fn g, acc ->
@@ -113,13 +119,36 @@ defmodule CashLens.Installments do
             else: acc
         end)
 
-      %{date: month, total: total}
+      %{date: month, total: total, pending: Date.compare(month, current) == :lt}
     end)
-    # Drop trailing months with nothing due.
+    # Drop trailing future months with nothing due (keep pending past months).
     |> Enum.reverse()
-    |> Enum.drop_while(&Decimal.eq?(&1.total, 0))
+    |> Enum.drop_while(&(not &1.pending and Decimal.eq?(&1.total, 0)))
     |> Enum.reverse()
   end
+
+  # First month whose installment data isn't fully imported (based on the latest
+  # imported installment transaction).
+  defp first_incomplete_month do
+    case Repo.one(
+           from t in Transaction, where: not is_nil(t.installment_group_id), select: max(t.date)
+         ) do
+      nil ->
+        today = Date.utc_today()
+        Date.new!(today.year, today.month, 1)
+
+      frontier ->
+        fm = Date.new!(frontier.year, frontier.month, 1)
+
+        if Date.compare(frontier, Date.end_of_month(frontier)) == :eq,
+          do: add_months(fm, 1),
+          else: fm
+    end
+  end
+
+  defp min_date(a, b), do: if(Date.compare(a, b) == :lt, do: a, else: b)
+
+  defp month_diff(from, to), do: to.year * 12 + to.month - (from.year * 12 + from.month)
 
   defp parcel_value(%{total_amount: nil}), do: Decimal.new("0")
 
