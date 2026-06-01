@@ -86,6 +86,18 @@ defmodule CashLensWeb.BalanceLive.Index do
                   </div>
                 </th>
                 <th class="text-right">
+                  <div class="flex flex-col gap-1">
+                    <span>Transf. Entrada</span>
+                    <div class="h-6"></div>
+                  </div>
+                </th>
+                <th class="text-right">
+                  <div class="flex flex-col gap-1">
+                    <span>Transf. Saída</span>
+                    <div class="h-6"></div>
+                  </div>
+                </th>
+                <th class="text-right">
                   <div class="flex flex-col gap-1 font-black">
                     <span>Saldo Final</span>
                     <div class="h-6"></div>
@@ -137,6 +149,16 @@ defmodule CashLensWeb.BalanceLive.Index do
                 <td class="text-right opacity-70">{format_currency(balance.initial_balance)}</td>
                 <td class="text-right text-success font-medium">{format_currency(balance.income)}</td>
                 <td class="text-right text-error font-medium">{format_currency(balance.expenses)}</td>
+                <td class="text-right text-info/80">
+                  {if Decimal.gt?(balance.transfers_in, 0),
+                    do: format_currency(balance.transfers_in),
+                    else: "—"}
+                </td>
+                <td class="text-right text-warning/80">
+                  {if Decimal.gt?(balance.transfers_out, 0),
+                    do: format_currency(balance.transfers_out),
+                    else: "—"}
+                </td>
                 <td class="text-right font-black bg-base-200/30">
                   {format_currency(balance.final_balance)}
                 </td>

@@ -10,6 +10,8 @@ defmodule CashLens.Accounting.Balance do
     field :initial_balance, :decimal
     field :income, :decimal
     field :expenses, :decimal
+    field :transfers_in, :decimal, default: Decimal.new("0")
+    field :transfers_out, :decimal, default: Decimal.new("0")
     field :balance, :decimal
     field :final_balance, :decimal
     field :is_snapshot, :boolean, default: false
@@ -27,6 +29,8 @@ defmodule CashLens.Accounting.Balance do
       :initial_balance,
       :income,
       :expenses,
+      :transfers_in,
+      :transfers_out,
       :balance,
       :final_balance,
       :account_id,

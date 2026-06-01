@@ -20,6 +20,39 @@ defmodule CashLens.AccountingTest do
       assert balance.month == 1
     end
 
+    test "calculate_monthly_balance/3 separates paired transfers from real income/expenses" do
+      acc = account_fixture(%{balance: "0"})
+
+      # Real movements
+      transaction_fixture(%{account_id: acc.id, amount: "1000.00", date: ~D[2026-01-05]})
+      transaction_fixture(%{account_id: acc.id, amount: "-200.00", date: ~D[2026-01-06]})
+      # Paired transfers (transfer_key set) — must not count as income/expense
+      key = Ecto.UUID.generate()
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "500.00",
+        date: ~D[2026-01-07],
+        transfer_key: key
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-300.00",
+        date: ~D[2026-01-08],
+        transfer_key: key
+      })
+
+      assert {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+
+      assert Decimal.equal?(b.income, Decimal.new("1000.00"))
+      assert Decimal.equal?(b.expenses, Decimal.new("200.00"))
+      assert Decimal.equal?(b.transfers_in, Decimal.new("500.00"))
+      assert Decimal.equal?(b.transfers_out, Decimal.new("300.00"))
+      # Final balance still reflects every movement: 1000 - 200 + 500 - 300 = 1000
+      assert Decimal.equal?(b.final_balance, Decimal.new("1000.00"))
+    end
+
     test "calculate_monthly_balance/3 succeeds with multiple prior-month balances" do
       # Regression: find_latest_balance_before/3 used Repo.one without a limit,
       # so an account with 2+ balances before the target month raised

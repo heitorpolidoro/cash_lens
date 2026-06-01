@@ -40,23 +40,27 @@ defmodule CashLens.Accounting do
 
     transactions = Repo.all(query)
 
-    income =
-      transactions
-      |> Enum.filter(fn t -> Decimal.gt?(t.amount, 0) end)
-      |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
+    # Split real movements from paired transfers (transfer_key set). Paired transfers
+    # just move money between the user's own accounts, so they are tracked separately
+    # from real income/expenses while still affecting the account's final balance.
+    {transfers, real} = Enum.split_with(transactions, &(not is_nil(&1.transfer_key)))
 
-    expenses =
-      transactions
-      |> Enum.filter(fn t -> Decimal.lt?(t.amount, 0) end)
-      |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
-      |> Decimal.abs()
+    income = sum_positive(real)
+    expenses = real |> sum_negative() |> Decimal.abs()
+    transfers_in = sum_positive(transfers)
+    transfers_out = transfers |> sum_negative() |> Decimal.abs()
 
     # 2. Get initial balance (Chained from previous month or last snapshot)
     initial_balance =
       get_chained_initial_balance(account_id, year, month, first_of_month, existing_balance)
 
-    # 3. Final calculations
-    balance_diff = Decimal.sub(income, expenses)
+    # 3. Final calculations — balance moves with real income/expenses AND transfers.
+    balance_diff =
+      income
+      |> Decimal.sub(expenses)
+      |> Decimal.add(transfers_in)
+      |> Decimal.sub(transfers_out)
+
     final_balance = Decimal.add(initial_balance, balance_diff)
 
     # A snapshot is created every 6 months to avoid re-calculating from the beginning of time
@@ -69,6 +73,8 @@ defmodule CashLens.Accounting do
       initial_balance: initial_balance,
       income: income,
       expenses: expenses,
+      transfers_in: transfers_in,
+      transfers_out: transfers_out,
       balance: balance_diff,
       final_balance: final_balance,
       is_snapshot: is_snapshot
@@ -81,6 +87,18 @@ defmodule CashLens.Accounting do
       conflict_target: [:account_id, :year, :month],
       returning: true
     )
+  end
+
+  defp sum_positive(transactions) do
+    transactions
+    |> Enum.filter(&Decimal.gt?(&1.amount, 0))
+    |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
+  end
+
+  defp sum_negative(transactions) do
+    transactions
+    |> Enum.filter(&Decimal.lt?(&1.amount, 0))
+    |> Enum.reduce(Decimal.new("0"), fn t, acc -> Decimal.add(acc, t.amount) end)
   end
 
   defp get_chained_initial_balance(account_id, year, month, first_of_month, existing_balance) do
@@ -319,6 +337,8 @@ defmodule CashLens.Accounting do
           month: b.month,
           income: sum(b.income),
           expenses: sum(b.expenses),
+          transfers_in: sum(b.transfers_in),
+          transfers_out: sum(b.transfers_out),
           balance: sum(b.balance),
           final_balance: sum(b.final_balance)
         }
