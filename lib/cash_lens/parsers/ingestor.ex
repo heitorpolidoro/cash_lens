@@ -35,6 +35,10 @@ defmodule CashLens.Parsers.Ingestor do
         Logger.info("Using Standard OFX Parser")
         OFXParser.parse(content, :standard)
 
+      "ourocard_ofx" ->
+        Logger.info("Using Ourocard OFX Parser")
+        OFXParser.parse(content, :ourocard)
+
       _ ->
         {:error, "Extrator não configurado ou não suportado para esta conta."}
     end
@@ -184,7 +188,10 @@ defmodule CashLens.Parsers.Ingestor do
     # 4. Run TransferMatcher for new transactions (including mirrors) in batch
     TransferMatcher.match_transfers(inserted_transactions ++ mirror_transactions)
 
-    # 5. Collect affected periods for balance recalculation
+    # 5. Detect installment ("PARC X/Y") purchases and group them
+    CashLens.Installments.detect_and_apply(inserted_transactions)
+
+    # 6. Collect affected periods for balance recalculation
     collect_affected_periods(transactions_data, account_id)
   end
 

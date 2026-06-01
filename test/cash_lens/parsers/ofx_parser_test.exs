@@ -204,5 +204,16 @@ defmodule CashLens.Parsers.OFXParserTest do
       content = "<STMTTRN><TRNAMT>10.00</TRNAMT><DTPOSTED>2026XX01</DTPOSTED></STMTTRN>"
       assert OFXParser.parse(content, :standard) == []
     end
+
+    test "collapses multiple internal spaces in the description (Ourocard fixed-width MEMO)" do
+      content =
+        "<STMTTRN><TRNTYPE>PAYMENT</TRNTYPE><DTPOSTED>20260415</DTPOSTED>" <>
+          "<TRNAMT>-805.14</TRNAMT><MEMO>SCHOOL OF ROCK         SAO JOSE DOS  BR</MEMO></STMTTRN>"
+
+      [t] = OFXParser.parse(content, :ourocard)
+      assert t.description == "SCHOOL OF ROCK SAO JOSE DOS BR"
+      assert t.amount == Decimal.new("-805.14")
+      assert t.date == ~D[2026-04-15]
+    end
   end
 end

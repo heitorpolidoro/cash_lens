@@ -28,8 +28,9 @@ defmodule CashLensWeb.AccountLive.Form do
             options={[
               {"Bradesco (CSV)", "bradesco_csv"},
               {"Banco do Brasil (CSV)", "bb_csv"},
+              {"Ourocard (OFX)", "ourocard_ofx"},
               {"Sem Parar (PDF)", "sem_parar_pdf"},
-              {"Standard OFX", "standard_ofx"}
+              {"OFX Padrão", "standard_ofx"}
             ]}
             prompt="Selecione um extrator"
           />

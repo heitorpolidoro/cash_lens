@@ -32,7 +32,7 @@ defmodule CashLens.Parsers.OFXParser do
     with {:ok, amount} <- parse_decimal(amount_str),
          {:ok, {date, time}} <- parse_ofx_date(date_str) do
       %{
-        description: if(memo, do: String.trim(memo), else: "UNKNOWN"),
+        description: clean_description(memo),
         amount: amount,
         date: date,
         time: time
@@ -40,6 +40,17 @@ defmodule CashLens.Parsers.OFXParser do
     else
       _ -> nil
     end
+  end
+
+  # Collapses runs of whitespace into a single space and trims the ends.
+  # Banco do Brasil / Ourocard exports MEMO as fixed-width fields padded with
+  # spaces (e.g. "SCHOOL OF ROCK         SAO JOSE DOS  BR").
+  defp clean_description(nil), do: "UNKNOWN"
+
+  defp clean_description(memo) do
+    memo
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
   end
 
   defp extract_tag(block, tag) do
