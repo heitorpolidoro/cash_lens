@@ -161,7 +161,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
           <tbody>
             <tr
               :for={group <- @groups}
-              class={["hover", if(group.band == 0, do: "bg-base-100", else: "bg-base-200/50")]}
+              class={["hover", if(group.band == 0, do: "bg-base-100", else: "bg-base-300")]}
             >
               <td class="font-bold text-xs">{group.description_pattern}</td>
               <td class="text-right font-mono">
