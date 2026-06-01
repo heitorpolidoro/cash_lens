@@ -33,8 +33,8 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponentTest do
     index_live |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
 
     # The error is sent to parent which puts it in flash
-    assert render(index_live) =~ "1 files failed"
-    assert render(index_live) =~ "Total transactions from successful files: 0"
+    assert render(index_live) =~ "1 arquivo(s) com falha"
+    assert render(index_live) =~ "Total de transações dos arquivos bem-sucedidos: 0"
   end
 
   test "cancel-upload event", %{conn: conn} do

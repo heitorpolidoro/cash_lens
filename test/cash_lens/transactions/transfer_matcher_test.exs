@@ -126,30 +126,30 @@ defmodule CashLens.Transactions.TransferMatcherTest do
       assert updated_tx1.transfer_key == updated_tx2.transfer_key
     end
 
-    test "automatically creates a virtual twin for BB MM OURO upon creation", %{
+    test "does not link when amounts are not exact opposites", %{
       category: cat,
-      acc1: a1
+      acc1: a1,
+      acc2: a2
     } do
-      # Create target account "BB MM Ouro"
-      ouro_acc = account_fixture(%{name: "BB MM Ouro"})
+      transaction_fixture(%{
+        account_id: a1.id,
+        category_id: cat.id,
+        amount: Decimal.new("-50.00"),
+        date: ~D[2026-05-01]
+      })
 
       tx =
         transaction_fixture(%{
-          account_id: a1.id,
+          account_id: a2.id,
           category_id: cat.id,
-          description: "BB MM OURO TRANSFER",
-          amount: Decimal.new("-50.00")
+          # Not the exact opposite of -50.00
+          amount: Decimal.new("49.00"),
+          date: ~D[2026-05-01]
         })
 
-      # The twin should already be created because create_transaction triggers TransferMatcher
-      updated_tx = Repo.get(Transaction, tx.id)
-      assert updated_tx.transfer_key != nil
-
-      # Verify twin was created in the correct account
-      twin = Repo.get_by(Transaction, account_id: ouro_acc.id)
-      assert twin != nil
-      assert twin.amount == Decimal.new("50.00")
-      assert twin.transfer_key == updated_tx.transfer_key
+      tx = Repo.get(Transaction, tx.id)
+      assert TransferMatcher.match_transfer(tx) == :no_twin_found
+      assert is_nil(Repo.get(Transaction, tx.id).transfer_key)
     end
 
     test "ignores transactions with non-transfer category", %{acc1: a1} do
@@ -159,46 +159,42 @@ defmodule CashLens.Transactions.TransferMatcherTest do
       assert :not_a_transfer == TransferMatcher.match_transfer(tx)
     end
 
-    test "returns :no_account_found when target account does not exist", %{
+    test "returns :no_twin_found when no opposite transaction exists", %{
       category: cat,
       acc1: a1
     } do
-      # No "BB MM Ouro" account exists in setup (only "Checking" and "Ouro")
       tx =
         transaction_fixture(%{
           account_id: a1.id,
           category_id: cat.id,
-          description: "BB MM OURO TRANSFER",
+          description: "TRANSFER SEM PAR",
           amount: Decimal.new("-50.00")
         })
 
-      # transfer_key remains nil because create_virtual_twin returned :no_account_found
       tx = Repo.get(Transaction, tx.id)
       assert is_nil(tx.transfer_key)
-
-      # Call match_transfer explicitly to exercise the path and verify return value
-      assert TransferMatcher.match_transfer(tx) == :no_account_found
+      assert TransferMatcher.match_transfer(tx) == :no_twin_found
     end
 
-    test "handles BB RENDE FÁCIL auto-pairing successfully", %{category: cat, acc1: a1} do
-      # Create target account "BB Rende Fácil"
-      rende_facil_acc = account_fixture(%{name: "BB Rende Fácil"})
+    test "does not link transactions on different dates", %{category: cat, acc1: a1, acc2: a2} do
+      transaction_fixture(%{
+        account_id: a1.id,
+        category_id: cat.id,
+        amount: Decimal.new("-100.00"),
+        date: ~D[2026-06-01]
+      })
 
       tx =
         transaction_fixture(%{
-          account_id: a1.id,
+          account_id: a2.id,
           category_id: cat.id,
-          description: "BB RENDE FÁCIL TRANSFER",
-          amount: Decimal.new("-100.00")
+          amount: Decimal.new("100.00"),
+          date: ~D[2026-06-02]
         })
 
-      updated_tx = Repo.get(Transaction, tx.id)
-      assert updated_tx.transfer_key != nil
-
-      twin = Repo.get_by(Transaction, account_id: rende_facil_acc.id)
-      assert twin != nil
-      assert twin.amount == Decimal.new("100.00")
-      assert twin.transfer_key == updated_tx.transfer_key
+      tx = Repo.get(Transaction, tx.id)
+      assert TransferMatcher.match_transfer(tx) == :no_twin_found
+      assert is_nil(Repo.get(Transaction, tx.id).transfer_key)
     end
 
     test "returns :no_match for transaction with nil id" do

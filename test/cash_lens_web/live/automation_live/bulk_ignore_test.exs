@@ -12,7 +12,7 @@ defmodule CashLensWeb.AutomationLive.BulkIgnoreTest do
       |> form("#ignore-form", %{"bulk_ignore_pattern" => %{"pattern" => ""}})
       |> render_change()
 
-    assert html =~ "Pattern"
+    assert html =~ "Padrão"
   end
 
   test "renders, creates, and deletes patterns", %{conn: conn} do
@@ -33,7 +33,7 @@ defmodule CashLensWeb.AutomationLive.BulkIgnoreTest do
       |> form("#ignore-form", %{"bulk_ignore_pattern" => %{"pattern" => new_pattern}})
       |> render_submit()
 
-    assert html =~ "Pattern registered!"
+    assert html =~ "Padrão cadastrado!"
     assert render(live) =~ new_pattern
 
     pattern = hd(Transactions.list_bulk_ignore_patterns())
@@ -43,6 +43,6 @@ defmodule CashLensWeb.AutomationLive.BulkIgnoreTest do
       |> element("button[phx-click='delete'][phx-value-id='#{pattern.id}']")
       |> render_click()
 
-    assert html =~ "Pattern removed."
+    assert html =~ "Padrão removido."
   end
 end

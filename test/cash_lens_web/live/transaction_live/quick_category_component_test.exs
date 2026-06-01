@@ -55,8 +55,8 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
 
   test "renders the modal", %{conn: conn} do
     {:ok, _view, html} = live_isolated(conn, HostLive)
-    assert html =~ "New Category"
-    assert html =~ "Save Category"
+    assert html =~ "Nova Categoria"
+    assert html =~ "Salvar Categoria"
   end
 
   test "renders parent category options when categories exist", %{conn: conn} do
@@ -70,7 +70,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
 
     view
     |> element("#quick-category-form")
-    |> render_submit(%{"name" => "My New Category", "parent_id" => ""})
+    |> render_submit(%{"category" => %{"name" => "My New Category", "parent_id" => ""}})
 
     assert render(view) =~ "Category created!"
     assert Categories.get_category_by_slug("my-new-category") != nil
@@ -82,7 +82,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
 
     view
     |> element("#quick-category-form")
-    |> render_submit(%{"name" => "Child Category", "parent_id" => parent.id})
+    |> render_submit(%{"category" => %{"name" => "Child Category", "parent_id" => parent.id}})
 
     assert render(view) =~ "Category created!"
   end

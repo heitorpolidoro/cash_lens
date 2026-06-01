@@ -15,7 +15,7 @@ defmodule CashLensWeb.AutomationLive.TransferRulesTest do
 
   test "mounts and renders empty state", %{conn: conn} do
     {:ok, _live, html} = live(conn, ~p"/admin/transfer_rules")
-    assert html =~ "Transfer Rules"
+    assert html =~ "Regras de Transferência"
   end
 
   test "renders existing rule in table", %{conn: conn, source: source, destination: destination} do
@@ -51,7 +51,7 @@ defmodule CashLensWeb.AutomationLive.TransferRulesTest do
       })
       |> render_submit()
 
-    assert html =~ "Transfer rule saved!"
+    assert html =~ "Regra de transferência salva!"
     assert html =~ "New Rule"
     assert html =~ "Pattern A"
   end
@@ -123,7 +123,7 @@ defmodule CashLensWeb.AutomationLive.TransferRulesTest do
       })
       |> render_submit()
 
-    assert html =~ "Transfer rule saved!"
+    assert html =~ "Regra de transferência salva!"
     assert html =~ "Updated Label"
     assert html =~ "updated pattern"
 
@@ -178,7 +178,7 @@ defmodule CashLensWeb.AutomationLive.TransferRulesTest do
       |> element("button[phx-click='delete'][phx-value-id='#{rule.id}']")
       |> render_click()
 
-    assert html =~ "Transfer rule deleted."
+    assert html =~ "Regra de transferência excluída."
     refute render(live) =~ "Delete Me"
   end
 end

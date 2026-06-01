@@ -16,13 +16,13 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
     {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
     index_live |> render_click("open_transfer_link", %{"id" => tx1.id})
-    assert render(index_live) =~ "Link Transfer"
+    assert render(index_live) =~ "Vincular Transferência"
 
     index_live
     |> element("button[phx-click='link_transfer'][phx-value-pair-id='#{tx2.id}']")
     |> render_click()
 
-    assert render(index_live) =~ "Transfer linked successfully!"
+    assert render(index_live) =~ "Transferência vinculada com sucesso!"
 
     assert Transactions.get_transaction!(tx1.id).transfer_key != nil
 
@@ -42,7 +42,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
     index_live |> render_click("open_transfer_link", %{"id" => tx1.id})
     index_live |> element("button[phx-click='open_quick_transfer']") |> render_click()
 
-    assert render(index_live) =~ "Create Transfer Pair"
+    assert render(index_live) =~ "Criar Par de Transferência"
 
     index_live
     |> element("#quick-transfer-form")
@@ -53,7 +53,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
       "amount" => "-100.00"
     })
 
-    assert render(index_live) =~ "Transfer pair created and linked!"
+    assert render(index_live) =~ "Par de transferência criado e vinculado!"
 
     # Verify new transaction
     txs = Transactions.list_transactions(%{"account_id" => acc2.id})
@@ -66,12 +66,12 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
     {:ok, index_live, _html} = live(conn, ~p"/transactions")
     index_live |> render_click("open_transfer_link", %{"id" => tx.id})
 
-    assert render(index_live) =~ "Link Transfer"
+    assert has_element?(index_live, "#transfer-modal")
 
     # Click the close button on the modal which triggers close_modal event on the component
     index_live |> element("#transfer-modal button[aria-label='close']") |> render_click()
 
-    refute render(index_live) =~ "Link Transfer"
+    refute has_element?(index_live, "#transfer-modal")
   end
 
   test "empty pending transfers", %{conn: conn} do
@@ -80,6 +80,6 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
     {:ok, index_live, _html} = live(conn, ~p"/transactions")
     index_live |> render_click("open_transfer_link", %{"id" => tx.id})
 
-    assert render(index_live) =~ "No matching pair found for this transfer"
+    assert render(index_live) =~ "Nenhum par correspondente encontrado para esta transferência."
   end
 end

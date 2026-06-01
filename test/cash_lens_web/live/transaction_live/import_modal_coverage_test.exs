@@ -25,6 +25,10 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
     def handle_info(:close_import_modal, socket),
       do: {:noreply, Phoenix.LiveView.put_flash(socket, :info, "Modal closed")}
 
+    # Progress messages emitted during import (import_file_start/parsed/done, etc.)
+    # are forwarded to the component in the real LiveView; the test double just ignores them.
+    def handle_info(_msg, socket), do: {:noreply, socket}
+
     def handle_event(_event, _params, socket), do: {:noreply, socket}
 
     def render(assigns) do
@@ -122,7 +126,8 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
 
     view |> element("#upload-form") |> render_submit(%{"account_id" => no_parser_account.id})
 
-    assert render(view) =~ "Error: 1 files failed. Total transactions from successful files: 0"
+    assert render(view) =~
+             "Error: 1 arquivo(s) com falha. Total de transações dos arquivos bem-sucedidos: 0"
   end
 
   test "save_import with file - success using bb_csv parser", %{conn: conn, account: account} do
@@ -181,7 +186,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalCoverageTest do
 
     view |> element("#upload-form") |> render_submit(%{"account_id" => account.id})
 
-    assert render(view) =~ "Error: No file selected."
+    assert render(view) =~ "Error: Nenhum arquivo selecionado."
   end
 
   test "cancel-upload removes file entry", %{conn: conn} do

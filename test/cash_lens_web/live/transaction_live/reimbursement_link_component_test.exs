@@ -22,7 +22,7 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponentTest do
     |> element("button[phx-click='link_reimbursement'][phx-value-expense-id='#{expense.id}']")
     |> render_click()
 
-    assert render(index_live) =~ "Reimbursement linked"
+    assert render(index_live) =~ "Reembolso vinculado"
 
     updated_credit = Transactions.get_transaction!(credit.id)
     updated_expense = Transactions.get_transaction!(expense.id)

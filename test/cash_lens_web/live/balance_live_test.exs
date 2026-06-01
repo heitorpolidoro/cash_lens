@@ -15,7 +15,7 @@ defmodule CashLensWeb.BalanceLiveTest do
 
     test "lists all balances", %{conn: conn} do
       {:ok, _index_live, html} = live(conn, ~p"/balances")
-      assert html =~ "Balance History"
+      assert html =~ "Histórico de Saldos"
     end
 
     test "filters balances by year", %{conn: conn, balance: balance} do
@@ -33,14 +33,14 @@ defmodule CashLensWeb.BalanceLiveTest do
       {:ok, index_live, _html} = live(conn, ~p"/balances")
 
       render_click(index_live, "clear_filters", %{})
-      assert render(index_live) =~ "Balance History"
+      assert render(index_live) =~ "Histórico de Saldos"
     end
 
     test "recalculates all balances", %{conn: conn} do
       {:ok, index_live, _html} = live(conn, ~p"/balances")
 
       html = render_click(index_live, "recalculate_all", %{})
-      assert html =~ "recalculated"
+      assert html =~ "recalculados"
     end
 
     test "renders balance with account that has no icon (shows initials)", %{conn: conn} do
@@ -53,7 +53,7 @@ defmodule CashLensWeb.BalanceLiveTest do
     test "balances are read-only and actions are hidden", %{conn: conn, balance: balance} do
       {:ok, index_live, _html} = live(conn, ~p"/balances")
 
-      assert render(index_live) =~ "Read-only"
+      assert render(index_live) =~ "Somente leitura"
       refute has_element?(index_live, "#balances-#{balance.id} a[href$='/edit']")
 
       refute has_element?(

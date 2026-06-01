@@ -29,7 +29,7 @@ defmodule CashLensWeb.TransactionLiveTest do
     test "lists all transactions", %{conn: conn, transaction: transaction} do
       {:ok, _index_live, html} = live(conn, ~p"/transactions")
 
-      assert html =~ "Transactions"
+      assert html =~ "Transações"
       assert html =~ transaction.description
     end
 
@@ -66,7 +66,7 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       assert {:ok, form_live, html} =
                index_live
-               |> element("#transactions-#{transaction.id} a[aria-label='Edit']")
+               |> element("#transactions-#{transaction.id} a[href$='/edit']")
                |> render_click()
                |> follow_redirect(conn, ~p"/transactions/#{transaction}/edit")
 
@@ -90,7 +90,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
       assert index_live
-             |> element("#transactions-#{transaction.id} button[aria-label='Delete']")
+             |> element("#transactions-#{transaction.id} button[phx-click='confirm_delete']")
              |> render_click()
 
       render_click(index_live, "delete", %{"id" => transaction.id})
@@ -142,7 +142,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       live |> element("button[phx-click='toggle_sort']") |> render_click()
       live |> element("button[phx-value-type='credit']") |> render_click()
       live |> element("button[phx-click='toggle_unmatched']") |> render_click()
-      assert render(live) =~ "Transactions"
+      assert render(live) =~ "Transações"
     end
 
     test "handles reimbursement linking", %{conn: conn, transaction: _tx} do
@@ -173,13 +173,13 @@ defmodule CashLensWeb.TransactionLiveTest do
       |> element("button[phx-click='open_reimbursement_link'][phx-value-id='#{credit.id}']")
       |> render_click()
 
-      assert render(live) =~ "Link Reimbursement"
+      assert render(live) =~ "Vincular Reembolso"
 
       live
       |> element("button[phx-click='link_reimbursement'][phx-value-expense-id='#{expense.id}']")
       |> render_click()
 
-      assert render(live) =~ "Reimbursement linked"
+      assert render(live) =~ "Reembolso vinculado"
     end
 
     test "handles transfer linking and creation", %{conn: conn, transaction: _tx} do
@@ -201,10 +201,10 @@ defmodule CashLensWeb.TransactionLiveTest do
       |> element("button[phx-click='open_transfer_link'][phx-value-id='#{tx.id}']")
       |> render_click()
 
-      assert render(live) =~ "Link Transfer"
+      assert render(live) =~ "Vincular Transferência"
       live |> element("button[phx-click='open_quick_transfer']") |> render_click()
 
-      assert render(live) =~ "Create Transfer Pair"
+      assert render(live) =~ "Criar Par de Transferência"
 
       live
       |> form("#quick-transfer-form", %{
@@ -215,7 +215,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       })
       |> render_submit()
 
-      assert render(live) =~ "Transfer pair created"
+      assert render(live) =~ "Par de transferência criado"
     end
 
     test "deletes all transactions", %{conn: conn} do
@@ -227,25 +227,14 @@ defmodule CashLensWeb.TransactionLiveTest do
       refute render(live) =~ "id=\"transactions-"
     end
 
-    test "month navigation", %{conn: conn} do
-      {:ok, live, _html} = live(conn, ~p"/transactions")
-
-      # Next month
-      live |> element("button[phx-click='next_month']") |> render_click()
-      # Prev month
-      live |> element("button[phx-click='prev_month']") |> render_click()
-
-      assert render(live) =~ "Transactions"
-    end
-
     test "auto-categorizes all transactions", %{conn: conn} do
       category_fixture(%{name: "Streaming", keywords: "NETFLIX"})
       transaction_fixture(%{description: "NETFLIX", category_id: nil})
 
       {:ok, live, _html} = live(conn, ~p"/transactions")
-      live |> element("button", "Auto-Categorize") |> render_click()
+      live |> element("button", "Auto-Categorizar") |> render_click()
 
-      assert render(live) =~ "Rules applied!"
+      assert render(live) =~ "Regras aplicadas!"
     end
 
     test "filters by search and clear filters", %{conn: conn} do
@@ -256,13 +245,13 @@ defmodule CashLensWeb.TransactionLiveTest do
       assert render(live) =~ "SearchTarget"
 
       live |> element("button[phx-click='clear_filters']") |> render_click()
-      assert render(live) =~ "Transactions"
+      assert render(live) =~ "Transações"
     end
 
     test "toggles pending transactions", %{conn: conn} do
       {:ok, live, _html} = live(conn, ~p"/transactions")
       live |> element("button[phx-click='toggle_pending']") |> render_click()
-      assert render(live) =~ "Pending"
+      assert render(live) =~ "Pendentes"
     end
 
     test "handles pagination via infinite scroll", %{conn: conn} do

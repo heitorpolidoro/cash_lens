@@ -47,8 +47,8 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       render_click(index_live, "open_quick_category", %{"name" => tx.description, "id" => tx.id})
 
       # The modal title is inside the quick-category-modal-modal-content
-      assert render(index_live) =~ "New Category"
-      assert render(index_live) =~ "organize your entries"
+      assert render(index_live) =~ "Nova Categoria"
+      assert render(index_live) =~ "Organize sua hierarquia financeira"
     end
 
     test "update_category and bulk confirmation", %{conn: conn} do
@@ -64,12 +64,12 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       })
 
       html = render(index_live)
-      assert html =~ "Bulk Categorization"
+      assert html =~ "Categorização em Lote"
 
       index_live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
       assert Transactions.get_transaction!(tx2.id).category_id == cat.id
-      assert render(index_live) =~ "Bulk categorized!"
+      assert render(index_live) =~ "transações categorizadas!"
     end
 
     test "handle_info category_created with target_transaction_id", %{conn: conn} do
@@ -82,7 +82,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       html = render(index_live)
       assert Transactions.get_transaction!(tx.id).category_id == cat.id
-      assert html =~ "Category created!"
+      assert html =~ "Categoria criada!"
     end
 
     test "toggle_type filter", %{conn: conn} do
@@ -103,7 +103,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
     test "handle_info import errors", %{conn: conn} do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
       send(index_live.pid, {:import_error, "Invalid format"})
-      assert render(index_live) =~ "Import error: Invalid format"
+      assert render(index_live) =~ "Erro na importação: Invalid format"
     end
 
     test "handle_info category updates/deletes", %{conn: conn} do
@@ -115,7 +115,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       send(index_live.pid, {:category_deleted, cat})
       render(index_live)
 
-      assert render(index_live) =~ "Transactions"
+      assert render(index_live) =~ "Transações"
     end
 
     test "close_modal event", %{conn: conn} do
@@ -123,11 +123,11 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       render_click(index_live, "open_import")
       # Check for specific modal content
-      assert render(index_live) =~ "Select Destination Account"
+      assert render(index_live) =~ "Selecione a Conta de Destino"
 
       render_click(index_live, "close_modal")
       # Content should be gone
-      refute render(index_live) =~ "Select Destination Account"
+      refute render(index_live) =~ "Selecione a Conta de Destino"
     end
   end
 
@@ -143,7 +143,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       send(index_live.pid, {:category_created, cat, tx1.id})
 
       html = render(index_live)
-      assert html =~ "Bulk Categorization"
+      assert html =~ "Categorização em Lote"
       assert html =~ "Alimentacao"
     end
 
@@ -156,7 +156,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       # Should not crash; tx was stream_deleted because search doesn't match
       html = render(index_live)
-      assert html =~ "Category created!"
+      assert html =~ "Categoria criada!"
     end
 
     test "category_created stream_deletes when tx does not match nil category filter", %{
@@ -170,7 +170,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       send(index_live.pid, {:category_created, cat, tx.id})
 
       html = render(index_live)
-      assert html =~ "Category created!"
+      assert html =~ "Categoria criada!"
     end
 
     test "category_created with ignore patterns skips bulk suggestion", %{conn: conn} do
@@ -193,8 +193,8 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       html = render(index_live)
       # Ignore pattern matched → bulk_items = [] → no bulk confirmation
-      refute html =~ "Bulk Categorization"
-      assert html =~ "Category created!"
+      refute html =~ "Categorização em Lote"
+      assert html =~ "Categoria criada!"
     end
 
     test "update_category with nil category_id skips bulk suggestion", %{conn: conn} do
@@ -209,7 +209,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       # No bulk confirmation should appear
       html = render(index_live)
-      refute html =~ "Bulk Categorization"
+      refute html =~ "Categorização em Lote"
     end
 
     test "update_category stream_deletes when account filter doesn't match", %{conn: conn} do
@@ -268,7 +268,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       # Ignore pattern matches → skip_bulk → no confirmation
       html = render(index_live)
-      refute html =~ "Bulk Categorization"
+      refute html =~ "Categorização em Lote"
     end
 
     test "update_category on unique description has no bulk items", %{conn: conn} do
@@ -284,7 +284,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       # Only one tx with this description → bulk_items empty → no confirmation
       html = render(index_live)
-      refute html =~ "Bulk Categorization"
+      refute html =~ "Categorização em Lote"
     end
 
     test "update_category stream_deletes with type filter mismatch", %{conn: conn} do
@@ -339,7 +339,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       })
 
       html = render(index_live)
-      refute html =~ "Bulk Categorization"
+      refute html =~ "Categorização em Lote"
     end
 
     test "unmatched_transfers filter interactions with stream_update", %{conn: conn} do
@@ -367,7 +367,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       {:ok, index_live, _html} = live(conn, ~p"/transactions?account_id=#{fake_id}")
 
       # Should render without crash; balance falls back to Decimal.new("0")
-      assert render(index_live) =~ "Transactions"
+      assert render(index_live) =~ "Transações"
     end
 
     test "open_transfer_link finds and sorts candidates", %{conn: conn} do

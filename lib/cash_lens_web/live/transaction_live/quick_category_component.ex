@@ -149,7 +149,8 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
     {:ok,
      socket
      |> assign(assigns)
-     |> assign(:parent_options, parent_options)}
+     |> assign(:parent_options, parent_options)
+     |> assign_new(:current_parent, fn -> nil end)}
   end
 
   @impl true

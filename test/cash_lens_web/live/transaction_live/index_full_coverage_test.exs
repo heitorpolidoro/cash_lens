@@ -15,7 +15,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       |> element("button[phx-click='auto_categorize_all']")
       |> render_click()
 
-      assert render(index_live) =~ "Rules applied!"
+      assert render(index_live) =~ "Regras aplicadas!"
     end
 
     test "clear_filters event", %{conn: conn} do
@@ -28,7 +28,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
 
       # Filters should be cleared, no "testing" in search input (if it was bound)
       # We check if the summary is recalculated and streams reset
-      assert render(index_live) =~ "Transactions"
+      assert render(index_live) =~ "Transações"
     end
 
     test "toggle_unmatched event", %{conn: conn} do
@@ -39,7 +39,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       # Toggle off
       index_live |> render_click("toggle_unmatched", %{})
 
-      assert render(index_live) =~ "Transactions"
+      assert render(index_live) =~ "Transações"
     end
 
     test "month navigation events", %{conn: conn} do
@@ -61,7 +61,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       index_live |> render_click("next_month", %{})
       # Should be January 2025
 
-      assert render(index_live) =~ "Transactions"
+      assert render(index_live) =~ "Transações"
     end
 
     test "toggle_pending event", %{conn: conn} do
@@ -72,7 +72,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       # Toggle off
       index_live |> render_click("toggle_pending", %{})
 
-      assert render(index_live) =~ "Transactions"
+      assert render(index_live) =~ "Transações"
     end
 
     test "load-more event", %{conn: conn} do
@@ -85,7 +85,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       # Trigger load-more
       index_live |> render_hook("load-more", %{})
 
-      assert render(index_live) =~ "Transactions"
+      assert render(index_live) =~ "Transações"
     end
 
     test "delete all transactions", %{conn: conn} do
@@ -115,7 +115,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
       send(index_live.pid, :reimbursement_linked)
-      assert render(index_live) =~ "Reimbursement linked"
+      assert render(index_live) =~ "Reembolso vinculado"
 
       send(index_live.pid, :close_transfer_modal)
 
@@ -125,10 +125,10 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       send(index_live.pid, :close_import_modal)
 
       send(index_live.pid, {:import_success, %{imported: 10, failed: []}})
-      assert render(index_live) =~ "10 transactions imported"
+      assert render(index_live) =~ "10 transações importadas"
 
       send(index_live.pid, {:import_error, "Failed"})
-      assert render(index_live) =~ "Import error: Failed"
+      assert render(index_live) =~ "Erro na importação: Failed"
 
       # Test category info handlers
       cat = category_fixture()
@@ -144,7 +144,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
 
       send(index_live.pid, {:category_created, cat, tx.id})
 
-      assert render(index_live) =~ "Category created!"
+      assert render(index_live) =~ "Categoria criada!"
       assert Transactions.get_transaction!(tx.id).category_id == cat.id
     end
 
@@ -156,7 +156,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       # Toggle back to desc
       index_live |> render_click("toggle_sort")
 
-      assert render(index_live) =~ "Transactions"
+      assert render(index_live) =~ "Transações"
     end
 
     test "open_reimbursement_link", %{conn: conn} do
@@ -199,7 +199,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
         "category_id" => Ecto.UUID.generate()
       })
 
-      assert render(index_live) =~ "Update failed"
+      assert render(index_live) =~ "Falha ao atualizar categoria"
     end
 
     test "get_bulk_items_for_tx with bulk ignore pattern", %{conn: conn} do
@@ -215,7 +215,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       send(index_live.pid, {:category_created, cat, tx.id})
 
       # Since it should skip bulk, bulk_confirmation should be nil
-      refute render(index_live) =~ "Bulk Categorized"
+      refute render(index_live) =~ "Categorização em Lote"
     end
 
     test "toggle_type filters", %{conn: conn} do
@@ -273,7 +273,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
       index_live |> render_click("open_transfer_link", %{"id" => tx.id})
-      assert render(index_live) =~ "Link Transfer"
+      assert render(index_live) =~ "Vincular Transferência"
     end
 
     test "open_quick_category", %{conn: conn} do
@@ -289,10 +289,10 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
     test "close_modal", %{conn: conn} do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
       index_live |> render_click("open_import")
-      assert render(index_live) =~ "1. Select Destination Account"
+      assert render(index_live) =~ "1. Selecione a Conta de Destino"
 
       index_live |> render_click("close_modal")
-      refute render(index_live) =~ "1. Select Destination Account"
+      refute render(index_live) =~ "1. Selecione a Conta de Destino"
     end
   end
 end

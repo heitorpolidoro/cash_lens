@@ -18,7 +18,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       {:ok, _index_live, html} = live(conn, ~p"/reimbursements")
 
-      assert html =~ "Reimbursement Management"
+      assert html =~ "Gerenciamento de Reembolsos"
       assert html =~ "Lunch for team"
     end
 
@@ -36,14 +36,14 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
 
       # Initially not selected
-      refute render(index_live) =~ "Total Selected (1"
+      refute render(index_live) =~ "Total Selecionado (1"
 
       # Select
       index_live
       |> element("input[phx-click='toggle_selection'][phx-value-id='#{tx.id}']")
       |> render_click()
 
-      assert render(index_live) =~ "Total Selected (1"
+      assert render(index_live) =~ "Total Selecionado (1"
       assert render(index_live) =~ "100,00"
 
       # Deselect
@@ -51,7 +51,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> element("input[phx-click='toggle_selection'][phx-value-id='#{tx.id}']")
       |> render_click()
 
-      refute render(index_live) =~ "Total Selected (1"
+      refute render(index_live) =~ "Total Selecionado (1"
     end
 
     test "clears selection of reimbursement expenses", %{conn: conn} do
@@ -84,14 +84,14 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> element("input[phx-click='toggle_selection'][phx-value-id='#{tx2.id}']")
       |> render_click()
 
-      assert render(index_live) =~ "Total Selected (2"
+      assert render(index_live) =~ "Total Selecionado (2"
 
       # Clear
       index_live
       |> element("button[phx-click='clear_selection']")
       |> render_click()
 
-      refute render(index_live) =~ "Total Selected"
+      refute render(index_live) =~ "Total Selecionado"
     end
 
     test "marks a reimbursement as requested", %{conn: conn} do
@@ -111,7 +111,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
         |> element("button[phx-click='mark_requested'][phx-value-id='#{tx.id}']")
         |> render_click()
 
-      assert html =~ "Requested"
+      assert html =~ "Solicitado"
       assert CashLens.Transactions.get_transaction!(tx.id).reimbursement_status == "requested"
     end
 
@@ -143,7 +143,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> element("button[phx-click='unlink_reimbursement'][phx-value-link-key='#{link_key}']")
       |> render_click()
 
-      assert render(index_live) =~ "unlinked successfully"
+      assert render(index_live) =~ "desvinculado com sucesso"
       updated = CashLens.Transactions.get_transaction!(expense.id)
       assert is_nil(updated.reimbursement_link_key)
     end
@@ -173,7 +173,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> render_click()
 
       index_live |> element("button[phx-click='open_batch_linker']") |> render_click()
-      assert render(index_live) =~ "Link Receipt"
+      assert render(index_live) =~ "Vincular Recebimento"
       assert render(index_live) =~ credit.description
 
       render_hook(index_live, "linker_search_change", %{"value" => "Batch"})
@@ -181,7 +181,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       render_click(index_live, "close_modal", %{})
       # After close, modal content (not the header button) is gone
-      refute render(index_live) =~ "Select the credit that covers the total"
+      refute render(index_live) =~ "Selecione um ou mais créditos"
     end
 
     test "sort comparison: exact amount match ranks first", %{conn: conn} do
@@ -195,7 +195,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
           description: "Expense 75"
         })
 
-      _credit_exact =
+      credit_exact =
         transaction_fixture(%{
           account_id: acc.id,
           amount: "75.00",
@@ -217,7 +217,10 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       html = render(index_live)
       assert html =~ "Exact match"
-      assert html =~ "Perfect Match!"
+
+      # Selecting the exact-amount credit reveals the perfect-match indicator
+      render_click(index_live, "toggle_credit", %{"credit-id" => credit_exact.id})
+      assert render(index_live) =~ "Match Perfeito!"
     end
 
     test "links an expense with a credit", %{conn: conn} do
@@ -247,14 +250,17 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       # Now the modal is open, we can see the credit
       assert render(index_live) =~ "Company refund"
-      assert render(index_live) =~ "Perfect Match!"
+
+      # Selecting the matching credit reveals the perfect-match indicator
+      render_click(index_live, "toggle_credit", %{"credit-id" => credit.id})
+      assert render(index_live) =~ "Match Perfeito!"
 
       # Confirm link
       index_live
-      |> element("button[phx-click='confirm_link'][phx-value-credit-id='#{credit.id}']")
+      |> element("button[phx-click='confirm_link']")
       |> render_click()
 
-      assert render(index_live) =~ "1 expenses linked!"
+      assert render(index_live) =~ "1 crédito(s) vinculado(s) à despesa!"
 
       updated_expense = CashLens.Transactions.get_transaction!(expense.id)
       assert updated_expense.reimbursement_status == "paid"

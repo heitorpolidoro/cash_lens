@@ -19,7 +19,7 @@ defmodule CashLensWeb.CategoryLiveTest do
     test "lists all categories", %{conn: conn, category: category} do
       {:ok, _index_live, html} = live(conn, ~p"/categories")
 
-      assert html =~ "Categories"
+      assert html =~ "Categorias"
       assert html =~ category.name
     end
 
@@ -28,11 +28,11 @@ defmodule CashLensWeb.CategoryLiveTest do
 
       assert {:ok, form_live, _} =
                index_live
-               |> element("a", "New Category")
+               |> element("a", "Nova Categoria")
                |> render_click()
                |> follow_redirect(conn, ~p"/categories/new")
 
-      assert render(form_live) =~ "New Category"
+      assert render(form_live) =~ "Nova Categoria"
 
       assert form_live
              |> form("#category-form", category: @invalid_attrs)
@@ -47,7 +47,7 @@ defmodule CashLensWeb.CategoryLiveTest do
                |> follow_redirect(conn, ~p"/categories")
 
       html = render(index_live)
-      assert html =~ "Category created successfully!"
+      assert html =~ "Categoria criada com sucesso!"
       assert html =~ unique_name
     end
 
@@ -60,7 +60,7 @@ defmodule CashLensWeb.CategoryLiveTest do
                |> render_click()
                |> follow_redirect(conn, ~p"/categories/#{category}/edit")
 
-      assert render(form_live) =~ "Edit Category"
+      assert render(form_live) =~ "Editar Categoria"
 
       assert form_live
              |> form("#category-form", category: @invalid_attrs)
@@ -73,7 +73,7 @@ defmodule CashLensWeb.CategoryLiveTest do
                |> follow_redirect(conn, ~p"/categories")
 
       html = render(index_live)
-      assert html =~ "Category updated!"
+      assert html =~ "Categoria atualizada!"
       assert html =~ "some updated name"
     end
 
@@ -105,7 +105,7 @@ defmodule CashLensWeb.CategoryLiveTest do
              |> element("#categories-#{category.id} button[phx-click='confirm_delete']")
              |> render_click()
 
-      assert index_live |> element("button", "Yes, Delete") |> render_click()
+      assert index_live |> element("button", "Sim, Excluir") |> render_click()
       refute has_element?(index_live, "#categories-#{category.id}")
     end
 
@@ -116,10 +116,10 @@ defmodule CashLensWeb.CategoryLiveTest do
       |> element("#categories-#{category.id} button[phx-click='confirm_delete']")
       |> render_click()
 
-      assert render(index_live) =~ "Delete Category?"
+      assert render(index_live) =~ "Excluir Categoria?"
 
       render_click(index_live, "close_modal", %{})
-      refute render(index_live) =~ "Delete Category?"
+      refute render(index_live) =~ "Excluir Categoria?"
     end
 
     test "shows delete error when category has child dependencies", %{conn: conn} do
@@ -132,8 +132,8 @@ defmodule CashLensWeb.CategoryLiveTest do
       |> element("#categories-#{parent.id} button[phx-click='confirm_delete']")
       |> render_click()
 
-      html = index_live |> element("button", "Yes, Delete") |> render_click()
-      assert html =~ "Could not delete category"
+      html = index_live |> element("button", "Sim, Excluir") |> render_click()
+      assert html =~ "Não foi possível excluir a categoria"
     end
 
     test "renders reimbursable icon for default_reimbursable category", %{conn: conn} do
@@ -187,11 +187,11 @@ defmodule CashLensWeb.CategoryLiveTest do
 
       assert {:ok, form_live, _} =
                show_live
-               |> element("a", "Edit Category")
+               |> element("a", "Editar Categoria")
                |> render_click()
                |> follow_redirect(conn, ~p"/categories/#{category}/edit")
 
-      assert render(form_live) =~ "Edit Category"
+      assert render(form_live) =~ "Editar Categoria"
 
       assert form_live
              |> form("#category-form", category: @invalid_attrs)
@@ -204,7 +204,7 @@ defmodule CashLensWeb.CategoryLiveTest do
                |> follow_redirect(conn, ~p"/categories")
 
       html = render(index_live)
-      assert html =~ "Category updated!"
+      assert html =~ "Categoria atualizada!"
       assert html =~ "some updated name"
     end
   end
