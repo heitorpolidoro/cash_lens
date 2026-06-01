@@ -116,6 +116,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
         // Clean up all previous listeners before re-attaching (prevents accumulation on updated())
         if (this.focusHandler) input.removeEventListener("focus", this.focusHandler);
         if (this.inputHandler) input.removeEventListener("input", this.inputHandler);
+        if (this.changeHandler) input.removeEventListener("change", this.changeHandler);
         if (this.scrollHandler) window.removeEventListener('scroll', this.scrollHandler, true);
         if (this.resizeHandler) window.removeEventListener('resize', this.resizeHandler);
         if (this.clickHandler) document.removeEventListener("click", this.clickHandler);
@@ -135,6 +136,10 @@ const liveSocket = new LiveSocket("/live", Socket, {
           positionDropdown();
         };
 
+        // This input has no name and sits inside the phx-change="apply_filters" form;
+        // stop its change events from bubbling so they never trigger a filter reset.
+        this.changeHandler = (e) => e.stopPropagation();
+
         this.scrollHandler = positionDropdown;
         this.resizeHandler = positionDropdown;
         this.clickHandler = (e) => {
@@ -146,6 +151,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
 
         input.addEventListener("focus", this.focusHandler);
         input.addEventListener("input", this.inputHandler);
+        input.addEventListener("change", this.changeHandler);
         window.addEventListener('scroll', this.scrollHandler, true);
         window.addEventListener('resize', this.resizeHandler);
         document.addEventListener("click", this.clickHandler);

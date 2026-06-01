@@ -374,8 +374,29 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_event("apply_filters", params, socket) do
+  def handle_event("apply_filters", %{"_target" => target} = params, socket) do
     valid_keys = Map.keys(socket.assigns.filters)
+
+    # The category autocomplete <input> lives inside this phx-change form but has no
+    # name, so its events fire apply_filters with _target ["undefined"]. Ignore any
+    # change that didn't come from an actual filter field — otherwise it resets the
+    # transaction stream (destroying the open dropdown) and can loop.
+    case target do
+      [field] when is_binary(field) ->
+        if field in valid_keys,
+          do: apply_filter_change(params, valid_keys, socket),
+          else: {:noreply, socket}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("apply_filters", params, socket) do
+    apply_filter_change(params, Map.keys(socket.assigns.filters), socket)
+  end
+
+  defp apply_filter_change(params, valid_keys, socket) do
     safe_params = Map.take(params, valid_keys)
     new_filters = Map.merge(socket.assigns.filters, safe_params)
 
