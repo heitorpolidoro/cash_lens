@@ -166,7 +166,19 @@ defmodule CashLens.Installments do
       |> Enum.group_by(fn {tx, d} -> {d.base, d.total, amount_key(tx.amount)} end)
       |> Enum.reduce(0, fn {{base, total, amount_key}, items}, acc ->
         group = find_or_create_group(base, total, amount_key, items)
-        Enum.each(items, fn {tx, d} -> link_and_clean(tx, group, d) end)
+        # When 2+ parcels share one date, the OFX listed them all at the purchase
+        # date, so spread each to its billing month (purchase + number-1). When the
+        # parcels already have distinct dates (e.g. recurring annuity charges billed
+        # monthly), they are already correct and must not be shifted.
+        purchase_date = bunched_purchase_date(Enum.map(items, fn {tx, _} -> tx.date end))
+
+        Enum.each(items, fn {tx, d} ->
+          billed_date =
+            if purchase_date, do: add_months(purchase_date, d.number - 1), else: tx.date
+
+          link_and_clean(tx, group, d, billed_date)
+        end)
+
         acc + length(items)
       end)
 
@@ -183,6 +195,15 @@ defmodule CashLens.Installments do
   # Rounds the absolute amount to the nearest whole real, as an integer.
   defp amount_key(amount) do
     amount |> Decimal.abs() |> Decimal.round(0) |> Decimal.to_integer()
+  end
+
+  # Returns the purchase date when parcels are "bunched" (2+ on the same date, the way
+  # the OFX lists a parcelled purchase), or nil when they already have distinct dates.
+  defp bunched_purchase_date(dates) do
+    case dates |> Enum.frequencies() |> Enum.max_by(fn {_d, c} -> c end, fn -> nil end) do
+      {date, count} when count >= 2 -> date
+      _ -> nil
+    end
   end
 
   defp find_or_create_group(base, total, amount_key, items) do
@@ -211,16 +232,14 @@ defmodule CashLens.Installments do
     end
   end
 
-  # Links a parcel to its group, cleans the description to the merchant base, and
-  # shifts the date to the month it was actually billed: the OFX reports every parcel
-  # on the original purchase date, but parcel X bills (X - 1) months later.
+  # Links a parcel to its group, cleans the description to the merchant base, and sets
+  # its billing date (computed by the caller).
   #
   # The update is done via `update_all` (not the changeset) so the original
   # `fingerprint` — derived from the raw date and description — is preserved and
   # re-importing the same statement still de-duplicates.
-  defp link_and_clean(tx, group, detection) do
+  defp link_and_clean(tx, group, detection, billed_date) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
-    billed_date = add_months(tx.date, detection.number - 1)
 
     from(t in Transaction, where: t.id == ^tx.id)
     |> Repo.update_all(

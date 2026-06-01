@@ -125,6 +125,10 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
             {results ++ [res], new_lines_acc}
           end)
 
+        # Detect installments once over the full set: a purchase's parcels may span
+        # several monthly statements, so they must be grouped together (not per file).
+        CashLens.Installments.scan_and_apply_all()
+
         case summarize_import_results(results) do
           {:ok, summary} -> send(pid, {:import_success, summary})
           {:error, reason} -> send(pid, {:import_error, reason})

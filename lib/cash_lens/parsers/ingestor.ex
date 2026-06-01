@@ -188,10 +188,11 @@ defmodule CashLens.Parsers.Ingestor do
     # 4. Run TransferMatcher for new transactions (including mirrors) in batch
     TransferMatcher.match_transfers(inserted_transactions ++ mirror_transactions)
 
-    # 5. Detect installment ("PARC X/Y") purchases and group them
-    CashLens.Installments.detect_and_apply(inserted_transactions)
+    # Note: installment detection runs once over the full set after the whole batch
+    # import (see ImportModalComponent), because a purchase's parcels can span
+    # multiple monthly statements and must be grouped together.
 
-    # 6. Collect affected periods for balance recalculation
+    # 5. Collect affected periods for balance recalculation
     collect_affected_periods(transactions_data, account_id)
   end
 

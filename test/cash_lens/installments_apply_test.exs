@@ -52,15 +52,32 @@ defmodule CashLens.InstallmentsApplyTest do
     end
 
     test "preserves the original fingerprint when cleaning/re-dating", %{account: account} do
+      # Two parcels bunched on the purchase date → parcel 2 is re-dated to its month.
+      ourocard_tx(account.id, "CVS PARC 01/03 CACAPAVA BR", "-50.00", ~D[2026-02-16])
       tx = ourocard_tx(account.id, "CVS PARC 02/03 CACAPAVA BR", "-50.00", ~D[2026-02-16])
       original_fp = Repo.get!(Transaction, tx.id).fingerprint
 
-      Installments.detect_and_apply([tx])
+      Installments.scan_and_apply_all()
 
       reloaded = Repo.get!(Transaction, tx.id)
       assert reloaded.description == "CVS"
       assert reloaded.date == ~D[2026-03-16]
       assert reloaded.fingerprint == original_fp
+    end
+
+    test "keeps original dates for parcels already billed monthly (distinct dates)",
+         %{account: account} do
+      # Recurring annuity: each parcel already arrives on its real billing date and
+      # must NOT be shifted into the future.
+      p2 = ourocard_tx(account.id, "ANUIDADE ADC-PARC 02/12 BR", "-22.75", ~D[2025-12-24])
+      p3 = ourocard_tx(account.id, "ANUIDADE ADC-PARC 03/12 BR", "-22.75", ~D[2026-01-27])
+      p4 = ourocard_tx(account.id, "ANUIDADE ADC-PARC 04/12 BR", "-22.75", ~D[2026-02-24])
+
+      Installments.detect_and_apply([p2, p3, p4])
+
+      assert Repo.get!(Transaction, p2.id).date == ~D[2025-12-24]
+      assert Repo.get!(Transaction, p3.id).date == ~D[2026-01-27]
+      assert Repo.get!(Transaction, p4.id).date == ~D[2026-02-24]
     end
 
     test "separates different plans at the same merchant by total and value",
