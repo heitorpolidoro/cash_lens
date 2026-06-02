@@ -157,15 +157,16 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
   def handle_event("validate", %{"category" => category_params}, socket) do
     changeset = Categories.change_category(%Category{}, category_params)
 
-    parent =
-      if category_params["parent_id"] != "",
-        do: Enum.find(socket.assigns.parent_options, &(&1.id == category_params["parent_id"]))
+    parent = find_parent_option(socket.assigns.parent_options, category_params["parent_id"])
 
     {:noreply,
      socket
      |> assign(:current_parent, parent)
      |> assign(:category_form, to_form(changeset, action: :validate))}
   end
+
+  defp find_parent_option(_options, parent_id) when parent_id in [nil, ""], do: nil
+  defp find_parent_option(options, parent_id), do: Enum.find(options, &(&1.id == parent_id))
 
   @impl true
   def handle_event("clear_parent", _params, socket) do

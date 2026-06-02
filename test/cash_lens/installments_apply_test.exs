@@ -136,6 +136,36 @@ defmodule CashLens.InstallmentsApplyTest do
       refute Repo.get(Transaction, p3.id)
     end
 
+    test "applies nothing when every parcel bills in a future month", %{account: account} do
+      # Two parcels bunched on a future date: every billing month is in the future,
+      # so all parcels are dropped and no group is created.
+      future = Date.utc_today() |> Date.add(40)
+      p1 = ourocard_tx(account.id, "FUTURO PARC 01/02 BR", "-30.00", future)
+      p2 = ourocard_tx(account.id, "FUTURO PARC 02/02 BR", "-30.00", future)
+
+      assert Installments.detect_and_apply([p1, p2]) == 0
+      assert Installments.list_installment_groups() == []
+      refute Repo.get(Transaction, p1.id)
+      refute Repo.get(Transaction, p2.id)
+    end
+
+    test "reuses an existing group for a parcel imported later", %{account: account} do
+      p = ~D[2026-01-12]
+      a = ourocard_tx(account.id, "CVS PARC 01/03 CACAPAVA BR", "-50.00", p)
+      b = ourocard_tx(account.id, "CVS PARC 02/03 CACAPAVA BR", "-50.00", p)
+      assert Installments.detect_and_apply([a, b]) == 2
+      [group] = Installments.list_installment_groups()
+
+      # Parcel 3 arrives in a later statement (distinct, past date) and must attach
+      # to the already-created group instead of spawning a new one.
+      c = ourocard_tx(account.id, "CVS PARC 03/03 CACAPAVA BR", "-50.00", ~D[2026-03-12])
+      assert Installments.detect_and_apply([c]) == 1
+
+      assert [reloaded] = Installments.list_installment_groups()
+      assert reloaded.id == group.id
+      assert Repo.get!(Transaction, c.id).installment_group_id == group.id
+    end
+
     test "is idempotent: re-running does not duplicate groups", %{account: account} do
       t1 = ourocard_tx(account.id, "LOJA X PARC 01/02 BR", "-10.00", ~D[2026-01-01])
       Installments.detect_and_apply([t1])

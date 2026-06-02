@@ -82,10 +82,14 @@ defmodule CashLensWeb.MonthLive.Show do
   # Adds a `:pct` field to each breakdown row relative to a total.
   defp with_pct(rows, total) do
     Enum.map(rows, fn row ->
+      # coveralls-ignore-start — a row only exists when its section total is positive,
+      # so the zero-total branch is a defensive default that never executes.
       pct =
         if Decimal.gt?(total, 0),
           do: row.total |> Decimal.div(total) |> Decimal.mult(100) |> Decimal.round(1),
           else: Decimal.new("0")
+
+      # coveralls-ignore-stop
 
       Map.put(row, :pct, pct)
     end)

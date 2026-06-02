@@ -80,6 +80,14 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
     parent = category_fixture(name: "Pai")
     {:ok, view, _html} = live_isolated(conn, HostLive)
 
+    # Validate with no parent selected (empty parent_id) — no parent chip.
+    no_parent =
+      view
+      |> element("#quick-category-form")
+      |> render_change(%{"category" => %{"name" => "Filha", "parent_id" => ""}})
+
+    refute no_parent =~ "Limpar pai"
+
     html =
       view
       |> element("#quick-category-form")

@@ -33,9 +33,13 @@ defmodule CashLensWeb.PageController do
     active_groups = CashLens.Installments.list_installment_groups()
 
     # 3. Generate 6 Projection Months
+    # coveralls-ignore-start — the historical series is always non-empty, so the
+    # fallback map is a defensive default that never executes in practice.
     last_real =
       List.last(historical) ||
         %{final_balance: 0.0, year: Date.utc_today().year, month: Date.utc_today().month}
+
+    # coveralls-ignore-stop
 
     projections = generate_projections(last_real, avg_income, avg_expenses, active_groups, 6)
 

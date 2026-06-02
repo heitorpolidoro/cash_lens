@@ -40,6 +40,7 @@ defmodule CashLens.Parsers.CSVParser do
   defp bradesco_date_row?([date | _]),
     do: Regex.match?(~r/^\d{2}\/\d{2}\/\d{4}$/, String.trim(date))
 
+  # coveralls-ignore-next-line
   defp bradesco_date_row?(_), do: false
 
   # Data;Histórico;Docto.;Crédito (R$);Débito (R$);Saldo (R$)

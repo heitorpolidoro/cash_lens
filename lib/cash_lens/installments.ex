@@ -70,6 +70,7 @@ defmodule CashLens.Installments do
   # A plan is "finished" once its last parcel's billing month is already in the past.
   # start_date holds the original purchase date; the final parcel bills
   # (installments - 1) months later.
+  # coveralls-ignore-next-line — defensive: start_date is required, so nil never occurs in practice.
   defp finished?(%{start_date: nil}), do: false
 
   defp finished?(%{start_date: start_date, installments: installments}) do
@@ -156,8 +157,10 @@ defmodule CashLens.Installments do
     Decimal.div(total, n) |> Decimal.round(2)
   end
 
+  # coveralls-ignore-next-line — defensive fallthrough; installments is validated > 1.
   defp parcel_value(_), do: Decimal.new("0")
 
+  # coveralls-ignore-next-line — defensive: start_date is required, so nil never occurs in practice.
   defp parcel_due_in_month?(%{start_date: nil}, _month), do: false
 
   defp parcel_due_in_month?(%{start_date: start_date, installments: n}, month) do

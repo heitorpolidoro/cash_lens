@@ -3,6 +3,49 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponentTest do
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
 
+  alias CashLensWeb.TransactionLive.ImportModalComponent
+
+  test "progress view renders multi-file and parsed-count state" do
+    html =
+      render_component(ImportModalComponent,
+        id: "import-modal",
+        show: true,
+        import_progress: %{
+          phase: :importing,
+          file_index: 1,
+          file_total: 3,
+          current_file: "extrato.csv",
+          current_file_lines: 7,
+          lines_done: 4
+        }
+      )
+
+    assert html =~ "Importando..."
+    assert html =~ "extrato.csv"
+    # file_total > 1 branch
+    assert html =~ "1 / 3"
+    # is_integer(current_file_lines) branch: 4 + 7 = 11 encontradas
+    assert html =~ "11 encontradas"
+  end
+
+  test "progress view renders the parsing state" do
+    html =
+      render_component(ImportModalComponent,
+        id: "import-modal",
+        show: true,
+        import_progress: %{
+          phase: :importing,
+          file_index: 1,
+          file_total: 1,
+          current_file: "extrato.csv",
+          current_file_lines: :parsing,
+          lines_done: 0
+        }
+      )
+
+    assert html =~ "lendo..."
+  end
+
   test "summarize_import_results error branch", %{conn: conn} do
     # Use an account without a configured parser to trigger an error
     account = account_fixture(accepts_import: true, parser_type: "unknown")

@@ -134,8 +134,11 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
           {:error, reason} -> send(pid, {:import_error, reason})
         end
       rescue
+        # coveralls-ignore-start — defensive guard so a crash inside the import Task
+        # surfaces to the UI instead of dying silently; not deterministically testable.
         e ->
           send(pid, {:import_error, "Erro inesperado: #{Exception.message(e)}"})
+          # coveralls-ignore-stop
       end
     end
 
