@@ -65,4 +65,18 @@ defmodule CashLensWeb.MonthLiveTest do
     html = render_click(live, "toggle_category", %{"category_id" => "credit:#{cat.id}"})
     assert html =~ "Salário"
   end
+
+  test "January links to the previous year and December to the next", %{conn: conn} do
+    {:ok, _live, jan} = live(conn, ~p"/months/2026/1")
+    assert jan =~ "/months/2025/12"
+
+    {:ok, _live, dec} = live(conn, ~p"/months/2026/12")
+    assert dec =~ "/months/2027/1"
+  end
+
+  test "renders empty-state messages for a month with no data", %{conn: conn} do
+    {:ok, _live, html} = live(conn, ~p"/months/2024/7")
+    assert html =~ "Nenhuma despesa registrada neste mês."
+    assert html =~ "Nenhuma receita registrada neste mês."
+  end
 end

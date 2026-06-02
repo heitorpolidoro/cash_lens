@@ -13,6 +13,110 @@ defmodule CashLens.TransactionsTest do
     :ok
   end
 
+  describe "new-code coverage" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    test "list_reimbursement_credit_candidates/1 excludes transfer/salary categories and their children" do
+      transfer = category_fixture(%{name: "Transfer", slug: "transfer"})
+      _child = category_fixture(%{name: "Sub", slug: "sub-transfer", parent_id: transfer.id})
+
+      acc = account_fixture()
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "100.00",
+        description: "Recebimento",
+        category_id: nil
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "200.00",
+        description: "Movido",
+        category_id: transfer.id
+      })
+
+      candidates = Transactions.list_reimbursement_credit_candidates()
+      descriptions = Enum.map(candidates, & &1.description)
+      refute "Movido" in descriptions
+    end
+
+    test "list_all_transactions/1 handles partial and invalid date ranges" do
+      acc = account_fixture()
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-10.00",
+        date: ~D[2026-03-10],
+        description: "DR"
+      })
+
+      # date_from present, date_to empty -> no upper bound applied
+      assert [_ | _] =
+               Transactions.list_all_transactions(%{"date_from" => "2026-01-01", "date_to" => ""})
+
+      # nil upper bound
+      assert [_ | _] =
+               Transactions.list_all_transactions(%{
+                 "date_from" => "2026-01-01",
+                 "date_to" => nil
+               })
+
+      # invalid iso date falls through to the unfiltered query
+      assert is_list(
+               Transactions.list_all_transactions(%{
+                 "date_from" => "nope",
+                 "date_to" => "also-bad"
+               })
+             )
+    end
+
+    test "suggest_installment_link/1 suggests an in-progress group" do
+      {:ok, group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "ACADEMIA",
+          total_amount: "300.00",
+          installments: 3,
+          start_date: Date.utc_today()
+        })
+
+      tx = transaction_fixture(%{amount: "-100.00", description: "ACADEMIA MENSALIDADE"})
+
+      suggestion = Transactions.suggest_installment_link(tx)
+      assert suggestion.group_id == group.id
+      assert suggestion.next_installment == 1
+      assert suggestion.total_installments == 3
+    end
+
+    test "suggest_installment_link/1 returns nil for completed groups and no match" do
+      {:ok, group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "COMPLETO",
+          total_amount: "200.00",
+          installments: 2,
+          start_date: Date.utc_today()
+        })
+
+      acc = account_fixture()
+
+      for d <- ["COMPLETO a", "COMPLETO b"] do
+        tx = transaction_fixture(%{account_id: acc.id, amount: "-100.00", description: d})
+
+        Repo.update_all(
+          from(t in Transaction, where: t.id == ^tx.id),
+          set: [installment_group_id: group.id]
+        )
+      end
+
+      completed_tx = transaction_fixture(%{amount: "-100.00", description: "COMPLETO c"})
+      assert is_nil(Transactions.suggest_installment_link(completed_tx))
+
+      no_match = transaction_fixture(%{amount: "-100.00", description: "NADA A VER"})
+      assert is_nil(Transactions.suggest_installment_link(no_match))
+    end
+  end
+
   describe "transactions" do
     test "update_transaction/2 updates notes" do
       transaction = transaction_fixture()

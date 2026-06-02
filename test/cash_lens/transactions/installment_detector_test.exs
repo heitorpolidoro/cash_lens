@@ -28,6 +28,11 @@ defmodule CashLens.Transactions.InstallmentDetectorTest do
       assert InstallmentDetector.detect("") == nil
     end
 
+    test "returns nil for non-binary input" do
+      assert InstallmentDetector.detect(123) == nil
+      assert InstallmentDetector.detect(%{}) == nil
+    end
+
     test "ignores a single-installment marker (X/1 is not really a plan)" do
       assert InstallmentDetector.detect("LOJA QUALQUER PARC 01/01 BR") == nil
     end

@@ -215,5 +215,12 @@ defmodule CashLens.CSVParserTest do
       content = @bradesco_header <> "Período: 01/03/2026 a 31/03/2026\n"
       assert CSVParser.parse(content, :bradesco_csv) == []
     end
+
+    test "ignores a date row that has too few columns" do
+      # Starts with a valid date (passes the drop_while) but lacks the credit/debit
+      # columns, so parse_bradesco_row falls through to its nil clause.
+      content = @bradesco_header <> "01/03/2026;APENAS DESCRICAO\n"
+      assert CSVParser.parse(content, :bradesco_csv) == []
+    end
   end
 end

@@ -7,6 +7,25 @@ defmodule CashLens.CategoriesTest do
     alias CashLens.Categories.Category
     import CashLens.CategoriesFixtures
 
+    test "list_categories/1 filters by name" do
+      u = System.unique_integer([:positive])
+      parent = category_fixture(name: "Moradia #{u}")
+      _child = category_fixture(name: "Aluguel #{u}", parent_id: parent.id)
+
+      results = Categories.list_categories(name: "Aluguel #{u}")
+      assert Enum.map(results, & &1.name) == ["Aluguel #{u}"]
+    end
+
+    test "list_categories/0 links the parent struct for child categories" do
+      u = System.unique_integer([:positive])
+      parent = category_fixture(name: "Moradia #{u}")
+      child = category_fixture(name: "Aluguel #{u}", parent_id: parent.id)
+
+      linked_child = Enum.find(Categories.list_categories(), &(&1.id == child.id))
+      assert %Category{} = linked_child.parent
+      assert linked_child.parent.id == parent.id
+    end
+
     test "list_categories/0 returns all categories ordered by hierarchy and name" do
       # Use high unique base to avoid any clash
       u = System.unique_integer([:positive])

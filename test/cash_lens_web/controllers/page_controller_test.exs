@@ -45,6 +45,12 @@ defmodule CashLensWeb.PageControllerTest do
     assert html_response(conn, 200) =~ "Dashboard Financeiro"
   end
 
+  test "GET / with no data renders the dashboard", %{conn: conn} do
+    # No accounts/balances/transactions: exercises the empty-history projection fallback.
+    conn = get(conn, ~p"/")
+    assert html_response(conn, 200) =~ "Dashboard Financeiro"
+  end
+
   test "GET / factors active installments into projections", %{conn: conn} do
     account = account_fixture()
     today = Date.utc_today()
