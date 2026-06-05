@@ -8,6 +8,8 @@ defmodule CashLensWeb.InstallmentLive.Index do
     {:ok,
      socket
      |> assign(:show_modal, false)
+     |> assign(:filters, default_filters())
+     |> assign(:expanded_ids, MapSet.new())
      |> assign(
        :form,
        to_form(Installments.change_installment_group(%Installments.InstallmentGroup{}))
@@ -17,7 +19,8 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   defp load_data(socket) do
     socket
-    |> assign(:groups, list_groups())
+    |> assign(:groups, list_groups(socket.assigns.filters))
+    |> assign(:filters_active?, filters_active?(socket.assigns.filters))
     |> assign(:upcoming, Installments.upcoming_installments())
   end
 
@@ -63,13 +66,83 @@ defmodule CashLensWeb.InstallmentLive.Index do
     {:noreply, load_data(socket)}
   end
 
-  defp list_groups do
+  @impl true
+  def handle_event("filter", %{"filters" => params}, socket) do
+    filters = Map.merge(socket.assigns.filters, params)
+    {:noreply, socket |> assign(:filters, filters) |> load_data()}
+  end
+
+  @impl true
+  def handle_event("clear_filters", _params, socket) do
+    {:noreply, socket |> assign(:filters, default_filters()) |> load_data()}
+  end
+
+  defp list_groups(filters) do
     Installments.list_installment_groups()
     |> Enum.map(fn g -> Installments.get_group_with_progress(g.id) end)
     |> Enum.reject(& &1.is_finished)
+    |> Enum.filter(&matches_filters?(&1, filters))
     # Fewest remaining parcels first (closest to finishing on top).
     |> Enum.sort_by(& &1.remaining_count)
     |> zebra_by_remaining()
+  end
+
+  defp default_filters do
+    %{
+      "name" => "",
+      "total_amount" => "",
+      "installment_amount" => "",
+      "start_from" => "",
+      "start_to" => ""
+    }
+  end
+
+  defp filters_active?(filters), do: Enum.any?(filters, fn {_k, v} -> v not in [nil, ""] end)
+
+  defp matches_filters?(group, filters) do
+    name_match?(group, filters["name"]) and
+      amount_match?(group.total_amount, filters["total_amount"]) and
+      amount_match?(installment_value(group), filters["installment_amount"]) and
+      start_from_match?(group, filters["start_from"]) and
+      start_to_match?(group, filters["start_to"])
+  end
+
+  defp name_match?(_group, blank) when blank in [nil, ""], do: true
+
+  defp name_match?(group, needle),
+    do:
+      String.contains?(String.downcase(group.description_pattern || ""), String.downcase(needle))
+
+  defp amount_match?(_value, blank) when blank in [nil, ""], do: true
+  defp amount_match?(nil, _needle), do: false
+
+  defp amount_match?(%Decimal{} = value, needle),
+    do: String.contains?(Decimal.to_string(value), String.trim(needle))
+
+  defp installment_value(%{total_amount: %Decimal{} = total, installments: n})
+       when is_integer(n) and n > 0,
+       do: Decimal.round(Decimal.div(total, n), 2)
+
+  defp installment_value(_), do: nil
+
+  defp start_from_match?(_group, blank) when blank in [nil, ""], do: true
+  defp start_from_match?(%{start_date: nil}, _needle), do: false
+
+  defp start_from_match?(group, date_str) do
+    case Date.from_iso8601(date_str) do
+      {:ok, d} -> Date.compare(group.start_date, d) != :lt
+      _ -> true
+    end
+  end
+
+  defp start_to_match?(_group, blank) when blank in [nil, ""], do: true
+  defp start_to_match?(%{start_date: nil}, _needle), do: false
+
+  defp start_to_match?(group, date_str) do
+    case Date.from_iso8601(date_str) do
+      {:ok, d} -> Date.compare(group.start_date, d) != :gt
+      _ -> true
+    end
   end
 
   # Adds a :band (0/1) that flips whenever the remaining-parcels count changes, so the
@@ -151,6 +224,67 @@ defmodule CashLensWeb.InstallmentLive.Index do
           </div>
         </div>
       </div>
+
+      <%!-- Filtros --%>
+      <form
+        phx-change="filter"
+        class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-4 flex flex-wrap items-end gap-3"
+      >
+        <label class="form-control">
+          <span class="label-text text-[10px] uppercase opacity-50">Nome</span>
+          <input
+            type="text"
+            name="filters[name]"
+            value={@filters["name"]}
+            placeholder="Buscar..."
+            class="input input-bordered input-sm rounded-xl"
+          />
+        </label>
+        <label class="form-control">
+          <span class="label-text text-[10px] uppercase opacity-50">Valor Total</span>
+          <input
+            type="text"
+            name="filters[total_amount]"
+            value={@filters["total_amount"]}
+            class="input input-bordered input-sm rounded-xl w-28"
+          />
+        </label>
+        <label class="form-control">
+          <span class="label-text text-[10px] uppercase opacity-50">Valor da Parcela</span>
+          <input
+            type="text"
+            name="filters[installment_amount]"
+            value={@filters["installment_amount"]}
+            class="input input-bordered input-sm rounded-xl w-28"
+          />
+        </label>
+        <label class="form-control">
+          <span class="label-text text-[10px] uppercase opacity-50">Início (de)</span>
+          <input
+            type="date"
+            name="filters[start_from]"
+            value={@filters["start_from"]}
+            class="input input-bordered input-sm rounded-xl"
+          />
+        </label>
+        <label class="form-control">
+          <span class="label-text text-[10px] uppercase opacity-50">Início (até)</span>
+          <input
+            type="date"
+            name="filters[start_to]"
+            value={@filters["start_to"]}
+            class="input input-bordered input-sm rounded-xl"
+          />
+        </label>
+        <button
+          :if={@filters_active?}
+          type="button"
+          phx-click="clear_filters"
+          class="btn btn-ghost btn-sm rounded-xl"
+        >
+          <.icon name="hero-x-mark" class="size-4 mr-1" /> Limpar
+        </button>
+      </form>
 
       <%!-- Lista de grupos de parcelamento --%>
       <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">

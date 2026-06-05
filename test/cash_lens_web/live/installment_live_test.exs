@@ -118,6 +118,74 @@ defmodule CashLensWeb.InstallmentLiveTest do
     assert html =~ "jul/26"
   end
 
+  describe "filters" do
+    setup do
+      {:ok, a} =
+        Installments.create_installment_group(%{
+          description_pattern: "ALPHA STORE",
+          total_amount: "300.00",
+          installments: 3,
+          start_date: ~D[2026-05-10]
+        })
+
+      {:ok, b} =
+        Installments.create_installment_group(%{
+          description_pattern: "BETA SHOP",
+          total_amount: "1200.00",
+          installments: 12,
+          start_date: ~D[2026-03-20]
+        })
+
+      %{a: a, b: b}
+    end
+
+    test "filters by name (case-insensitive substring)", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      html = render_change(live, "filter", %{"filters" => %{"name" => "beta"}})
+
+      assert html =~ "BETA SHOP"
+      refute html =~ "ALPHA STORE"
+    end
+
+    test "filters by total amount", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      html = render_change(live, "filter", %{"filters" => %{"total_amount" => "1200"}})
+
+      assert html =~ "BETA SHOP"
+      refute html =~ "ALPHA STORE"
+    end
+
+    test "filters by installment value (total / installments)", %{conn: conn} do
+      # ALPHA: 300/3 = 100 ; BETA: 1200/12 = 100 -> both match "100"
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      html = render_change(live, "filter", %{"filters" => %{"installment_amount" => "100"}})
+
+      assert html =~ "ALPHA STORE"
+      assert html =~ "BETA SHOP"
+    end
+
+    test "filters by start date range", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      html =
+        render_change(live, "filter", %{
+          "filters" => %{"start_from" => "2026-03-01", "start_to" => "2026-03-31"}
+        })
+
+      assert html =~ "BETA SHOP"
+      refute html =~ "ALPHA STORE"
+    end
+
+    test "clear_filters restores the full list", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      render_change(live, "filter", %{"filters" => %{"name" => "beta"}})
+
+      html = render_click(live, "clear_filters", %{})
+      assert html =~ "ALPHA STORE"
+      assert html =~ "BETA SHOP"
+    end
+  end
+
   test "detect_installments scans and groups", %{conn: conn} do
     acc = account_fixture()
 
