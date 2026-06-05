@@ -80,6 +80,29 @@ defmodule CashLens.Installments do
     Date.compare(last_billing, current_month_start) == :lt
   end
 
+  @doc """
+  Returns the date of the final installment for a group:
+  start_date shifted forward by (installments - 1) months. Nil if no start_date.
+  """
+  def last_installment_date(%{start_date: %Date{} = start_date, installments: n})
+      when is_integer(n) and n >= 1 do
+    add_months(start_date, n - 1)
+  end
+
+  def last_installment_date(_), do: nil
+
+  @doc """
+  Lists the transactions (parcels) linked to an installment group,
+  ordered by installment number, then by date.
+  """
+  def list_group_transactions(group_id) do
+    from(t in Transaction,
+      where: t.installment_group_id == ^group_id,
+      order_by: [asc_nulls_last: t.installment_number, asc: t.date]
+    )
+    |> Repo.all()
+  end
+
   # Adds n calendar months to a date, clamping the day to the target month's length.
   def add_months(date, 0), do: date
 

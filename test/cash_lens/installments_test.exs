@@ -73,6 +73,69 @@ defmodule CashLens.InstallmentsTest do
     assert is_nil(Installments.find_matching_group(nil))
   end
 
+  describe "last_installment_date/1" do
+    test "returns start_date + (installments - 1) months" do
+      g = %CashLens.Installments.InstallmentGroup{
+        start_date: ~D[2025-10-08],
+        installments: 10
+      }
+
+      assert Installments.last_installment_date(g) == ~D[2026-07-08]
+    end
+
+    test "single-installment group ends on its start date" do
+      g = %CashLens.Installments.InstallmentGroup{start_date: ~D[2026-01-15], installments: 1}
+      assert Installments.last_installment_date(g) == ~D[2026-01-15]
+    end
+
+    test "returns nil when start_date is missing" do
+      g = %CashLens.Installments.InstallmentGroup{start_date: nil, installments: 3}
+      assert Installments.last_installment_date(g) == nil
+    end
+  end
+
+  describe "list_group_transactions/1" do
+    test "returns the group's transactions ordered by installment_number" do
+      {:ok, g} =
+        Installments.create_installment_group(%{
+          description_pattern: "LOJA Y",
+          installments: 3,
+          start_date: ~D[2026-01-01]
+        })
+
+      acc = account_fixture()
+
+      t2 = transaction_fixture(%{account_id: acc.id, amount: "-10.00", description: "Y 2/3"})
+      t1 = transaction_fixture(%{account_id: acc.id, amount: "-10.00", description: "Y 1/3"})
+
+      Repo.update_all(from(t in Transaction, where: t.id == ^t1.id),
+        set: [installment_group_id: g.id, installment_number: 1]
+      )
+
+      Repo.update_all(from(t in Transaction, where: t.id == ^t2.id),
+        set: [installment_group_id: g.id, installment_number: 2]
+      )
+
+      numbers =
+        g.id
+        |> Installments.list_group_transactions()
+        |> Enum.map(& &1.installment_number)
+
+      assert numbers == [1, 2]
+    end
+
+    test "returns [] for a group with no transactions" do
+      {:ok, g} =
+        Installments.create_installment_group(%{
+          description_pattern: "EMPTY",
+          installments: 2,
+          start_date: ~D[2026-01-01]
+        })
+
+      assert Installments.list_group_transactions(g.id) == []
+    end
+  end
+
   describe "upcoming_installments/1" do
     test "sums parcels per month, including groups without a total amount" do
       today = Date.utc_today()
