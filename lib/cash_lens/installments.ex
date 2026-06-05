@@ -7,6 +7,7 @@ defmodule CashLens.Installments do
   alias CashLens.Repo
 
   alias CashLens.Installments.InstallmentGroup
+  alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.InstallmentDetector
   alias CashLens.Transactions.Transaction
 
@@ -315,7 +316,54 @@ defmodule CashLens.Installments do
       )
 
     Enum.each(present, fn {tx, d, billed} -> link_and_clean(tx, group, d, billed) end)
+
+    account_id = present |> hd() |> elem(0) |> Map.get(:account_id)
+    fill_group_categories(group, base, account_id)
+
     length(present)
+  end
+
+  # Fills the category of the group's parcels that have none. Inherits the most
+  # common category among already-categorized parcels; if none exist, falls back to
+  # AutoCategorizer over the cleaned merchant-base description. Never overwrites an
+  # existing category and never touches the fingerprint.
+  defp fill_group_categories(group, base, account_id) do
+    txs =
+      Repo.all(
+        from t in Transaction,
+          where: t.installment_group_id == ^group.id,
+          select: %{id: t.id, category_id: t.category_id}
+      )
+
+    case group_category_id(txs, base, account_id) do
+      nil ->
+        :ok
+
+      category_id ->
+        from(t in Transaction,
+          where: t.installment_group_id == ^group.id and is_nil(t.category_id)
+        )
+        |> Repo.update_all(set: [category_id: category_id])
+
+        :ok
+    end
+  end
+
+  defp group_category_id(txs, base, account_id) do
+    existing = txs |> Enum.map(& &1.category_id) |> Enum.reject(&is_nil/1)
+
+    case existing do
+      [] ->
+        %{description: base, account_id: account_id}
+        |> AutoCategorizer.categorize()
+        |> Map.get(:category_id)
+
+      ids ->
+        ids
+        |> Enum.frequencies()
+        |> Enum.max_by(fn {_id, count} -> count end)
+        |> elem(0)
+    end
   end
 
   # Rounds the absolute amount to the nearest whole real, as an integer.

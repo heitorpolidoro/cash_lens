@@ -1,6 +1,9 @@
 defmodule CashLens.InstallmentsApplyTest do
   use CashLens.DataCase, async: false
 
+  import Ecto.Query
+
+  alias CashLens.Categories
   alias CashLens.Installments
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
@@ -224,6 +227,146 @@ defmodule CashLens.InstallmentsApplyTest do
 
       assert dates_after_second == dates_after_first
       assert dates_after_first == [~D[2026-01-10], ~D[2026-02-10], ~D[2026-03-10]]
+    end
+  end
+
+  describe "category backfill on grouping" do
+    setup do
+      %{acc: account_fixture()}
+    end
+
+    # The Category changeset auto-generates the slug from the name and only casts
+    # name/keywords/type, so we pass a unique name and (optionally) keywords.
+    defp make_category(attrs) do
+      attrs =
+        attrs
+        |> Map.delete(:slug)
+        |> Map.put_new(:name, "Cat #{System.unique_integer([:positive])}")
+
+      {:ok, cat} = Categories.create_category(attrs)
+      cat
+    end
+
+    test "uncategorized parcel inherits a categorized sibling's category", %{acc: acc} do
+      cat = make_category(%{name: "Saúde #{System.unique_integer([:positive])}"})
+
+      t1 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-48.00",
+          description: "EC FARMA PARC 01/03 BR",
+          date: ~D[2026-01-10],
+          category_id: cat.id
+        })
+
+      _t2 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-48.00",
+          description: "EC FARMA PARC 02/03 BR",
+          date: ~D[2026-01-10]
+        })
+
+      Installments.detect_and_apply(Repo.all(Transaction))
+
+      cats =
+        Repo.all(
+          from t in Transaction, where: not is_nil(t.installment_group_id), select: t.category_id
+        )
+
+      assert cats != []
+      assert Enum.all?(cats, &(&1 == cat.id))
+      # sanity: the originally-categorized one is unchanged
+      assert Repo.get(Transaction, t1.id).category_id == cat.id
+    end
+
+    test "all-uncategorized group is categorized via cleaned description keyword", %{acc: acc} do
+      cat =
+        make_category(%{
+          name: "Mercado #{System.unique_integer([:positive])}",
+          keywords: "EC FARMA"
+        })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-48.00",
+        description: "EC FARMA PARC 01/03 BR",
+        date: ~D[2026-01-10]
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-48.00",
+        description: "EC FARMA PARC 02/03 BR",
+        date: ~D[2026-01-10]
+      })
+
+      Installments.detect_and_apply(Repo.all(Transaction))
+
+      cats =
+        Repo.all(
+          from t in Transaction, where: not is_nil(t.installment_group_id), select: t.category_id
+        )
+
+      assert cats != []
+      assert Enum.all?(cats, &(&1 == cat.id))
+    end
+
+    test "existing category is never overwritten", %{acc: acc} do
+      keep = make_category(%{name: "Manual #{System.unique_integer([:positive])}"})
+
+      _other =
+        make_category(%{
+          name: "Auto #{System.unique_integer([:positive])}",
+          keywords: "EC FARMA"
+        })
+
+      t1 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-48.00",
+          description: "EC FARMA PARC 01/03 BR",
+          date: ~D[2026-01-10],
+          category_id: keep.id
+        })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-48.00",
+        description: "EC FARMA PARC 02/03 BR",
+        date: ~D[2026-01-10]
+      })
+
+      Installments.detect_and_apply(Repo.all(Transaction))
+
+      # t1 keeps its manual category, not overwritten by the keyword-matched `other`.
+      assert Repo.get(Transaction, t1.id).category_id == keep.id
+    end
+
+    test "group with no category and no keyword match stays uncategorized", %{acc: acc} do
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-48.00",
+        description: "ZZZ NOMATCH PARC 01/02 BR",
+        date: ~D[2026-01-10]
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-48.00",
+        description: "ZZZ NOMATCH PARC 02/02 BR",
+        date: ~D[2026-01-10]
+      })
+
+      Installments.detect_and_apply(Repo.all(Transaction))
+
+      cats =
+        Repo.all(
+          from t in Transaction, where: not is_nil(t.installment_group_id), select: t.category_id
+        )
+
+      assert cats != []
+      assert Enum.all?(cats, &is_nil/1)
     end
   end
 end
