@@ -102,6 +102,22 @@ defmodule CashLensWeb.InstallmentLiveTest do
     assert Installments.list_installment_groups() == []
   end
 
+  test "shows the last-installment month/year column", %{conn: conn} do
+    {:ok, _group} =
+      Installments.create_installment_group(%{
+        description_pattern: "ULTIMA (10x)",
+        total_amount: "1000.00",
+        installments: 10,
+        start_date: ~D[2025-10-08]
+      })
+
+    {:ok, _live, html} = live(conn, ~p"/installments")
+
+    assert html =~ "Última Parcela"
+    # 2025-10 + 9 months = 2026-07 -> "jul/26"
+    assert html =~ "jul/26"
+  end
+
   test "detect_installments scans and groups", %{conn: conn} do
     acc = account_fixture()
 

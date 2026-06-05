@@ -84,6 +84,17 @@ defmodule CashLensWeb.InstallmentLive.Index do
     Enum.reverse(rows)
   end
 
+  defp last_parcel_label(group) do
+    case Installments.last_installment_date(group) do
+      %Date{} = d ->
+        yy = d.year |> Integer.to_string() |> String.slice(-2, 2)
+        "#{String.downcase(month_label(d.month))}/#{yy}"
+
+      _ ->
+        "---"
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -155,6 +166,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
               <th class="text-right">Parcela</th>
               <th class="text-center w-40">Progresso</th>
               <th class="text-right">Início</th>
+              <th class="text-right">Última Parcela</th>
               <th class="w-10"></th>
             </tr>
           </thead>
@@ -190,6 +202,9 @@ defmodule CashLensWeb.InstallmentLive.Index do
               </td>
               <td class="text-right text-xs opacity-60 whitespace-nowrap">
                 {format_date(group.start_date)}
+              </td>
+              <td class="text-right text-xs opacity-60 whitespace-nowrap">
+                {last_parcel_label(group)}
               </td>
               <td class="text-right">
                 <button
