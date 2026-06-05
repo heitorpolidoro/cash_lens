@@ -93,10 +93,14 @@ defmodule CashLens.Parsers.Ingestor do
       end)
 
     total_imported = successes |> Enum.map(fn {:ok, %{imported: n}} -> n end) |> Enum.sum()
+
+    total_skipped =
+      successes |> Enum.map(fn {:ok, s} -> Map.get(s, :skipped, 0) end) |> Enum.sum()
+
     all_failed = successes |> Enum.flat_map(fn {:ok, %{failed: f}} -> f end)
 
     if Enum.empty?(errors) do
-      {:ok, %{imported: total_imported, failed: all_failed}}
+      {:ok, %{imported: total_imported, skipped: total_skipped, failed: all_failed}}
     else
       {:error,
        "#{length(errors)} files failed to import. Total transactions from successful files: #{total_imported}"}
@@ -146,7 +150,7 @@ defmodule CashLens.Parsers.Ingestor do
 
     {entries, failed} = prepare_entries(transactions_data, account_id)
 
-    periods = process_entries(entries, transactions_data, account_id)
+    {inserted_count, periods} = process_entries(entries, transactions_data, account_id)
 
     periods
     |> MapSet.to_list()
@@ -154,7 +158,13 @@ defmodule CashLens.Parsers.Ingestor do
       Accounting.calculate_monthly_balance(acc_id, year, month)
     end)
 
-    {:ok, %{imported: length(entries), failed: failed}}
+    # `skipped` makes silent dedupe misses observable: it is the number of prepared
+    # input rows the unique index rejected as already-present (or in-batch dups),
+    # i.e. entries that did not result in an insert. A future regression that lets
+    # duplicates back in would surface as a non-zero `skipped` on re-import.
+    skipped = length(entries) - inserted_count
+
+    {:ok, %{imported: inserted_count, skipped: skipped, failed: failed}}
   end
 
   defp prepare_entries(transactions_data, account_id) do
@@ -162,9 +172,10 @@ defmodule CashLens.Parsers.Ingestor do
 
     {valid, failed} =
       transactions_data
-      |> Enum.map(fn data ->
+      |> assign_occurrence_indices(account_id)
+      |> Enum.map(fn {data, index} ->
         try do
-          {:ok, prepare_transaction_entry(data, account_id, now)}
+          {:ok, prepare_transaction_entry(data, account_id, now, index)}
         rescue
           e -> {:error, {data[:description] || "unknown", Exception.message(e)}}
         end
@@ -179,10 +190,45 @@ defmodule CashLens.Parsers.Ingestor do
     {entries, reasons}
   end
 
+  # Computes the 0-based occurrence index of every incoming row among otherwise
+  # identical rows (same dedup_key) *within this batch*, preserving input order.
+  #
+  # The index is the batch position only — the count of already-stored rows is
+  # deliberately NOT added. That is what makes re-import dedupe correct: the N
+  # identical lines of a statement always reproduce indices 0..N-1, so on
+  # re-import they regenerate the exact fingerprints already on disk and the
+  # unique index drops them (zero duplicates). Genuinely-distinct identical
+  # lines that arrive together in one statement get distinct indices (0, 1, …)
+  # and are all preserved.
+  #
+  # Cross-statement repeats (the same single line appearing again in a later,
+  # separate import) collapse to index 0 and therefore collide with the stored
+  # row — they are treated as duplicates. This is the intended, re-import-safe
+  # default; the system cannot tell such a repeat apart from a true re-import,
+  # so it errs toward not creating a duplicate.
+  defp assign_occurrence_indices(transactions_data, account_id) do
+    {tagged, _seen} =
+      Enum.map_reduce(transactions_data, %{}, fn data, seen ->
+        key = dedup_key_for(data, account_id)
+        index = Map.get(seen, key, 0)
+        {{data, index}, Map.put(seen, key, index + 1)}
+      end)
+
+    tagged
+  end
+
+  defp dedup_key_for(data, account_id) do
+    data
+    |> Map.put(:account_id, account_id)
+    |> Transaction.dedup_key()
+  end
+
   defp process_entries(entries, transactions_data, account_id) do
     # 2. Batch Insert with on_conflict: :nothing
-    # We use returning: true to get the actually inserted transactions for TransferMatcher
-    {_count, inserted_transactions} = batch_insert_transactions(entries)
+    # We use returning: true to get the actually inserted transactions for TransferMatcher.
+    # `count` is the number of rows actually inserted (conflicts are not counted),
+    # which lets the caller compute how many input rows were skipped as duplicates.
+    {count, inserted_transactions} = batch_insert_transactions(entries)
 
     # 3. Apply transfer rules for newly inserted transactions, creating mirrors as needed
     mirror_transactions = TransferRuleApplier.apply_rules(inserted_transactions)
@@ -195,15 +241,16 @@ defmodule CashLens.Parsers.Ingestor do
     # multiple monthly statements and must be grouped together.
 
     # 5. Collect affected periods for balance recalculation
-    collect_affected_periods(transactions_data, account_id)
+    {count, collect_affected_periods(transactions_data, account_id)}
   end
 
-  defp prepare_transaction_entry(data, account_id, now) do
+  defp prepare_transaction_entry(data, account_id, now, occurrence_index) do
     categorizer = Application.get_env(:cash_lens, :auto_categorizer, AutoCategorizer)
 
     attrs =
       data
       |> Map.put(:account_id, account_id)
+      |> Map.put(:occurrence_index, occurrence_index)
       |> categorizer.categorize()
 
     # Generate changeset to get fingerprint and validate
@@ -213,8 +260,11 @@ defmodule CashLens.Parsers.Ingestor do
         attrs
       )
 
-    # Merge changes with timestamps and a generated ID
+    # Merge changes with timestamps and a generated ID. `occurrence_index` is a
+    # virtual field (an input to the fingerprint only) and must not reach
+    # `insert_all`, which rejects non-column fields.
     changeset.changes
+    |> Map.drop([:occurrence_index])
     |> Map.put(:id, UUID.generate())
     |> Map.put(:inserted_at, now)
     |> Map.put(:updated_at, now)

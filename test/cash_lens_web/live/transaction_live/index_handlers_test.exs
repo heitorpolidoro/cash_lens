@@ -9,7 +9,6 @@ defmodule CashLensWeb.TransactionLive.IndexHandlersTest do
 
   alias CashLens.Installments
   alias CashLens.Repo
-  alias CashLens.Transactions
   alias CashLens.Transactions.Transaction
 
   describe "installment linking" do

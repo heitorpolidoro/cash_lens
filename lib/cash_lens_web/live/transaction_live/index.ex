@@ -397,21 +397,6 @@ defmodule CashLensWeb.TransactionLive.Index do
     apply_filter_change(params, Map.keys(socket.assigns.filters), socket)
   end
 
-  defp apply_filter_change(params, valid_keys, socket) do
-    safe_params = Map.take(params, valid_keys)
-    new_filters = Map.merge(socket.assigns.filters, safe_params)
-
-    txs = Transactions.list_transactions(map_filters(new_filters), 1)
-
-    {:noreply,
-     socket
-     |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, txs, reset: true)}
-  end
-
   @impl true
   def handle_event("toggle_sort", _params, socket) do
     new_order = if socket.assigns.filters["sort_order"] == "desc", do: "asc", else: "desc"
@@ -657,6 +642,21 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:confirm_modal, nil)
      |> stream(:transactions, [], reset: true)
      |> assign(:pending_count, 0)}
+  end
+
+  defp apply_filter_change(params, valid_keys, socket) do
+    safe_params = Map.take(params, valid_keys)
+    new_filters = Map.merge(socket.assigns.filters, safe_params)
+
+    txs = Transactions.list_transactions(map_filters(new_filters), 1)
+
+    {:noreply,
+     socket
+     |> assign(:filters, new_filters)
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
+     |> calculate_summary()
+     |> stream(:transactions, txs, reset: true)}
   end
 
   @impl true

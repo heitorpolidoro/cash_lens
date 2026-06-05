@@ -116,6 +116,12 @@ defmodule CashLens.Transactions.TransferRuleApplier do
     link_id = Ecto.UUID.generate()
     mirror_id = Ecto.UUID.generate()
 
+    # The mirror uses the default occurrence index (0). Re-running the rule for
+    # the same source must reproduce the same mirror fingerprint so the
+    # `on_conflict: {:replace, [:updated_at]}` upsert stays idempotent (no second
+    # mirror). A would-be second mirror for an identical twin source therefore
+    # upserts onto the existing one rather than creating a duplicate — matching
+    # the pre-occurrence-index behavior.
     mirror_params = %{
       id: mirror_id,
       date: tx.date,

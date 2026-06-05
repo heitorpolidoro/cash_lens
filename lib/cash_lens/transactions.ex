@@ -80,9 +80,6 @@ defmodule CashLens.Transactions do
   def get_bulk_ignore_pattern!(id), do: Repo.get!(BulkIgnorePattern, id)
 
   @doc """
-  Returns the list of transactions based on filters and pagination.
-  """
-  @doc """
   Returns income and expenses totals for the given filters.
   Returns %{income: Decimal, expenses: Decimal}.
   """
@@ -677,7 +674,19 @@ defmodule CashLens.Transactions do
     do: Repo.get!(Transaction, id) |> Repo.preload([:category, :account, :installment_group])
 
   @doc """
-  Creates a transaction.
+  Creates a transaction (manual single-create path).
+
+  This path deliberately uses the default `occurrence_index` of 0, so a second
+  identical submit (same dedupe base key) regenerates the same fingerprint and
+  collides on the unique index — it is reported as `{:ok, :duplicate}` rather
+  than inserted. That blocks accidental double-submits (e.g. a double-clicked
+  form).
+
+  This is intentionally different from the IMPORT path
+  (`CashLens.Parsers.Ingestor`), which assigns per-batch occurrence indices so
+  N legitimately-identical lines within one statement are all preserved. A
+  manual create has no batch context to distinguish a genuine repeat from an
+  accidental resubmit, so it errs toward not creating a duplicate.
   """
   def create_transaction(attrs) do
     %Transaction{}

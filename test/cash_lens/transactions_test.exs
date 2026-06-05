@@ -367,18 +367,59 @@ defmodule CashLens.TransactionsTest do
       assert t2_after.reimbursement_status == nil
     end
 
-    test "create_transaction/1 handles duplicate fingerprint" do
+    test "create_transaction/1 blocks an accidental manual double-submit" do
       account = AccountsFixtures.account_fixture()
 
       attrs = %{
         date: ~D[2026-02-23],
         description: "duplicate",
         amount: "100",
-        account_id: account.id,
-        fingerprint: "unique_fingerprint"
+        account_id: account.id
       }
 
-      assert {:ok, _} = Transactions.create_transaction(attrs)
+      # The manual single-create path always uses occurrence index 0, so an
+      # identical second submit collides on the unique fingerprint and is
+      # reported as a duplicate (guards against accidental double-clicks). This
+      # deliberately differs from the import path, which preserves legitimate
+      # repeats via per-batch occurrence indices.
+      assert {:ok, %Transaction{}} = Transactions.create_transaction(attrs)
+      assert {:ok, :duplicate} = Transactions.create_transaction(attrs)
+
+      assert Repo.aggregate(Transaction, :count) == 1
+    end
+
+    test "create_transaction/1 reports :duplicate on a fingerprint collision" do
+      account = AccountsFixtures.account_fixture()
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      attrs = %{
+        date: ~D[2026-02-23],
+        description: "collide",
+        amount: "100",
+        account_id: account.id
+      }
+
+      # Pre-seed a row carrying the fingerprint that create_transaction will
+      # compute at occurrence index 0, but with a DIFFERENT dedup_key so the
+      # occurrence count stays 0. This simulates the concurrent-insert race the
+      # :duplicate branch guards against.
+      colliding_fp = Transaction.fingerprint(attrs, 0)
+
+      {1, _} =
+        Repo.insert_all(Transaction, [
+          %{
+            id: Ecto.UUID.generate(),
+            account_id: account.id,
+            date: ~D[2026-02-23],
+            description: "other",
+            amount: Decimal.new("100"),
+            dedup_key: "decoy-key",
+            fingerprint: colliding_fp,
+            inserted_at: now,
+            updated_at: now
+          }
+        ])
+
       assert {:ok, :duplicate} = Transactions.create_transaction(attrs)
     end
   end

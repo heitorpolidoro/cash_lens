@@ -207,6 +207,166 @@ defmodule CashLens.Parsers.IngestorTest do
     end
   end
 
+  describe "duplicate-safe re-import" do
+    import CashLens.AccountsFixtures
+    alias CashLens.Transactions.Transaction
+
+    test "importing the same OFX fatura twice yields no duplicates and reports skips" do
+      account = account_fixture(parser_type: "ourocard_ofx")
+
+      ofx = """
+      <STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260415</DTPOSTED>
+      <TRNAMT>-66.00</TRNAMT><MEMO>VALE EVENTOS   SAO PAULO  BR</MEMO></STMTTRN>
+      <STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260416</DTPOSTED>
+      <TRNAMT>-12.50</TRNAMT><MEMO>PADARIA SAO JOSE</MEMO></STMTTRN>
+      """
+
+      file_path = "test/support/fixtures/files/fatura_#{account.id}.ofx"
+      File.write!(file_path, ofx)
+      on_exit(fn -> File.rm(file_path) end)
+
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, file_path)
+
+      assert Repo.aggregate(Transaction, :count) == 2
+    end
+
+    test "date-only re-import with amount-scale drift still dedupes" do
+      account = account_fixture(parser_type: "ourocard_ofx")
+
+      # Both runs are a credit-style date-only DTPOSTED (no time): the stable
+      # 00:00:00 default makes them share a base key. Amount scale drifts
+      # (-66.00 vs -66.0) but integer-cents canonicalization keeps the key
+      # identical -> re-import dedupes. This is the original duplication
+      # root-cause scenario, now fixed by the stable time default.
+      first = """
+      <STMTTRN><DTPOSTED>20260415</DTPOSTED><TRNAMT>-66.00</TRNAMT>\
+      <MEMO>VALE EVENTOS SAO PAULO BR</MEMO></STMTTRN>
+      """
+
+      second = """
+      <STMTTRN><DTPOSTED>20260415</DTPOSTED><TRNAMT>-66.0</TRNAMT>\
+      <MEMO>VALE EVENTOS SAO PAULO BR</MEMO></STMTTRN>
+      """
+
+      p1 = "test/support/fixtures/files/drift1_#{account.id}.ofx"
+      p2 = "test/support/fixtures/files/drift2_#{account.id}.ofx"
+      File.write!(p1, first)
+      File.write!(p2, second)
+      on_exit(fn -> File.rm(p1) && File.rm(p2) end)
+
+      assert {:ok, %{imported: 1, skipped: 0}} = Ingestor.import_file(account, p1)
+      assert {:ok, %{imported: 0, skipped: 1}} = Ingestor.import_file(account, p2)
+
+      assert Repo.aggregate(Transaction, :count) == 1
+    end
+
+    test "two genuinely identical same-day charges are both preserved (occurrence index)" do
+      account = account_fixture(parser_type: "ourocard_ofx")
+
+      # Two identical lines in one fatura: same date, amount and merchant. These
+      # are distinct real purchases and must BOTH be kept (indices 0 and 1).
+      ofx = """
+      <STMTTRN><DTPOSTED>20260415</DTPOSTED><TRNAMT>-48.00</TRNAMT>\
+      <MEMO>JULIO CESAR DE SAO JOSE</MEMO></STMTTRN>
+      <STMTTRN><DTPOSTED>20260415</DTPOSTED><TRNAMT>-48.00</TRNAMT>\
+      <MEMO>JULIO CESAR DE SAO JOSE</MEMO></STMTTRN>
+      """
+
+      path = "test/support/fixtures/files/twins_#{account.id}.ofx"
+      File.write!(path, ofx)
+      on_exit(fn -> File.rm(path) end)
+
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, path)
+      assert Repo.aggregate(Transaction, :count) == 2
+
+      # Re-importing the exact same fatura reproduces indices 0 and 1, so BOTH
+      # collide with the stored rows: zero new rows, both reported skipped.
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, path)
+      assert Repo.aggregate(Transaction, :count) == 2
+    end
+
+    test "two identical same-day credit à-vista charges are both preserved" do
+      account = account_fixture(parser_type: "ourocard_ofx")
+
+      # Credit (à-vista) OFX postings are date-only, so both lines normalize to
+      # the stable time 00:00:00 -> identical base key. They are distinct real
+      # purchases and must BOTH survive via occurrence indices 0 and 1.
+      ofx = """
+      <STMTTRN><DTPOSTED>20260415</DTPOSTED><TRNAMT>-79.90</TRNAMT>\
+      <MEMO>LIVRARIA CULTURA SP</MEMO></STMTTRN>
+      <STMTTRN><DTPOSTED>20260415</DTPOSTED><TRNAMT>-79.90</TRNAMT>\
+      <MEMO>LIVRARIA CULTURA SP</MEMO></STMTTRN>
+      """
+
+      path = "test/support/fixtures/files/credit_twins_#{account.id}.ofx"
+      File.write!(path, ofx)
+      on_exit(fn -> File.rm(path) end)
+
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, path)
+      assert Repo.aggregate(Transaction, :count) == 2
+
+      # Re-importing the exact same fatura reproduces times (00:00:00) AND
+      # ordinals (0, 1), so both collide: zero duplicates.
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, path)
+      assert Repo.aggregate(Transaction, :count) == 2
+    end
+
+    test "same-day same-amount debit charges at distinct times are both preserved" do
+      account = account_fixture(parser_type: "ourocard_ofx")
+
+      # Two debit charges with REAL distinct times get distinct base keys via the
+      # time discriminator (each at occurrence index 0) and are both preserved.
+      ofx = """
+      <STMTTRN><DTPOSTED>20260415083000</DTPOSTED><TRNAMT>-15.00</TRNAMT>\
+      <MEMO>METRO SP</MEMO></STMTTRN>
+      <STMTTRN><DTPOSTED>20260415173000</DTPOSTED><TRNAMT>-15.00</TRNAMT>\
+      <MEMO>METRO SP</MEMO></STMTTRN>
+      """
+
+      path = "test/support/fixtures/files/debit_times_#{account.id}.ofx"
+      File.write!(path, ofx)
+      on_exit(fn -> File.rm(path) end)
+
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, path)
+      assert Repo.aggregate(Transaction, :count) == 2
+
+      # Re-import reproduces the same times -> same fingerprints -> zero dups.
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, path)
+      assert Repo.aggregate(Transaction, :count) == 2
+    end
+
+    test "occurrence index accounts for rows already stored across separate imports" do
+      account = account_fixture(parser_type: "ourocard_ofx")
+
+      one = """
+      <STMTTRN><DTPOSTED>20260415</DTPOSTED><TRNAMT>-10.00</TRNAMT>\
+      <MEMO>CAFE</MEMO></STMTTRN>
+      """
+
+      two = """
+      <STMTTRN><DTPOSTED>20260415</DTPOSTED><TRNAMT>-10.00</TRNAMT>\
+      <MEMO>CAFE</MEMO></STMTTRN>
+      <STMTTRN><DTPOSTED>20260415</DTPOSTED><TRNAMT>-10.00</TRNAMT>\
+      <MEMO>CAFE</MEMO></STMTTRN>
+      """
+
+      p1 = "test/support/fixtures/files/seq1_#{account.id}.ofx"
+      p2 = "test/support/fixtures/files/seq2_#{account.id}.ofx"
+      File.write!(p1, one)
+      File.write!(p2, two)
+      on_exit(fn -> File.rm(p1) && File.rm(p2) end)
+
+      # First import stores one row at index 0.
+      assert {:ok, %{imported: 1, skipped: 0}} = Ingestor.import_file(account, p1)
+
+      # Second import has two identical lines: the first matches the stored index
+      # 0 (skipped), the second takes index 1 (a genuine new repeat, inserted).
+      assert {:ok, %{imported: 1, skipped: 1}} = Ingestor.import_file(account, p2)
+      assert Repo.aggregate(Transaction, :count) == 2
+    end
+  end
+
   describe "import_directory/2" do
     import CashLens.AccountsFixtures
 

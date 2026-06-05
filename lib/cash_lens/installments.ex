@@ -340,8 +340,11 @@ defmodule CashLens.Installments do
   # its billing date (computed by the caller).
   #
   # The update is done via `update_all` (not the changeset) so the original
-  # `fingerprint` — derived from the raw date and description — is preserved and
-  # re-importing the same statement still de-duplicates.
+  # `dedup_key`/`fingerprint` — derived from the raw date and the raw
+  # "PARC xx/yy" description — are preserved. Re-importing the same statement
+  # recomputes those raw values and still de-duplicates. The "PARC xx/yy" marker
+  # in the raw memo also self-disambiguates parcels, so each installment lands on
+  # its own dedup_key (occurrence index 0) without relying on the ordinal.
   defp link_and_clean(tx, group, detection, billed_date) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
