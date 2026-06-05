@@ -258,16 +258,15 @@ defmodule CashLens.Installments do
   # Spreads one purchase's parcels to their billing months, drops not-yet-charged
   # future parcels, links the rest to a group, and returns how many were applied.
   defp apply_installment_group({base, total, amount_key}, items) do
-    # When 2+ parcels share one date, the OFX listed them all at the purchase
-    # date, so spread each to its billing month (purchase + number-1). When the
-    # parcels already have distinct dates (e.g. recurring annuity charges billed
-    # monthly), they are already correct and must not be shifted.
-    purchase_date = bunched_purchase_date(Enum.map(items, fn {tx, _} -> tx.date end))
+    # "PARC xx/yy" always denotes a single installment purchase whose parcels are
+    # each reported on their own purchase date (OFX DTPOSTED). Re-date every parcel
+    # to its billing month: add_months(its own DTPOSTED, number - 1), so parcel 1
+    # bills in the purchase month and parcel N bills (N - 1) months later.
     today = Date.utc_today()
 
     dated =
       Enum.map(items, fn {tx, d} ->
-        billed = if purchase_date, do: add_months(purchase_date, d.number - 1), else: tx.date
+        billed = add_months(tx.date, d.number - 1)
         {tx, d, billed}
       end)
 
@@ -301,23 +300,15 @@ defmodule CashLens.Installments do
     amount |> Decimal.abs() |> Decimal.round(0) |> Decimal.to_integer()
   end
 
-  # Returns the purchase date when parcels are "bunched" (2+ on the same date, the way
-  # the OFX lists a parcelled purchase), or nil when they already have distinct dates.
-  defp bunched_purchase_date(dates) do
-    case dates |> Enum.frequencies() |> Enum.max_by(fn {_d, c} -> c end, fn -> nil end) do
-      {date, count} when count >= 2 -> date
-      _ -> nil
-    end
-  end
-
   defp find_or_create_group(base, total, amount_key, items) do
     pattern = "#{base} (#{total}x · R$#{amount_key})"
 
     case Repo.get_by(InstallmentGroup, description_pattern: pattern) do
       nil ->
         {tx, _d} = hd(items)
-        # All parcels carry the original purchase date (OFX DTPOSTED), so use it as
-        # the group's start date — the basis for projecting the plan's end.
+        # Each parcel's DTPOSTED is the original purchase date, so the plan's start
+        # (purchase month, where parcel 1 bills) is the earliest DTPOSTED seen — the
+        # basis for projecting the plan's end via add_months(start, installments - 1).
         start_date = items |> Enum.map(fn {t, _} -> t.date end) |> Enum.min(Date)
         total_amount = tx.amount |> Decimal.abs() |> Decimal.mult(total)
 

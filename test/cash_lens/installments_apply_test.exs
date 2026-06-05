@@ -23,7 +23,8 @@ defmodule CashLens.InstallmentsApplyTest do
 
     test "groups parcels, cleans descriptions and re-dates to the billing month",
          %{account: account} do
-      # Real Ourocard OFX reports every parcel on the original purchase date.
+      # Every parcel of a single purchase carries the same DTPOSTED (the purchase
+      # date); each is re-dated to add_months(purchase, number - 1).
       purchase = ~D[2026-01-10]
       t1 = ourocard_tx(account.id, "CAPRICHO VEIC PARC 01/03 SAO JOSE DOSBR", "-100.00", purchase)
       t2 = ourocard_tx(account.id, "CAPRICHO VEIC PARC 02/03 SAO JOSE DOSBR", "-100.00", purchase)
@@ -34,6 +35,7 @@ defmodule CashLens.InstallmentsApplyTest do
       [group] = Installments.list_installment_groups()
       assert group.description_pattern == "CAPRICHO VEIC (3x · R$100)"
       assert group.installments == 3
+      # start_date is the inferred purchase month (parcel 1's billing month).
       assert group.start_date == purchase
       assert Decimal.equal?(group.total_amount, Decimal.new("300.00"))
 
@@ -65,19 +67,21 @@ defmodule CashLens.InstallmentsApplyTest do
       assert reloaded.fingerprint == original_fp
     end
 
-    test "keeps original dates for parcels already billed monthly (distinct dates)",
+    test "always re-dates each parcel from its own DTPOSTED (distinct dates)",
          %{account: account} do
-      # Recurring annuity: each parcel already arrives on its real billing date and
-      # must NOT be shifted into the future.
+      # "PARC xx/yy" always denotes a single installment purchase: each parcel is
+      # re-dated to add_months(its own DTPOSTED, number - 1), regardless of whether
+      # the parcels share a date or arrive with distinct dates.
       p2 = ourocard_tx(account.id, "ANUIDADE ADC-PARC 02/12 BR", "-22.75", ~D[2025-12-24])
       p3 = ourocard_tx(account.id, "ANUIDADE ADC-PARC 03/12 BR", "-22.75", ~D[2026-01-27])
       p4 = ourocard_tx(account.id, "ANUIDADE ADC-PARC 04/12 BR", "-22.75", ~D[2026-02-24])
 
       Installments.detect_and_apply([p2, p3, p4])
 
-      assert Repo.get!(Transaction, p2.id).date == ~D[2025-12-24]
-      assert Repo.get!(Transaction, p3.id).date == ~D[2026-01-27]
-      assert Repo.get!(Transaction, p4.id).date == ~D[2026-02-24]
+      # parcel N bills (N - 1) months after its own DTPOSTED.
+      assert Repo.get!(Transaction, p2.id).date == ~D[2026-01-24]
+      assert Repo.get!(Transaction, p3.id).date == ~D[2026-03-27]
+      assert Repo.get!(Transaction, p4.id).date == ~D[2026-05-24]
     end
 
     test "separates different plans at the same merchant by total and value",
@@ -163,7 +167,11 @@ defmodule CashLens.InstallmentsApplyTest do
 
       assert [reloaded] = Installments.list_installment_groups()
       assert reloaded.id == group.id
-      assert Repo.get!(Transaction, c.id).installment_group_id == group.id
+
+      reloaded_c = Repo.get!(Transaction, c.id)
+      assert reloaded_c.installment_group_id == group.id
+      # parcel 3 bills 2 months after its own DTPOSTED (2026-03-12 → 2026-05-12).
+      assert reloaded_c.date == ~D[2026-05-12]
     end
 
     test "is idempotent: re-running does not duplicate groups", %{account: account} do
@@ -172,6 +180,50 @@ defmodule CashLens.InstallmentsApplyTest do
       Installments.scan_and_apply_all()
 
       assert length(Installments.list_installment_groups()) == 1
+    end
+
+    test "re-dates parcels from different purchases each by its own DTPOSTED",
+         %{account: account} do
+      # Real "Próxima Fatura" shape: each parcel of a single purchase shows up on a
+      # distinct DTPOSTED (the purchase date). Two unrelated purchases here:
+      #   ELETRO  PARC 08/10 @ 2025-10-15 → add_months(7) → 2026-05-15
+      #   VIAGEM  PARC 04/04 @ 2026-01-20 → add_months(3) → 2026-04-20
+      eletro =
+        ourocard_tx(account.id, "ELETRO PARC 08/10 SAO PAULO BR", "-300.00", ~D[2025-10-15])
+
+      viagem =
+        ourocard_tx(account.id, "VIAGEM PARC 04/04 SAO PAULO BR", "-150.00", ~D[2026-01-20])
+
+      assert Installments.detect_and_apply([eletro, viagem]) == 2
+
+      assert Repo.get!(Transaction, eletro.id).date == ~D[2026-05-15]
+      assert Repo.get!(Transaction, viagem.id).date == ~D[2026-04-20]
+    end
+
+    test "re-importing the same fatura yields no duplicates and stable dates",
+         %{account: account} do
+      purchase = ~D[2026-01-10]
+      t1 = ourocard_tx(account.id, "CAPRICHO VEIC PARC 01/03 SAO JOSE DOSBR", "-100.00", purchase)
+      t2 = ourocard_tx(account.id, "CAPRICHO VEIC PARC 02/03 SAO JOSE DOSBR", "-100.00", purchase)
+      t3 = ourocard_tx(account.id, "CAPRICHO VEIC PARC 03/03 SAO JOSE DOSBR", "-100.00", purchase)
+
+      assert Installments.detect_and_apply([t1, t2, t3]) == 3
+
+      dates_after_first =
+        [t1, t2, t3]
+        |> Enum.map(&Repo.get!(Transaction, &1.id).date)
+
+      # Re-running detection (e.g. a re-import) must not duplicate groups or shift dates.
+      Installments.scan_and_apply_all()
+
+      assert length(Installments.list_installment_groups()) == 1
+
+      dates_after_second =
+        [t1, t2, t3]
+        |> Enum.map(&Repo.get!(Transaction, &1.id).date)
+
+      assert dates_after_second == dates_after_first
+      assert dates_after_first == [~D[2026-01-10], ~D[2026-02-10], ~D[2026-03-10]]
     end
   end
 end
