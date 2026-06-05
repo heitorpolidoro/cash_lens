@@ -77,6 +77,16 @@ defmodule CashLensWeb.InstallmentLive.Index do
     {:noreply, socket |> assign(:filters, default_filters()) |> load_data()}
   end
 
+  @impl true
+  def handle_event("toggle_expand", %{"id" => id}, socket) do
+    expanded =
+      if MapSet.member?(socket.assigns.expanded_ids, id),
+        do: MapSet.delete(socket.assigns.expanded_ids, id),
+        else: MapSet.put(socket.assigns.expanded_ids, id)
+
+    {:noreply, assign(socket, :expanded_ids, expanded)}
+  end
+
   defp list_groups(filters) do
     Installments.list_installment_groups()
     |> Enum.map(fn g -> Installments.get_group_with_progress(g.id) end)
@@ -156,6 +166,12 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
     Enum.reverse(rows)
   end
+
+  defp parcel_status(%{date: %Date{} = d}) do
+    if Date.compare(d, Date.utc_today()) == :gt, do: "a vencer", else: "paga"
+  end
+
+  defp parcel_status(_), do: "—"
 
   defp last_parcel_label(group) do
     case Installments.last_installment_date(group) do
@@ -305,51 +321,100 @@ defmodule CashLensWeb.InstallmentLive.Index do
             </tr>
           </thead>
           <tbody>
-            <tr
-              :for={group <- @groups}
-              class={["hover", if(group.band == 0, do: "bg-base-100", else: "bg-base-300")]}
-            >
-              <td class="font-bold text-xs">{group.description_pattern}</td>
-              <td class="text-right font-mono">
-                {if group.total_amount, do: format_currency(group.total_amount), else: "---"}
-              </td>
-              <td class="text-right font-mono text-xs opacity-70">
-                {if group.total_amount && group.installments > 0,
-                  do:
-                    format_currency(
-                      Decimal.round(Decimal.div(group.total_amount, group.installments), 2)
-                    ),
-                  else: "---"}
-              </td>
-              <td>
-                <div class="flex flex-col gap-1">
-                  <span class="text-[10px] font-bold text-center">
-                    {group.paid_count} / {group.installments}
-                  </span>
-                  <progress
-                    class="progress progress-primary w-full h-1.5"
-                    value={group.paid_count}
-                    max={group.installments}
+            <%= for group <- @groups do %>
+              <tr class={["hover", if(group.band == 0, do: "bg-base-100", else: "bg-base-300")]}>
+                <td class="font-bold text-xs">
+                  <button
+                    type="button"
+                    phx-click="toggle_expand"
+                    phx-value-id={group.id}
+                    class="flex items-center gap-2 text-left w-full"
                   >
-                  </progress>
-                </div>
-              </td>
-              <td class="text-right text-xs opacity-60 whitespace-nowrap">
-                {format_date(group.start_date)}
-              </td>
-              <td class="text-right text-xs opacity-60 whitespace-nowrap">
-                {last_parcel_label(group)}
-              </td>
-              <td class="text-right">
-                <button
-                  phx-click="delete"
-                  phx-value-id={group.id}
-                  class="btn btn-ghost btn-xs text-error p-0"
-                >
-                  <.icon name="hero-trash" class="size-4" />
-                </button>
-              </td>
-            </tr>
+                    <.icon
+                      name="hero-chevron-right"
+                      class={[
+                        "size-3 transition-transform",
+                        MapSet.member?(@expanded_ids, group.id) && "rotate-90"
+                      ]}
+                    />
+                    {group.description_pattern}
+                  </button>
+                </td>
+                <td class="text-right font-mono">
+                  {if group.total_amount, do: format_currency(group.total_amount), else: "---"}
+                </td>
+                <td class="text-right font-mono text-xs opacity-70">
+                  {if group.total_amount && group.installments > 0,
+                    do:
+                      format_currency(
+                        Decimal.round(Decimal.div(group.total_amount, group.installments), 2)
+                      ),
+                    else: "---"}
+                </td>
+                <td>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-[10px] font-bold text-center">
+                      {group.paid_count} / {group.installments}
+                    </span>
+                    <progress
+                      class="progress progress-primary w-full h-1.5"
+                      value={group.paid_count}
+                      max={group.installments}
+                    >
+                    </progress>
+                  </div>
+                </td>
+                <td class="text-right text-xs opacity-60 whitespace-nowrap">
+                  {format_date(group.start_date)}
+                </td>
+                <td class="text-right text-xs opacity-60 whitespace-nowrap">
+                  {last_parcel_label(group)}
+                </td>
+                <td class="text-right">
+                  <button
+                    phx-click="delete"
+                    phx-value-id={group.id}
+                    class="btn btn-ghost btn-xs text-error p-0"
+                  >
+                    <.icon name="hero-trash" class="size-4" />
+                  </button>
+                </td>
+              </tr>
+              <tr :if={MapSet.member?(@expanded_ids, group.id)} class="bg-base-200/40">
+                <td colspan="7" class="p-0">
+                  <div class="px-6 py-3">
+                    <% parcels = Installments.list_group_transactions(group.id) %>
+                    <div :if={parcels == []} class="text-xs opacity-40 py-2">
+                      Nenhuma parcela importada ainda.
+                    </div>
+                    <table :if={parcels != []} class="table table-xs w-full">
+                      <thead class="text-[9px] uppercase tracking-wider opacity-50">
+                        <tr>
+                          <th class="w-12">Parc.</th>
+                          <th>Descrição</th>
+                          <th class="text-right">Data</th>
+                          <th class="text-right">Valor</th>
+                          <th class="text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr :for={p <- parcels}>
+                          <td class="font-mono text-[11px]">{p.installment_number || "—"}</td>
+                          <td class="text-xs">{p.description}</td>
+                          <td class="text-right text-xs opacity-60 whitespace-nowrap">
+                            {format_date(p.date)}
+                          </td>
+                          <td class="text-right font-mono text-xs">{format_currency(p.amount)}</td>
+                          <td class="text-right text-[10px] uppercase opacity-60">
+                            {parcel_status(p)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </td>
+              </tr>
+            <% end %>
           </tbody>
         </table>
       </div>

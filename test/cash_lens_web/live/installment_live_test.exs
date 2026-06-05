@@ -186,6 +186,38 @@ defmodule CashLensWeb.InstallmentLiveTest do
     end
   end
 
+  test "expands a group row to list its parcels", %{conn: conn} do
+    {:ok, group} =
+      Installments.create_installment_group(%{
+        description_pattern: "EXPAND ME",
+        total_amount: "200.00",
+        installments: 2,
+        start_date: ~D[2026-05-05]
+      })
+
+    acc = account_fixture()
+
+    tx =
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-100.00",
+        description: "EXPAND ME parcela 1"
+      })
+
+    Repo.update_all(from(t in Transaction, where: t.id == ^tx.id),
+      set: [installment_group_id: group.id, installment_number: 1]
+    )
+
+    {:ok, live, html} = live(conn, ~p"/installments")
+    refute html =~ "EXPAND ME parcela 1"
+
+    html = render_click(live, "toggle_expand", %{"id" => group.id})
+    assert html =~ "EXPAND ME parcela 1"
+
+    html = render_click(live, "toggle_expand", %{"id" => group.id})
+    refute html =~ "EXPAND ME parcela 1"
+  end
+
   test "detect_installments scans and groups", %{conn: conn} do
     acc = account_fixture()
 
