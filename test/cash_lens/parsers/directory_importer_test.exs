@@ -88,4 +88,46 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       assert length(CashLens.Repo.all(CashLens.Transactions.Transaction)) == 3
     end
   end
+
+  describe "run/2 on a parent folder" do
+    test "imports each subfolder that has an .account", %{root: root} do
+      account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+      account_fixture(bank: "Bradesco", name: "Conta Corrente", parser_type: "bb_csv")
+
+      account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [{"e.csv", @bb_sample}])
+      account_folder(root, "brad", "Bradesco", "Conta Corrente", [{"e.csv", @bb_sample}])
+
+      assert %Result{accounts: accounts, warnings: [], errors: []} =
+               DirectoryImporter.run(root, skip_installments: true)
+
+      assert length(accounts) == 2
+      assert length(CashLens.Repo.all(CashLens.Transactions.Transaction)) == 6
+    end
+
+    test "warns and skips subfolders without an .account", %{root: root} do
+      account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+      account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [{"e.csv", @bb_sample}])
+
+      no_acct = Path.join(root, "fatura-antiga")
+      File.mkdir_p!(no_acct)
+      File.write!(Path.join(no_acct, "x.csv"), @bb_sample)
+
+      assert %Result{accounts: [_], warnings: [warning]} =
+               DirectoryImporter.run(root, skip_installments: true)
+
+      assert warning =~ "fatura-antiga"
+      assert warning =~ "sem .account"
+    end
+
+    test "one bad subfolder does not abort the others", %{root: root} do
+      account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+      account_folder(root, "ok", "Banco do Brasil", "Conta Corrente", [{"e.csv", @bb_sample}])
+      account_folder(root, "bad", "Banco Fantasma", "Conta X", [{"e.csv", @bb_sample}])
+
+      assert %Result{accounts: [_], errors: [error]} =
+               DirectoryImporter.run(root, skip_installments: true)
+
+      assert error =~ "não encontrada"
+    end
+  end
 end

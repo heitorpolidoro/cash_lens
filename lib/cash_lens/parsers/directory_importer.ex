@@ -20,13 +20,33 @@ defmodule CashLens.Parsers.DirectoryImporter do
       (used in tests to keep cases isolated).
   """
   def run(path, opts \\ []) do
-    result = import_account_folder(path, %Result{})
+    result =
+      if AccountFile.exists?(path) do
+        import_account_folder(path, %Result{})
+      else
+        import_parent(path, %Result{})
+      end
 
     unless Keyword.get(opts, :skip_installments, false) do
       CashLens.Installments.scan_and_apply_all()
     end
 
     result
+  end
+
+  defp import_parent(path, result) do
+    path
+    |> File.ls!()
+    |> Enum.map(&Path.join(path, &1))
+    |> Enum.filter(&File.dir?/1)
+    |> Enum.sort()
+    |> Enum.reduce(result, fn dir, acc ->
+      if AccountFile.exists?(dir) do
+        import_account_folder(dir, acc)
+      else
+        add_warning(acc, "pasta #{Path.basename(dir)}/ sem .account — pulada")
+      end
+    end)
   end
 
   defp import_account_folder(dir, result) do
