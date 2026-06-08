@@ -45,6 +45,19 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   @doc """
+  Returns the file extensions a given parser_type can handle. Used to guard
+  against feeding e.g. an .ofx file to a CSV parser during folder imports.
+  """
+  def expected_extensions(parser_type) do
+    case parser_type do
+      t when t in ["bradesco_csv", "bb_csv"] -> [".csv"]
+      t when t in ["ourocard_ofx", "standard_ofx"] -> [".ofx"]
+      "sem_parar_pdf" -> [".pdf"]
+      _ -> []
+    end
+  end
+
+  @doc """
   Reads a file, converts encoding/extracts text, parses and saves the transactions.
   Returns `{:ok, count}` or `{:error, reason}`.
   """

@@ -367,6 +367,27 @@ defmodule CashLens.Parsers.IngestorTest do
     end
   end
 
+  describe "expected_extensions/1" do
+    test "maps csv parsers to .csv" do
+      assert Ingestor.expected_extensions("bradesco_csv") == [".csv"]
+      assert Ingestor.expected_extensions("bb_csv") == [".csv"]
+    end
+
+    test "maps ofx parsers to .ofx" do
+      assert Ingestor.expected_extensions("ourocard_ofx") == [".ofx"]
+      assert Ingestor.expected_extensions("standard_ofx") == [".ofx"]
+    end
+
+    test "maps pdf parser to .pdf" do
+      assert Ingestor.expected_extensions("sem_parar_pdf") == [".pdf"]
+    end
+
+    test "returns empty list for unknown parser" do
+      assert Ingestor.expected_extensions("unknown") == []
+      assert Ingestor.expected_extensions(nil) == []
+    end
+  end
+
   describe "import_directory/2" do
     import CashLens.AccountsFixtures
 
