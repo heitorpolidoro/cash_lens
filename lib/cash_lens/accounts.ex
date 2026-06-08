@@ -46,6 +46,20 @@ defmodule CashLens.Accounts do
   end
 
   @doc """
+  Finds accounts matching a bank and name pair, case-insensitively.
+  Returns a list so callers can distinguish 0, 1, or ambiguous (2+) matches.
+  """
+  def find_accounts_by_bank_and_name(bank, name) do
+    b = bank |> String.trim() |> String.downcase()
+    n = name |> String.trim() |> String.downcase()
+
+    from(a in Account,
+      where: fragment("lower(?)", a.bank) == ^b and fragment("lower(?)", a.name) == ^n
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   Fetches multiple accounts by name in a single query. Returns a map of name => account.
   """
   def get_accounts_by_names(names) do
