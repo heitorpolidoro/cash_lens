@@ -20,6 +20,14 @@ defmodule CashLens.Parsers.DirectoryImporter do
       (used in tests to keep cases isolated).
   """
   def run(path, opts \\ []) do
+    if File.dir?(path) do
+      run_existing(path, opts)
+    else
+      %Result{errors: ["caminho '#{path}' não existe ou não é uma pasta"]}
+    end
+  end
+
+  defp run_existing(path, opts) do
     result =
       if AccountFile.exists?(path) do
         import_account_folder(path, %Result{})

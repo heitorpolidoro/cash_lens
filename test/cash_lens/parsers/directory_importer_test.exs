@@ -22,6 +22,17 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
     dir
   end
 
+  describe "run/2 on an invalid path" do
+    test "returns an error instead of raising when the path does not exist" do
+      assert %Result{accounts: [], warnings: [], errors: [error]} =
+               DirectoryImporter.run("/no/such/path/#{System.unique_integer([:positive])}",
+                 skip_installments: true
+               )
+
+      assert error =~ "não existe"
+    end
+  end
+
   describe "run/2 on a single account folder" do
     test "imports matching files into the resolved account", %{root: root} do
       account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
