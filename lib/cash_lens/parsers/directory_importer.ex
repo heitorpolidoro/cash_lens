@@ -102,10 +102,11 @@ defmodule CashLens.Parsers.DirectoryImporter do
     dir
     |> File.ls!()
     |> Enum.map(&Path.join(dir, &1))
-    |> Enum.filter(&File.regular?/1)
-    |> Enum.filter(&(Path.extname(&1) |> String.downcase() |> Kernel.in(@supported_extensions)))
-    |> Enum.split_with(&(Path.extname(&1) |> String.downcase() |> Kernel.in(expected)))
+    |> Enum.filter(&(File.regular?(&1) and extname(&1) in @supported_extensions))
+    |> Enum.split_with(&(extname(&1) in expected))
   end
+
+  defp extname(path), do: path |> Path.extname() |> String.downcase()
 
   defp add_warning(result, msg), do: %{result | warnings: result.warnings ++ [msg]}
   defp add_error(result, msg), do: %{result | errors: result.errors ++ [msg]}

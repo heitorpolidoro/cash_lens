@@ -38,6 +38,30 @@ Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
 Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
 
+## Importing statements from folders
+
+Import statements in bulk from the command line, routing each folder to the right account:
+
+```sh
+mix cash_lens.import <path>
+```
+
+Each account folder must contain a `.account` marker file identifying the
+destination account (bank + name, case-insensitive):
+
+```
+bank: Banco do Brasil
+account: Conta Corrente
+```
+
+- If `<path>` has a `.account`, it is imported as a single account.
+- Otherwise each immediate subfolder with a `.account` is imported; subfolders
+  without one are skipped with a warning.
+- Only files matching the account's parser format are imported (e.g. `.csv` for
+  `bb_csv`); mismatched files are skipped with a warning.
+- Files are left in place; re-running is safe — already-imported transactions are
+  deduplicated and reported as skipped.
+
 ## Learn more
 
 * Official website: https://www.phoenixframework.org/
