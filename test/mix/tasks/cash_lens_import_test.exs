@@ -1,6 +1,7 @@
 defmodule Mix.Tasks.CashLens.ImportTest do
   use ExUnit.Case, async: true
   alias CashLens.Parsers.DirectoryImporter.Result
+  alias Mix.Tasks.CashLens.Import
 
   test "format_lines/1 renders successes, skips, warnings and errors" do
     result = %Result{
@@ -12,7 +13,7 @@ defmodule Mix.Tasks.CashLens.ImportTest do
       errors: ["pasta cripto/ — conta 'X' não encontrada"]
     }
 
-    lines = Mix.Tasks.CashLens.Import.format_lines(result)
+    lines = Import.format_lines(result)
     text = Enum.join(lines, "\n")
 
     assert text =~ "✓ Banco do Brasil / Conta Corrente"
@@ -32,7 +33,7 @@ defmodule Mix.Tasks.CashLens.ImportTest do
       ]
     }
 
-    text = Mix.Tasks.CashLens.Import.format_lines(result) |> Enum.join("\n")
+    text = Import.format_lines(result) |> Enum.join("\n")
     assert text =~ "ruim.csv"
     assert text =~ "parse falhou"
   end
