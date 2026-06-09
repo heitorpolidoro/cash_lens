@@ -25,19 +25,21 @@ defmodule Mix.Tasks.CashLens.Import do
     ansi? = IO.ANSI.enabled?()
 
     try do
-      result =
+      {result, agent} =
         if ansi? do
-          on_event = build_on_event()
-          r = DirectoryImporter.run(path, on_event: on_event)
+          {on_event, agent} = build_on_event()
+          result = DirectoryImporter.run(path, on_event: on_event)
           Owl.LiveScreen.await_render()
-          r
+          {result, agent}
         else
-          DirectoryImporter.run(path)
+          {DirectoryImporter.run(path), nil}
         end
 
       result
       |> format_lines()
       |> Enum.each(&Mix.shell().info/1)
+
+      if agent, do: Agent.stop(agent)
 
       if result.errors != [], do: exit({:shutdown, 1})
     after
@@ -57,7 +59,7 @@ defmodule Mix.Tasks.CashLens.Import do
   defp build_on_event do
     {:ok, agent} = Agent.start_link(fn -> %{n: 0, ids: %{}} end)
 
-    fn
+    handler = fn
       {:start, total} ->
         Owl.ProgressBar.start(id: :overall, label: "Contas", total: max(total, 1))
 
@@ -82,6 +84,8 @@ defmodule Mix.Tasks.CashLens.Import do
       {:account_done, _summary} ->
         Owl.ProgressBar.inc(id: :overall)
     end
+
+    {handler, agent}
   end
 
   @doc "Formats a DirectoryImporter.Result into printable lines."
