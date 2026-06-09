@@ -61,6 +61,8 @@ account: Conta Corrente
   `bb_csv`); mismatched files are skipped with a warning.
 - Files are left in place; re-running is safe — already-imported transactions are
   deduplicated and reported as skipped.
+- Output is clean (Ecto query logs are suppressed during import); in an interactive
+  terminal a progress bar is shown per account plus an overall bar.
 
 ## Learn more
 

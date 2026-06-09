@@ -141,4 +141,66 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       assert error =~ "não encontrada"
     end
   end
+
+  defp collect_events(acc \\ []) do
+    receive do
+      {:event, e} -> collect_events([e | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
+  describe "run/2 progress events" do
+    test "emits start, per-account and per-file events in order", %{root: root} do
+      account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+      account_fixture(bank: "Bradesco", name: "Conta Corrente", parser_type: "bb_csv")
+
+      account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [{"e.csv", @bb_sample}])
+      account_folder(root, "brad", "Bradesco", "Conta Corrente", [{"e.csv", @bb_sample}])
+
+      test_pid = self()
+
+      DirectoryImporter.run(root,
+        skip_installments: true,
+        on_event: &send(test_pid, {:event, &1})
+      )
+
+      events = collect_events()
+
+      assert [
+               {:start, 2},
+               {:account_start, "Banco do Brasil / Conta Corrente", 1},
+               {:file_done, "Banco do Brasil / Conta Corrente"},
+               {:account_done, %{imported: 3}},
+               {:account_start, "Bradesco / Conta Corrente", 1},
+               {:file_done, "Bradesco / Conta Corrente"},
+               {:account_done, %{imported: 3}}
+             ] = events
+    end
+
+    test "does not emit account events for unresolved folders", %{root: root} do
+      account_folder(root, "bad", "Banco Fantasma", "Conta X", [{"e.csv", @bb_sample}])
+
+      test_pid = self()
+
+      DirectoryImporter.run(root,
+        skip_installments: true,
+        on_event: &send(test_pid, {:event, &1})
+      )
+
+      events = collect_events()
+
+      assert [{:start, 1}] = events
+    end
+
+    test "works (and is unchanged) without on_event", %{root: root} do
+      account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+      account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [{"e.csv", @bb_sample}])
+
+      assert %Result{accounts: [entry], warnings: [], errors: []} =
+               DirectoryImporter.run(root, skip_installments: true)
+
+      assert entry.imported == 3
+    end
+  end
 end
