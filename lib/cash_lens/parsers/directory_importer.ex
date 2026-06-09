@@ -28,12 +28,15 @@ defmodule CashLens.Parsers.DirectoryImporter do
   end
 
   defp run_existing(path, opts) do
+    emit = Keyword.get(opts, :on_event, fn _ -> :ok end)
+    {account_dirs, skipped_dirs} = classify(path)
+
+    emit.({:start, length(account_dirs)})
+
     result =
-      if AccountFile.exists?(path) do
-        import_account_folder(path, %Result{})
-      else
-        import_parent(path, %Result{})
-      end
+      account_dirs
+      |> Enum.reduce(%Result{}, fn dir, acc -> import_account_folder(dir, acc, emit) end)
+      |> add_skipped_warnings(skipped_dirs)
 
     unless Keyword.get(opts, :skip_installments, false) do
       CashLens.Installments.scan_and_apply_all()
@@ -42,25 +45,32 @@ defmodule CashLens.Parsers.DirectoryImporter do
     result
   end
 
-  defp import_parent(path, result) do
-    path
-    |> File.ls!()
-    |> Enum.map(&Path.join(path, &1))
-    |> Enum.filter(&File.dir?/1)
-    |> Enum.sort()
-    |> Enum.reduce(result, fn dir, acc ->
-      if AccountFile.exists?(dir) do
-        import_account_folder(dir, acc)
-      else
-        add_warning(acc, "pasta #{Path.basename(dir)}/ sem .account — pulada")
-      end
+  # A path that itself has a `.account` is a single account folder. Otherwise its
+  # immediate subdirectories are split into those with a `.account` (to import)
+  # and those without (skipped with a warning).
+  defp classify(path) do
+    if AccountFile.exists?(path) do
+      {[path], []}
+    else
+      path
+      |> File.ls!()
+      |> Enum.map(&Path.join(path, &1))
+      |> Enum.filter(&File.dir?/1)
+      |> Enum.sort()
+      |> Enum.split_with(&AccountFile.exists?/1)
+    end
+  end
+
+  defp add_skipped_warnings(result, dirs) do
+    Enum.reduce(dirs, result, fn dir, acc ->
+      add_warning(acc, "pasta #{Path.basename(dir)}/ sem .account — pulada")
     end)
   end
 
-  defp import_account_folder(dir, result) do
+  defp import_account_folder(dir, result, emit) do
     with {:ok, %{bank: bank, account: name}} <- AccountFile.read(dir),
          {:ok, account} <- resolve_account(bank, name) do
-      do_import(dir, account, bank, name, result)
+      do_import(dir, account, bank, name, result, emit)
     else
       {:error, reason} ->
         add_error(result, "pasta #{Path.basename(dir)}/ — #{reason}")
@@ -75,7 +85,8 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end
   end
 
-  defp do_import(dir, account, bank, name, result) do
+  defp do_import(dir, account, bank, name, result, emit) do
+    label = "#{bank} / #{name}"
     expected = Ingestor.expected_extensions(account.parser_type)
     {matching, mismatched} = partition_files(dir, expected)
 
@@ -87,20 +98,28 @@ defmodule CashLens.Parsers.DirectoryImporter do
         )
       end)
 
+    emit.({:account_start, label, length(matching)})
+
     summary =
       Enum.reduce(matching, %{imported: 0, skipped: 0, failed: []}, fn file, acc ->
-        case Ingestor.import_file(account, file) do
-          {:ok, s} ->
-            %{
-              imported: acc.imported + s.imported,
-              skipped: acc.skipped + Map.get(s, :skipped, 0),
-              failed: acc.failed ++ Map.get(s, :failed, [])
-            }
+        acc =
+          case Ingestor.import_file(account, file) do
+            {:ok, s} ->
+              %{
+                imported: acc.imported + s.imported,
+                skipped: acc.skipped + Map.get(s, :skipped, 0),
+                failed: acc.failed ++ Map.get(s, :failed, [])
+              }
 
-          {:error, reason} ->
-            %{acc | failed: acc.failed ++ [{Path.basename(file), reason}]}
-        end
+            {:error, reason} ->
+              %{acc | failed: acc.failed ++ [{Path.basename(file), reason}]}
+          end
+
+        emit.({:file_done, label})
+        acc
       end)
+
+    emit.({:account_done, summary})
 
     entry = Map.merge(summary, %{account: account, bank: bank, name: name})
     %{result | accounts: result.accounts ++ [entry]}
