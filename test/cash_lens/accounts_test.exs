@@ -103,4 +103,29 @@ defmodule CashLens.AccountsTest do
       refute Map.has_key?(result, "Gamma")
     end
   end
+
+  describe "find_accounts_by_bank_and_name/2" do
+    import CashLens.AccountsFixtures
+
+    test "matches case-insensitively on bank and name" do
+      account =
+        account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+
+      assert [found] =
+               Accounts.find_accounts_by_bank_and_name("banco do brasil", "conta corrente")
+
+      assert found.id == account.id
+    end
+
+    test "returns empty list when nothing matches" do
+      assert [] = Accounts.find_accounts_by_bank_and_name("Inexistente", "Nada")
+    end
+
+    test "returns all matches when ambiguous (same bank + name)" do
+      account_fixture(bank: "Banco X", name: "Conta Corrente")
+      account_fixture(bank: "Banco X", name: "Conta Corrente")
+
+      assert length(Accounts.find_accounts_by_bank_and_name("Banco X", "Conta Corrente")) == 2
+    end
+  end
 end
