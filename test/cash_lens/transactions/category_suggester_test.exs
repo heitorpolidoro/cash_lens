@@ -93,4 +93,17 @@ defmodule CashLens.Transactions.CategorySuggesterTest do
       assert is_nil(b.suggested_category)
     end
   end
+
+  describe "integration with list_transactions/3" do
+    test "rows come annotated with suggestions" do
+      category = category_fixture(name: "Padaria")
+      transaction_fixture(description: "PADARIA SAO JOSE", category_id: category.id)
+      target = transaction_fixture(description: "Padaria São José", amount: "10.0")
+
+      rows = CashLens.Transactions.list_transactions()
+      row = Enum.find(rows, &(&1.id == target.id))
+
+      assert row.suggested_category == %{category_id: category.id, category_name: "Padaria"}
+    end
+  end
 end

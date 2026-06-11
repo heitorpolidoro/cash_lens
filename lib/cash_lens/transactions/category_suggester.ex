@@ -19,7 +19,7 @@ defmodule CashLens.Transactions.CategorySuggester do
   def suggest_for(transactions) do
     targets =
       transactions
-      |> Enum.filter(&is_nil(&1.category_id))
+      |> Enum.filter(&(is_nil(&1.category_id) and not is_nil(&1.description)))
       |> Enum.map(&{&1.id, Transaction.normalize_description(&1.description)})
 
     if targets == [] do

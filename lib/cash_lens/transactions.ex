@@ -8,6 +8,7 @@ defmodule CashLens.Transactions do
   alias CashLens.Repo
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.BulkIgnorePattern
+  alias CashLens.Transactions.CategorySuggester
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.TransferRule
@@ -169,6 +170,7 @@ defmodule CashLens.Transactions do
     |> limit(^page_size)
     |> offset(^offset)
     |> Repo.all()
+    |> CategorySuggester.annotate()
   end
 
   @excluded_reimbursement_slugs ["transfer", "initial_value", "salário", "salario"]
