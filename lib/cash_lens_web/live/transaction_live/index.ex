@@ -5,6 +5,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   alias CashLens.Categories
   alias CashLens.Categories.Category
   alias CashLens.Transactions
+  alias CashLens.Transactions.CategorySuggester
 
   @impl true
   def mount(_params, _session, socket) do
@@ -863,7 +864,9 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   defp stream_update_transaction(socket, tx) do
-    tx = Transactions.get_transaction!(tx.id)
+    # Re-annotate so an uncategorized row updated for other reasons (e.g. notes)
+    # keeps its suggestion pill when re-inserted into the stream.
+    [tx] = CategorySuggester.annotate([Transactions.get_transaction!(tx.id)])
 
     if matches_filters?(tx, socket.assigns.filters, socket.assigns.transfer_category_id),
       do: stream_insert(socket, :transactions, tx),

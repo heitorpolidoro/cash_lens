@@ -493,6 +493,19 @@
                         <.icon name="hero-x-mark" class="size-3" />
                       </button>
                     </div>
+                    <button
+                      :if={is_nil(transaction.category_id) && transaction.suggested_category}
+                      type="button"
+                      data-role="category-suggestion"
+                      phx-click="update_category"
+                      phx-value-transaction_id={transaction.id}
+                      phx-value-category_id={transaction.suggested_category.category_id}
+                      class="badge badge-outline badge-info badge-sm mt-1 gap-1 cursor-pointer hover:bg-info hover:text-info-content text-[9px] font-bold"
+                      title="Aplicar categoria sugerida"
+                    >
+                      <.icon name="hero-sparkles" class="size-3" />
+                      Sugestão: {transaction.suggested_category.category_name}
+                    </button>
                     <div class="dropdown-content hidden fixed z-[100] mt-1 w-64 bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
                       <ul
                         id={"cat-options-#{transaction.id}"}
