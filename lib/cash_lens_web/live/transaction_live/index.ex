@@ -122,7 +122,7 @@ defmodule CashLensWeb.TransactionLive.Index do
           reimbursement_link_key: nil
         })
 
-      {:noreply, stream_insert(socket, :transactions, updated)}
+      {:noreply, stream_insert(socket, :transactions, annotate_one(updated))}
     end
   end
 
@@ -140,7 +140,10 @@ defmodule CashLensWeb.TransactionLive.Index do
         {:noreply,
          socket
          |> put_flash(:success, "Vinculado a #{group.description_pattern}!")
-         |> stream_insert(:transactions, Transactions.get_transaction!(updated_tx.id))}
+         |> stream_insert(
+           :transactions,
+           annotate_one(Transactions.get_transaction!(updated_tx.id))
+         )}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Falha ao vincular.")}
@@ -157,14 +160,14 @@ defmodule CashLensWeb.TransactionLive.Index do
         installment_number: nil
       })
 
-    {:noreply, stream_insert(socket, :transactions, updated_tx)}
+    {:noreply, stream_insert(socket, :transactions, annotate_one(updated_tx))}
   end
 
   @impl true
   def handle_event("mark_reimbursable", %{"id" => id}, socket) do
     tx = Transactions.get_transaction!(id)
     {:ok, updated} = Transactions.update_transaction(tx, %{reimbursement_status: "pending"})
-    {:noreply, stream_insert(socket, :transactions, updated)}
+    {:noreply, stream_insert(socket, :transactions, annotate_one(updated))}
   end
 
   @impl true
@@ -209,7 +212,7 @@ defmodule CashLensWeb.TransactionLive.Index do
          |> assign(:show_notes_modal, false)
          |> assign(:editing_transaction, nil)
          |> put_flash(:success, "Notas atualizadas!")
-         |> stream_insert(:transactions, updated_tx)}
+         |> stream_insert(:transactions, annotate_one(updated_tx))}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Falha ao atualizar notas.")}
@@ -863,10 +866,15 @@ defmodule CashLensWeb.TransactionLive.Index do
     end
   end
 
+  # Single-row convenience over CategorySuggester.annotate/1 so streamed rows
+  # never lose their suggestion pill, whatever path re-inserts them.
+  defp annotate_one(tx) do
+    [tx] = CategorySuggester.annotate([tx])
+    tx
+  end
+
   defp stream_update_transaction(socket, tx) do
-    # Re-annotate so an uncategorized row updated for other reasons (e.g. notes)
-    # keeps its suggestion pill when re-inserted into the stream.
-    [tx] = CategorySuggester.annotate([Transactions.get_transaction!(tx.id)])
+    tx = annotate_one(Transactions.get_transaction!(tx.id))
 
     if matches_filters?(tx, socket.assigns.filters, socket.assigns.transfer_category_id),
       do: stream_insert(socket, :transactions, tx),

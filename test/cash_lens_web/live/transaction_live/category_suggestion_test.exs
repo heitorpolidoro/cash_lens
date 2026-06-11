@@ -31,4 +31,24 @@ defmodule CashLensWeb.TransactionLive.CategorySuggestionTest do
 
     refute has_element?(live, "button[data-role='category-suggestion']")
   end
+
+  test "pill survives a notes edit on an uncategorized row", %{conn: conn} do
+    category = category_fixture(name: "Padaria")
+    transaction_fixture(description: "PADARIA SAO JOSE", category_id: category.id)
+    target = transaction_fixture(description: "Padaria São José", amount: "10.0")
+
+    {:ok, live, _html} = live(conn, ~p"/transactions")
+
+    assert has_element?(
+             live,
+             "button[data-role='category-suggestion'][phx-value-transaction_id='#{target.id}']"
+           )
+
+    render_click(live, "save_notes", %{"tx_id" => target.id, "notes" => "obs"})
+
+    assert has_element?(
+             live,
+             "button[data-role='category-suggestion'][phx-value-transaction_id='#{target.id}']"
+           )
+  end
 end
