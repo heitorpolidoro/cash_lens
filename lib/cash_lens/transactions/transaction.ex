@@ -23,6 +23,10 @@ defmodule CashLens.Transactions.Transaction do
     # create path, the mirror insert) set it so the fingerprint is computed
     # against it. Defaults to 0.
     field :occurrence_index, :integer, virtual: true, default: 0
+    # Virtual: on-the-fly category suggestion derived from how identical
+    # (normalized) descriptions were categorized in the past. Filled by
+    # CategorySuggester.annotate/1; never persisted.
+    field :suggested_category, :map, virtual: true
     field :notes, :string
     field :installment_number, :integer
     belongs_to :account, CashLens.Accounts.Account
