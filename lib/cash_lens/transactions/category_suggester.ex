@@ -71,7 +71,7 @@ defmodule CashLens.Transactions.CategorySuggester do
     |> Enum.map(fn {{cat_id, name}, occurrences} ->
       latest =
         occurrences
-        |> Enum.map(fn {_d, at, _i, _n} -> to_unix(at) end)
+        |> Enum.map(fn {_d, at, _i, _n} -> DateTime.to_unix(at) end)
         |> Enum.max()
 
       {length(occurrences), latest, %{category_id: cat_id, category_name: name}}
@@ -79,9 +79,4 @@ defmodule CashLens.Transactions.CategorySuggester do
     |> Enum.max_by(fn {count, latest, _suggestion} -> {count, latest} end)
     |> elem(2)
   end
-
-  # inserted_at is utc_datetime, which Ecto loads as DateTime.
-  # Guard against NaiveDateTime in case the column type ever changes.
-  defp to_unix(%DateTime{} = dt), do: DateTime.to_unix(dt)
-  defp to_unix(%NaiveDateTime{} = ndt), do: DateTime.to_unix(DateTime.from_naive!(ndt, "Etc/UTC"))
 end
