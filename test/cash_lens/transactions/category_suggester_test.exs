@@ -67,6 +67,31 @@ defmodule CashLens.Transactions.CategorySuggesterTest do
       assert CategorySuggester.suggest_for([target]) == %{}
     end
 
+    test "tolerates categorized history rows with nil description" do
+      # A nil-description row can gain a category via update_transaction_category
+      # (which only casts category_id). The history scan must not crash on it.
+      category = category_fixture(name: "Misc")
+      account = CashLens.AccountsFixtures.account_fixture()
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      Repo.insert_all(Transaction, [
+        %{
+          id: Ecto.UUID.generate(),
+          date: ~D[2026-02-23],
+          description: nil,
+          amount: Decimal.new("50.00"),
+          account_id: account.id,
+          category_id: category.id,
+          fingerprint: "nil_desc_#{System.unique_integer([:positive])}",
+          inserted_at: now,
+          updated_at: now
+        }
+      ])
+
+      target = transaction_fixture(description: "QUALQUER COISA")
+      assert CategorySuggester.suggest_for([target]) == %{}
+    end
+
     test "ignores transactions that already have a category" do
       category = category_fixture(name: "Qualquer")
       categorized = transaction_fixture(description: "JA TEM", category_id: category.id)

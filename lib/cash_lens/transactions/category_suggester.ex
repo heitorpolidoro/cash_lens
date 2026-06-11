@@ -51,8 +51,11 @@ defmodule CashLens.Transactions.CategorySuggester do
   end
 
   defp history_by_normalized_description do
+    # `description` can be nil on rows inserted outside the changeset (and such a
+    # row can later gain a category via update_transaction_category, which only
+    # casts category_id) — normalize_description/1 would crash on it.
     from(t in Transaction,
-      where: not is_nil(t.category_id),
+      where: not is_nil(t.category_id) and not is_nil(t.description),
       join: c in assoc(t, :category),
       select: {t.description, t.inserted_at, c.id, c.name}
     )
