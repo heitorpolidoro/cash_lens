@@ -1005,27 +1005,21 @@ defmodule CashLens.Transactions do
   Returns a list of {expense, credit} tuples sorted by date desc.
   """
   def list_reimbursement_suggestions do
-    excluded_ids =
-      Enum.flat_map(@excluded_reimbursement_slugs, fn slug ->
-        case Repo.one(
-               from c in CashLens.Categories.Category, where: c.slug == ^slug, select: c.id
-             ) do
-          nil -> []
-          id -> CashLens.Categories.get_category_ids_with_children(id)
-        end
-      end)
-      |> Enum.uniq()
+    excluded_ids = excluded_reimbursement_category_ids()
 
     from(a in Transaction,
       join: b in Transaction,
       on:
         a.amount == fragment("? * -1", b.amount) and
           a.id < b.id,
+      join: acc_a in assoc(a, :account),
+      join: acc_b in assoc(b, :account),
       where: is_nil(a.reimbursement_link_key) and is_nil(b.reimbursement_link_key),
       where:
         a.reimbursement_status in ["pending", "requested"] or
           b.reimbursement_status in ["pending", "requested"],
       where: is_nil(b.category_id) or b.category_id not in ^excluded_ids,
+      where: acc_a.accepts_import == true and acc_b.accepts_import == true,
       order_by: [desc: a.date],
       select: {a, b}
     )
@@ -1036,6 +1030,16 @@ defmodule CashLens.Transactions do
       diff >= 0 and diff <= 15
     end)
     |> Enum.map(&order_reimbursement_pair/1)
+  end
+
+  defp excluded_reimbursement_category_ids do
+    Enum.flat_map(@excluded_reimbursement_slugs, fn slug ->
+      case Repo.one(from c in CashLens.Categories.Category, where: c.slug == ^slug, select: c.id) do
+        nil -> []
+        id -> CashLens.Categories.get_category_ids_with_children(id)
+      end
+    end)
+    |> Enum.uniq()
   end
 
   defp order_reimbursement_pair({a, b}) do

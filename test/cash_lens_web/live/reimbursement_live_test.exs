@@ -367,5 +367,32 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       assert CashLens.Transactions.get_transaction!(expense2.id).reimbursement_status == "paid"
       assert CashLens.Transactions.get_transaction!(credit2.id).reimbursement_status == "paid"
     end
+
+    test "ignores suggestions from accounts that do not accept import", %{conn: conn} do
+      acc_no_import = account_fixture(%{accepts_import: false})
+      acc_import = account_fixture(%{accepts_import: true})
+
+      _expense =
+        transaction_fixture(%{
+          account_id: acc_no_import.id,
+          reimbursement_status: "pending",
+          amount: "-35.00",
+          description: "No import expense",
+          date: ~D[2026-02-23]
+        })
+
+      _credit =
+        transaction_fixture(%{
+          account_id: acc_import.id,
+          amount: "35.00",
+          description: "Import credit",
+          date: ~D[2026-02-24]
+        })
+
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+
+      assert render(index_live) =~ "0 pares sugeridos"
+      refute render(index_live) =~ "Confirmar"
+    end
   end
 end
