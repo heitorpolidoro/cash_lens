@@ -422,5 +422,42 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       assert render(index_live) =~ "0 pares sugeridos"
       refute render(index_live) =~ "Confirmar"
     end
+
+    test "sorts unmatched reimbursement expenses in ascending order by date", %{conn: conn} do
+      acc = account_fixture()
+
+      _expense_middle =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-10.00",
+          description: "Middle Expense",
+          date: ~D[2026-02-20]
+        })
+
+      _expense_earliest =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-20.00",
+          description: "Earliest Expense",
+          date: ~D[2026-02-15]
+        })
+
+      _expense_latest =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-30.00",
+          description: "Latest Expense",
+          date: ~D[2026-02-25]
+        })
+
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+      html = render(index_live)
+
+      # The order should be Earliest Expense, then Middle Expense, then Latest Expense
+      assert html =~ ~r/Earliest Expense.*Middle Expense.*Latest Expense/s
+    end
   end
 end

@@ -1064,7 +1064,7 @@ defmodule CashLens.Transactions do
       where: t.amount < 0,
       where: t.reimbursement_status in ["pending", "requested"],
       where: t.id not in ^MapSet.to_list(suggested_ids),
-      order_by: [desc: t.date],
+      order_by: [asc: t.date],
       preload: [:account, :category]
     )
     |> Repo.all()
