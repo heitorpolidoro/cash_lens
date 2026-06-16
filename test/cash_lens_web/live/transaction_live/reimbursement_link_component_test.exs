@@ -78,4 +78,18 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponentTest do
 
     assert Transactions.get_transaction!(credit.id).category_id == cat.id
   end
+
+  test "filters out positive transactions from candidates list", %{conn: conn} do
+    credit = transaction_fixture(amount: "100.00", description: "Credit Origin")
+    _expense = transaction_fixture(amount: "-100.00", description: "Expense Candidate")
+    _other_credit = transaction_fixture(amount: "100.00", description: "Positive Candidate")
+
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
+
+    index_live |> render_click("open_reimbursement_link", %{"id" => credit.id})
+    modal_content = index_live |> element("#reimbursement-link-modal") |> render()
+
+    assert modal_content =~ "Expense Candidate"
+    refute modal_content =~ "Positive Candidate"
+  end
 end

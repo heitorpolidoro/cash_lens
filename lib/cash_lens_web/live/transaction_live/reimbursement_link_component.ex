@@ -184,7 +184,11 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponent do
     all_pending =
       (exact_matches ++ recent_items)
       |> Enum.uniq_by(& &1.id)
-      |> Enum.filter(&(is_nil(&1.reimbursement_link_key) && &1.reimbursement_status != "paid"))
+      |> Enum.filter(fn tx ->
+        is_nil(tx.reimbursement_link_key) and
+          tx.reimbursement_status != "paid" and
+          Decimal.lt?(tx.amount, 0)
+      end)
 
     sorted_pending =
       all_pending
