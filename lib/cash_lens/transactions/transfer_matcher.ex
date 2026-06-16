@@ -74,10 +74,17 @@ defmodule CashLens.Transactions.TransferMatcher do
   end
 
   defp link_pair(tx_id, twin_id, link_id) do
+    transfer_cat = Categories.get_category_by_slug("transfer")
+    cat_id = transfer_cat && transfer_cat.id
+
     Repo.transaction(fn ->
       from(t in Transaction, where: t.id in [^tx_id, ^twin_id])
       |> Repo.update_all(
-        set: [transfer_key: link_id, updated_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+        set: [
+          transfer_key: link_id,
+          category_id: cat_id,
+          updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        ]
       )
     end)
 

@@ -194,7 +194,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
     end
 
     test "links source to existing unlinked mirror in destination account" do
-      create_transfer_category()
+      transfer_cat = create_transfer_category()
       source = account_fixture()
       destination = account_fixture()
       create_rule(source.id, destination.id, ["salary payment"])
@@ -227,6 +227,8 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
 
       refute is_nil(updated_tx.transfer_key)
       assert updated_tx.transfer_key == updated_mirror.transfer_key
+      assert updated_tx.category_id == transfer_cat.id
+      assert updated_mirror.category_id == transfer_cat.id
     end
 
     test "idempotency: does not create mirror if one already exists" do

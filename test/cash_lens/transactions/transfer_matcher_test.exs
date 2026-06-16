@@ -200,5 +200,35 @@ defmodule CashLens.Transactions.TransferMatcherTest do
     test "returns :no_match for transaction with nil id" do
       assert TransferMatcher.match_transfer(%Transaction{id: nil}) == :no_match
     end
+
+    test "categorizes both transactions as transfer when linking a matched pair", %{
+      category: cat,
+      acc1: a1,
+      acc2: a2
+    } do
+      tx1 =
+        transaction_fixture(%{
+          account_id: a1.id,
+          category_id: nil,
+          amount: Decimal.new("150.00"),
+          date: ~D[2026-03-01]
+        })
+
+      tx2 =
+        transaction_fixture(%{
+          account_id: a2.id,
+          category_id: cat.id,
+          amount: Decimal.new("-150.00"),
+          date: ~D[2026-03-01]
+        })
+
+      updated_tx1 = Repo.get(Transaction, tx1.id)
+      updated_tx2 = Repo.get(Transaction, tx2.id)
+
+      assert updated_tx1.transfer_key != nil
+      assert updated_tx1.transfer_key == updated_tx2.transfer_key
+      assert updated_tx1.category_id == cat.id
+      assert updated_tx2.category_id == cat.id
+    end
   end
 end
