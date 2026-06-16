@@ -394,5 +394,33 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       assert render(index_live) =~ "0 pares sugeridos"
       refute render(index_live) =~ "Confirmar"
     end
+
+    test "ignores suggestions where the expense is categorized as transfer", %{conn: conn} do
+      acc = account_fixture()
+      category = CashLens.CategoriesFixtures.category_fixture(%{name: "Transfer"})
+
+      _expense =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-40.00",
+          description: "Transfer expense",
+          date: ~D[2026-02-23],
+          category_id: category.id
+        })
+
+      _credit =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "40.00",
+          description: "Reimbursement credit",
+          date: ~D[2026-02-24]
+        })
+
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+
+      assert render(index_live) =~ "0 pares sugeridos"
+      refute render(index_live) =~ "Confirmar"
+    end
   end
 end

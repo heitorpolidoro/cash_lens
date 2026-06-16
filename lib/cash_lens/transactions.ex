@@ -1018,6 +1018,7 @@ defmodule CashLens.Transactions do
       where:
         a.reimbursement_status in ["pending", "requested"] or
           b.reimbursement_status in ["pending", "requested"],
+      where: is_nil(a.category_id) or a.category_id not in ^excluded_ids,
       where: is_nil(b.category_id) or b.category_id not in ^excluded_ids,
       where: acc_a.accepts_import == true and acc_b.accepts_import == true,
       order_by: [desc: a.date],
