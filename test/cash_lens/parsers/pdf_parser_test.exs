@@ -123,4 +123,163 @@ defmodule CashLens.PDFParserTest do
       assert tx.date == Date.utc_today()
     end
   end
+
+  describe "parse/2 (bradesco_card)" do
+    test "correctly parses Amazon Mastercard statement text" do
+      text = """
+      Fatura mensal
+      HEITOR POLIDORO
+      AMAZON MASTERCARD PLATINUM 5373.63**.****.8015
+
+      Total da fatura                                                                Vencimento
+      R$ 56,53                                                                       10/03/2026
+
+      Lançamentos
+      Data Descrição                                                        Valor R$
+      Nacionais em Reais (R$)
+      HEITOR POLIDORO                                            5373.63**.****.8015
+      28/01    AMAZON BR            SAO PAULO      BRA                           0,34        Demais faturas                                                             R$ 0,00
+      28/01    AMAZON BR            SAO PAULO      BRA                          52,15
+      01/02    IOF DIARIO                                                        0,01
+
+      Total da fatura em real                                                          56,53
+      """
+
+      transactions = PDFParser.parse(text, :bradesco_card)
+
+      assert length(transactions) == 3
+      [t1, t2, t3] = transactions
+
+      assert t1.description == "AMAZON BR SAO PAULO BRA"
+      assert t1.amount == Decimal.new("-0.34")
+      assert t1.date == ~D[2026-01-28]
+
+      assert t2.description == "AMAZON BR SAO PAULO BRA"
+      assert t2.amount == Decimal.new("-52.15")
+      assert t2.date == ~D[2026-01-28]
+
+      assert t3.description == "IOF DIARIO"
+      assert t3.amount == Decimal.new("-0.01")
+      assert t3.date == ~D[2026-02-01]
+    end
+
+    test "correctly parses small statement without Lançamentos header and with wrapped description" do
+      text = """
+      Aplicativo Bradesco Cartões
+      Data: 01/06/2026 - 08:46
+
+      Situação do Extrato: FECHADO
+
+      HEITOR POLIDORO - AMAZON MASTERCARD PLATINUM          XXXX.XXXX.XXXX.8015
+
+                                              Moeda de              Cotação
+       Data    Histórico                                 US$                      R$
+                                              origem                   US$
+
+       -       SALDO ANTERIOR                                                 166,47
+
+       27/01   JUROS DE MORA DE ATRASO                                           0,06
+
+               PAGAMENTO RECEBIDO -
+       13/01                                                                  -166,47
+               OBRI
+
+               MULTA CONTRATUAL DE
+       12/01                                                                     3,34
+               ATRAS
+
+               Total para HEITOR                                                  R$
+      """
+
+      transactions = PDFParser.parse(text, :bradesco_card)
+
+      assert length(transactions) == 3
+      [t1, t2, t3] = transactions
+
+      assert t1.description == "JUROS DE MORA DE ATRASO"
+      assert t1.amount == Decimal.new("-0.06")
+      assert t1.date == ~D[2026-01-27]
+
+      assert t2.description == "PAGAMENTO RECEBIDO - OBRI"
+      assert t2.amount == Decimal.new("166.47")
+      assert t2.date == ~D[2026-01-13]
+
+      assert t3.description == "MULTA CONTRATUAL DE ATRAS"
+      assert t3.amount == Decimal.new("-3.34")
+      assert t3.date == ~D[2026-01-12]
+    end
+
+    test "correctly parses Amex statement text" do
+      text = """
+      Fatura Mensal
+      AMEX GOLD CARD PRIME
+      Total da fatura                 Vencimento
+      R$ 1.099,28                  10/05/2026
+
+      Número do Cartão                      3747 XXXXXX 58225
+      Lançamentos
+
+      Data Histórico de Lançamentos               Cidade         US$
+      HEITOR LUIS POLIDORO                         Cartão 3747 XXXXXX 58225
+      11/04 CINEMARK COLINAS                      SAO JOSE DOS                           232,00       Compras                          R$ 1.239,08
+      27/04 SEGURO SUPERPROTEGIDO                                                           9,99       Rotativo                 14,99% 434,46% 481,28%               16,99%
+
+       Total para HEITOR LUIS POLIDORO                                                 1.099,28
+      """
+
+      transactions = PDFParser.parse(text, :bradesco_card)
+
+      assert length(transactions) == 2
+      [t1, t2] = transactions
+
+      assert t1.description == "CINEMARK COLINAS SAO JOSE DOS"
+      assert t1.amount == Decimal.new("-232.00")
+      assert t1.date == ~D[2026-04-11]
+
+      assert t2.description == "SEGURO SUPERPROTEGIDO"
+      assert t2.amount == Decimal.new("-9.99")
+      assert t2.date == ~D[2026-04-27]
+    end
+
+    test "correctly handles year boundary on December purchases" do
+      text = """
+      Fatura mensal
+      Vencimento
+      10/01/2026
+
+      Lançamentos
+      28/12    SOME PURCHASE                                                       100,00
+      02/01    OTHER PURCHASE                                                       50,00
+      Total para HEITOR POLIDORO
+      """
+
+      transactions = PDFParser.parse(text, :bradesco_card)
+      assert length(transactions) == 2
+      [t1, t2] = transactions
+
+      assert t1.description == "SOME PURCHASE"
+      assert t1.amount == Decimal.new("-100.00")
+      assert t1.date == ~D[2025-12-28]
+
+      assert t2.description == "OTHER PURCHASE"
+      assert t2.amount == Decimal.new("-50.00")
+      assert t2.date == ~D[2026-01-02]
+    end
+
+    test "correctly parses 2026-01-Amazon statement layout" do
+      text = """
+                                                                                                                                                                                                                                            10/01/2026
+      Lançamentos
+      09/12    AmazonPrimeBR          SAO PAULO      BRA                       166,80        Demais faturas                                                             R$ 0,00
+      """
+
+      transactions = PDFParser.parse(text, :bradesco_card)
+
+      assert length(transactions) == 1
+      tx = List.first(transactions)
+      assert tx.description == "AmazonPrimeBR SAO PAULO BRA"
+      assert tx.amount == Decimal.new("-166.80")
+      assert tx.date == ~D[2025-12-09]
+    end
+  end
 end

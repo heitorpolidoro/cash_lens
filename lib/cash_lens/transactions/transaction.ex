@@ -212,6 +212,8 @@ defmodule CashLens.Transactions.Transaction do
     |> String.trim()
     |> String.upcase()
     |> strip_diacritics()
+    |> String.replace(~r/(.{3,})\s*BR$/u, "\\1")
+    |> String.trim()
   end
 
   # Decomposes accented characters (NFD) and drops the combining marks, e.g.

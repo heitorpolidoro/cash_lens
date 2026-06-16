@@ -7,7 +7,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="py-6 space-y-8 relative">
+    <div class="py-6 space-y-8 relative max-w-4xl mx-auto">
       <div
         :if={MapSet.size(@selected_ids) > 0}
         class="sticky top-4 z-30 flex items-center justify-between gap-4 bg-primary/90 backdrop-blur-md text-primary-content px-8 py-4 rounded-3xl border border-primary/20 shadow-2xl animate-in slide-in-from-top-4"
@@ -31,10 +31,24 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         </div>
       </div>
 
-      <.header>
-        Gerenciamento de Reembolsos
-        <:subtitle>Acompanhe despesas reembolsáveis e reconcilie com recebimentos.</:subtitle>
-      </.header>
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-black uppercase tracking-tight">Gerenciamento de Reembolsos</h1>
+          <p class="text-xs opacity-50 mt-1">
+            {length(@suggestions)} pares sugeridos · {length(@unmatched)} despesas a reembolsar
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            :if={@suggestions != []}
+            phx-click="confirm_all"
+            class="btn btn-primary btn-sm rounded-xl"
+            data-confirm={"Confirmar todos os #{length(@suggestions)} pares sugeridos?"}
+          >
+            <.icon name="hero-check-circle" class="size-4 mr-1" /> Confirmar Todos
+          </button>
+        </div>
+      </div>
       
     <!-- Macro Summary -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -60,203 +74,282 @@ defmodule CashLensWeb.ReimbursementLive.Index do
           </div>
         </div>
       </div>
-      
-    <!-- PENDING/REQUESTED LIST -->
-      <div class="card bg-base-100 shadow-sm border border-base-300 overflow-hidden">
-        <div class="card-body p-0">
-          <div class="p-6 border-b border-base-200 flex justify-between items-center bg-base-200/10">
-            <h2 class="text-sm font-black uppercase opacity-50">Lista de Despesas Reembolsáveis</h2>
-            <div class="flex gap-2">
-              <span class="badge badge-warning badge-xs text-[8px] uppercase">Pending</span>
-              <span class="badge badge-info badge-xs text-[8px] uppercase">Requested</span>
-              <span class="badge badge-success badge-xs text-[8px] uppercase">Paid</span>
-            </div>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="table table-zebra w-full text-xs">
-              <thead class="bg-base-200/50">
-                <tr>
-                  <th class="w-12"></th>
-                  <th>Data</th>
-                  <th>Descrição</th>
-                  <th>Conta</th>
-                  <th>Status</th>
-                  <th class="text-right">Valor</th>
-                  <th class="text-center">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                <%= for tx <- @all_reimbursable_list do %>
-                  <tr class={["hover group", MapSet.member?(@selected_ids, tx.id) && "bg-primary/5"]}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        class="checkbox checkbox-primary checkbox-sm"
-                        checked={MapSet.member?(@selected_ids, tx.id)}
-                        phx-click="toggle_selection"
-                        phx-value-id={tx.id}
-                      />
-                    </td>
-                    <td class="whitespace-nowrap font-medium">{format_date(tx.date)}</td>
-                    <td class="font-bold max-w-xs truncate">{tx.description}</td>
-                    <td class="opacity-60 uppercase font-bold text-[10px] whitespace-nowrap">
-                      {tx.account.name}
-                    </td>
-                    <td>
-                      <div class={[
-                        "badge badge-xs uppercase font-black text-[8px]",
-                        tx.reimbursement_status == "pending" && "badge-warning",
-                        tx.reimbursement_status == "requested" && "badge-info"
-                      ]}>
-                        {translate_reimbursement_status(tx.reimbursement_status, tx.amount)}
-                      </div>
-                    </td>
-                    <td class={[
-                      "text-right font-black whitespace-nowrap",
-                      if(Decimal.gt?(tx.amount, 0), do: "text-success", else: "text-error")
+
+      <%!-- 1. Suggested Pairs Table --%>
+      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-base-300 flex items-center justify-between">
+          <h2 class="font-black uppercase tracking-tight text-sm text-success flex items-center gap-1.5">
+            <.icon name="hero-sparkles" class="size-4 text-success" /> Pares Sugeridos
+          </h2>
+          <span class="text-xs opacity-50">{length(@suggestions)} prontos para confirmar</span>
+        </div>
+
+        <div :if={@suggestions == []} class="px-6 py-12 text-center opacity-40 text-sm italic">
+          Sem sugestões automáticas no momento.
+        </div>
+
+        <table :if={@suggestions != []} class="table table-sm w-full text-xs">
+          <thead class="bg-base-200/50">
+            <tr>
+              <th class="w-24">Data</th>
+              <th>Transação</th>
+              <th class="text-center w-28">Valor</th>
+              <th class="w-20"></th>
+            </tr>
+          </thead>
+          <%= for {expense, credit} <- @suggestions do %>
+            <tbody class="hover:bg-base-200/40 border-b border-base-200 last:border-b-0">
+              <tr class="border-b-0">
+                <td class="font-mono opacity-60 whitespace-nowrap align-middle">
+                  {format_date(expense.date)}
+                </td>
+                <td class="pb-1 border-none">
+                  <div class="flex items-center gap-1.5">
+                    <span class="badge badge-error badge-outline badge-xs px-1 text-[9px] h-3.5 uppercase font-bold">
+                      Despesa
+                    </span>
+                    <span class="font-semibold">{expense.description}</span>
+                    <span class="opacity-50 text-[10px]">
+                      ({expense.account && "#{expense.account.bank} - #{expense.account.name}"})
+                    </span>
+                    <span :if={expense.category} class="badge badge-ghost badge-xs text-[9px]">
+                      {expense.category.name}
+                    </span>
+                  </div>
+                </td>
+                <td
+                  rowspan="2"
+                  class="text-center align-middle font-mono font-black whitespace-nowrap text-success"
+                >
+                  {format_currency(credit.amount)}
+                </td>
+                <td rowspan="2" class="text-right align-middle">
+                  <button
+                    class="btn btn-success btn-xs rounded-lg font-bold"
+                    phx-click="confirm_pair"
+                    phx-value-a={expense.id}
+                    phx-value-b={credit.id}
+                  >
+                    <.icon name="hero-check" class="size-3" /> Confirmar
+                  </button>
+                </td>
+              </tr>
+              <tr class="border-t-0">
+                <td class="font-mono opacity-60 whitespace-nowrap align-middle">
+                  {format_date(credit.date)}
+                </td>
+                <td class="pt-1 pb-2 border-none">
+                  <div class="flex items-center gap-1.5">
+                    <span class="badge badge-success badge-outline badge-xs px-1 text-[9px] h-3.5 uppercase font-bold">
+                      Crédito
+                    </span>
+                    <span class="font-semibold">{credit.description}</span>
+                    <span class="opacity-50 text-[10px]">
+                      ({credit.account && "#{credit.account.bank} - #{credit.account.name}"})
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          <% end %>
+        </table>
+      </div>
+
+      <%!-- 2. Unmatched/Pending Table --%>
+      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-base-300 flex items-center justify-between">
+          <h2 class="font-black uppercase tracking-tight text-sm">Despesas a Reembolsar</h2>
+          <span class="text-xs opacity-50">{length(@unmatched)} pendentes</span>
+        </div>
+
+        <div :if={@unmatched == []} class="px-6 py-12 text-center opacity-40 text-sm italic">
+          Nenhuma despesa pendente de reembolso!
+        </div>
+
+        <div :if={@unmatched != []} class="overflow-x-auto">
+          <table class="table table-zebra table-xs w-full text-[11px] leading-snug">
+            <thead class="bg-base-200/50">
+              <tr>
+                <th class="w-12"></th>
+                <th>Data</th>
+                <th>Descrição</th>
+                <th>Conta</th>
+                <th>Status</th>
+                <th class="text-right">Valor</th>
+                <th class="text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <%= for tx <- @unmatched do %>
+                <tr class={["hover group", MapSet.member?(@selected_ids, tx.id) && "bg-primary/5"]}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-primary checkbox-sm rounded-lg"
+                      checked={MapSet.member?(@selected_ids, tx.id)}
+                      phx-click="toggle_selection"
+                      phx-value-id={tx.id}
+                    />
+                  </td>
+                  <td class="whitespace-nowrap font-medium">{format_date(tx.date)}</td>
+                  <td class="font-bold max-w-xs truncate">{tx.description}</td>
+                  <td class="opacity-60 uppercase font-bold text-[9px] whitespace-nowrap leading-tight">
+                    <div>{tx.account.bank}</div>
+                    <div class="opacity-70">{tx.account.name}</div>
+                  </td>
+                  <td>
+                    <div class={[
+                      "badge badge-xs uppercase font-black text-[8px] rounded",
+                      tx.reimbursement_status == "pending" && "badge-warning",
+                      tx.reimbursement_status == "requested" && "badge-info"
                     ]}>
-                      {format_currency(tx.amount)}
-                    </td>
-                    <td class="text-center">
-                      <div class="flex justify-center gap-1">
+                      {translate_reimbursement_status(tx.reimbursement_status, tx.amount)}
+                    </div>
+                  </td>
+                  <td class="text-right font-black text-error whitespace-nowrap">
+                    {format_currency(tx.amount)}
+                  </td>
+                  <td class="text-center">
+                    <div class="flex justify-center gap-1">
+                      <button
+                        phx-click="link_single_expense"
+                        phx-value-id={tx.id}
+                        class="btn btn-ghost btn-xs text-success"
+                        title="Vincular Recebimento"
+                      >
+                        <.icon name="hero-link" class="size-4" />
+                      </button>
+                      <%= if tx.reimbursement_status == "pending" do %>
                         <button
-                          phx-click="link_single_expense"
+                          phx-click="mark_requested"
                           phx-value-id={tx.id}
-                          class="btn btn-ghost btn-xs text-success"
-                          title="Vincular Recebimento"
+                          class="btn btn-ghost btn-xs text-info"
+                          title="Marcar como Solicitado"
                         >
-                          <.icon name="hero-link" class="size-4" />
+                          <.icon name="hero-paper-airplane" class="size-4" />
                         </button>
-                        <%= if tx.reimbursement_status == "pending" do %>
-                          <button
-                            phx-click="mark_requested"
-                            phx-value-id={tx.id}
-                            class="btn btn-ghost btn-xs text-info"
-                            title="Marcar como Solicitado"
-                          >
-                            <.icon name="hero-paper-airplane" class="size-4" />
-                          </button>
-                        <% end %>
-                        <%= if tx.reimbursement_status == "requested" do %>
-                          <button
-                            phx-click="mark_pending"
-                            phx-value-id={tx.id}
-                            class="btn btn-ghost btn-xs text-warning opacity-50 hover:opacity-100"
-                            title="Reverter para Pendente"
-                          >
-                            <.icon name="hero-arrow-uturn-left" class="size-4" />
-                          </button>
-                        <% end %>
+                      <% end %>
+                      <%= if tx.reimbursement_status == "requested" do %>
                         <button
-                          phx-click="remove_reimbursable"
+                          phx-click="mark_pending"
                           phx-value-id={tx.id}
-                          class="btn btn-ghost btn-xs text-error opacity-30 hover:opacity-100"
-                          title="Não é reembolsável"
+                          class="btn btn-ghost btn-xs text-warning opacity-50 hover:opacity-100"
+                          title="Reverter para Pendente"
                         >
-                          <.icon name="hero-x-mark" class="size-4" />
+                          <.icon name="hero-arrow-uturn-left" class="size-4" />
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                <% end %>
-                <%= if Enum.empty?(@all_reimbursable_list) do %>
-                  <tr>
-                    <td colspan="7" class="text-center py-20 opacity-30 italic text-sm">
-                      Nenhuma despesa reembolsável encontrada.
-                    </td>
-                  </tr>
-                <% end %>
-              </tbody>
-            </table>
-          </div>
+                      <% end %>
+                      <button
+                        phx-click="remove_reimbursable"
+                        phx-value-id={tx.id}
+                        class="btn btn-ghost btn-xs text-error opacity-30 hover:opacity-100"
+                        title="Não é reembolsável"
+                      >
+                        <.icon name="hero-x-mark" class="size-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
         </div>
       </div>
-      
-    <!-- HISTORY -->
-      <div class="card bg-base-100 shadow-sm border border-base-300 overflow-hidden">
-        <div class="card-body p-0">
-          <div class="p-6 border-b border-base-200 bg-success/5">
-            <h2 class="text-sm font-black uppercase text-success">
-              Histórico de Reembolsos Concluídos
-            </h2>
-          </div>
-          <div class="p-6 space-y-4">
-            <%= if Enum.empty?(@paid_groups) do %>
-              <p class="text-center py-10 opacity-30 italic text-sm">
-                Nenhum reembolso concluído ainda.
-              </p>
-            <% end %>
 
+      <%!-- 3. Linked/History Table --%>
+      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-base-300 flex items-center justify-between">
+          <h2 class="font-black uppercase tracking-tight text-sm">Reembolsos Vinculados</h2>
+          <span class="text-xs opacity-50">{length(Map.keys(@paid_groups))} grupos concluídos</span>
+        </div>
+
+        <div :if={Enum.empty?(@paid_groups)} class="px-6 py-12 text-center opacity-40 text-sm italic">
+          Nenhum reembolso vinculado ainda.
+        </div>
+
+        <table
+          :if={!Enum.empty?(@paid_groups)}
+          class="table table-zebra table-xs w-full text-[11px] leading-snug"
+        >
+          <thead class="bg-base-200/50">
+            <tr>
+              <th>Despesas</th>
+              <th>Reembolsos</th>
+              <th class="w-20"></th>
+            </tr>
+          </thead>
+          <tbody>
             <%= for {link_key, txs} <- @paid_groups do %>
-              <% credit = Enum.find(txs, &Decimal.gt?(&1.amount, 0))
-              expenses = Enum.filter(txs, &Decimal.lt?(&1.amount, 0)) %>
-              <div class="p-4 bg-base-200/50 rounded-2xl border border-base-300 flex flex-col md:flex-row gap-6 justify-between items-center group">
-                <div class="flex-1 flex flex-col md:flex-row gap-6 items-center w-full">
-                  <!-- Expenses Side -->
-                  <div class="flex-1 space-y-1 w-full">
-                    <p class="text-[8px] font-black uppercase opacity-40">Despesas Cobertas</p>
-                    <%= for ex <- expenses do %>
-                      <div class="flex justify-between items-center bg-base-100 p-2 rounded-lg border border-base-300/50">
-                        <div class="flex flex-col">
-                          <span class="text-[10px] font-bold truncate max-w-[150px]">
-                            {ex.description}
-                          </span>
-                          <span class="text-[8px] opacity-50 uppercase font-black">
+              <% credit_txs = Enum.filter(txs, &Decimal.gt?(&1.amount, 0))
+              expense_txs = Enum.filter(txs, &Decimal.lt?(&1.amount, 0)) %>
+              <tr class="hover:bg-base-200/40 border-b border-base-200 last:border-b-0 align-middle">
+                <td class="space-y-2 align-top py-3">
+                  <%= for ex <- expense_txs do %>
+                    <div class="py-1 border-b border-base-200/50 last:border-b-0">
+                      <div class="flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                          <span class="font-mono opacity-50 shrink-0 text-[10px]">
                             {format_date(ex.date)}
                           </span>
+                          <span class="font-semibold truncate max-w-[150px]" title={ex.description}>
+                            {ex.description}
+                          </span>
                         </div>
-                        <span class="text-[10px] font-black text-error">
+                        <span class="text-error font-mono font-bold shrink-0">
                           {format_currency(ex.amount)}
                         </span>
                       </div>
-                    <% end %>
-                  </div>
-
-                  <div class="hidden md:block">
-                    <.icon name="hero-arrow-long-right" class="size-6 opacity-20" />
-                  </div>
-                  
-    <!-- Credit Side -->
-                  <div class="flex-1 space-y-1 w-full">
-                    <p class="text-[8px] font-black uppercase opacity-40">Recebimento</p>
-                    <div
-                      :if={credit}
-                      class="flex justify-between items-center bg-success/10 p-2 rounded-lg border border-success/20"
-                    >
-                      <div class="flex flex-col">
-                        <span class="text-[10px] font-black text-success truncate max-w-[150px]">
-                          {credit.description}
-                        </span>
-                        <span class="text-[8px] text-success/60 font-black uppercase">
-                          {format_date(credit.date)}
+                      <div class="flex items-center gap-1.5 text-[9px] opacity-50 mt-0.5">
+                        <span>{ex.account && "#{ex.account.bank} - #{ex.account.name}"}</span>
+                        <span :if={ex.category} class="badge badge-ghost badge-xs text-[8px] h-3 px-1">
+                          {ex.category.name}
                         </span>
                       </div>
-                      <span class="text-[10px] font-black text-success">
-                        {format_currency(credit.amount)}
-                      </span>
                     </div>
-                    <p :if={!credit} class="text-[10px] text-warning italic">
-                      Crédito não encontrado ou excluído.
-                    </p>
-                  </div>
-                </div>
-
-                <div class="flex flex-col items-end gap-2 border-t md:border-t-0 md:border-l border-base-300 pt-4 md:pt-0 md:pl-6">
-                  <span class="text-[9px] font-black opacity-30 uppercase">
-                    Link: {String.slice(link_key, 0..7)}
-                  </span>
+                  <% end %>
+                </td>
+                <td class="space-y-2 align-top py-3">
+                  <%= for credit <- credit_txs do %>
+                    <div class="py-1 border-b border-base-200/50 last:border-b-0">
+                      <div class="flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                          <span class="font-mono opacity-50 shrink-0 text-[10px]">
+                            {format_date(credit.date)}
+                          </span>
+                          <span
+                            class="font-semibold truncate max-w-[150px] text-success"
+                            title={credit.description}
+                          >
+                            {credit.description}
+                          </span>
+                        </div>
+                        <span class="text-success font-mono font-bold shrink-0">
+                          {format_currency(credit.amount)}
+                        </span>
+                      </div>
+                      <div class="text-[9px] opacity-50 mt-0.5">
+                        {credit.account && "#{credit.account.bank} - #{credit.account.name}"}
+                      </div>
+                    </div>
+                  <% end %>
+                  <p :if={Enum.empty?(credit_txs)} class="text-[10px] text-warning italic">
+                    Crédito não encontrado ou excluído.
+                  </p>
+                </td>
+                <td class="text-right align-middle">
                   <button
+                    class="btn btn-ghost btn-xs text-error font-bold"
                     phx-click="unlink_reimbursement"
                     phx-value-link-key={link_key}
-                    class="btn btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100 transition-opacity"
+                    data-confirm="Desvincular este reembolso?"
                   >
-                    <.icon name="hero-link-slash" class="size-4 mr-1" /> Desvincular
+                    <.icon name="hero-link-slash" class="size-3 mr-1" /> Desvincular
                   </button>
-                </div>
-              </div>
+                </td>
+              </tr>
             <% end %>
-          </div>
-        </div>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -269,7 +362,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
 
         <%!-- Expense being reimbursed --%>
         <div class="bg-base-200 rounded-xl p-3 mb-4 space-y-1">
-          <%= for tx <- Enum.filter(@all_reimbursable_list, &MapSet.member?(@selected_ids, &1.id)) do %>
+          <%= for tx <- Enum.filter(@unmatched, &MapSet.member?(@selected_ids, &1.id)) do %>
             <div class="flex items-center justify-between text-xs">
               <div>
                 <span class="opacity-50 mr-2">{format_date(tx.date)}</span>
@@ -388,7 +481,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
      |> assign(:linker_search, "")
      |> assign(:selected_credit_ids, MapSet.new())
      |> assign(:total_credits_selected, Decimal.new("0"))
-     |> fetch_data()}
+     |> load_data()}
   end
 
   @impl true
@@ -400,9 +493,8 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         MapSet.put(socket.assigns.selected_ids, id)
       end
 
-    # Calculate total
     total =
-      socket.assigns.all_reimbursable_list
+      socket.assigns.unmatched
       |> Enum.filter(&MapSet.member?(new_selection, &1.id))
       |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
       |> Decimal.abs()
@@ -416,24 +508,44 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   @impl true
+  def handle_event("confirm_pair", %{"a" => id_a, "b" => id_b}, socket) do
+    {:ok, _} = Transactions.link_reimbursement_pair(id_a, id_b)
+    {:noreply, socket |> put_flash(:success, "Reembolso vinculado com sucesso!") |> load_data()}
+  end
+
+  @impl true
+  def handle_event("confirm_all", _params, socket) do
+    Enum.each(socket.assigns.suggestions, fn {a, b} ->
+      Transactions.link_reimbursement_pair(a.id, b.id)
+    end)
+
+    count = length(socket.assigns.suggestions)
+
+    {:noreply,
+     socket
+     |> put_flash(:success, "#{count} reembolsos vinculados com sucesso!")
+     |> load_data()}
+  end
+
+  @impl true
   def handle_event("mark_requested", %{"id" => id}, socket) do
     tx = Transactions.get_transaction!(id)
     {:ok, _} = Transactions.update_transaction(tx, %{reimbursement_status: "requested"})
-    {:noreply, fetch_data(socket)}
+    {:noreply, load_data(socket)}
   end
 
   @impl true
   def handle_event("mark_pending", %{"id" => id}, socket) do
     tx = Transactions.get_transaction!(id)
     {:ok, _} = Transactions.update_transaction(tx, %{reimbursement_status: "pending"})
-    {:noreply, fetch_data(socket)}
+    {:noreply, load_data(socket)}
   end
 
   @impl true
   def handle_event("remove_reimbursable", %{"id" => id}, socket) do
     tx = Transactions.get_transaction!(id)
     {:ok, _} = Transactions.update_transaction(tx, %{reimbursement_status: nil})
-    {:noreply, fetch_data(socket)}
+    {:noreply, load_data(socket)}
   end
 
   @impl true
@@ -441,7 +553,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     new_selection = MapSet.new([id])
 
     total =
-      socket.assigns.all_reimbursable_list
+      socket.assigns.unmatched
       |> Enum.filter(&(&1.id == id))
       |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
       |> Decimal.abs()
@@ -461,7 +573,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     Transactions.unlink_reimbursement_by_key(link_key)
 
     {:noreply,
-     socket |> put_flash(:success, "Reembolso desvinculado com sucesso.") |> fetch_data()}
+     socket |> put_flash(:success, "Reembolso desvinculado com sucesso.") |> load_data()}
   end
 
   @impl true
@@ -507,7 +619,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     link_key = Ecto.UUID.generate()
 
     expense =
-      socket.assigns.all_reimbursable_list
+      socket.assigns.unmatched
       |> Enum.find(&MapSet.member?(selected_expense_ids, &1.id))
 
     cat_id = expense && expense.category_id
@@ -542,7 +654,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
        :success,
        "#{MapSet.size(selected_credit_ids)} crédito(s) vinculado(s) à despesa!"
      )
-     |> fetch_data()}
+     |> load_data()}
   end
 
   @impl true
@@ -554,12 +666,14 @@ defmodule CashLensWeb.ReimbursementLive.Index do
      |> assign(:total_credits_selected, Decimal.new("0"))}
   end
 
-  defp fetch_data(socket) do
+  defp load_data(socket) do
+    suggestions = Transactions.list_reimbursement_suggestions()
+    unmatched = Transactions.list_unmatched_reimbursements_without_suggestion()
+    linked = Transactions.list_linked_reimbursement_pairs()
+
     pending = Transactions.list_all_transactions(%{"reimbursement_status" => "pending"})
     requested = Transactions.list_all_transactions(%{"reimbursement_status" => "requested"})
     paid = Transactions.list_all_transactions(%{"reimbursement_status" => "paid"})
-
-    all_reimbursable = (pending ++ requested) |> Enum.sort_by(& &1.date, {:asc, Date})
 
     paid_groups =
       paid
@@ -580,7 +694,9 @@ defmodule CashLensWeb.ReimbursementLive.Index do
       end)
 
     socket
-    |> assign(:all_reimbursable_list, all_reimbursable)
+    |> assign(:suggestions, suggestions)
+    |> assign(:unmatched, unmatched)
+    |> assign(:linked, linked)
     |> assign(:paid_groups, paid_groups)
     |> assign(:total_pending, total_pending)
     |> assign(:total_requested, total_requested)
@@ -595,11 +711,10 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     search = String.downcase(socket.assigns.linker_search)
 
     expense_date =
-      socket.assigns.all_reimbursable_list
+      socket.assigns.unmatched
       |> Enum.find(&MapSet.member?(socket.assigns.selected_ids, &1.id))
       |> then(&(&1 && &1.date))
 
-    # Pass description search to DB; filter amount matches in memory
     desc_search = if Decimal.parse(search) == :error, do: search, else: ""
     all_credits = Transactions.list_reimbursement_credit_candidates(desc_search)
 

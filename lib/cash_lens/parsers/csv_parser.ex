@@ -11,6 +11,7 @@ defmodule CashLens.Parsers.CSVParser do
   Parses a CSV string. Supported formats:
   - `:bradesco_csv` — Bradesco bank statement (semicolon-separated, BOM prefix)
   - `:bb` — Banco do Brasil (comma or semicolon)
+  - `:mercado_pago_csv` — Mercado Pago bank statement (semicolon-separated)
   """
   def parse(csv_content, :bradesco_csv) do
     csv_content
@@ -18,6 +19,15 @@ defmodule CashLens.Parsers.CSVParser do
     |> Semicolon.parse_string(skip_headers: false)
     |> Enum.drop_while(&(not bradesco_date_row?(&1)))
     |> Enum.map(&parse_bradesco_row/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  def parse(csv_content, :mercado_pago_csv) do
+    csv_content
+    |> Semicolon.parse_string(skip_headers: false)
+    |> Enum.drop_while(&(not mercado_pago_header_row?(&1)))
+    |> Enum.drop(1)
+    |> Enum.map(&parse_mercado_pago_row/1)
     |> Enum.reject(&is_nil/1)
   end
 
@@ -217,6 +227,45 @@ defmodule CashLens.Parsers.CSVParser do
     case Decimal.cast(clean_string) do
       {:ok, decimal} -> decimal
       :error -> Decimal.new("0")
+    end
+  end
+
+  # --- Mercado Pago helpers ---
+
+  defp mercado_pago_header_row?([first | _]) do
+    String.trim(first || "") == "RELEASE_DATE"
+  end
+
+  defp mercado_pago_header_row?(_), do: false
+
+  defp parse_mercado_pago_row([date_str, type_str, _ref_id, amount_str | _]) do
+    date = parse_dash_date(String.trim(date_str))
+    amount = parse_br_amount(amount_str)
+    clean_desc = String.trim(type_str)
+
+    if is_nil(date) or Decimal.eq?(amount, Decimal.new("0")) do
+      nil
+    else
+      %{date: date, time: nil, description: clean_desc, amount: amount}
+    end
+  end
+
+  defp parse_mercado_pago_row(_), do: nil
+
+  defp parse_dash_date(date_string) do
+    case String.split(date_string, "-") do
+      [d, m, y] ->
+        with {d_i, ""} <- Integer.parse(d),
+             {m_i, ""} <- Integer.parse(m),
+             {y_i, ""} <- Integer.parse(y),
+             {:ok, date} <- Date.new(y_i, m_i, d_i) do
+          date
+        else
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 end

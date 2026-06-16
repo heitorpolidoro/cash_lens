@@ -159,10 +159,13 @@ defmodule CashLens.Transactions.TransactionTest do
       Transaction.dedup_key(Map.merge(base, attrs))
     end
 
-    test "is invariant to amount scale, whitespace, case and diacritics" do
+    test "is invariant to amount scale, whitespace, case, diacritics and trailing BR suffix" do
       assert key(%{amount: Decimal.new("100")}) == key(%{amount: Decimal.new("100.00")})
       assert key(%{description: "  mercado   x "}) == key(%{description: "MERCADO X"})
       assert key(%{description: "MÉRCÁDO X"}) == key(%{description: "MERCADO X"})
+      assert key(%{description: "AMAZON BR"}) == key(%{description: "AMAZON"})
+      assert key(%{description: "AMAZONBR"}) == key(%{description: "AMAZON"})
+      assert key(%{description: "BR"}) == key(%{description: "BR"})
     end
 
     test "absent/nil time normalizes to the stable 00:00:00 default" do

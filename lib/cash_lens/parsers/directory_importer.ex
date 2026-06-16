@@ -35,7 +35,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
 
     result =
       account_dirs
-      |> Enum.reduce(%Result{}, fn dir, acc -> import_account_folder(dir, acc, emit) end)
+      |> Enum.reduce(%Result{}, fn dir, acc -> import_account_folder(dir, path, acc, emit) end)
       |> add_skipped_warnings(skipped_dirs)
 
     unless Keyword.get(opts, :skip_installments, false) do
@@ -45,19 +45,62 @@ defmodule CashLens.Parsers.DirectoryImporter do
     result
   end
 
-  # A path that itself has a `.account` is a single account folder. Otherwise its
-  # immediate subdirectories are split into those with a `.account` (to import)
-  # and those without (skipped with a warning).
+  # A path that itself has a `.account` is a single account folder. Otherwise,
+  # it recursively traverses subdirectories looking for `.account` files.
+  # Subfolders without `.account` that contain supported files are skipped with a warning.
   defp classify(path) do
     if AccountFile.exists?(path) do
       {[path], []}
     else
-      path
-      |> File.ls!()
-      |> Enum.map(&Path.join(path, &1))
-      |> Enum.filter(&File.dir?/1)
-      |> Enum.sort()
-      |> Enum.split_with(&AccountFile.exists?/1)
+      {account_dirs, skipped_dirs} = traverse(path, [], [])
+      {Enum.reverse(account_dirs), Enum.reverse(skipped_dirs)}
+    end
+  end
+
+  defp traverse(path, account_dirs, skipped_dirs) do
+    if AccountFile.exists?(path) do
+      {[path | account_dirs], skipped_dirs}
+    else
+      skipped_dirs = maybe_warn_skipped_dir(path, skipped_dirs)
+
+      case File.ls(path) do
+        {:ok, items} ->
+          traverse_children(path, items, account_dirs, skipped_dirs)
+
+        _ ->
+          {account_dirs, skipped_dirs}
+      end
+    end
+  end
+
+  defp traverse_children(path, items, account_dirs, skipped_dirs) do
+    items
+    |> Enum.map(&Path.join(path, &1))
+    |> Enum.filter(&File.dir?/1)
+    |> Enum.sort()
+    |> Enum.reduce({account_dirs, skipped_dirs}, fn subdir, {acc_dirs, sk_dirs} ->
+      traverse(subdir, acc_dirs, sk_dirs)
+    end)
+  end
+
+  defp maybe_warn_skipped_dir(path, skipped_dirs) do
+    if has_supported_files?(path) do
+      [path | skipped_dirs]
+    else
+      skipped_dirs
+    end
+  end
+
+  defp has_supported_files?(path) do
+    case File.ls(path) do
+      {:ok, files} ->
+        Enum.any?(files, fn f ->
+          full_path = Path.join(path, f)
+          File.regular?(full_path) and extname(full_path) in @supported_extensions
+        end)
+
+      _ ->
+        false
     end
   end
 
@@ -67,10 +110,10 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end)
   end
 
-  defp import_account_folder(dir, result, emit) do
+  defp import_account_folder(dir, root_path, result, emit) do
     with {:ok, %{bank: bank, account: name}} <- AccountFile.read(dir),
          {:ok, account} <- resolve_account(bank, name) do
-      do_import(dir, account, bank, name, result, emit)
+      do_import(dir, root_path, account, bank, name, result, emit)
     else
       {:error, reason} ->
         add_error(result, "pasta #{Path.basename(dir)}/ — #{reason}")
@@ -85,8 +128,8 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end
   end
 
-  defp do_import(dir, account, bank, name, result, emit) do
-    label = "#{bank} / #{name}"
+  defp do_import(dir, root_path, account, bank, name, result, emit) do
+    label = format_label(dir, root_path)
     expected = Ingestor.expected_extensions(account.parser_type)
     {matching, mismatched} = partition_files(dir, expected)
 
@@ -121,8 +164,23 @@ defmodule CashLens.Parsers.DirectoryImporter do
 
     emit.({:account_done, summary})
 
-    entry = Map.merge(summary, %{account: account, bank: bank, name: name})
+    entry = Map.merge(summary, %{account: account, bank: bank, name: name, folder_path: label})
     %{result | accounts: result.accounts ++ [entry]}
+  end
+
+  defp format_label(dir, root_path) do
+    basename = Path.basename(dir)
+
+    if String.match?(basename, ~r/^\d{4}$/) do
+      parent = Path.dirname(dir)
+      Path.join(Path.basename(parent), basename)
+    else
+      if dir == root_path do
+        Path.basename(dir)
+      else
+        Path.relative_to(dir, root_path)
+      end
+    end
   end
 
   defp partition_files(dir, expected) do

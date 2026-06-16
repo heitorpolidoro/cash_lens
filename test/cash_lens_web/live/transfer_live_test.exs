@@ -86,6 +86,73 @@ defmodule CashLensWeb.TransferLiveTest do
     assert html =~ "Confirmar Todos"
   end
 
+  test "lists suggestions for transactions without transfer category", %{
+    conn: conn,
+    acc_a: a,
+    acc_b: b
+  } do
+    t1 =
+      transaction_fixture(%{
+        account_id: a.id,
+        category_id: nil,
+        amount: "-150.00",
+        date: ~D[2026-03-01]
+      })
+
+    t2 =
+      transaction_fixture(%{
+        account_id: b.id,
+        category_id: nil,
+        amount: "150.00",
+        date: ~D[2026-03-01]
+      })
+
+    Repo.update_all(from(t in Transaction, where: t.id in [^t1.id, ^t2.id]),
+      set: [transfer_key: nil]
+    )
+
+    {:ok, _live, html} = live(conn, ~p"/transfers")
+
+    assert html =~ "R$ 150,00"
+    assert html =~ "BB - Conta A"
+    assert html =~ "BB - Conta B"
+  end
+
+  test "reapply_rules button reapplies transfer rules", %{
+    conn: conn,
+    acc_a: a,
+    acc_b: b
+  } do
+    _tx =
+      transaction_fixture(%{
+        account_id: a.id,
+        description: "reapply test rule",
+        category_id: nil,
+        amount: "-200.00"
+      })
+
+    {:ok, _rule} =
+      Transactions.create_transfer_rule(%{
+        label: "Ingest Rule",
+        description_patterns: ["reapply test rule"],
+        source_account_id: a.id,
+        destination_account_id: b.id,
+        create_mirror: true
+      })
+
+    {:ok, live, _html} = live(conn, ~p"/transfers")
+
+    refute render(live) =~ "R$ 200,00"
+
+    html =
+      live
+      |> element("button[phx-click='reapply_rules']")
+      |> render_click()
+
+    assert html =~ "Regras de transferência reaplicadas com sucesso!"
+    assert html =~ "R$ 200,00"
+  end
+
   test "confirm_pair links a suggested pair", %{conn: conn, transfer_cat: cat, acc_a: a, acc_b: b} do
     {out, inc} = suggested_pair(cat, a, b, ~D[2026-03-05])
 

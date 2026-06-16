@@ -68,6 +68,40 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
       assert updated_mirror.transfer_key == updated_tx.transfer_key
     end
 
+    test "does not create a mirror transaction when create_mirror is false" do
+      transfer_cat = create_transfer_category()
+      source = account_fixture()
+      destination = account_fixture()
+
+      {:ok, _rule} =
+        Repo.insert(%TransferRule{
+          description_patterns: ["salary payment"],
+          source_account_id: source.id,
+          destination_account_id: destination.id,
+          create_mirror: false
+        })
+
+      tx =
+        insert_raw_transaction(%{
+          account_id: source.id,
+          description: "Salary Payment",
+          amount: "1000.00",
+          date: ~D[2026-01-15]
+        })
+
+      mirrors = TransferRuleApplier.apply_rules([tx])
+
+      assert mirrors == []
+
+      # Source transaction should have transfer category but NO transfer_key
+      updated_tx = Repo.get!(Transaction, tx.id)
+      assert updated_tx.category_id == transfer_cat.id
+      assert updated_tx.transfer_key == nil
+
+      # No mirror transaction should exist in destination
+      assert Repo.all(from t in Transaction, where: t.account_id == ^destination.id) == []
+    end
+
     test "handles conflict gracefully when mirror already exists" do
       create_transfer_category()
       source = account_fixture()
@@ -116,6 +150,24 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           account_id: source.id,
           description: "salary payment",
           amount: "500.00",
+          date: ~D[2026-01-15]
+        })
+
+      mirrors = TransferRuleApplier.apply_rules([tx])
+      assert length(mirrors) == 1
+    end
+
+    test "matching supports substring contains" do
+      create_transfer_category()
+      source = account_fixture()
+      destination = account_fixture()
+      create_rule(source.id, destination.id, ["OUROCARD FACIL VISA"])
+
+      tx =
+        insert_raw_transaction(%{
+          account_id: source.id,
+          description: "Pagto cartão crédito - OUROCARD FACIL VISA",
+          amount: "-6114.94",
           date: ~D[2026-01-15]
         })
 

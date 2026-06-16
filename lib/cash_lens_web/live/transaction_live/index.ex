@@ -313,6 +313,7 @@ defmodule CashLensWeb.TransactionLive.Index do
         socket =
           socket
           |> assign(:pending_count, Transactions.count_pending_transactions())
+          |> calculate_summary()
           |> put_flash(:success, flash_msg)
           |> handle_bulk_suggestion(updated_tx, category_id)
           |> stream_update_transaction(updated_tx)
@@ -339,6 +340,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())
      |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> calculate_summary()
      |> put_flash(:success, "#{length(selected_items)} transações categorizadas!")
      |> stream(
        :transactions,
@@ -634,6 +636,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:confirm_modal, nil)
      |> stream_delete(:transactions, transaction)
+     |> calculate_summary()
      |> assign(:pending_count, Transactions.count_pending_transactions())}
   end
 
@@ -645,6 +648,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:confirm_modal, nil)
      |> stream(:transactions, [], reset: true)
+     |> calculate_summary()
      |> assign(:pending_count, 0)}
   end
 
@@ -671,6 +675,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:auto_categorizing, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> calculate_summary()
      |> put_flash(:success, "Regras aplicadas!")
      |> stream(
        :transactions,
@@ -684,6 +689,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:show_reimbursement_modal, false)
      |> put_flash(:success, "Reembolso vinculado e categorizado!")
+     |> calculate_summary()
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -706,6 +712,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_transfer_modal, false)
      |> assign(:show_quick_transfer_modal, false)
      |> put_flash(:success, message)
+     |> calculate_summary()
      |> stream(
        :transactions,
        Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
@@ -770,6 +777,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> calculate_summary()
      |> put_flash(:success, "Sucesso! #{count} transações importadas.")
      |> stream(
        :transactions,
@@ -787,6 +795,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> calculate_summary()
      |> put_flash(
        :info,
        "#{count} transações importadas. #{length(failed)} linhas ignoradas: #{failed_msg}"
@@ -819,6 +828,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> assign(:show_quick_category_modal, false)
       |> assign(:categories, Categories.list_categories())
       |> assign(:pending_count, Transactions.count_pending_transactions())
+      |> calculate_summary()
       |> put_flash(:success, "Categoria criada!")
 
     bulk_items = get_bulk_items_for_tx(tx, category.id)
@@ -968,14 +978,18 @@ defmodule CashLensWeb.TransactionLive.Index do
     origin_tx = socket.assigns.transfer_origin
     target_amount = Decimal.mult(origin_tx.amount, -1)
 
+    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat_id = if transfer_cat, do: transfer_cat.id, else: nil
+
     # 1. Broad search for opposite value transactions
-    # Criteria: same absolute amount (opposite signal), no transfer_key, different account
+    # Criteria: same absolute amount (opposite signal), no transfer_key, different account, uncategorized or transfer
     candidates =
       Transactions.list_transactions(%{"amount" => target_amount})
       |> Enum.filter(fn t ->
         is_nil(t.transfer_key) and
           t.id != origin_tx.id and
-          t.account_id != origin_tx.account_id
+          t.account_id != origin_tx.account_id and
+          (is_nil(t.category_id) or t.category_id == transfer_cat_id)
       end)
 
     # 2. Sort by date proximity to origin_tx

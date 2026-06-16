@@ -27,9 +27,17 @@ defmodule CashLens.Parsers.Ingestor do
         Logger.info("Using BB CSV Parser")
         CSVParser.parse(content, :bb)
 
+      "mercado_pago_csv" ->
+        Logger.info("Using Mercado Pago CSV Parser")
+        CSVParser.parse(content, :mercado_pago_csv)
+
       "sem_parar_pdf" ->
         Logger.info("Using Sem Parar PDF Parser")
         PDFParser.parse(content, :sem_parar)
+
+      "bradesco_cartao_pdf" ->
+        Logger.info("Using Bradesco Cartao PDF Parser")
+        PDFParser.parse(content, :bradesco_card)
 
       "standard_ofx" ->
         Logger.info("Using Standard OFX Parser")
@@ -50,9 +58,9 @@ defmodule CashLens.Parsers.Ingestor do
   """
   def expected_extensions(parser_type) do
     case parser_type do
-      t when t in ["bradesco_csv", "bb_csv"] -> [".csv"]
+      t when t in ["bradesco_csv", "bb_csv", "mercado_pago_csv"] -> [".csv"]
       t when t in ["ourocard_ofx", "standard_ofx"] -> [".ofx"]
-      "sem_parar_pdf" -> [".pdf"]
+      t when t in ["sem_parar_pdf", "bradesco_cartao_pdf"] -> [".pdf"]
       _ -> []
     end
   end
@@ -138,7 +146,8 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   defp prepare_content(content, account, file_path) do
-    if String.ends_with?(file_path, ".pdf") or account.parser_type == "sem_parar_pdf" do
+    if String.ends_with?(file_path, ".pdf") or
+         account.parser_type in ["sem_parar_pdf", "bradesco_cartao_pdf"] do
       converter = Application.get_env(:cash_lens, :pdf_converter)
 
       case converter.convert(file_path) do

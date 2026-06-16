@@ -238,6 +238,23 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       assert render(index_live) =~ "UniqueDebit"
     end
 
+    test "amount filter filters transactions", %{conn: conn} do
+      transaction_fixture(amount: "166.47", description: "First Tx")
+      transaction_fixture(amount: "-166.87", description: "Second Tx")
+      transaction_fixture(amount: "200.00", description: "Third Tx")
+
+      {:ok, index_live, _html} = live(conn, ~p"/transactions")
+
+      html =
+        index_live
+        |> form("#transaction-filters", %{"amount" => "166"})
+        |> render_change()
+
+      assert html =~ "First Tx"
+      assert html =~ "Second Tx"
+      refute html =~ "Third Tx"
+    end
+
     test "type_match credit via stream_update_transaction", %{conn: conn} do
       cat = category_fixture(name: "Food")
       credit_tx = transaction_fixture(amount: "100.00", description: "CreditTx")

@@ -93,7 +93,8 @@ defmodule Mix.Tasks.CashLens.Import do
     account_lines =
       Enum.flat_map(result.accounts, fn a ->
         extra = if a.skipped > 0, do: ", #{a.skipped} já existiam", else: ""
-        header = "✓ #{a.bank} / #{a.name}\t#{a.imported} importadas#{extra}"
+        path_label = Map.get(a, :folder_path) || "#{a.bank} / #{a.name}"
+        header = "✓ #{path_label}\t#{a.imported} importadas#{extra}"
 
         failures =
           Enum.map(a.failed, fn {file, reason} -> "   ✗ #{file}: #{reason}" end)

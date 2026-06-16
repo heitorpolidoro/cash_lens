@@ -68,9 +68,9 @@ defmodule CashLens.Transactions.AutoCategorizer do
             where: r.source_account_id == ^account_id,
             where:
               fragment(
-                "? = ANY(SELECT lower(p) FROM unnest(?) AS p)",
-                ^description_lower,
-                r.description_patterns
+                "EXISTS (SELECT 1 FROM unnest(?) AS p WHERE ? LIKE '%' || lower(p) || '%')",
+                r.description_patterns,
+                ^description_lower
               ),
             limit: 1
         )

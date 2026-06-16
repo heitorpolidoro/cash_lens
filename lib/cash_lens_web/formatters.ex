@@ -118,6 +118,8 @@ defmodule CashLensWeb.Formatters do
   """
   def translate_parser_type("bb_csv"), do: "Banco do Brasil (CSV)"
   def translate_parser_type("bradesco_csv"), do: "Bradesco (CSV)"
+  def translate_parser_type("bradesco_cartao_pdf"), do: "Bradesco Cartão (PDF)"
+  def translate_parser_type("mercado_pago_csv"), do: "Mercado Pago (CSV)"
   def translate_parser_type("ourocard_ofx"), do: "Ourocard (OFX)"
   def translate_parser_type("sem_parar_pdf"), do: "Sem Parar (PDF)"
   def translate_parser_type("standard_ofx"), do: "OFX Padrão"

@@ -83,5 +83,25 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
 
       assert result.category_id == transfer_category.id
     end
+
+    test "assigns transfer category when a transfer rule matches description via substring" do
+      import CashLens.AccountsFixtures
+      transfer_category = category_fixture(%{name: "Transfer", slug: "transfer"})
+      source = account_fixture()
+      dest = account_fixture()
+
+      {:ok, _rule} =
+        CashLens.Transactions.create_transfer_rule(%{
+          label: "Auto categorizer rule",
+          description_patterns: ["OUROCARD FACIL VISA"],
+          source_account_id: source.id,
+          destination_account_id: dest.id
+        })
+
+      params = %{description: "Pagto cartão crédito - OUROCARD FACIL VISA", account_id: source.id}
+      result = AutoCategorizer.categorize(params)
+
+      assert result.category_id == transfer_category.id
+    end
   end
 end

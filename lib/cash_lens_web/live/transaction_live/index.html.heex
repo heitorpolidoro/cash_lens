@@ -154,11 +154,6 @@
               <.icon name="hero-no-symbol" class="size-4" /> Regras de Exclusão
             </.link>
           </li>
-          <li>
-            <.link navigate={~p"/admin/transfer_rules"}>
-              <.icon name="hero-arrows-right-left" class="size-4" /> Regras de Transferência
-            </.link>
-          </li>
           <div class="divider my-1"></div>
           <li>
             <button type="button" phx-click="confirm_delete_all" class="text-error">
@@ -290,11 +285,10 @@
                   <span>Valor</span>
                   <div class="relative">
                     <input
-                      type="number"
+                      type="text"
                       name="amount"
                       value={@filters["amount"]}
                       placeholder="0.00"
-                      step="any"
                       class="input input-bordered input-xs font-normal w-full text-right pr-5"
                       phx-debounce="300"
                     />

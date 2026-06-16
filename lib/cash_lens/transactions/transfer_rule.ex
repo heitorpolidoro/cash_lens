@@ -7,6 +7,7 @@ defmodule CashLens.Transactions.TransferRule do
   schema "transfer_rules" do
     field :label, :string
     field :description_patterns, {:array, :string}, default: []
+    field :create_mirror, :boolean, default: true
 
     belongs_to :source_account, CashLens.Accounts.Account
     belongs_to :destination_account, CashLens.Accounts.Account
@@ -17,7 +18,13 @@ defmodule CashLens.Transactions.TransferRule do
   @doc false
   def changeset(transfer_rule, attrs) do
     transfer_rule
-    |> cast(attrs, [:label, :description_patterns, :source_account_id, :destination_account_id])
+    |> cast(attrs, [
+      :label,
+      :description_patterns,
+      :source_account_id,
+      :destination_account_id,
+      :create_mirror
+    ])
     |> validate_required([:source_account_id, :destination_account_id])
     |> validate_description_patterns()
     |> validate_accounts_differ()

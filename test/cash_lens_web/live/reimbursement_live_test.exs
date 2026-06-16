@@ -101,6 +101,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
         transaction_fixture(%{
           account_id: acc.id,
           reimbursement_status: "pending",
+          amount: "-120.50",
           description: "Pending item"
         })
 
@@ -156,14 +157,16 @@ defmodule CashLensWeb.ReimbursementLiveTest do
           account_id: acc.id,
           reimbursement_status: "pending",
           amount: "-50.00",
-          description: "Batch item"
+          description: "Batch item",
+          date: ~D[2026-02-23]
         })
 
       credit =
         transaction_fixture(%{
           account_id: acc.id,
           amount: "50.00",
-          description: "Batch credit"
+          description: "Batch credit",
+          date: ~D[2026-03-20]
         })
 
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
@@ -192,21 +195,24 @@ defmodule CashLensWeb.ReimbursementLiveTest do
           account_id: acc.id,
           reimbursement_status: "requested",
           amount: "-75.00",
-          description: "Expense 75"
+          description: "Expense 75",
+          date: ~D[2026-02-23]
         })
 
       credit_exact =
         transaction_fixture(%{
           account_id: acc.id,
           amount: "75.00",
-          description: "Exact match"
+          description: "Exact match",
+          date: ~D[2026-03-20]
         })
 
       _credit_other =
         transaction_fixture(%{
           account_id: acc.id,
           amount: "100.00",
-          description: "Other amount"
+          description: "Other amount",
+          date: ~D[2026-03-20]
         })
 
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
@@ -231,14 +237,16 @@ defmodule CashLensWeb.ReimbursementLiveTest do
           account_id: acc.id,
           reimbursement_status: "requested",
           amount: "-150.00",
-          description: "Travel expense"
+          description: "Travel expense",
+          date: ~D[2026-02-23]
         })
 
       credit =
         transaction_fixture(%{
           account_id: acc.id,
           amount: "150.00",
-          description: "Company refund"
+          description: "Company refund",
+          date: ~D[2026-03-20]
         })
 
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
@@ -269,6 +277,95 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       updated_credit = CashLens.Transactions.get_transaction!(credit.id)
       assert updated_credit.reimbursement_status == "paid"
       assert updated_credit.reimbursement_link_key == updated_expense.reimbursement_link_key
+    end
+
+    test "confirms a suggested reimbursement pair", %{conn: conn} do
+      acc = account_fixture()
+
+      expense =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-45.00",
+          description: "Suggest expense",
+          date: ~D[2026-02-23]
+        })
+
+      credit =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "45.00",
+          description: "Suggest credit",
+          date: ~D[2026-02-24]
+        })
+
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+
+      assert render(index_live) =~ "Pares Sugeridos"
+      assert render(index_live) =~ "Suggest expense"
+      assert render(index_live) =~ "Suggest credit"
+
+      index_live
+      |> element(
+        "button[phx-click='confirm_pair'][phx-value-a='#{expense.id}'][phx-value-b='#{credit.id}']"
+      )
+      |> render_click()
+
+      assert render(index_live) =~ "Reembolso vinculado com sucesso!"
+      assert CashLens.Transactions.get_transaction!(expense.id).reimbursement_status == "paid"
+      assert CashLens.Transactions.get_transaction!(credit.id).reimbursement_status == "paid"
+    end
+
+    test "confirms all suggested reimbursement pairs", %{conn: conn} do
+      acc = account_fixture()
+
+      expense1 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-60.00",
+          description: "Suggest expense 1",
+          date: ~D[2026-02-23]
+        })
+
+      credit1 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "60.00",
+          description: "Suggest credit 1",
+          date: ~D[2026-02-24]
+        })
+
+      expense2 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "requested",
+          amount: "-80.00",
+          description: "Suggest expense 2",
+          date: ~D[2026-02-23]
+        })
+
+      credit2 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "80.00",
+          description: "Suggest credit 2",
+          date: ~D[2026-02-25]
+        })
+
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+
+      assert render(index_live) =~ "Confirmar Todos"
+
+      index_live
+      |> element("button[phx-click='confirm_all']")
+      |> render_click()
+
+      assert render(index_live) =~ "2 reembolsos vinculados com sucesso!"
+      assert CashLens.Transactions.get_transaction!(expense1.id).reimbursement_status == "paid"
+      assert CashLens.Transactions.get_transaction!(credit1.id).reimbursement_status == "paid"
+      assert CashLens.Transactions.get_transaction!(expense2.id).reimbursement_status == "paid"
+      assert CashLens.Transactions.get_transaction!(credit2.id).reimbursement_status == "paid"
     end
   end
 end

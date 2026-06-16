@@ -60,6 +60,11 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
                   prompt="Selecione a conta de destino"
                   required
                 />
+                <.input
+                  field={@form[:create_mirror]}
+                  type="checkbox"
+                  label="Criar transação espelhada na conta de destino"
+                />
                 <div class="pt-2 flex gap-2">
                   <button
                     type="submit"
@@ -93,6 +98,7 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
                     <th>Padrões</th>
                     <th>Conta de Origem</th>
                     <th>Conta de Destino</th>
+                    <th>Espelhar?</th>
                     <th class="w-20"></th>
                   </tr>
                 </thead>
@@ -104,6 +110,18 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
                     </td>
                     <td class="opacity-70">{rule.source_account.name}</td>
                     <td class="opacity-70">{rule.destination_account.name}</td>
+                    <td>
+                      <.icon
+                        :if={rule.create_mirror}
+                        name="hero-check-circle"
+                        class="size-5 text-success"
+                      />
+                      <.icon
+                        :if={!rule.create_mirror}
+                        name="hero-x-circle"
+                        class="size-5 text-base-300"
+                      />
+                    </td>
                     <td class="text-right pr-4">
                       <div class="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                         <button

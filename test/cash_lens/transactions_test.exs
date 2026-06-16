@@ -153,13 +153,36 @@ defmodule CashLens.TransactionsTest do
       assert Enum.at(results, 0).id == t2.id
     end
 
-    test "filters by exact amount" do
+    test "filters by amount" do
+      # Exact amount with dot
       t1 = transaction_fixture(%{amount: "100.50"})
-      _t2 = transaction_fixture(%{amount: "200.00"})
+      # Negative amount
+      t2 = transaction_fixture(%{amount: "-100.50"})
+      # Positive integer match candidate
+      t3 = transaction_fixture(%{amount: "166.47"})
+      # Negative integer match candidate
+      t4 = transaction_fixture(%{amount: "-166.87"})
+      # Exact amount with comma candidate
+      t5 = transaction_fixture(%{amount: "50.75"})
+      # Distractor
+      _t6 = transaction_fixture(%{amount: "200.00"})
 
+      # Exact match with dot
       results = Transactions.list_transactions(%{"amount" => "100.50"})
+      assert length(results) == 2
+      assert Enum.any?(results, &(&1.id == t1.id))
+      assert Enum.any?(results, &(&1.id == t2.id))
+
+      # Exact match with comma
+      results = Transactions.list_transactions(%{"amount" => "50,75"})
       assert length(results) == 1
-      assert Enum.at(results, 0).id == t1.id
+      assert Enum.at(results, 0).id == t5.id
+
+      # Integer part search (166 should match 166.47 and -166.87)
+      results = Transactions.list_transactions(%{"amount" => "166"})
+      assert length(results) == 2
+      assert Enum.any?(results, &(&1.id == t3.id))
+      assert Enum.any?(results, &(&1.id == t4.id))
     end
 
     test "filters by type (debit/credit)" do
@@ -316,9 +339,45 @@ defmodule CashLens.TransactionsTest do
       assert length(Transactions.list_recent_transactions(1)) == 1
     end
 
-    test "reapply_auto_categorization/0" do
-      # This is hard to test without specific rules, but we can at least call it
+    test "reapply_auto_categorization/0 applies transfer rules and creates mirror when category is transfer" do
+      transfer_cat =
+        CashLens.CategoriesFixtures.category_fixture(%{name: "Transfer", slug: "transfer"})
+
+      source = AccountsFixtures.account_fixture()
+      destination = AccountsFixtures.account_fixture()
+
+      # Create a transfer rule
+      {:ok, _rule} =
+        Transactions.create_transfer_rule(%{
+          label: "Reapply rule",
+          description_patterns: ["pix transfer text"],
+          source_account_id: source.id,
+          destination_account_id: destination.id,
+          create_mirror: true
+        })
+
+      # Insert an uncategorized transaction matching the transfer rule description
+      tx =
+        transaction_fixture(%{
+          account_id: source.id,
+          description: "pix transfer text",
+          category_id: nil
+        })
+
+      assert tx.category_id == nil
+
+      # Reapply auto-categorization
       assert Transactions.reapply_auto_categorization() == :ok
+
+      # Verify it was categorized as transfer and a mirror was created
+      updated_tx = Repo.get!(Transaction, tx.id)
+      assert updated_tx.category_id == transfer_cat.id
+      refute is_nil(updated_tx.transfer_key)
+
+      # A mirror transaction in destination must now exist
+      [mirror] = Repo.all(from t in Transaction, where: t.account_id == ^destination.id)
+      assert mirror.transfer_key == updated_tx.transfer_key
+      assert mirror.category_id == transfer_cat.id
     end
 
     test "update_transaction_category/2" do

@@ -4,7 +4,7 @@ import Config
 config :cash_lens, CashLens.Repo,
   username: "postgres",
   password: "postgres",
-  hostname: "db",
+  hostname: System.get_env("DATABASE_HOST") || "db",
   database: "cash_lens",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
@@ -23,7 +23,9 @@ config :cash_lens, CashLensWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: System.get_env("SECRET_KEY_BASE") || "dev_change_me_secret_key_base",
+  secret_key_base:
+    System.get_env("SECRET_KEY_BASE") ||
+      "dev_change_me_secret_key_base_must_be_at_least_64_bytes_long_to_pass_plug_validation",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:cash_lens, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:cash_lens, ~w(--watch)]}
@@ -68,3 +70,6 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Disable Telemetry ConsoleReporter in development to avoid query spam
+config :cash_lens, start_console_reporter: false

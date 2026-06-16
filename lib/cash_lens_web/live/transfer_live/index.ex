@@ -37,14 +37,30 @@ defmodule CashLensWeb.TransferLive.Index do
   end
 
   @impl true
+  def handle_event("reapply_rules", _params, socket) do
+    Transactions.reapply_transfer_rules()
+
+    {:noreply,
+     socket
+     |> put_flash(:success, "Regras de transferência reaplicadas com sucesso!")
+     |> load_data()}
+  end
+
+  @impl true
   def handle_event("open_transfer_link", %{"id" => id}, socket) do
     origin_tx = Transactions.get_transaction!(id)
     target_amount = Decimal.mult(origin_tx.amount, -1)
 
+    transfer_cat = CashLens.Categories.get_category_by_slug("transfer")
+    transfer_cat_id = if transfer_cat, do: transfer_cat.id, else: nil
+
     candidates =
       Transactions.list_transactions(%{"amount" => target_amount})
       |> Enum.filter(fn t ->
-        is_nil(t.transfer_key) and t.id != origin_tx.id and t.account_id != origin_tx.account_id
+        is_nil(t.transfer_key) and
+          t.id != origin_tx.id and
+          t.account_id != origin_tx.account_id and
+          (is_nil(t.category_id) or t.category_id == transfer_cat_id)
       end)
       |> Enum.sort_by(fn t -> abs(Date.diff(t.date, origin_tx.date)) end)
       |> Enum.take(50)
@@ -115,14 +131,25 @@ defmodule CashLensWeb.TransferLive.Index do
             {@suggestions |> length()} pares para confirmar · {@unmatched |> length()} sem par
           </p>
         </div>
-        <button
-          :if={@suggestions != []}
-          phx-click="confirm_all"
-          class="btn btn-primary btn-sm"
-          data-confirm={"Confirmar todos os #{length(@suggestions)} pares?"}
-        >
-          <.icon name="hero-check-circle" class="size-4" /> Confirmar Todos
-        </button>
+        <div class="flex items-center gap-2">
+          <.link navigate={~p"/admin/transfer_rules"} class="btn btn-outline btn-sm">
+            <.icon name="hero-arrows-right-left" class="size-4" /> Regras de Transferência
+          </.link>
+          <button
+            phx-click="reapply_rules"
+            class="btn btn-outline btn-sm"
+          >
+            <.icon name="hero-play" class="size-4" /> Reaplicar Regras
+          </button>
+          <button
+            :if={@suggestions != []}
+            phx-click="confirm_all"
+            class="btn btn-primary btn-sm"
+            data-confirm={"Confirmar todos os #{length(@suggestions)} pares?"}
+          >
+            <.icon name="hero-check-circle" class="size-4" /> Confirmar Todos
+          </button>
+        </div>
       </div>
 
       <%!-- Suggestions --%>
@@ -139,40 +166,36 @@ defmodule CashLensWeb.TransferLive.Index do
         <table :if={@suggestions != []} class="table table-sm w-full text-xs">
           <thead class="bg-base-200/50">
             <tr>
-              <th>Data</th>
-              <th>Saída</th>
-              <th class="text-center">Valor</th>
-              <th>Entrada</th>
-              <th></th>
+              <th class="w-24">Data</th>
+              <th>Transação</th>
+              <th class="text-center w-28">Valor</th>
+              <th class="w-20"></th>
             </tr>
           </thead>
-          <tbody>
-            <%= for {tx_out, tx_in} <- @suggestions do %>
-              <tr class="hover">
-                <td class="font-mono opacity-60 whitespace-nowrap">
+          <%= for {tx_out, tx_in} <- @suggestions do %>
+            <tbody class="hover:bg-base-200/40 border-b border-base-200 last:border-b-0">
+              <tr class="border-b-0">
+                <td rowspan="2" class="font-mono opacity-60 whitespace-nowrap align-middle">
                   {Calendar.strftime(tx_out.date, "%d/%m/%Y")}
                 </td>
-                <td>
-                  <div class="font-semibold truncate max-w-[160px]">{tx_out.description}</div>
-                  <div class="opacity-50 text-[10px]">
-                    {tx_out.account && "#{tx_out.account.bank} - #{tx_out.account.name}"}
-                  </div>
-                </td>
-                <td class="text-center">
-                  <div class="flex items-center justify-center gap-1">
-                    <.icon name="hero-arrows-right-left" class="size-3 opacity-40" />
-                    <span class="font-mono font-black">
-                      {format_currency(Decimal.abs(tx_out.amount))}
+                <td class="pb-1 border-none">
+                  <div class="flex items-center gap-1.5">
+                    <span class="badge badge-error badge-outline badge-xs px-1 text-[9px] h-3.5 uppercase font-bold">
+                      Saída
+                    </span>
+                    <span class="font-semibold">{tx_out.description}</span>
+                    <span class="opacity-50 text-[10px]">
+                      ({tx_out.account && "#{tx_out.account.bank} - #{tx_out.account.name}"})
                     </span>
                   </div>
                 </td>
-                <td>
-                  <div class="font-semibold truncate max-w-[160px]">{tx_in.description}</div>
-                  <div class="opacity-50 text-[10px]">
-                    {tx_in.account && "#{tx_in.account.bank} - #{tx_in.account.name}"}
-                  </div>
+                <td
+                  rowspan="2"
+                  class="text-center align-middle font-mono font-black whitespace-nowrap"
+                >
+                  {format_currency(Decimal.abs(tx_out.amount))}
                 </td>
-                <td class="text-right">
+                <td rowspan="2" class="text-right align-middle">
                   <button
                     class="btn btn-success btn-xs"
                     phx-click="confirm_pair"
@@ -183,8 +206,21 @@ defmodule CashLensWeb.TransferLive.Index do
                   </button>
                 </td>
               </tr>
-            <% end %>
-          </tbody>
+              <tr class="border-t-0">
+                <td class="pt-1 pb-2 border-none">
+                  <div class="flex items-center gap-1.5">
+                    <span class="badge badge-success badge-outline badge-xs px-1 text-[9px] h-3.5 uppercase font-bold">
+                      Entrada
+                    </span>
+                    <span class="font-semibold">{tx_in.description}</span>
+                    <span class="opacity-50 text-[10px]">
+                      ({tx_in.account && "#{tx_in.account.bank} - #{tx_in.account.name}"})
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          <% end %>
         </table>
       </div>
 
@@ -254,40 +290,36 @@ defmodule CashLensWeb.TransferLive.Index do
         <table :if={@linked != []} class="table table-sm w-full text-xs">
           <thead class="bg-base-200/50">
             <tr>
-              <th>Data</th>
-              <th>Saída</th>
-              <th class="text-center">Valor</th>
-              <th>Entrada</th>
-              <th></th>
+              <th class="w-24">Data</th>
+              <th>Transação</th>
+              <th class="text-center w-28">Valor</th>
+              <th class="w-20"></th>
             </tr>
           </thead>
-          <tbody>
-            <%= for {tx_out, tx_in} <- @linked do %>
-              <tr class="hover">
-                <td class="font-mono opacity-60 whitespace-nowrap">
+          <%= for {tx_out, tx_in} <- @linked do %>
+            <tbody class="hover:bg-base-200/40 border-b border-base-200 last:border-b-0">
+              <tr class="border-b-0">
+                <td rowspan="2" class="font-mono opacity-60 whitespace-nowrap align-middle">
                   {Calendar.strftime(tx_out.date, "%d/%m/%Y")}
                 </td>
-                <td>
-                  <div class="font-semibold truncate max-w-[160px]">{tx_out.description}</div>
-                  <div class="opacity-50 text-[10px]">
-                    {tx_out.account && "#{tx_out.account.bank} - #{tx_out.account.name}"}
-                  </div>
-                </td>
-                <td class="text-center">
-                  <div class="flex items-center justify-center gap-1">
-                    <.icon name="hero-arrows-right-left" class="size-3 opacity-40" />
-                    <span class="font-mono font-black">
-                      {format_currency(Decimal.abs(tx_out.amount))}
+                <td class="pb-1 border-none">
+                  <div class="flex items-center gap-1.5">
+                    <span class="badge badge-error badge-outline badge-xs px-1 text-[9px] h-3.5 uppercase font-bold">
+                      Saída
+                    </span>
+                    <span class="font-semibold">{tx_out.description}</span>
+                    <span class="opacity-50 text-[10px]">
+                      ({tx_out.account && "#{tx_out.account.bank} - #{tx_out.account.name}"})
                     </span>
                   </div>
                 </td>
-                <td>
-                  <div class="font-semibold truncate max-w-[160px]">{tx_in.description}</div>
-                  <div class="opacity-50 text-[10px]">
-                    {tx_in.account && "#{tx_in.account.bank} - #{tx_in.account.name}"}
-                  </div>
+                <td
+                  rowspan="2"
+                  class="text-center align-middle font-mono font-black whitespace-nowrap"
+                >
+                  {format_currency(Decimal.abs(tx_out.amount))}
                 </td>
-                <td class="text-right">
+                <td rowspan="2" class="text-right align-middle">
                   <button
                     class="btn btn-ghost btn-xs text-error"
                     phx-click="unlink"
@@ -298,8 +330,21 @@ defmodule CashLensWeb.TransferLive.Index do
                   </button>
                 </td>
               </tr>
-            <% end %>
-          </tbody>
+              <tr class="border-t-0">
+                <td class="pt-1 pb-2 border-none">
+                  <div class="flex items-center gap-1.5">
+                    <span class="badge badge-success badge-outline badge-xs px-1 text-[9px] h-3.5 uppercase font-bold">
+                      Entrada
+                    </span>
+                    <span class="font-semibold">{tx_in.description}</span>
+                    <span class="opacity-50 text-[10px]">
+                      ({tx_in.account && "#{tx_in.account.bank} - #{tx_in.account.name}"})
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          <% end %>
         </table>
       </div>
     </div>

@@ -51,7 +51,8 @@ defmodule CashLens.Transactions.TransferMatcher do
   defp find_and_link(tx) do
     target_amount = Decimal.negate(tx.amount)
 
-    # Search for a twin transaction: same date, opposite amount, different account, no key yet
+    # Search for a twin transaction: same date, opposite amount, different account, no key yet,
+    # and either uncategorized or already categorized as transfer.
     query =
       from t in Transaction,
         where: t.id != ^tx.id,
@@ -59,6 +60,7 @@ defmodule CashLens.Transactions.TransferMatcher do
         where: t.date == ^tx.date,
         where: t.amount == ^target_amount,
         where: is_nil(t.transfer_key),
+        where: is_nil(t.category_id) or t.category_id == ^tx.category_id,
         limit: 1
 
     case Repo.one(query) do

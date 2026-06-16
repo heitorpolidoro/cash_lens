@@ -87,13 +87,18 @@ defmodule CashLens.Transactions.TransferRuleApplier do
     matched_rule =
       Enum.find(account_rules, fn rule ->
         Enum.any?(rule.description_patterns, fn pattern ->
-          String.downcase(pattern) == description_lower
+          String.contains?(description_lower, String.downcase(pattern))
         end)
       end)
 
     if matched_rule do
       set_transfer_category(tx, transfer_category)
-      maybe_create_mirror(tx, matched_rule, transfer_category)
+
+      if matched_rule.create_mirror do
+        maybe_create_mirror(tx, matched_rule, transfer_category)
+      else
+        []
+      end
     else
       []
     end

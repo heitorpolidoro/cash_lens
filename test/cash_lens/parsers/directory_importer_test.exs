@@ -115,6 +115,31 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       assert length(CashLens.Repo.all(CashLens.Transactions.Transaction)) == 6
     end
 
+    test "imports subfolders recursively (multi-level nesting) containing .account", %{root: root} do
+      account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+
+      # Create nested folder structure: root/bb/2026/
+      bb_dir = Path.join(root, "bb")
+      year_dir = Path.join(bb_dir, "2026")
+      File.mkdir_p!(year_dir)
+
+      # Write .account and sample file inside root/bb/2026/
+      File.write!(
+        Path.join(year_dir, ".account"),
+        "bank: Banco do Brasil\naccount: Conta Corrente\n"
+      )
+
+      File.write!(Path.join(year_dir, "e.csv"), @bb_sample)
+
+      assert %Result{accounts: [entry], warnings: [], errors: []} =
+               DirectoryImporter.run(root, skip_installments: true)
+
+      assert entry.bank == "Banco do Brasil"
+      assert entry.name == "Conta Corrente"
+      assert entry.imported == 3
+      assert entry.folder_path == "bb/2026"
+    end
+
     test "warns and skips subfolders without an .account", %{root: root} do
       account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
       account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [{"e.csv", @bb_sample}])
@@ -169,11 +194,11 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
 
       assert [
                {:start, 2},
-               {:account_start, "Banco do Brasil / Conta Corrente", 1},
-               {:file_done, "Banco do Brasil / Conta Corrente"},
+               {:account_start, "bb", 1},
+               {:file_done, "bb"},
                {:account_done, %{imported: 3}},
-               {:account_start, "Bradesco / Conta Corrente", 1},
-               {:file_done, "Bradesco / Conta Corrente"},
+               {:account_start, "brad", 1},
+               {:file_done, "brad"},
                {:account_done, %{imported: 3}}
              ] = events
     end

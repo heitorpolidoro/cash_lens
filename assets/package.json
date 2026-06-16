@@ -3,5 +3,8 @@
     "chart.js": "^4.5.1",
     "dompurify": "^3.4.0",
     "flatpickr": "^4.6.13"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.0"
   }
 }

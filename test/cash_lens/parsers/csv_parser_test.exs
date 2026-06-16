@@ -223,4 +223,42 @@ defmodule CashLens.CSVParserTest do
       assert CSVParser.parse(content, :bradesco_csv) == []
     end
   end
+
+  describe "parse/2 with :mercado_pago_csv" do
+    test "correctly parses a Mercado Pago CSV file" do
+      content = """
+      INITIAL_BALANCE;CREDITS;DEBITS;FINAL_BALANCE
+      117,73;1,09;0,00;118,82
+
+      RELEASE_DATE;TRANSACTION_TYPE;REFERENCE_ID;TRANSACTION_NET_AMOUNT;PARTIAL_BALANCE
+      04-05-2026;Rendimentos ;1743175009624;0,05;117,78
+      05-05-2026;Compra de 2 produtos Mercado Livre;101754796278;-48,51;69,27
+      """
+
+      transactions = CSVParser.parse(content, :mercado_pago_csv)
+
+      assert length(transactions) == 2
+
+      tx1 = Enum.find(transactions, &(&1.description == "Rendimentos"))
+      assert tx1.amount == Decimal.new("0.05")
+      assert tx1.date == ~D[2026-05-04]
+
+      tx2 = Enum.find(transactions, &(&1.description == "Compra de 2 produtos Mercado Livre"))
+      assert tx2.amount == Decimal.new("-48.51")
+      assert tx2.date == ~D[2026-05-05]
+    end
+
+    test "drops rows with zero amount or invalid format" do
+      content = """
+      INITIAL_BALANCE;CREDITS;DEBITS;FINAL_BALANCE
+      117,73;1,09;0,00;118,82
+
+      RELEASE_DATE;TRANSACTION_TYPE;REFERENCE_ID;TRANSACTION_NET_AMOUNT;PARTIAL_BALANCE
+      04-05-2026;Rendimentos ;1743175009624;0,00;117,78
+      invalid_row
+      """
+
+      assert CSVParser.parse(content, :mercado_pago_csv) == []
+    end
+  end
 end

@@ -329,7 +329,41 @@ defmodule CashLens.Transactions do
   defp filter_by_amount(query, ""), do: query
 
   defp filter_by_amount(query, amount) do
-    where(query, amount: ^amount)
+    # Remove whitespace, sign, and convert comma to dot
+    amount_str =
+      amount
+      |> to_string()
+      |> String.replace(~r/\s+/, "")
+      |> String.replace(",", ".")
+      |> String.replace("-", "")
+      |> String.replace("+", "")
+
+    if String.contains?(amount_str, ".") do
+      clean_str = String.trim_trailing(amount_str, ".")
+
+      case Decimal.cast(clean_str) do
+        {:ok, dec} ->
+          where(query, [t], fragment("abs(?)", t.amount) == ^dec)
+
+        :error ->
+          query
+      end
+    else
+      case Integer.parse(amount_str) do
+        {int_val, ""} ->
+          min_val = Decimal.new(int_val)
+          max_val = Decimal.new(int_val + 1)
+
+          where(
+            query,
+            [t],
+            fragment("abs(?)", t.amount) >= ^min_val and fragment("abs(?)", t.amount) < ^max_val
+          )
+
+        _ ->
+          query
+      end
+    end
   end
 
   defp filter_by_type(query, type) when type in ["debit", "expense"],
@@ -759,12 +793,61 @@ defmodule CashLens.Transactions do
     query = from t in Transaction, where: is_nil(t.category_id)
     pending_transactions = Repo.all(query)
 
-    Enum.each(pending_transactions, fn tx ->
-      updates = AutoCategorizer.categorize(tx)
-      if updates.category_id, do: update_transaction_category(tx.id, updates.category_id)
-    end)
+    Enum.each(pending_transactions, &process_auto_categorization_reapply/1)
 
     :ok
+  end
+
+  @doc """
+  Reapplies transfer rules to all unmatched transactions and attempts matching.
+  """
+  def reapply_transfer_rules do
+    unmatched =
+      Repo.all(
+        from t in Transaction,
+          where: is_nil(t.transfer_key)
+      )
+
+    Enum.each(unmatched, &TransferRuleApplier.maybe_apply_rule/1)
+
+    unmatched_after =
+      Repo.all(
+        from t in Transaction,
+          where: is_nil(t.transfer_key)
+      )
+
+    TransferMatcher.match_transfers(unmatched_after)
+
+    :ok
+  end
+
+  defp process_auto_categorization_reapply(tx) do
+    updates = AutoCategorizer.categorize(tx)
+    if updates.category_id, do: do_update_category_and_match(tx.id, updates.category_id)
+  end
+
+  defp do_update_category_and_match(tx_id, category_id) do
+    case update_transaction_category(tx_id, category_id) do
+      {:ok, updated_tx} ->
+        maybe_apply_transfer_matching(updated_tx, category_id)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp maybe_apply_transfer_matching(updated_tx, category_id) do
+    if category_id == get_transfer_category_id() do
+      TransferRuleApplier.maybe_apply_rule(updated_tx)
+      TransferMatcher.match_transfer(updated_tx)
+    end
+  end
+
+  defp get_transfer_category_id do
+    case CashLens.Categories.get_category_by_slug("transfer") do
+      nil -> nil
+      category -> category.id
+    end
   end
 
   @doc """
@@ -824,32 +907,29 @@ defmodule CashLens.Transactions do
 
   @doc """
   Returns suggested transfer pairs: same date, opposite amounts, different accounts,
-  both unmatched and both categorized as 'transfer'.
+  both unmatched and both either uncategorized or categorized as 'transfer'.
   Returns a list of {tx_out, tx_in} tuples sorted by date desc.
   """
   def list_transfer_suggestions do
     transfer_cat = CashLens.Categories.get_category_by_slug("transfer")
+    transfer_cat_id = if transfer_cat, do: transfer_cat.id, else: nil
 
-    if is_nil(transfer_cat) do
-      []
-    else
-      cat_id = transfer_cat.id
-
-      from(a in Transaction,
-        join: b in Transaction,
-        on:
-          a.date == b.date and
-            a.amount == fragment("? * -1", b.amount) and
-            a.account_id != b.account_id and
-            a.id < b.id,
-        where: is_nil(a.transfer_key) and is_nil(b.transfer_key),
-        where: a.category_id == ^cat_id or b.category_id == ^cat_id,
-        order_by: [desc: a.date],
-        select: {a, b}
-      )
-      |> Repo.all()
-      |> Enum.map(&order_transfer_pair/1)
-    end
+    from(a in Transaction,
+      join: b in Transaction,
+      on:
+        a.date == b.date and
+          a.amount == fragment("? * -1", b.amount) and
+          a.account_id != b.account_id and
+          a.id < b.id,
+      where: is_nil(a.transfer_key) and is_nil(b.transfer_key),
+      where:
+        (is_nil(a.category_id) or a.category_id == ^transfer_cat_id) and
+          (is_nil(b.category_id) or b.category_id == ^transfer_cat_id),
+      order_by: [desc: a.date],
+      select: {a, b}
+    )
+    |> Repo.all()
+    |> Enum.map(&order_transfer_pair/1)
   end
 
   # Preloads both sides of a suggested transfer pair and orders them so the
@@ -881,7 +961,9 @@ defmodule CashLens.Transactions do
               a.amount == fragment("? * -1", b.amount) and
               a.account_id != b.account_id,
           where: is_nil(a.transfer_key) and is_nil(b.transfer_key),
-          where: a.category_id == ^cat_id or b.category_id == ^cat_id,
+          where:
+            (is_nil(a.category_id) or a.category_id == ^cat_id) and
+              (is_nil(b.category_id) or b.category_id == ^cat_id),
           select: a.id
         )
         |> Repo.all()
@@ -913,6 +995,121 @@ defmodule CashLens.Transactions do
       a = Repo.preload(a, [:account])
       b = Repo.preload(b, [:account])
       if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
+    end)
+  end
+
+  @doc """
+  Returns suggested reimbursement pairs: same absolute amount, date within 15 days,
+  both unmatched, where the debit is marked as 'pending' or 'requested' for reimbursement,
+  and the credit is not a transfer/initial value.
+  Returns a list of {expense, credit} tuples sorted by date desc.
+  """
+  def list_reimbursement_suggestions do
+    excluded_ids =
+      Enum.flat_map(@excluded_reimbursement_slugs, fn slug ->
+        case Repo.one(
+               from c in CashLens.Categories.Category, where: c.slug == ^slug, select: c.id
+             ) do
+          nil -> []
+          id -> CashLens.Categories.get_category_ids_with_children(id)
+        end
+      end)
+      |> Enum.uniq()
+
+    from(a in Transaction,
+      join: b in Transaction,
+      on:
+        a.amount == fragment("? * -1", b.amount) and
+          a.id < b.id,
+      where: is_nil(a.reimbursement_link_key) and is_nil(b.reimbursement_link_key),
+      where:
+        a.reimbursement_status in ["pending", "requested"] or
+          b.reimbursement_status in ["pending", "requested"],
+      where: is_nil(b.category_id) or b.category_id not in ^excluded_ids,
+      order_by: [desc: a.date],
+      select: {a, b}
+    )
+    |> Repo.all()
+    |> Enum.filter(fn {a, b} ->
+      {expense, credit} = if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
+      diff = Date.diff(credit.date, expense.date)
+      diff >= 0 and diff <= 15
+    end)
+    |> Enum.map(&order_reimbursement_pair/1)
+  end
+
+  defp order_reimbursement_pair({a, b}) do
+    a = Repo.preload(a, [:account, :category])
+    b = Repo.preload(b, [:account, :category])
+    if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
+  end
+
+  @doc """
+  Returns unmatched reimbursement expenses (pending or requested) that have no auto-suggestion pair.
+  """
+  def list_unmatched_reimbursements_without_suggestion do
+    suggestions = list_reimbursement_suggestions()
+
+    suggested_ids =
+      Enum.flat_map(suggestions, fn {a, b} -> [a.id, b.id] end)
+      |> MapSet.new()
+
+    from(t in Transaction,
+      where: is_nil(t.reimbursement_link_key),
+      where: t.amount < 0,
+      where: t.reimbursement_status in ["pending", "requested"],
+      where: t.id not in ^MapSet.to_list(suggested_ids),
+      order_by: [desc: t.date],
+      preload: [:account, :category]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns all linked reimbursement pairs as {expense, credit} tuples, sorted by date desc.
+  """
+  def list_linked_reimbursement_pairs do
+    from(a in Transaction,
+      join: b in Transaction,
+      on: a.reimbursement_link_key == b.reimbursement_link_key and a.id < b.id,
+      where: not is_nil(a.reimbursement_link_key),
+      order_by: [desc: a.date],
+      select: {a, b}
+    )
+    |> Repo.all()
+    |> Enum.map(fn {a, b} ->
+      a = Repo.preload(a, [:account, :category])
+      b = Repo.preload(b, [:account, :category])
+      if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
+    end)
+  end
+
+  @doc """
+  Links an expense and a credit transaction as a reimbursement.
+  """
+  def link_reimbursement_pair(expense_id, credit_id) do
+    link_key = Ecto.UUID.generate()
+    expense = get_transaction!(expense_id)
+    credit = get_transaction!(credit_id)
+
+    final_category_id = expense.category_id || credit.category_id
+
+    Repo.transaction(fn ->
+      {:ok, updated_expense} =
+        update_transaction(expense, %{
+          reimbursement_status: "paid",
+          reimbursement_link_key: link_key,
+          category_id: final_category_id
+        })
+
+      {:ok, updated_credit} =
+        update_transaction(credit, %{
+          reimbursement_status: "paid",
+          reimbursement_link_key: link_key,
+          category_id: final_category_id
+        })
+
+      {:ok, {updated_expense, updated_credit}}
     end)
   end
 

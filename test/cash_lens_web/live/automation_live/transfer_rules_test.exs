@@ -181,4 +181,64 @@ defmodule CashLensWeb.AutomationLive.TransferRulesTest do
     assert html =~ "Regra de transferência excluída."
     refute render(live) =~ "Delete Me"
   end
+
+  test "creates a rule with create_mirror set to false", %{
+    conn: conn,
+    source: source,
+    destination: destination
+  } do
+    {:ok, live, _html} = live(conn, ~p"/admin/transfer_rules")
+
+    html =
+      live
+      |> form("#transfer-rule-form", %{
+        "transfer_rule" => %{
+          "label" => "No Mirror Rule",
+          "description_patterns_raw" => "Pattern C",
+          "source_account_id" => source.id,
+          "destination_account_id" => destination.id,
+          "create_mirror" => "false"
+        }
+      })
+      |> render_submit()
+
+    assert html =~ "Regra de transferência salva!"
+    assert html =~ "No Mirror Rule"
+    assert html =~ "hero-x-circle"
+
+    [rule] = Transactions.list_transfer_rules()
+    refute rule.create_mirror
+  end
+
+  test "toggles create_mirror on edit", %{conn: conn, source: source, destination: destination} do
+    rule =
+      transfer_rule_fixture(%{
+        label: "Toggle Me",
+        description_patterns: ["toggle pattern"],
+        source_account_id: source.id,
+        destination_account_id: destination.id,
+        create_mirror: true
+      })
+
+    {:ok, live, _html} = live(conn, ~p"/admin/transfer_rules")
+
+    live
+    |> element("button[phx-click='edit'][phx-value-id='#{rule.id}']")
+    |> render_click()
+
+    html =
+      live
+      |> form("#transfer-rule-form", %{
+        "transfer_rule" => %{
+          "create_mirror" => "false"
+        }
+      })
+      |> render_submit()
+
+    assert html =~ "Regra de transferência salva!"
+    assert html =~ "hero-x-circle"
+
+    updated = Transactions.get_transfer_rule!(rule.id)
+    refute updated.create_mirror
+  end
 end
