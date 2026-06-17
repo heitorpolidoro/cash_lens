@@ -489,5 +489,39 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       assert html =~ "Anuidade"
       assert html =~ "Desconto Anuidade"
     end
+
+    test "rejecting/ignoring a suggested reimbursement pair", %{conn: conn} do
+      acc = account_fixture()
+
+      expense =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "Reimburse expense",
+          date: ~D[2026-02-23]
+        })
+
+      credit =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "50.00",
+          description: "Reimburse credit",
+          date: ~D[2026-02-24]
+        })
+
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+
+      assert render(index_live) =~ "1 pares sugeridos"
+
+      # Click "Ignorar"
+      index_live
+      |> element(
+        "button[phx-click='reject_pair'][phx-value-a='#{expense.id}'][phx-value-b='#{credit.id}']"
+      )
+      |> render_click()
+
+      assert render(index_live) =~ "Sugestão de reembolso ignorada."
+      assert render(index_live) =~ "0 pares sugeridos"
+    end
   end
 end

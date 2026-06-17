@@ -9,6 +9,7 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.BulkIgnorePattern
   alias CashLens.Transactions.CategorySuggester
+  alias CashLens.Transactions.RejectedReimbursementPair
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.TransferRule
@@ -884,6 +885,18 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
+  Rejects a reimbursement pair so it won't be suggested again.
+  """
+  def reject_reimbursement_pair(tx_id_a, tx_id_b) do
+    %RejectedReimbursementPair{}
+    |> RejectedReimbursementPair.changeset(%{
+      transaction_a_id: tx_id_a,
+      transaction_b_id: tx_id_b
+    })
+    |> Repo.insert()
+  end
+
+  @doc """
   Given a list of transfer_keys, returns a map %{transfer_key => [tx, tx]}
   with both sides of each pair preloaded with account.
   """
@@ -1028,6 +1041,9 @@ defmodule CashLens.Transactions do
           a.id < b.id,
       join: acc_a in assoc(a, :account),
       join: acc_b in assoc(b, :account),
+      left_join: rp in RejectedReimbursementPair,
+      on: rp.transaction_a_id == a.id and rp.transaction_b_id == b.id,
+      where: is_nil(rp.id),
       where: is_nil(a.reimbursement_link_key) and is_nil(b.reimbursement_link_key),
       where: is_nil(a.category_id) or a.category_id not in ^excluded_ids,
       where: is_nil(b.category_id) or b.category_id not in ^excluded_ids,

@@ -124,14 +124,25 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                   {format_currency(credit.amount)}
                 </td>
                 <td rowspan="2" class="text-right align-middle">
-                  <button
-                    class="btn btn-success btn-xs rounded-lg font-bold"
-                    phx-click="confirm_pair"
-                    phx-value-a={expense.id}
-                    phx-value-b={credit.id}
-                  >
-                    <.icon name="hero-check" class="size-3" /> Confirmar
-                  </button>
+                  <div class="flex flex-col gap-1 items-end">
+                    <button
+                      class="btn btn-success btn-xs rounded-lg font-bold w-full"
+                      phx-click="confirm_pair"
+                      phx-value-a={expense.id}
+                      phx-value-b={credit.id}
+                    >
+                      <.icon name="hero-check" class="size-3" /> Confirmar
+                    </button>
+                    <button
+                      class="btn btn-ghost btn-xs text-error rounded-lg font-bold w-full"
+                      phx-click="reject_pair"
+                      phx-value-a={expense.id}
+                      phx-value-b={credit.id}
+                      data-confirm="Marcar que este par não é um reembolso?"
+                    >
+                      <.icon name="hero-x-mark" class="size-3" /> Ignorar
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr class="border-t-0">
@@ -511,6 +522,12 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   def handle_event("confirm_pair", %{"a" => id_a, "b" => id_b}, socket) do
     {:ok, _} = Transactions.link_reimbursement_pair(id_a, id_b)
     {:noreply, socket |> put_flash(:success, "Reembolso vinculado com sucesso!") |> load_data()}
+  end
+
+  @impl true
+  def handle_event("reject_pair", %{"a" => id_a, "b" => id_b}, socket) do
+    {:ok, _} = Transactions.reject_reimbursement_pair(id_a, id_b)
+    {:noreply, socket |> put_flash(:success, "Sugestão de reembolso ignorada.") |> load_data()}
   end
 
   @impl true
