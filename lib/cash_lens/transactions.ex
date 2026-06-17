@@ -1007,6 +1007,20 @@ defmodule CashLens.Transactions do
   def list_reimbursement_suggestions do
     excluded_ids = excluded_reimbursement_category_ids()
 
+    reimbursement_suggestions_query(excluded_ids)
+    |> Repo.all()
+    |> Enum.filter(fn {a, b} ->
+      {expense, credit} = if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
+      diff = Date.diff(credit.date, expense.date)
+
+      diff >= 0 and diff <= 15 and
+        is_nil(a.transfer_key) and is_nil(b.transfer_key) and
+        a.reimbursement_status != "paid" and b.reimbursement_status != "paid"
+    end)
+    |> Enum.map(&order_reimbursement_pair/1)
+  end
+
+  defp reimbursement_suggestions_query(excluded_ids) do
     from(a in Transaction,
       join: b in Transaction,
       on:
@@ -1015,22 +1029,12 @@ defmodule CashLens.Transactions do
       join: acc_a in assoc(a, :account),
       join: acc_b in assoc(b, :account),
       where: is_nil(a.reimbursement_link_key) and is_nil(b.reimbursement_link_key),
-      where:
-        a.reimbursement_status in ["pending", "requested"] or
-          b.reimbursement_status in ["pending", "requested"],
       where: is_nil(a.category_id) or a.category_id not in ^excluded_ids,
       where: is_nil(b.category_id) or b.category_id not in ^excluded_ids,
       where: acc_a.accepts_import == true and acc_b.accepts_import == true,
       order_by: [desc: a.date],
       select: {a, b}
     )
-    |> Repo.all()
-    |> Enum.filter(fn {a, b} ->
-      {expense, credit} = if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
-      diff = Date.diff(credit.date, expense.date)
-      diff >= 0 and diff <= 15
-    end)
-    |> Enum.map(&order_reimbursement_pair/1)
   end
 
   defp excluded_reimbursement_category_ids do

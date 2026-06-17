@@ -459,5 +459,35 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       # The order should be Earliest Expense, then Middle Expense, then Latest Expense
       assert html =~ ~r/Earliest Expense.*Middle Expense.*Latest Expense/s
     end
+
+    test "suggests reimbursement pairs even if neither transaction has reimbursement_status set",
+         %{conn: conn} do
+      acc = account_fixture()
+
+      _expense =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: nil,
+          amount: "-22.75",
+          description: "Anuidade",
+          date: ~D[2025-11-25]
+        })
+
+      _credit =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: nil,
+          amount: "22.75",
+          description: "Desconto Anuidade",
+          date: ~D[2025-11-25]
+        })
+
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+      html = render(index_live)
+
+      assert html =~ "1 pares sugeridos"
+      assert html =~ "Anuidade"
+      assert html =~ "Desconto Anuidade"
+    end
   end
 end
