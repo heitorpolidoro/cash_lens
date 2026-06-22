@@ -300,4 +300,32 @@ defmodule CashLens.ForecastTest do
       assert Forecast.resync_item(item) == {:error, :insufficient_history}
     end
   end
+
+  describe "manual_update/2" do
+    test "updates the fields and marks manually_edited" do
+      item = recurring_item_fixture(%{day_of_month: 5, amount: "-10.00"})
+
+      assert {:ok, updated} =
+               Forecast.manual_update(item, %{"day_of_month" => "20", "amount" => "-15.00"})
+
+      assert updated.day_of_month == 20
+      assert Decimal.equal?(updated.amount, "-15.00")
+      assert updated.manually_edited == true
+    end
+
+    test "returns an error changeset for an invalid day" do
+      item = recurring_item_fixture()
+      assert {:error, changeset} = Forecast.manual_update(item, %{"day_of_month" => "40"})
+      assert "must be less than or equal to 31" in errors_on(changeset).day_of_month
+    end
+  end
+
+  describe "toggle_active/1" do
+    test "flips active from true to false and back" do
+      item = recurring_item_fixture(%{active: true})
+
+      assert {:ok, %{active: false} = toggled} = Forecast.toggle_active(item)
+      assert {:ok, %{active: true}} = Forecast.toggle_active(toggled)
+    end
+  end
 end

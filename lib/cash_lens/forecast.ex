@@ -127,6 +127,22 @@ defmodule CashLens.Forecast do
     end
   end
 
+  @doc """
+  Updates day_of_month and/or amount from the UI. Marks the item as
+  manually_edited so future sync_all/0 calls leave it untouched.
+  """
+  def manual_update(%RecurringItem{} = item, attrs) do
+    item
+    |> RecurringItem.changeset(Map.put(attrs, "manually_edited", true))
+    |> Repo.update()
+  end
+
+  def toggle_active(%RecurringItem{} = item) do
+    item
+    |> RecurringItem.changeset(%{"active" => !item.active})
+    |> Repo.update()
+  end
+
   defp median(sorted_list) do
     Enum.at(sorted_list, div(length(sorted_list) - 1, 2))
   end
