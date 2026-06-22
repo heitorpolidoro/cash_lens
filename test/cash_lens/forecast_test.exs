@@ -340,7 +340,7 @@ defmodule CashLens.ForecastTest do
     end
 
     test "starting_balance excludes credit card and closed accounts", %{
-      account: account,
+      account: _account,
       cc_account: cc_account
     } do
       closed = account_fixture(%{balance: "2000.00", is_closed: true})
@@ -358,7 +358,7 @@ defmodule CashLens.ForecastTest do
       assert projection.zero_date == nil
     end
 
-    test "finds the date the balance goes negative", %{account: account} do
+    test "finds the date the balance goes negative", %{account: _account} do
       today = Date.utc_today()
       future_day = today.day
 
