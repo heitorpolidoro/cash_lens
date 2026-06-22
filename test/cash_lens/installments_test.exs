@@ -32,6 +32,79 @@ defmodule CashLens.InstallmentsTest do
     assert %Ecto.Changeset{} = Installments.change_installment_group(%InstallmentGroup{})
   end
 
+  describe "total_amount automatic calculations" do
+    test "calculates total_amount from installment_amount when total_amount is nil" do
+      {:ok, g} =
+        Installments.create_installment_group(%{
+          description_pattern: "TEST CALC 1",
+          installments: 4,
+          start_date: ~D[2026-01-01],
+          installment_amount: "50.00"
+        })
+
+      assert Decimal.equal?(g.total_amount, Decimal.new("200.00"))
+
+      # Verify it was saved to the DB
+      fetched = Installments.get_installment_group!(g.id)
+      assert Decimal.equal?(fetched.total_amount, Decimal.new("200.00"))
+      assert Decimal.equal?(fetched.installment_amount, Decimal.new("50.00"))
+    end
+
+    test "calculates total_amount from the last matching transaction when both are nil" do
+      acc = account_fixture()
+
+      # Create some transactions matching description pattern
+      _tx_old =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-45.00",
+          description: "OUTRO TEST CALC 2 MENSAL",
+          date: ~D[2026-01-01]
+        })
+
+      _tx_new =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "TEST CALC 2",
+          date: ~D[2026-01-10]
+        })
+
+      {:ok, g} =
+        Installments.create_installment_group(%{
+          description_pattern: "TEST CALC 2",
+          installments: 3,
+          start_date: ~D[2026-01-01]
+        })
+
+      # Should match tx_new (-50.00 -> 50.00 * 3 = 150.00) dynamically
+      assert Decimal.equal?(g.total_amount, Decimal.new("150.00"))
+
+      # Verify that total_amount is actually nil in the database (not persisted)
+      db_group = Repo.get!(InstallmentGroup, g.id)
+      assert is_nil(db_group.total_amount)
+
+      # But fetched via context is populated
+      fetched = Installments.get_installment_group!(g.id)
+      assert Decimal.equal?(fetched.total_amount, Decimal.new("150.00"))
+      assert Decimal.equal?(fetched.installment_amount, Decimal.new("50.00"))
+    end
+
+    test "leaves total_amount as nil if total_amount/installment_amount are nil and no matching transaction is found" do
+      assert {:ok, g} =
+               Installments.create_installment_group(%{
+                 description_pattern: "NON EXISTENT MERCH",
+                 installments: 3,
+                 start_date: ~D[2026-01-01]
+               })
+
+      assert is_nil(g.total_amount)
+
+      fetched = Installments.get_installment_group!(g.id)
+      assert is_nil(fetched.total_amount)
+    end
+  end
+
   test "list_active_groups/0 excludes completed groups" do
     active = group(%{description_pattern: "Ativo (3x)", total_amount: "300.00", installments: 3})
 
@@ -184,6 +257,171 @@ defmodule CashLens.InstallmentsTest do
 
       result = Installments.upcoming_installments(3)
       assert is_list(result)
+    end
+  end
+
+  describe "automatic association for manual groups" do
+    test "automatically associates unlinked matching transactions upon group creation" do
+      acc = account_fixture()
+
+      # Match because date >= start_date and description matches pattern
+      tx1 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "CURSO ELIXIR",
+          date: ~D[2026-01-10]
+        })
+
+      tx2 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "Curso Elixir Avançado",
+          date: ~D[2026-02-10]
+        })
+
+      # Should NOT match because date < start_date
+      _tx_early =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "Curso Elixir",
+          date: ~D[2025-12-10]
+        })
+
+      # Should NOT match because description doesn't match
+      _tx_other =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "Outra Coisa",
+          date: ~D[2026-01-15]
+        })
+
+      {:ok, group} =
+        Installments.create_installment_group(%{
+          description_pattern: "Curso Elixir",
+          installments: 3,
+          start_date: ~D[2026-01-01],
+          total_amount: "150.00"
+        })
+
+      linked = Installments.list_group_transactions(group.id)
+      assert length(linked) == 2
+
+      [l1, l2] = linked
+      assert l1.id == tx1.id
+      assert l1.installment_number == 1
+      assert l2.id == tx2.id
+      assert l2.installment_number == 2
+    end
+
+    test "respects group.installments limit" do
+      acc = account_fixture()
+
+      _tx1 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "CURSO ELIXIR",
+          date: ~D[2026-01-10]
+        })
+
+      _tx2 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "Curso Elixir",
+          date: ~D[2026-02-10]
+        })
+
+      _tx3 =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "Curso Elixir",
+          date: ~D[2026-03-10]
+        })
+
+      # Create group with 2 installments limit
+      {:ok, group} =
+        Installments.create_installment_group(%{
+          description_pattern: "Curso Elixir",
+          installments: 2,
+          start_date: ~D[2026-01-01],
+          total_amount: "100.00"
+        })
+
+      linked = Installments.list_group_transactions(group.id)
+      assert length(linked) == 2
+    end
+
+    test "updating group updates automatic associations" do
+      acc = account_fixture()
+
+      tx_old =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "OLD MERCH",
+          date: ~D[2026-01-10]
+        })
+
+      tx_new =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "NEW MERCH",
+          date: ~D[2026-01-12]
+        })
+
+      {:ok, group} =
+        Installments.create_installment_group(%{
+          description_pattern: "OLD MERCH",
+          installments: 2,
+          start_date: ~D[2026-01-01],
+          total_amount: "100.00"
+        })
+
+      assert [linked_old] = Installments.list_group_transactions(group.id)
+      assert linked_old.id == tx_old.id
+
+      # Update description pattern
+      {:ok, updated_group} =
+        Installments.update_installment_group(group, %{
+          description_pattern: "NEW MERCH"
+        })
+
+      linked = Installments.list_group_transactions(updated_group.id)
+      assert [linked_new] = linked
+      assert linked_new.id == tx_new.id
+
+      # Verify old is unlinked
+      refute CashLens.Transactions.get_transaction!(tx_old.id).installment_group_id
+    end
+
+    test "does not auto-associate for auto-detected pattern format groups" do
+      acc = account_fixture()
+
+      _tx =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-50.00",
+          description: "AMAZON",
+          date: ~D[2026-01-10]
+        })
+
+      # Create with auto-detected pattern format
+      {:ok, group} =
+        Installments.create_installment_group(%{
+          description_pattern: "AMAZON (2x · R$50)",
+          installments: 2,
+          start_date: ~D[2026-01-01],
+          total_amount: "100.00"
+        })
+
+      assert Installments.list_group_transactions(group.id) == []
     end
   end
 end

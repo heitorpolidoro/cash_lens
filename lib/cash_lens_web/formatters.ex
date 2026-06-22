@@ -3,7 +3,10 @@ defmodule CashLensWeb.Formatters do
   Helpers for formatting data in the UI.
   """
 
-  def account_label(%{bank: bank, name: name}), do: "#{bank} - #{name}"
+  def account_label(%{bank: bank, name: name} = account) do
+    label = "#{bank} - #{name}"
+    if Map.get(account, :is_closed), do: "#{label} (Encerrada)", else: label
+  end
 
   @doc """
   Formats a decimal or float as Brazilian currency (BRL).

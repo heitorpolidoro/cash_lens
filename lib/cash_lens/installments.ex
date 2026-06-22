@@ -15,13 +15,18 @@ defmodule CashLens.Installments do
   Returns the list of installment groups.
   """
   def list_installment_groups do
-    Repo.all(from g in InstallmentGroup, order_by: [desc: g.inserted_at])
+    from(g in InstallmentGroup, order_by: [desc: g.inserted_at])
+    |> Repo.all()
+    |> Enum.map(&load_dynamic_fields/1)
   end
 
   @doc """
   Gets a single installment group.
   """
-  def get_installment_group!(id), do: Repo.get!(InstallmentGroup, id)
+  def get_installment_group!(id) do
+    Repo.get!(InstallmentGroup, id)
+    |> load_dynamic_fields()
+  end
 
   @doc """
   Creates an installment group.
@@ -30,6 +35,14 @@ defmodule CashLens.Installments do
     %InstallmentGroup{}
     |> InstallmentGroup.changeset(attrs)
     |> Repo.insert()
+    |> case do
+      {:ok, group} ->
+        associate_matching_transactions(group)
+        {:ok, load_dynamic_fields(group)}
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -39,6 +52,14 @@ defmodule CashLens.Installments do
     group
     |> InstallmentGroup.changeset(attrs)
     |> Repo.update()
+    |> case do
+      {:ok, updated_group} ->
+        associate_matching_transactions(updated_group)
+        {:ok, load_dynamic_fields(updated_group)}
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -228,6 +249,7 @@ defmodule CashLens.Installments do
         where: fragment("? ILIKE '%' || ? || '%'", ^desc, g.description_pattern),
         limit: 1
     )
+    |> load_dynamic_fields()
   end
 
   @doc """
@@ -420,5 +442,84 @@ defmodule CashLens.Installments do
         updated_at: now
       ]
     )
+  end
+
+  @doc """
+  Automatically associates unlinked transactions that match the group's description pattern and start date.
+  If the group is edited, it first unlinks any existing associated transactions before re-associating.
+  Auto-detected groups are ignored since their parcels are explicitly linked by the scan process.
+  """
+  def associate_matching_transactions(%InstallmentGroup{} = group) do
+    if Regex.match?(~r/\(\d+x · R\$\d+\)$/, group.description_pattern) do
+      # Auto-detected groups are handled by detect_and_apply/1, do not auto-associate
+      :ok
+    else
+      # Manual groups: unlink existing and re-associate by pattern
+      from(t in Transaction, where: t.installment_group_id == ^group.id)
+      |> Repo.update_all(set: [installment_group_id: nil, installment_number: nil])
+
+      pattern = "%#{group.description_pattern}%"
+
+      unlinked_matches =
+        Repo.all(
+          from t in Transaction,
+            where:
+              is_nil(t.installment_group_id) and ilike(t.description, ^pattern) and
+                t.date >= ^group.start_date,
+            order_by: [asc: t.date],
+            limit: ^group.installments
+        )
+
+      unlinked_matches
+      |> Enum.with_index(1)
+      |> Enum.each(fn {tx, next_num} ->
+        from(t in Transaction, where: t.id == ^tx.id)
+        |> Repo.update_all(
+          set: [
+            installment_group_id: group.id,
+            installment_number: next_num,
+            updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+          ]
+        )
+      end)
+
+      :ok
+    end
+  end
+
+  @doc """
+  Dynamically calculates total_amount and installment_amount at read-time if total_amount is nil.
+  """
+  def load_dynamic_fields(nil), do: nil
+
+  def load_dynamic_fields(%InstallmentGroup{} = group) do
+    cond do
+      not is_nil(group.total_amount) ->
+        inst_val = Decimal.round(Decimal.div(group.total_amount, group.installments), 2)
+        %{group | installment_amount: inst_val}
+
+      not is_nil(group.description_pattern) ->
+        pattern = "%#{group.description_pattern}%"
+
+        query =
+          from t in Transaction,
+            where: ilike(t.description, ^pattern),
+            order_by: [desc: t.date, desc: t.inserted_at],
+            limit: 1
+
+        case Repo.one(query) do
+          nil ->
+            group
+
+          transaction ->
+            valor_parcela = Decimal.abs(transaction.amount)
+            calculated_total = Decimal.mult(valor_parcela, group.installments)
+
+            %{group | installment_amount: valor_parcela, total_amount: calculated_total}
+        end
+
+      true ->
+        group
+    end
   end
 end

@@ -79,4 +79,38 @@ defmodule CashLensWeb.MonthLiveTest do
     assert html =~ "Nenhuma despesa registrada neste mês."
     assert html =~ "Nenhuma receita registrada neste mês."
   end
+
+  test "separates income and expenses of the same category without subtracting", %{conn: conn} do
+    acc = account_fixture()
+
+    shared_cat =
+      category_fixture(%{name: "Compartilhado", slug: "compartilhado", type: "variable"})
+
+    # Positive transaction (credit) in Shared category
+    transaction_fixture(%{
+      account_id: acc.id,
+      category_id: shared_cat.id,
+      amount: "1000.00",
+      date: ~D[2026-03-15],
+      description: "Pix recebido"
+    })
+
+    # Negative transaction (debit) in Shared category
+    transaction_fixture(%{
+      account_id: acc.id,
+      category_id: shared_cat.id,
+      amount: "-150.00",
+      date: ~D[2026-03-16],
+      description: "Compra loja"
+    })
+
+    {:ok, _live, html} = live(conn, ~p"/months/2026/3")
+
+    # Compartilhado should show 1000.00 in the Receitas table
+    assert html =~ "R$ 1.000,00"
+    # Compartilhado should show 150.00 in the Gastos table
+    assert html =~ "R$ 150,00"
+    # The sub-label "receita" should be rendered
+    assert html =~ "receita"
+  end
 end

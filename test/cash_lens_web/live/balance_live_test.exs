@@ -6,7 +6,8 @@ defmodule CashLensWeb.BalanceLiveTest do
   import CashLens.AccountsFixtures
 
   defp create_balance(_) do
-    balance = balance_fixture()
+    today = Date.utc_today()
+    balance = balance_fixture(year: today.year, month: today.month)
     %{balance: balance}
   end
 
@@ -45,7 +46,8 @@ defmodule CashLensWeb.BalanceLiveTest do
 
     test "renders balance with account that has no icon (shows initials)", %{conn: conn} do
       account = account_fixture(%{bank: "MyBank", icon: nil})
-      balance_fixture(%{account_id: account.id})
+      today = Date.utc_today()
+      balance_fixture(%{account_id: account.id, year: today.year, month: today.month})
       {:ok, _live, html} = live(conn, ~p"/balances")
       assert html =~ "My"
     end

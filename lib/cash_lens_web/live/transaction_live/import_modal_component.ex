@@ -24,7 +24,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
       |> assign(assigns)
       |> assign_new(:import_progress, fn -> @idle_progress end)
       |> assign_new(:import_accounts, fn ->
-        Accounts.list_accounts() |> Enum.filter(& &1.accepts_import)
+        Accounts.list_accounts() |> Enum.filter(&(&1.accepts_import and not &1.is_closed))
       end)
       |> assign_new(:import_account_id, fn -> nil end)
       |> allow_upload(:statement,

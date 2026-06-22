@@ -170,25 +170,29 @@ defmodule CashLens.Accounting do
     do: calculate_from_point(account_id, last_point, target_year, target_month)
 
   defp calculate_from_point(account_id, last_point, target_year, target_month) do
-    {next_year, next_month} = get_next_period(last_point.year, last_point.month)
+    if {last_point.year, last_point.month} >= {target_year, target_month} do
+      last_point.final_balance
+    else
+      {next_year, next_month} = get_next_period(last_point.year, last_point.month)
 
-    # We recursively calculate all missing months between the last point and our target
-    # This ensures that even if we are missing a whole year, the chain is restored.
-    case calculate_monthly_balance(account_id, next_year, next_month) do
-      {:ok, next_balance} ->
-        if {next_year, next_month} == {target_year, target_month} do
-          next_balance.final_balance
-        else
-          calculate_from_point(account_id, next_balance, target_year, target_month)
-        end
+      # We recursively calculate all missing months between the last point and our target
+      # This ensures that even if we are missing a whole year, the chain is restored.
+      case calculate_monthly_balance(account_id, next_year, next_month) do
+        {:ok, next_balance} ->
+          if {next_year, next_month} == {target_year, target_month} do
+            next_balance.final_balance
+          else
+            calculate_from_point(account_id, next_balance, target_year, target_month)
+          end
 
-      {:error, reason} ->
-        Logger.error(
-          "Failed to re-calculate balance chain at #{next_month}/#{next_year}: #{inspect(reason)}"
-        )
+        {:error, reason} ->
+          Logger.error(
+            "Failed to re-calculate balance chain at #{next_month}/#{next_year}: #{inspect(reason)}"
+          )
 
-        # Fallback to the last known point to avoid complete failure
-        last_point.final_balance
+          # Fallback to the last known point to avoid complete failure
+          last_point.final_balance
+      end
     end
   end
 
@@ -250,29 +254,71 @@ defmodule CashLens.Accounting do
   def rebuild_account_balances(account_id) do
     Repo.delete_all(from b in Balance, where: b.account_id == ^account_id)
 
-    months =
-      from(t in Transaction,
-        where: t.account_id == ^account_id,
-        select: %{
-          year: fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
-          month: fragment("EXTRACT(MONTH FROM ?)::integer", t.date)
-        },
-        distinct: [
-          fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
-          fragment("EXTRACT(MONTH FROM ?)::integer", t.date)
-        ],
-        order_by: [
-          asc: fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
-          asc: fragment("EXTRACT(MONTH FROM ?)::integer", t.date)
-        ]
+    # Get the account to check if it is closed
+    account = CashLens.Accounts.get_account!(account_id)
+
+    # Find the oldest transaction for this account
+    oldest_tx =
+      Repo.one(
+        from t in Transaction,
+          where: t.account_id == ^account_id,
+          order_by: [asc: t.date],
+          limit: 1
       )
-      |> Repo.all()
 
-    Enum.each(months, fn %{year: year, month: month} ->
-      calculate_monthly_balance(account_id, year, month)
-    end)
+    # The starting month/year
+    {start_year, start_month} =
+      case oldest_tx do
+        nil ->
+          inserted_date = DateTime.to_date(account.inserted_at || DateTime.utc_now())
+          {inserted_date.year, inserted_date.month}
 
-    :ok
+        tx ->
+          {tx.date.year, tx.date.month}
+      end
+
+    # The ending month/year
+    today = Date.utc_today()
+
+    {end_year, end_month} =
+      if account.is_closed do
+        # Find the newest transaction to determine the end month if the account is closed
+        newest_tx =
+          Repo.one(
+            from t in Transaction,
+              where: t.account_id == ^account_id,
+              order_by: [desc: t.date],
+              limit: 1
+          )
+
+        case newest_tx do
+          nil -> {start_year, start_month}
+          tx -> {tx.date.year, tx.date.month}
+        end
+      else
+        {today.year, today.month}
+      end
+
+    {end_year, end_month} =
+      if {end_year, end_month} < {start_year, start_month} do
+        {start_year, start_month}
+      else
+        {end_year, end_month}
+      end
+
+    # Calculate the first month's balance
+    case calculate_monthly_balance(account_id, start_year, start_month) do
+      {:ok, first_balance} ->
+        # Propagate forward up to the end month/year
+        if {start_year, start_month} != {end_year, end_month} do
+          calculate_from_point(account_id, first_balance, end_year, end_month)
+        end
+
+        :ok
+
+      _error ->
+        :ok
+    end
   end
 
   @doc """
@@ -308,6 +354,8 @@ defmodule CashLens.Accounting do
   Returns the most recent balance for each account.
   """
   def list_latest_balances do
+    ensure_active_balances_healed()
+
     subquery =
       from b in Balance,
         select: %{
@@ -331,10 +379,17 @@ defmodule CashLens.Accounting do
   Returns aggregated balance history grouped by year and month.
   """
   def get_historical_balances(opts \\ []) do
+    ensure_active_balances_healed()
+
     limit = Keyword.get(opts, :limit)
 
+    # final_balance feeds the dashboard's "Saldo Atual" card/chart line, which
+    # excludes credit card accounts (their balance is a debt, not cash on hand) —
+    # so its sum zeroes out credit card rows while every other aggregate keeps
+    # summing all accounts.
     query =
       from b in Balance,
+        join: a in assoc(b, :account),
         group_by: [b.year, b.month],
         select: %{
           year: b.year,
@@ -344,7 +399,8 @@ defmodule CashLens.Accounting do
           transfers_in: sum(b.transfers_in),
           transfers_out: sum(b.transfers_out),
           balance: sum(b.balance),
-          final_balance: sum(b.final_balance)
+          final_balance:
+            sum(fragment("CASE WHEN ? THEN 0 ELSE ? END", a.is_credit_card, b.final_balance))
         }
 
     query =
@@ -386,5 +442,23 @@ defmodule CashLens.Accounting do
 
   def change_balance(%Balance{} = balance, attrs \\ %{}) do
     Balance.changeset(balance, attrs)
+  end
+
+  defp ensure_active_balances_healed do
+    today = Date.utc_today()
+
+    # Get all active accounts
+    active_accounts = Repo.all(from a in CashLens.Accounts.Account, where: a.is_closed == false)
+
+    Enum.each(active_accounts, fn account ->
+      unless Repo.exists?(
+               from b in Balance,
+                 where:
+                   b.account_id == ^account.id and b.year == ^today.year and
+                     b.month == ^today.month
+             ) do
+        rebuild_account_balances(account.id)
+      end
+    end)
   end
 end

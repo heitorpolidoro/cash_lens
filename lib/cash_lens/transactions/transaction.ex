@@ -71,19 +71,34 @@ defmodule CashLens.Transactions.Transaction do
     }
   end
 
+  defp identity_changed?(changeset) do
+    Enum.any?(
+      [:date, :time, :description, :amount, :account_id],
+      &Map.has_key?(changeset.changes, &1)
+    )
+  end
+
   defp put_dedup_key(changeset) do
-    case dedup_key(identity_attrs(changeset)) do
-      nil -> changeset
-      key -> put_change(changeset, :dedup_key, key)
+    if identity_changed?(changeset) or is_nil(get_field(changeset, :dedup_key)) do
+      case dedup_key(identity_attrs(changeset)) do
+        nil -> changeset
+        key -> put_change(changeset, :dedup_key, key)
+      end
+    else
+      changeset
     end
   end
 
   defp generate_fingerprint(changeset) do
-    index = get_field(changeset, :occurrence_index) || 0
+    if identity_changed?(changeset) or is_nil(get_field(changeset, :fingerprint)) do
+      index = get_field(changeset, :occurrence_index) || 0
 
-    case fingerprint(identity_attrs(changeset), index) do
-      nil -> changeset
-      hash -> put_change(changeset, :fingerprint, hash)
+      case fingerprint(identity_attrs(changeset), index) do
+        nil -> changeset
+        hash -> put_change(changeset, :fingerprint, hash)
+      end
+    else
+      changeset
     end
   end
 

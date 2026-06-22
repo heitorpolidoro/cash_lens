@@ -177,12 +177,20 @@ defmodule CashLensWeb.BalanceLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
+    today = Date.utc_today()
+
+    default_filters = %{
+      "account_id" => "",
+      "month" => to_string(today.month),
+      "year" => to_string(today.year)
+    }
+
     {:ok,
      socket
      |> assign(:page_title, "Saldos")
      |> assign(:accounts, Accounts.list_accounts())
-     |> assign(:filters, %{"account_id" => "", "month" => "", "year" => ""})
-     |> stream(:balances, Accounting.list_balances())}
+     |> assign(:filters, default_filters)
+     |> stream(:balances, Accounting.list_balances(default_filters))}
   end
 
   @impl true

@@ -30,6 +30,7 @@ defmodule CashLensWeb.AccountLive.Index do
               <th class="text-right">Saldo Atual</th>
               <th>Extrator</th>
               <th class="text-center">Importação?</th>
+              <th class="text-center">Cartão de Crédito?</th>
               <th class="w-16"></th>
             </tr>
           </thead>
@@ -37,7 +38,10 @@ defmodule CashLensWeb.AccountLive.Index do
             <tr
               :for={{id, account} <- @streams.accounts}
               id={id}
-              class="hover group border-b border-base-200 cursor-pointer"
+              class={[
+                "hover group border-b border-base-200 cursor-pointer",
+                account.is_closed && "opacity-60"
+              ]}
               phx-click={JS.navigate(~p"/transactions?account_id=#{account.id}&return_to=accounts")}
             >
               <td class="text-center py-4">
@@ -53,7 +57,17 @@ defmodule CashLensWeb.AccountLive.Index do
                   </div>
                 </div>
               </td>
-              <td class="font-bold">{account.name}</td>
+              <td class="font-bold">
+                <span class="flex items-center gap-2">
+                  {account.name}
+                  <span
+                    :if={account.is_closed}
+                    class="badge badge-ghost badge-sm text-[9px] uppercase font-black tracking-wider opacity-60"
+                  >
+                    Encerrada
+                  </span>
+                </span>
+              </td>
               <td class="opacity-70">{account.bank}</td>
               <td class="text-right font-mono opacity-60">
                 {format_currency(account.balance)}
@@ -66,6 +80,13 @@ defmodule CashLensWeb.AccountLive.Index do
               </td>
               <td class="text-center">
                 <%= if account.accepts_import do %>
+                  <.icon name="hero-check-circle" class="size-5 text-success mx-auto" />
+                <% else %>
+                  <.icon name="hero-x-circle" class="size-5 text-base-300 mx-auto" />
+                <% end %>
+              </td>
+              <td class="text-center">
+                <%= if account.is_credit_card do %>
                   <.icon name="hero-check-circle" class="size-5 text-success mx-auto" />
                 <% else %>
                   <.icon name="hero-x-circle" class="size-5 text-base-300 mx-auto" />

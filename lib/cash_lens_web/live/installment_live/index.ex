@@ -36,7 +36,13 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   @impl true
   def handle_event("open_modal", _params, socket) do
-    {:noreply, assign(socket, :show_modal, true)}
+    {:noreply,
+     socket
+     |> assign(:show_modal, true)
+     |> assign(
+       :form,
+       to_form(Installments.change_installment_group(%Installments.InstallmentGroup{}))
+     )}
   end
 
   @impl true
@@ -45,17 +51,45 @@ defmodule CashLensWeb.InstallmentLive.Index do
   end
 
   @impl true
-  def handle_event("save", %{"installment_group" => params}, socket) do
-    case Installments.create_installment_group(params) do
-      {:ok, _group} ->
-        {:noreply,
-         socket
-         |> assign(:show_modal, false)
-         |> load_data()
-         |> put_flash(:success, "Grupo de parcelamento criado!")}
+  def handle_event("edit", %{"id" => id}, socket) do
+    group = Installments.get_installment_group!(id)
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+    {:noreply,
+     socket
+     |> assign(:show_modal, true)
+     |> assign(:form, to_form(Installments.change_installment_group(group)))}
+  end
+
+  @impl true
+  def handle_event("save", %{"installment_group" => params}, socket) do
+    group = socket.assigns.form.data
+
+    case group.id do
+      nil ->
+        case Installments.create_installment_group(params) do
+          {:ok, _group} ->
+            {:noreply,
+             socket
+             |> assign(:show_modal, false)
+             |> load_data()
+             |> put_flash(:success, "Grupo de parcelamento criado!")}
+
+          {:error, changeset} ->
+            {:noreply, assign(socket, :form, to_form(changeset))}
+        end
+
+      _id ->
+        case Installments.update_installment_group(group, params) do
+          {:ok, _group} ->
+            {:noreply,
+             socket
+             |> assign(:show_modal, false)
+             |> load_data()
+             |> put_flash(:success, "Grupo de parcelamento atualizado!")}
+
+          {:error, changeset} ->
+            {:noreply, assign(socket, :form, to_form(changeset))}
+        end
     end
   end
 
@@ -371,13 +405,22 @@ defmodule CashLensWeb.InstallmentLive.Index do
                   {last_parcel_label(group)}
                 </td>
                 <td class="text-right">
-                  <button
-                    phx-click="delete"
-                    phx-value-id={group.id}
-                    class="btn btn-ghost btn-xs text-error p-0"
-                  >
-                    <.icon name="hero-trash" class="size-4" />
-                  </button>
+                  <div class="flex justify-end gap-1.5">
+                    <button
+                      phx-click="edit"
+                      phx-value-id={group.id}
+                      class="btn btn-ghost btn-xs text-info p-0"
+                    >
+                      <.icon name="hero-pencil" class="size-4" />
+                    </button>
+                    <button
+                      phx-click="delete"
+                      phx-value-id={group.id}
+                      class="btn btn-ghost btn-xs text-error p-0"
+                    >
+                      <.icon name="hero-trash" class="size-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr :if={MapSet.member?(@expanded_ids, group.id)} class="bg-base-200/40">
@@ -425,10 +468,12 @@ defmodule CashLensWeb.InstallmentLive.Index do
             <.icon name="hero-rectangle-group" class="size-8" />
           </div>
           <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">
-            Novo Grupo de Parcelamento
+            {if @form.data.id, do: "Editar Grupo de Parcelamento", else: "Novo Grupo de Parcelamento"}
           </h2>
           <p class="text-sm opacity-70 mb-8">
-            Crie um grupo para acompanhar uma dívida de longo prazo e suas parcelas.
+            {if @form.data.id,
+              do: "Edite as configurações do grupo de parcelamento.",
+              else: "Crie um grupo para acompanhar uma dívida de longo prazo e suas parcelas."}
           </p>
 
           <.form for={@form} phx-submit="save" class="space-y-4">
@@ -445,16 +490,24 @@ defmodule CashLensWeb.InstallmentLive.Index do
                 step="0.01"
                 label="Valor Total (opcional)"
               />
-              <.input field={@form[:installments]} type="number" label="Total de Parcelas" required />
+              <.input
+                field={@form[:installment_amount]}
+                type="number"
+                step="0.01"
+                label="Valor da Parcela (opcional)"
+              />
             </div>
-            <.input field={@form[:start_date]} type="date" label="Data de Início" required />
+            <div class="grid grid-cols-2 gap-4">
+              <.input field={@form[:installments]} type="number" label="Total de Parcelas" required />
+              <.input field={@form[:start_date]} type="date" label="Data de Início" required />
+            </div>
 
             <div class="flex flex-col sm:flex-row gap-3 pt-4">
               <button
                 type="submit"
                 class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
               >
-                Criar Grupo
+                {if @form.data.id, do: "Salvar Alterações", else: "Criar Grupo"}
               </button>
               <button
                 type="button"

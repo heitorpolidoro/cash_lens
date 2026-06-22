@@ -14,6 +14,8 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Transactions.TransferRuleApplier
   alias Ecto.UUID
 
+  @special_account_names ["BB MM Ouro", "BB Rende Fácil"]
+
   @doc """
   Parses the content based on the provided parser_type.
   """
@@ -172,12 +174,12 @@ defmodule CashLens.Parsers.Ingestor do
 
     {entries, failed} = prepare_entries(transactions_data, account_id)
 
-    {inserted_count, periods} = process_entries(entries, transactions_data, account_id)
+    {inserted_count, affected_account_ids} =
+      process_entries(entries, transactions_data, account_id)
 
-    periods
-    |> MapSet.to_list()
-    |> Enum.each(fn {acc_id, month, year} ->
-      Accounting.calculate_monthly_balance(acc_id, year, month)
+    # Rebuild balances for all affected accounts up to the current month/year
+    Enum.each(affected_account_ids, fn acc_id ->
+      Accounting.rebuild_account_balances(acc_id)
     end)
 
     # `skipped` makes silent dedupe misses observable: it is the number of prepared
@@ -256,14 +258,29 @@ defmodule CashLens.Parsers.Ingestor do
     mirror_transactions = TransferRuleApplier.apply_rules(inserted_transactions)
 
     # 4. Run TransferMatcher for new transactions (including mirrors) in batch
-    TransferMatcher.match_transfers(inserted_transactions ++ mirror_transactions)
+    matched_account_ids =
+      TransferMatcher.match_transfers(inserted_transactions ++ mirror_transactions) || []
 
     # Note: installment detection runs once over the full set after the whole batch
     # import (see ImportModalComponent), because a purchase's parcels can span
     # multiple monthly statements and must be grouped together.
 
-    # 5. Collect affected periods for balance recalculation
-    {count, collect_affected_periods(transactions_data, account_id)}
+    # 5. Collect affected account IDs for balance rebuilding
+    special_accounts = Accounts.get_accounts_by_names(@special_account_names)
+
+    special_account_ids =
+      Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
+        add_special_account_ids(acc, data, special_accounts)
+      end)
+      |> MapSet.to_list()
+
+    mirror_account_ids = Enum.map(mirror_transactions, & &1.account_id)
+
+    all_affected_account_ids =
+      [account_id | mirror_account_ids ++ matched_account_ids ++ special_account_ids]
+      |> Enum.uniq()
+
+    {count, all_affected_account_ids}
   end
 
   defp prepare_transaction_entry(data, account_id, now, occurrence_index) do
@@ -302,36 +319,25 @@ defmodule CashLens.Parsers.Ingestor do
     )
   end
 
-  @special_account_names ["BB MM Ouro", "BB Rende Fácil"]
-
-  defp collect_affected_periods(transactions_data, account_id) do
-    special_accounts = Accounts.get_accounts_by_names(@special_account_names)
-
-    Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
-      acc = MapSet.put(acc, {account_id, data.date.month, data.date.year})
-      add_special_account_periods(acc, data, special_accounts)
-    end)
-  end
-
-  defp add_special_account_periods(acc, data, special_accounts) do
+  defp add_special_account_ids(acc, data, special_accounts) do
     description = String.upcase(data.description || "")
 
     cond do
       String.contains?(description, "BB MM OURO") ->
-        add_account_period_if_exists(acc, special_accounts["BB MM Ouro"], data.date)
+        add_account_id_if_exists(acc, special_accounts["BB MM Ouro"])
 
       String.contains?(description, ["BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
-        add_account_period_if_exists(acc, special_accounts["BB Rende Fácil"], data.date)
+        add_account_id_if_exists(acc, special_accounts["BB Rende Fácil"])
 
       true ->
         acc
     end
   end
 
-  defp add_account_period_if_exists(acc, account, date) do
+  defp add_account_id_if_exists(acc, account) do
     case account do
       nil -> acc
-      a -> MapSet.put(acc, {a.id, date.month, date.year})
+      a -> MapSet.put(acc, a.id)
     end
   end
 end

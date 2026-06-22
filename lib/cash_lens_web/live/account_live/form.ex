@@ -72,6 +72,16 @@ defmodule CashLensWeb.AccountLive.Form do
             type="checkbox"
             label="Aceita importação de extratos?"
           />
+          <.input
+            field={@form[:is_closed]}
+            type="checkbox"
+            label="Conta encerrada?"
+          />
+          <.input
+            field={@form[:is_credit_card]}
+            type="checkbox"
+            label="Cartão de crédito?"
+          />
           <.input field={@form[:color]} type="text" label="Cor (opcional)" class="w-32" />
         </div>
 
@@ -179,11 +189,13 @@ defmodule CashLensWeb.AccountLive.Form do
       end
 
     previous_initial_balance = socket.assigns.account.balance
+    previous_is_closed = socket.assigns.account.is_closed
 
     case Accounts.update_account(socket.assigns.account, adjusted_params) do
       {:ok, account} ->
-        # If the root initial balance changed (either directly or via current balance adjustment)
-        if not Decimal.equal?(previous_initial_balance, account.balance) do
+        # If initial balance or closed status changed, rebuild balances
+        if not Decimal.equal?(previous_initial_balance, account.balance) or
+             previous_is_closed != account.is_closed do
           Accounting.rebuild_account_balances(account.id)
         end
 
@@ -200,7 +212,9 @@ defmodule CashLensWeb.AccountLive.Form do
   defp save_account(socket, :new, account_params) do
     case Accounts.create_account(account_params) do
       {:ok, account} ->
-        # No need to rebuild for new account (no transactions yet)
+        # Initialize monthly balance record for the new account
+        Accounting.rebuild_account_balances(account.id)
+
         {:noreply,
          socket
          |> put_flash(:success, "Conta criada com sucesso")

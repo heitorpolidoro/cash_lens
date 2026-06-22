@@ -6,7 +6,10 @@ defmodule CashLensWeb.PageController do
   alias CashLens.Transactions
 
   def home(conn, _params) do
-    # Get latest balances per account
+    # Get all accounts
+    all_accounts = Accounts.list_accounts()
+
+    # Get latest balances per account (triggers read-time self-healing check internally)
     latest_balances = Accounting.list_latest_balances()
 
     # Get historical data for the chart (ensure we have 12 months of history)
@@ -45,9 +48,6 @@ defmodule CashLensWeb.PageController do
 
     chart_data = Jason.encode!(historical ++ projections)
 
-    # Get all accounts to find those without a balance yet
-    all_accounts = Accounts.list_accounts()
-
     # Map accounts to their latest data (Balance final_balance or Account balance)
     accounts_with_data =
       Enum.map(all_accounts, fn account ->
@@ -59,12 +59,21 @@ defmodule CashLensWeb.PageController do
           bank: account.bank,
           color: account.color,
           icon: account.icon,
+          is_closed: account.is_closed,
+          is_credit_card: account.is_credit_card,
           display_balance: if(balance, do: balance.final_balance, else: account.balance)
         }
       end)
 
+    # "Saldo Atual" excludes credit cards: their balance is a debt, not cash on hand.
     total_balance =
       accounts_with_data
+      |> Enum.reject(&(&1.is_closed or &1.is_credit_card))
+      |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
+
+    total_balance_with_credit_cards =
+      accounts_with_data
+      |> Enum.reject(& &1.is_closed)
       |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
 
     summary = Transactions.get_monthly_summary()
@@ -78,6 +87,7 @@ defmodule CashLensWeb.PageController do
     render(conn, :home,
       layout: {CashLensWeb.Layouts, :app},
       total_balance: total_balance,
+      total_balance_with_credit_cards: total_balance_with_credit_cards,
       monthly_income: summary.income,
       monthly_expenses: summary.expenses,
       accounts: accounts_with_data,

@@ -233,21 +233,27 @@ defmodule CashLensWeb.MonthLive.Show do
                   />
                   <div>
                     <div class="font-semibold">{row.name}</div>
-                    <div
-                      :if={not is_nil(row.type)}
-                      class={[
-                        "text-[9px] font-bold uppercase tracking-wider mt-0.5",
-                        if(row.type == "fixed", do: "text-info", else: "text-warning")
-                      ]}
-                    >
-                      {row.type}
-                    </div>
-                    <div
-                      :if={is_nil(row.type)}
-                      class="text-[9px] opacity-30 uppercase tracking-wider mt-0.5"
-                    >
-                      sem categoria
-                    </div>
+                    <%= if @type == "credit" do %>
+                      <div class="text-[9px] font-bold uppercase tracking-wider mt-0.5 text-success">
+                        receita
+                      </div>
+                    <% else %>
+                      <div
+                        :if={not is_nil(row.type)}
+                        class={[
+                          "text-[9px] font-bold uppercase tracking-wider mt-0.5",
+                          if(row.type == "fixed", do: "text-info", else: "text-warning")
+                        ]}
+                      >
+                        {row.type}
+                      </div>
+                      <div
+                        :if={is_nil(row.type)}
+                        class="text-[9px] opacity-30 uppercase tracking-wider mt-0.5"
+                      >
+                        sem categoria
+                      </div>
+                    <% end %>
                   </div>
                 </div>
               </td>

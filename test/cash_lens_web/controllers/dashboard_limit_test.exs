@@ -9,7 +9,7 @@ defmodule CashLensWeb.DashboardLimitTest do
 
   describe "dashboard data limiting" do
     setup do
-      account = account_fixture()
+      account = account_fixture(is_closed: true)
 
       # Create 15 months of data: 2025-01 to 2026-03
       for year <- 2025..2026, month <- 1..12 do

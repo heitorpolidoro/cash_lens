@@ -141,7 +141,6 @@ defmodule CashLensWeb.TransactionLiveTest do
       {:ok, live, _html} = live(conn, ~p"/transactions")
       live |> element("button[phx-click='toggle_sort']") |> render_click()
       live |> element("button[phx-value-type='credit']") |> render_click()
-      live |> element("button[phx-click='toggle_unmatched']") |> render_click()
       assert render(live) =~ "Transações"
     end
 

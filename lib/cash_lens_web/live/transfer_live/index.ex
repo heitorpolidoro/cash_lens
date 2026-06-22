@@ -14,7 +14,7 @@ defmodule CashLensWeb.TransferLive.Index do
      |> assign(:transfer_origin, nil)
      |> assign(:pending_transfers, [])
      |> assign(:quick_transfer_form, to_form(%{}))
-     |> assign(:accounts, Accounts.list_accounts())
+     |> assign(:accounts, Accounts.list_active_accounts())
      |> load_data()}
   end
 

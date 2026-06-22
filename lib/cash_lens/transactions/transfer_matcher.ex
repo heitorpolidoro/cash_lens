@@ -32,7 +32,20 @@ defmodule CashLens.Transactions.TransferMatcher do
     if transfer_category do
       transfers
       |> Enum.filter(&(&1.category_id == transfer_category.id))
-      |> Enum.each(&find_and_link/1)
+      |> Enum.reduce(MapSet.new(), fn tx, acc ->
+        case find_and_link(tx) do
+          {:ok, twin_account_id} ->
+            acc
+            |> MapSet.put(tx.account_id)
+            |> MapSet.put(twin_account_id)
+
+          _ ->
+            acc
+        end
+      end)
+      |> MapSet.to_list()
+    else
+      nil
     end
   end
 
@@ -70,6 +83,7 @@ defmodule CashLens.Transactions.TransferMatcher do
       twin ->
         link_id = Ecto.UUID.generate()
         link_pair(tx.id, twin.id, link_id)
+        {:ok, twin.account_id}
     end
   end
 

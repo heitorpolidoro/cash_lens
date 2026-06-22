@@ -16,6 +16,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:page_title, "Transações")
      |> assign(:show_import_modal, false)
+     |> assign(:show_batch_import_modal, false)
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
      |> assign(:show_transfer_modal, false)
@@ -225,6 +226,11 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
+  def handle_event("open_batch_import", _params, socket) do
+    {:noreply, assign(socket, :show_batch_import_modal, true)}
+  end
+
+  @impl true
   def handle_event("open_quick_category", %{"name" => name, "id" => tx_id}, socket) do
     suggested_name = name |> String.split(" ") |> Enum.map_join(" ", &String.capitalize/1)
     new_category = %Category{name: suggested_name, default_reimbursable: false}
@@ -242,6 +248,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:show_import_modal, false)
+     |> assign(:show_batch_import_modal, false)
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
      |> assign(:show_transfer_modal, false)
@@ -732,6 +739,41 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_info(:close_import_modal, socket) do
     {:noreply, assign(socket, :show_import_modal, false)}
+  end
+
+  @impl true
+  def handle_info(:close_batch_import_modal, socket) do
+    {:noreply, assign(socket, :show_batch_import_modal, false)}
+  end
+
+  @impl true
+  def handle_info({:batch_import_progress, progress}, socket) do
+    send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
+      id: "batch-import-modal",
+      progress_update: progress
+    )
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:batch_import_finished, result}, socket) do
+    send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
+      id: "batch-import-modal",
+      progress_update: %{phase: :done, result: result}
+    )
+
+    {:noreply,
+     socket
+     |> assign(:page, 1)
+     |> assign(:end_of_list?, false)
+     |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> calculate_summary()
+     |> stream(
+       :transactions,
+       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
+       reset: true
+     )}
   end
 
   @impl true

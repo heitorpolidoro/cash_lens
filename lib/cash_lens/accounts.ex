@@ -16,6 +16,13 @@ defmodule CashLens.Accounts do
   end
 
   @doc """
+  Returns the list of active (non-closed) accounts.
+  """
+  def list_active_accounts do
+    Repo.all(from a in Account, where: a.is_closed == false)
+  end
+
+  @doc """
   Calculates the total balance across all accounts.
   """
   def get_total_balance do
@@ -117,7 +124,22 @@ defmodule CashLens.Accounts do
 
   """
   def delete_account(%Account{} = account) do
-    Repo.delete(account)
+    Repo.transaction(fn ->
+      Repo.delete_all(from b in CashLens.Accounting.Balance, where: b.account_id == ^account.id)
+
+      Repo.delete_all(
+        from t in CashLens.Transactions.Transaction, where: t.account_id == ^account.id
+      )
+
+      case Repo.delete(account) do
+        {:ok, deleted} -> deleted
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
+    |> case do
+      {:ok, deleted} -> {:ok, deleted}
+      {:error, changeset} -> {:error, changeset}
+    end
   end
 
   @doc """

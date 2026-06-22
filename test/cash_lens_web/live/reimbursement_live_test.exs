@@ -141,7 +141,13 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
 
       index_live
-      |> element("button[phx-click='unlink_reimbursement'][phx-value-link-key='#{link_key}']")
+      |> element(
+        "button[phx-click='confirm_unlink_reimbursement'][phx-value-link-key='#{link_key}']"
+      )
+      |> render_click()
+
+      index_live
+      |> element("button", "Sim, Desvincular")
       |> render_click()
 
       assert render(index_live) =~ "desvinculado com sucesso"
@@ -358,7 +364,11 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       assert render(index_live) =~ "Confirmar Todos"
 
       index_live
-      |> element("button[phx-click='confirm_all']")
+      |> element("button[phx-click='confirm_all_suggestions']")
+      |> render_click()
+
+      index_live
+      |> element("#confirm-modal button.btn-primary")
       |> render_click()
 
       assert render(index_live) =~ "2 reembolsos vinculados com sucesso!"
@@ -516,8 +526,13 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       # Click "Ignorar"
       index_live
       |> element(
-        "button[phx-click='reject_pair'][phx-value-a='#{expense.id}'][phx-value-b='#{credit.id}']"
+        "button[phx-click='confirm_reject_pair'][phx-value-a='#{expense.id}'][phx-value-b='#{credit.id}']"
       )
+      |> render_click()
+
+      # Click "Sim, Ignorar" inside the modal
+      index_live
+      |> element("button", "Sim, Ignorar")
       |> render_click()
 
       assert render(index_live) =~ "Sugestão de reembolso ignorada."

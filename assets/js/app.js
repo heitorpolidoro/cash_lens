@@ -274,7 +274,7 @@ window.addEventListener("load", () => {
           labels,
           datasets: [
             {
-              label: 'Saldo Final (Acumulado)',
+              label: 'Saldo Final',
               data: history.map(item => item.final_balance),
               borderColor: 'rgb(59, 130, 246)',
               backgroundColor: 'rgba(59, 130, 246, 0.1)',

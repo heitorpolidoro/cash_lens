@@ -460,6 +460,7 @@ defmodule CashLens.Transactions do
         left_join: p in assoc(c, :parent),
         left_join: g in assoc(p, :parent),
         where: t.date >= ^first and t.date <= ^last,
+        where: t.amount < 0,
         # Transfers are not spending categories, so exclude the whole transfer
         # category (paired or not) along with initial values.
         where: c.slug not in ["initial_value", "transfer"],
@@ -515,6 +516,7 @@ defmodule CashLens.Transactions do
         left_join: p in assoc(c, :parent),
         left_join: g in assoc(p, :parent),
         where: t.date >= ^first and t.date <= ^last,
+        where: t.amount > 0,
         where: c.slug not in ["initial_value", "transfer"],
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
@@ -731,8 +733,27 @@ defmodule CashLens.Transactions do
     |> Repo.insert()
     |> case do
       {:ok, transaction} ->
-        TransferRuleApplier.maybe_apply_rule(transaction)
-        TransferMatcher.match_transfer(transaction)
+        mirrors = TransferRuleApplier.maybe_apply_rule(transaction)
+
+        twin_account_id =
+          case TransferMatcher.match_transfer(transaction) do
+            {:ok, id} -> id
+            _ -> nil
+          end
+
+        # Rebuild balances for the original account
+        CashLens.Accounting.rebuild_account_balances(transaction.account_id)
+
+        # Rebuild balances for any mirror account
+        Enum.each(mirrors, fn mirror ->
+          CashLens.Accounting.rebuild_account_balances(mirror.account_id)
+        end)
+
+        # Rebuild balances for twin account if matched
+        if twin_account_id do
+          CashLens.Accounting.rebuild_account_balances(twin_account_id)
+        end
+
         {:ok, transaction}
 
       {:error, changeset} ->
@@ -748,9 +769,24 @@ defmodule CashLens.Transactions do
   Updates a transaction.
   """
   def update_transaction(%Transaction{} = transaction, attrs) do
+    old_account_id = transaction.account_id
+
     transaction
     |> Transaction.changeset(attrs)
     |> Repo.update()
+    |> case do
+      {:ok, updated_transaction} ->
+        CashLens.Accounting.rebuild_account_balances(updated_transaction.account_id)
+
+        if old_account_id && old_account_id != updated_transaction.account_id do
+          CashLens.Accounting.rebuild_account_balances(old_account_id)
+        end
+
+        {:ok, updated_transaction}
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -775,17 +811,44 @@ defmodule CashLens.Transactions do
     ])
     |> Ecto.Changeset.foreign_key_constraint(:category_id)
     |> Repo.update()
+    |> case do
+      {:ok, updated} ->
+        CashLens.Accounting.rebuild_account_balances(updated.account_id)
+        {:ok, updated}
+
+      error ->
+        error
+    end
   end
 
   @doc """
   Deletes a transaction.
   """
-  def delete_transaction(%Transaction{} = transaction), do: Repo.delete(transaction)
+  def delete_transaction(%Transaction{} = transaction) do
+    Repo.delete(transaction)
+    |> case do
+      {:ok, deleted} ->
+        CashLens.Accounting.rebuild_account_balances(deleted.account_id)
+        {:ok, deleted}
+
+      error ->
+        error
+    end
+  end
 
   @doc """
   Deletes all transactions from the database.
   """
-  def delete_all_transactions, do: Repo.delete_all(Transaction)
+  def delete_all_transactions do
+    active_accounts = CashLens.Accounts.list_active_accounts()
+    res = Repo.delete_all(Transaction)
+
+    Enum.each(active_accounts, fn account ->
+      CashLens.Accounting.rebuild_account_balances(account.id)
+    end)
+
+    res
+  end
 
   @doc """
   Reapplies auto-categorization rules to all transactions without a category.
@@ -819,6 +882,11 @@ defmodule CashLens.Transactions do
 
     TransferMatcher.match_transfers(unmatched_after)
 
+    # Rebuild balances for all active accounts after applying rules
+    Enum.each(CashLens.Accounts.list_active_accounts(), fn account ->
+      CashLens.Accounting.rebuild_account_balances(account.id)
+    end)
+
     :ok
   end
 
@@ -830,7 +898,11 @@ defmodule CashLens.Transactions do
   defp do_update_category_and_match(tx_id, category_id) do
     case update_transaction_category(tx_id, category_id) do
       {:ok, updated_tx} ->
-        maybe_apply_transfer_matching(updated_tx, category_id)
+        affected_ids = maybe_apply_transfer_matching(updated_tx, category_id)
+
+        [updated_tx.account_id | affected_ids]
+        |> Enum.uniq()
+        |> Enum.each(&CashLens.Accounting.rebuild_account_balances/1)
 
       _ ->
         :ok
@@ -839,8 +911,18 @@ defmodule CashLens.Transactions do
 
   defp maybe_apply_transfer_matching(updated_tx, category_id) do
     if category_id == get_transfer_category_id() do
-      TransferRuleApplier.maybe_apply_rule(updated_tx)
-      TransferMatcher.match_transfer(updated_tx)
+      mirrors = TransferRuleApplier.maybe_apply_rule(updated_tx)
+      mirror_ids = Enum.map(mirrors, & &1.account_id)
+
+      twin_ids =
+        case TransferMatcher.match_transfer(updated_tx) do
+          {:ok, twin_account_id} -> [twin_account_id]
+          _ -> []
+        end
+
+      mirror_ids ++ twin_ids
+    else
+      []
     end
   end
 

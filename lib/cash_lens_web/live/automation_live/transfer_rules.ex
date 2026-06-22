@@ -161,7 +161,7 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
   @impl true
   def mount(_params, _session, socket) do
     rules = Transactions.list_transfer_rules()
-    accounts = Accounts.list_accounts()
+    accounts = Accounts.list_active_accounts()
 
     {:ok,
      socket

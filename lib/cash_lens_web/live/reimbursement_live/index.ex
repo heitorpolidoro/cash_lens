@@ -41,9 +41,8 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         <div class="flex items-center gap-2">
           <button
             :if={@suggestions != []}
-            phx-click="confirm_all"
+            phx-click="confirm_all_suggestions"
             class="btn btn-primary btn-sm rounded-xl"
-            data-confirm={"Confirmar todos os #{length(@suggestions)} pares sugeridos?"}
           >
             <.icon name="hero-check-circle" class="size-4 mr-1" /> Confirmar Todos
           </button>
@@ -135,10 +134,9 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                     </button>
                     <button
                       class="btn btn-ghost btn-xs text-error rounded-lg font-bold w-full"
-                      phx-click="reject_pair"
+                      phx-click="confirm_reject_pair"
                       phx-value-a={expense.id}
                       phx-value-b={credit.id}
-                      data-confirm="Marcar que este par não é um reembolso?"
                     >
                       <.icon name="hero-x-mark" class="size-3" /> Ignorar
                     </button>
@@ -350,9 +348,8 @@ defmodule CashLensWeb.ReimbursementLive.Index do
                 <td class="text-right align-middle">
                   <button
                     class="btn btn-ghost btn-xs text-error font-bold"
-                    phx-click="unlink_reimbursement"
+                    phx-click="confirm_unlink_reimbursement"
                     phx-value-link-key={link_key}
-                    data-confirm="Desvincular este reembolso?"
                   >
                     <.icon name="hero-link-slash" class="size-3 mr-1" /> Desvincular
                   </button>
@@ -479,6 +476,31 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         </button>
       </div>
     </.modal>
+
+    <!-- Confirmation Modal -->
+    <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
+      <div class="p-4 text-center">
+        <div class={[
+          "w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6",
+          @confirm_modal.icon_class
+        ]}>
+          <.icon name={@confirm_modal.icon} class="size-10" />
+        </div>
+        <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">{@confirm_modal.title}</h2>
+        <p class="text-base-content/60 mb-10">{@confirm_modal.message}</p>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button
+            phx-click={@confirm_modal.action}
+            class={["btn btn-lg flex-1 rounded-2xl", @confirm_modal.confirm_class]}
+          >
+            {@confirm_modal.confirm_text}
+          </button>
+          <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </.modal>
     """
   end
 
@@ -492,6 +514,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
      |> assign(:linker_search, "")
      |> assign(:selected_credit_ids, MapSet.new())
      |> assign(:total_credits_selected, Decimal.new("0"))
+     |> assign(:confirm_modal, nil)
      |> load_data()}
   end
 
@@ -525,9 +548,46 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   @impl true
+  def handle_event("confirm_reject_pair", %{"a" => id_a, "b" => id_b}, socket) do
+    confirm = %{
+      title: "Ignorar Sugestão?",
+      message:
+        "Deseja marcar que este par não é um reembolso? O sistema tentará sugerir outros pares.",
+      action: JS.push("reject_pair", value: %{a: id_a, b: id_b}),
+      confirm_text: "Sim, Ignorar",
+      confirm_class: "btn-error",
+      icon: "hero-x-mark",
+      icon_class: "bg-error/10 text-error"
+    }
+
+    {:noreply, assign(socket, :confirm_modal, confirm)}
+  end
+
+  @impl true
   def handle_event("reject_pair", %{"a" => id_a, "b" => id_b}, socket) do
     {:ok, _} = Transactions.reject_reimbursement_pair(id_a, id_b)
-    {:noreply, socket |> put_flash(:success, "Sugestão de reembolso ignorada.") |> load_data()}
+
+    {:noreply,
+     socket
+     |> put_flash(:success, "Sugestão de reembolso ignorada.")
+     |> assign(:confirm_modal, nil)
+     |> load_data()}
+  end
+
+  @impl true
+  def handle_event("confirm_all_suggestions", _, socket) do
+    confirm = %{
+      title: "Confirmar Todos os Pares?",
+      message:
+        "Deseja confirmar todos os #{length(socket.assigns.suggestions)} pares de sugestão de reembolso?",
+      action: JS.push("confirm_all"),
+      confirm_text: "Confirmar Todos",
+      confirm_class: "btn-primary",
+      icon: "hero-check",
+      icon_class: "bg-primary/10 text-primary"
+    }
+
+    {:noreply, assign(socket, :confirm_modal, confirm)}
   end
 
   @impl true
@@ -541,6 +601,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     {:noreply,
      socket
      |> put_flash(:success, "#{count} reembolsos vinculados com sucesso!")
+     |> assign(:confirm_modal, nil)
      |> load_data()}
   end
 
@@ -586,11 +647,30 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   @impl true
+  def handle_event("confirm_unlink_reimbursement", %{"link-key" => link_key}, socket) do
+    confirm = %{
+      title: "Desvincular Reembolso?",
+      message:
+        "Deseja desvincular este reembolso? A despesa voltará a ficar pendente de reembolso.",
+      action: JS.push("unlink_reimbursement", value: %{"link-key" => link_key}),
+      confirm_text: "Sim, Desvincular",
+      confirm_class: "btn-error",
+      icon: "hero-link-slash",
+      icon_class: "bg-error/10 text-error"
+    }
+
+    {:noreply, assign(socket, :confirm_modal, confirm)}
+  end
+
+  @impl true
   def handle_event("unlink_reimbursement", %{"link-key" => link_key}, socket) do
     Transactions.unlink_reimbursement_by_key(link_key)
 
     {:noreply,
-     socket |> put_flash(:success, "Reembolso desvinculado com sucesso.") |> load_data()}
+     socket
+     |> put_flash(:success, "Reembolso desvinculado com sucesso.")
+     |> assign(:confirm_modal, nil)
+     |> load_data()}
   end
 
   @impl true
@@ -679,6 +759,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     {:noreply,
      socket
      |> assign(:show_linker_modal, false)
+     |> assign(:confirm_modal, nil)
      |> assign(:selected_credit_ids, MapSet.new())
      |> assign(:total_credits_selected, Decimal.new("0"))}
   end

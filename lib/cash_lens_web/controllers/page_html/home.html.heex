@@ -17,6 +17,9 @@
           {format_currency(@total_balance)}
         </div>
         <div class="stat-desc">Soma de todas as contas</div>
+        <div class="stat-desc opacity-60">
+          {format_currency(@total_balance_with_credit_cards)} com cartões de crédito
+        </div>
       </div>
     </div>
     
@@ -161,7 +164,10 @@
           <%= for account <- @accounts do %>
             <.link
               navigate={~p"/transactions?account_id=#{account.id}&return_to=dashboard"}
-              class="flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300 gap-4"
+              class={[
+                "flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300 gap-4",
+                account.is_closed && "opacity-60"
+              ]}
             >
               <div class="flex items-center gap-4 min-w-0">
                 <div class="avatar flex-shrink-0">
@@ -180,7 +186,15 @@
                   </div>
                 </div>
                 <div class="min-w-0">
-                  <p class="font-bold truncate">{account.name}</p>
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <p class="font-bold truncate">{account.name}</p>
+                    <span
+                      :if={account.is_closed}
+                      class="badge badge-sm badge-ghost text-[8px] font-black uppercase opacity-60 flex-shrink-0"
+                    >
+                      Encerrada
+                    </span>
+                  </div>
                   <p class="text-xs opacity-60 truncate">{account.bank}</p>
                 </div>
               </div>

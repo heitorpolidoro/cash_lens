@@ -110,6 +110,13 @@ defmodule CashLens.AccountingTest do
 
     test "get_historical_balances/0 returns aggregated data" do
       acc = account_fixture()
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: acc.id,
+        date: ~D[2026-01-01],
+        amount: "100.0"
+      })
+
       Accounting.calculate_monthly_balance(acc.id, 2026, 1)
       history = Accounting.get_historical_balances()
       assert history != []
@@ -228,11 +235,43 @@ defmodule CashLens.AccountingTest do
   end
 
   describe "rebuild_account_balances/1" do
-    test "is a no-op when the account has no transactions" do
+    test "generates balance records up to the current month when the account has no transactions" do
       acc = account_fixture(balance: "500")
 
       assert :ok = Accounting.rebuild_account_balances(acc.id)
-      assert Repo.all(from b in Balance, where: b.account_id == ^acc.id) == []
+      balances = Repo.all(from b in Balance, where: b.account_id == ^acc.id)
+      assert length(balances) > 0
+
+      # The latest month should be the current month
+      today = Date.utc_today()
+
+      latest =
+        Repo.one!(
+          from b in Balance,
+            where: b.account_id == ^acc.id and b.year == ^today.year and b.month == ^today.month
+        )
+
+      assert Decimal.equal?(latest.final_balance, "500")
+    end
+
+    test "stops generating balance records at the last transaction month if the account is closed" do
+      acc = account_fixture(balance: "1000")
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-01-10], amount: "-100"})
+      transaction_fixture(%{account_id: acc.id, date: ~D[2026-02-10], amount: "-200"})
+
+      # Mark account as closed
+      {:ok, closed_acc} = CashLens.Accounts.update_account(acc, %{is_closed: true})
+
+      assert :ok = Accounting.rebuild_account_balances(closed_acc.id)
+
+      # Should have balances for Jan (1) and Feb (2) only
+      balances =
+        Repo.all(
+          from b in Balance, where: b.account_id == ^acc.id, order_by: [asc: b.year, asc: b.month]
+        )
+
+      months = Enum.map(balances, &{&1.year, &1.month})
+      assert months == [{2026, 1}, {2026, 2}]
     end
 
     test "deletes existing balances and rebuilds them with the new initial balance" do

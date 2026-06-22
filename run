@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+
+docker compose -f /Users/heitor/workspace/docker-compose.yml up -d --wait postgres
+export $(cat .env | xargs)
+exec mix phx.server

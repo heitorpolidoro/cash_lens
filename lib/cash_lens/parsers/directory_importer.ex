@@ -183,10 +183,13 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end
   end
 
+  # Recursive: an account folder commonly has files organized into year/month
+  # subfolders (e.g. "BB Conta Corrente/2026/junho.csv") with a single `.account`
+  # at the top, not one per subfolder. A non-recursive listing would silently
+  # skip everything below the first level.
   defp partition_files(dir, expected) do
-    dir
-    |> File.ls!()
-    |> Enum.map(&Path.join(dir, &1))
+    Path.join(dir, "**/*")
+    |> Path.wildcard()
     |> Enum.filter(&(File.regular?(&1) and extname(&1) in @supported_extensions))
     |> Enum.split_with(&(extname(&1) in expected))
   end

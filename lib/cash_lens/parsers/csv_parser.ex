@@ -38,11 +38,17 @@ defmodule CashLens.Parsers.CSVParser do
         do: Semicolon,
         else: CSV
 
-    csv_content
-    |> parser.parse_string(skip_headers: false)
-    |> Enum.drop(1)
-    |> Enum.map(fn row -> parse_row(row, :bb) end)
-    |> Enum.reject(&is_nil/1)
+    case csv_content |> parser.parse_string(skip_headers: false) |> Enum.to_list() do
+      [header | rows] ->
+        mapping = bb_column_mapping(header)
+
+        rows
+        |> Enum.map(&parse_bb_row(&1, mapping))
+        |> Enum.reject(&is_nil/1)
+
+      [] ->
+        []
+    end
   end
 
   # --- Bradesco helpers ---
@@ -102,24 +108,57 @@ defmodule CashLens.Parsers.CSVParser do
 
   # --- Banco do Brasil helpers ---
 
-  # Try to match based on row length to handle different exports
-  defp parse_row(row, :bb) when length(row) >= 6 do
-    description = Enum.at(row, 2)
-    amount = Enum.at(row, 5)
+  # BB has changed its CSV export layout over time (column count and order vary
+  # between exports — e.g. a "Histórico" column some years, a split
+  # "Lançamento"/"Detalhes" pair in others, with "Valor" moving accordingly). Reading
+  # column positions by header name (instead of a fixed index/heuristic) makes every
+  # variant resolve to the same fields without needing per-format detection.
+  defp bb_column_mapping(header) do
+    normalized = Enum.map(header, &normalize_header/1)
 
-    # Heuristic: if column 3 (index 2) is a small number and column 4 exists,
-    # it might be the Dep/Term format
-    {description, amount} =
-      if String.match?(description || "", ~r/^\d+$/) and length(row) >= 6 do
-        {Enum.at(row, 3), Enum.at(row, 5)}
-      else
-        {description, amount}
-      end
-
-    do_parse_row(Enum.at(row, 0), description, amount)
+    %{
+      date_idx: find_col(normalized, "data") || 0,
+      valor_idx: find_col(normalized, "valor"),
+      historico_idx: find_col(normalized, "hist"),
+      lancamento_idx: find_col(normalized, "lancamento"),
+      detalhes_idx: find_col(normalized, "detalhes")
+    }
   end
 
-  defp parse_row(_, _), do: nil
+  # Headers are sometimes abbreviated ("Hist" instead of "Histórico") and the
+  # exact wording varies by export, so match by substring rather than equality.
+  # First match wins, which is what disambiguates e.g. "Lançamento" (idx 1) from
+  # "Tipo Lançamento" (idx 5) — the real column always comes first in BB exports.
+  defp find_col(normalized, needle),
+    do: Enum.find_index(normalized, &String.contains?(&1, needle))
+
+  defp normalize_header(header) do
+    (header || "")
+    |> String.trim()
+    |> String.normalize(:nfd)
+    |> String.replace(~r/\p{Mn}/u, "")
+    |> String.downcase()
+    |> String.replace(~r/[^a-z]/u, "")
+  end
+
+  defp parse_bb_row(row, mapping) do
+    date = Enum.at(row, mapping.date_idx)
+    amount = if mapping.valor_idx, do: Enum.at(row, mapping.valor_idx)
+    description = bb_row_description(row, mapping)
+
+    do_parse_row(date, description, amount)
+  end
+
+  defp bb_row_description(row, %{historico_idx: idx}) when not is_nil(idx) do
+    Enum.at(row, idx)
+  end
+
+  defp bb_row_description(row, %{lancamento_idx: l_idx, detalhes_idx: d_idx}) do
+    [l_idx, d_idx]
+    |> Enum.map(&if &1, do: Enum.at(row, &1))
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join(" - ")
+  end
 
   defp do_parse_row(date, description, amount) do
     amount_decimal = parse_amount(amount)
@@ -217,12 +256,21 @@ defmodule CashLens.Parsers.CSVParser do
   defp normalize_year(y) when y < 100, do: 2000 + y
   defp normalize_year(y), do: y
 
+  # BB exports amounts in two different notations depending on the statement:
+  # plain "-150.00" (no thousands separator) in some exports, and Brazilian
+  # "-1.471,52" (period thousands separator, comma decimal) in others. A comma
+  # is the tell: when present, the period(s) before it are thousands separators
+  # and must be dropped, not converted, or "1.471,52" round-trips to the
+  # invalid "1.471.52" and silently zeroes out the transaction.
   defp parse_amount(amount_string) do
+    raw = (amount_string || "") |> String.trim() |> String.replace(~r/[^0-9,.-]/, "")
+
     clean_string =
-      (amount_string || "")
-      |> String.trim()
-      |> String.replace(~r/[^0-9,.-]/, "")
-      |> String.replace(",", ".")
+      if String.contains?(raw, ",") do
+        raw |> String.replace(".", "") |> String.replace(",", ".")
+      else
+        raw
+      end
 
     case Decimal.cast(clean_string) do
       {:ok, decimal} -> decimal

@@ -219,17 +219,8 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
       })
 
     # 3. Recalculate balances
-    CashLens.Accounting.calculate_monthly_balance(
-      origin_tx.account_id,
-      origin_tx.date.year,
-      origin_tx.date.month
-    )
-
-    CashLens.Accounting.calculate_monthly_balance(
-      pair_tx.account_id,
-      pair_tx.date.year,
-      pair_tx.date.month
-    )
+    CashLens.Accounting.rebuild_account_balances(origin_tx.account_id)
+    CashLens.Accounting.rebuild_account_balances(pair_tx.account_id)
 
     send(self(), {:transfer_linked, "Par de transferência criado e vinculado!"})
 

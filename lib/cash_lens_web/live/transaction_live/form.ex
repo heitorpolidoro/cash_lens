@@ -86,7 +86,7 @@ defmodule CashLensWeb.TransactionLive.Form do
   @impl true
   def mount(params, _session, socket) do
     categories = CashLens.Categories.list_categories()
-    accounts = CashLens.Accounts.list_accounts()
+    accounts = CashLens.Accounts.list_active_accounts()
 
     {:ok,
      socket
@@ -102,9 +102,19 @@ defmodule CashLensWeb.TransactionLive.Form do
   defp apply_action(socket, :edit, %{"id" => id}) do
     transaction = Transactions.get_transaction!(id)
 
+    accounts =
+      if transaction.account_id &&
+           not Enum.any?(socket.assigns.accounts, &(&1.id == transaction.account_id)) do
+        account = CashLens.Accounts.get_account!(transaction.account_id)
+        [account | socket.assigns.accounts]
+      else
+        socket.assigns.accounts
+      end
+
     socket
     |> assign(:page_title, "Edit Transaction")
     |> assign(:transaction, transaction)
+    |> assign(:accounts, accounts)
     |> assign(:form, to_form(Transactions.change_transaction(transaction)))
   end
 

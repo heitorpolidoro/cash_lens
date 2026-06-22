@@ -27,140 +27,98 @@
       end}
     </:subtitle>
     <:actions>
-      <div class="dropdown dropdown-end">
+      <div class="flex items-center gap-2">
         <button
-          tabindex="0"
+          type="button"
+          phx-click="toggle_pending"
           class={[
-            "btn btn-sm",
-            if(@filtered_count != nil,
-              do: "btn-primary",
+            "btn btn-sm gap-2",
+            if(@filters["category_id"] == "nil",
+              do: "btn-warning text-warning-content font-black shadow-sm",
               else: "btn-outline border-base-300"
             )
           ]}
         >
-          <.icon name="hero-funnel" class="size-4" /> Filtros
-          <span :if={@filtered_count != nil} class="badge badge-xs badge-warning ml-1">
-            {@filtered_count}
-          </span>
+          <.icon name="hero-exclamation-triangle" class="size-4" /> Pendentes {@pending_count}
         </button>
-        <ul
-          tabindex="0"
-          class="dropdown-content z-[1] p-3 shadow bg-base-100 rounded-box w-72 mt-2 border border-base-200 space-y-2"
-        >
-          <li class="text-[9px] font-black uppercase opacity-40 tracking-widest px-1">Tipo</li>
-          <li>
-            <div class="join w-full shadow-sm border border-base-300 rounded-lg overflow-hidden">
-              <button
-                type="button"
-                phx-click="toggle_type"
-                phx-value-type="debit"
-                class={[
-                  "join-item btn btn-sm flex-1",
-                  if(@filters["type"] == "debit",
-                    do: "btn-error",
-                    else: "bg-base-100 border-none hover:bg-base-200"
-                  )
-                ]}
-              >
-                <.icon name="hero-arrow-trending-down" class="size-3.5 mr-1" /> Débitos
-              </button>
-              <button
-                type="button"
-                phx-click="toggle_type"
-                phx-value-type="credit"
-                class={[
-                  "join-item btn btn-sm flex-1",
-                  if(@filters["type"] == "credit",
-                    do: "btn-success",
-                    else: "bg-base-100 border-none hover:bg-base-200"
-                  )
-                ]}
-              >
-                <.icon name="hero-arrow-trending-up" class="size-3.5 mr-1" /> Créditos
-              </button>
-            </div>
-          </li>
-          <div class="divider my-1"></div>
-          <li class="text-[9px] font-black uppercase opacity-40 tracking-widest px-1">Status</li>
 
-          <li>
-            <button
-              type="button"
-              phx-click="toggle_pending"
-              class={[
-                "btn btn-sm w-full justify-start gap-2",
-                if(@filters["category_id"] == "nil",
-                  do: "btn-warning",
-                  else: "btn-ghost"
-                )
-              ]}
-            >
-              <.icon name="hero-exclamation-triangle" class="size-4" /> Pendentes
-              <span class="ml-auto badge badge-xs">
-                {@pending_count}
-              </span>
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              phx-click="toggle_unmatched"
-              class={[
-                "btn btn-sm w-full justify-start gap-2",
-                if(@filters["unmatched_transfers"] == "true",
-                  do: "btn-secondary",
-                  else: "btn-ghost"
-                )
-              ]}
-            >
-              <.icon name="hero-link-slash" class="size-4" /> Transferência Não Vinculada
-              <span class="ml-auto badge badge-xs">
-                {@unmatched_transfers_count}
-              </span>
-            </button>
-          </li>
-        </ul>
-      </div>
-      <div class="dropdown dropdown-end">
-        <button tabindex="0" class="btn btn-outline border-base-300 btn-sm">
-          <.icon name="hero-ellipsis-vertical" class="size-4" /> Ações
-        </button>
-        <ul
-          tabindex="0"
-          class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 mt-2 border border-base-200"
-        >
-          <li>
-            <.link navigate={~p"/transactions/new"}>
-              <.icon name="hero-plus" class="size-4" /> Nova Transação
-            </.link>
-          </li>
-          <li>
-            <button type="button" phx-click="open_import">
-              <.icon name="hero-arrow-up-tray" class="size-4" /> Importar Extratos
-            </button>
-          </li>
-          <li>
-            <button type="button" phx-click="auto_categorize_all">
-              <.icon name="hero-sparkles" class="size-4" /> Auto-Categorizar
-            </button>
-          </li>
-          <li>
-            <.link navigate={~p"/reimbursements"}>
-              <.icon name="hero-banknotes" class="size-4" /> Reembolsos
-            </.link>
-          </li>
-          <li>
-            <.link navigate={~p"/admin/exclusion_rules"}>
-              <.icon name="hero-no-symbol" class="size-4" /> Regras de Exclusão
-            </.link>
-          </li>
-          <div class="divider my-1"></div>
-          <li>
-            <button type="button" phx-click="confirm_delete_all" class="text-error">
-              <.icon name="hero-trash" class="size-4" /> Limpar Tudo
-            </button>
-          </li>
-        </ul>
+        <div class="join shadow-sm border border-base-300 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            phx-click="toggle_type"
+            phx-value-type="debit"
+            class={[
+              "join-item btn btn-sm",
+              if(@filters["type"] == "debit",
+                do: "btn-error",
+                else: "bg-base-100 border-none hover:bg-base-200"
+              )
+            ]}
+          >
+            <.icon name="hero-arrow-trending-down" class="size-3.5 mr-1" /> Débitos
+          </button>
+          <button
+            type="button"
+            phx-click="toggle_type"
+            phx-value-type="credit"
+            class={[
+              "join-item btn btn-sm",
+              if(@filters["type"] == "credit",
+                do: "btn-success",
+                else: "bg-base-100 border-none hover:bg-base-200"
+              )
+            ]}
+          >
+            <.icon name="hero-arrow-trending-up" class="size-3.5 mr-1" /> Créditos
+          </button>
+        </div>
+
+        <div class="dropdown dropdown-end">
+          <button tabindex="0" class="btn btn-outline border-base-300 btn-sm">
+            <.icon name="hero-ellipsis-vertical" class="size-4" /> Ações
+          </button>
+          <ul
+            tabindex="0"
+            class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 mt-2 border border-base-200"
+          >
+            <li>
+              <.link navigate={~p"/transactions/new"}>
+                <.icon name="hero-plus" class="size-4" /> Nova Transação
+              </.link>
+            </li>
+            <li>
+              <button type="button" phx-click="open_import">
+                <.icon name="hero-arrow-up-tray" class="size-4" /> Importar Extratos
+              </button>
+            </li>
+            <li>
+              <button type="button" phx-click="open_batch_import">
+                <.icon name="hero-folder-arrow-down" class="size-4" /> Importar em Lote
+              </button>
+            </li>
+            <li>
+              <button type="button" phx-click="auto_categorize_all">
+                <.icon name="hero-sparkles" class="size-4" /> Auto-Categorizar
+              </button>
+            </li>
+            <li>
+              <.link navigate={~p"/reimbursements"}>
+                <.icon name="hero-banknotes" class="size-4" /> Reembolsos
+              </.link>
+            </li>
+            <li>
+              <.link navigate={~p"/admin/exclusion_rules"}>
+                <.icon name="hero-no-symbol" class="size-4" /> Regras de Exclusão
+              </.link>
+            </li>
+            <div class="divider my-1"></div>
+            <li>
+              <button type="button" phx-click="confirm_delete_all" class="text-error">
+                <.icon name="hero-trash" class="size-4" /> Limpar Tudo
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
     </:actions>
   </.header>
@@ -746,6 +704,12 @@
     module={CashLensWeb.TransactionLive.ImportModalComponent}
     id="import-modal"
     show={@show_import_modal}
+  />
+
+  <.live_component
+    module={CashLensWeb.TransactionLive.BatchImportModalComponent}
+    id="batch-import-modal"
+    show={@show_batch_import_modal}
   />
 
   <.live_component
