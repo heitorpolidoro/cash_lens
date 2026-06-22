@@ -328,4 +328,102 @@ defmodule CashLens.ForecastTest do
       assert {:ok, %{active: true}} = Forecast.toggle_active(toggled)
     end
   end
+
+  describe "project/1" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    setup do
+      account = account_fixture(%{balance: "1000.00"})
+      cc_account = account_fixture(%{balance: "5000.00", is_credit_card: true})
+      %{account: account, cc_account: cc_account}
+    end
+
+    test "starting_balance excludes credit card and closed accounts", %{
+      account: account,
+      cc_account: cc_account
+    } do
+      closed = account_fixture(%{balance: "2000.00", is_closed: true})
+      projection = Forecast.project()
+
+      assert Decimal.equal?(projection.starting_balance, "1000.00")
+      refute cc_account.is_credit_card == false
+      assert closed.is_closed
+    end
+
+    test "inactive items don't appear in the projection" do
+      recurring_item_fixture(%{day_of_month: 1, amount: "-2000.00", active: false})
+      projection = Forecast.project()
+      assert projection.occurrences == []
+      assert projection.zero_date == nil
+    end
+
+    test "finds the date the balance goes negative", %{account: account} do
+      today = Date.utc_today()
+      future_day = today.day
+
+      recurring_item_fixture(%{day_of_month: future_day, amount: "-2000.00"})
+
+      projection = Forecast.project()
+
+      assert projection.zero_date == today
+      assert %{date: ^today, balance_after: balance} = hd(projection.occurrences)
+      assert Decimal.equal?(balance, "-1000.00")
+    end
+
+    test "zero_date is nil when the balance never goes negative" do
+      recurring_item_fixture(%{day_of_month: 15, amount: "-1.00"})
+      projection = Forecast.project()
+      assert projection.zero_date == nil
+    end
+  end
+
+  describe "balance_on/2" do
+    test "returns starting_balance when the date is before any occurrence" do
+      projection = %{
+        starting_balance: Decimal.new("100.00"),
+        occurrences: [
+          %{date: ~D[2026-07-01], item: nil, balance_after: Decimal.new("50.00")}
+        ],
+        zero_date: nil
+      }
+
+      assert Decimal.equal?(Forecast.balance_on(projection, ~D[2026-06-01]), "100.00")
+    end
+
+    test "returns the cumulative balance as of the given date" do
+      projection = %{
+        starting_balance: Decimal.new("100.00"),
+        occurrences: [
+          %{date: ~D[2026-07-01], item: nil, balance_after: Decimal.new("50.00")},
+          %{date: ~D[2026-07-10], item: nil, balance_after: Decimal.new("80.00")}
+        ],
+        zero_date: nil
+      }
+
+      assert Decimal.equal?(Forecast.balance_on(projection, ~D[2026-07-05]), "50.00")
+      assert Decimal.equal?(Forecast.balance_on(projection, ~D[2026-07-10]), "80.00")
+      assert Decimal.equal?(Forecast.balance_on(projection, ~D[2026-12-31]), "80.00")
+    end
+  end
+
+  describe "next_income_date/1" do
+    test "returns the date of the first occurrence with a positive amount" do
+      projection = %{
+        starting_balance: Decimal.new("0"),
+        occurrences: [
+          %{date: ~D[2026-07-01], item: %{amount: Decimal.new("-50.00")}, balance_after: nil},
+          %{date: ~D[2026-07-05], item: %{amount: Decimal.new("3000.00")}, balance_after: nil}
+        ],
+        zero_date: nil
+      }
+
+      assert Forecast.next_income_date(projection) == ~D[2026-07-05]
+    end
+
+    test "falls back to today + 30 days when there is no income item" do
+      projection = %{starting_balance: Decimal.new("0"), occurrences: [], zero_date: nil}
+      assert Forecast.next_income_date(projection) == Date.add(Date.utc_today(), 30)
+    end
+  end
 end
