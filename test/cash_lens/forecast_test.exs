@@ -7,6 +7,77 @@ defmodule CashLens.ForecastTest do
   import CashLens.CategoriesFixtures
   import CashLens.ForecastFixtures
 
+  describe "suggest_for_category/1" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    test "returns :insufficient_history with fewer than 2 occurrences" do
+      category = category_fixture(%{type: "fixed"})
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        category_id: category.id,
+        date: ~D[2026-06-10],
+        amount: "-50.00"
+      })
+
+      assert Forecast.suggest_for_category(category) == :insufficient_history
+    end
+
+    test "suggests the median day and the most recent amount" do
+      category = category_fixture(%{type: "fixed"})
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        category_id: category.id,
+        date: ~D[2026-04-10],
+        amount: "-50.00"
+      })
+
+      transaction_fixture(%{
+        account_id: account.id,
+        category_id: category.id,
+        date: ~D[2026-05-12],
+        amount: "-52.00"
+      })
+
+      transaction_fixture(%{
+        account_id: account.id,
+        category_id: category.id,
+        date: ~D[2026-06-15],
+        amount: "-55.00"
+      })
+
+      assert {:ok, %{"day_of_month" => 12, "amount" => amount}} =
+               Forecast.suggest_for_category(category)
+
+      assert Decimal.equal?(amount, "-55.00")
+    end
+
+    test "ignores transactions on credit card accounts" do
+      category = category_fixture(%{type: "fixed"})
+      cc_account = account_fixture(%{is_credit_card: true})
+
+      transaction_fixture(%{
+        account_id: cc_account.id,
+        category_id: category.id,
+        date: ~D[2026-04-10],
+        amount: "-50.00"
+      })
+
+      transaction_fixture(%{
+        account_id: cc_account.id,
+        category_id: category.id,
+        date: ~D[2026-05-10],
+        amount: "-50.00"
+      })
+
+      assert Forecast.suggest_for_category(category) == :insufficient_history
+    end
+  end
+
   describe "create_recurring_item/1" do
     test "creates with valid attrs" do
       category = category_fixture(%{type: "fixed"})
