@@ -245,11 +245,19 @@ defmodule CashLens.Transactions do
 
   defp filter_unmatched_transfers(query, _), do: query
 
-  # Excludes transactions categorized as transfers from income/expense aggregates.
+  # Excludes transactions categorized as transfers or credit-card payments
+  # from income/expense aggregates (the itemized purchases still count, just
+  # not the lump-sum payment — see spec section 8).
   defp exclude_transfer_category(query) do
-    case Repo.one(from(c in Category, where: c.slug == "transfer", select: c.id)) do
-      nil -> query
-      id -> where(query, [t], is_nil(t.category_id) or t.category_id != ^id)
+    excluded_ids =
+      ["transfer", "cartao-de-credito"]
+      |> Enum.map(&Repo.one(from(c in Category, where: c.slug == ^&1, select: c.id)))
+      |> Enum.reject(&is_nil/1)
+
+    if excluded_ids == [] do
+      query
+    else
+      where(query, [t], is_nil(t.category_id) or t.category_id not in ^excluded_ids)
     end
   end
 
@@ -569,9 +577,10 @@ defmodule CashLens.Transactions do
   defp build_summary_base_query(query) do
     from t in query,
       left_join: c in assoc(t, :category),
-      # Transfers (category "transfer") move money between the user's own accounts,
-      # so they never count as income/expense — paired or not.
-      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+      # Transfers and credit-card payments move money between the user's own
+      # "buckets" (another account, or a not-yet-itemized bill), so they
+      # never count as income/expense — paired/itemized or not.
+      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
       where: is_nil(t.reimbursement_link_key)
   end
 
@@ -602,8 +611,9 @@ defmodule CashLens.Transactions do
     query =
       from t in Transaction,
         left_join: c in assoc(t, :category),
-        # Transfers (category "transfer") are excluded from income/expenses, paired or not.
-        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+        # Transfers and credit-card payments are excluded from income/expenses,
+        # paired/itemized or not.
+        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
         where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("EXTRACT(YEAR FROM ?)::integer", t.date),

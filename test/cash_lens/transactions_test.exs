@@ -624,4 +624,74 @@ defmodule CashLens.TransactionsTest do
       assert Repo.get!(Transaction, purchase.id).parent_transaction_id == payment.id
     end
   end
+
+  describe "totals exclude Cartão de Crédito (no double counting)" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    test "get_filtered_summary/1 excludes the payment but counts the itemized purchase" do
+      cc = cc_category()
+      market = other_category()
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: market.id,
+        amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
+      summary = Transactions.get_filtered_summary(%{})
+      assert Decimal.equal?(summary.expenses, Decimal.new("500.00"))
+    end
+
+    test "get_monthly_summary/2 excludes Cartão de Crédito payments" do
+      cc = cc_category()
+      checking = account_fixture(%{is_credit_card: false})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
+      summary = Transactions.get_monthly_summary(~D[2026-02-15])
+      assert Decimal.equal?(summary.expenses, Decimal.new("0"))
+    end
+
+    test "get_historical_summary/1 excludes Cartão de Crédito payments" do
+      cc = cc_category()
+      market = other_category()
+      checking = account_fixture(%{is_credit_card: false})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
+      # A non-excluded transaction in the same month so the group_by produces
+      # a row to assert against (a month with only an excluded transaction
+      # legitimately yields no row at all).
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: market.id,
+        amount: "10.00",
+        date: ~D[2026-02-12]
+      })
+
+      [row] = Transactions.get_historical_summary()
+      assert Decimal.equal?(row.expenses, Decimal.new("0"))
+    end
+  end
 end
