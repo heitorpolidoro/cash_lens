@@ -210,9 +210,6 @@ defmodule CashLens.Parsers.IngestorTest do
     end
 
     test "links an imported credit-card batch to an existing Cartão de Crédito payment" do
-      import CashLens.CategoriesFixtures
-      import CashLens.TransactionsFixtures
-
       category = category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
       checking = account_fixture(%{is_credit_card: false})
       card = account_fixture(%{is_credit_card: true, parser_type: "bb_csv"})
