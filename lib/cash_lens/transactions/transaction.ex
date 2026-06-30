@@ -29,6 +29,7 @@ defmodule CashLens.Transactions.Transaction do
     field :suggested_category, :map, virtual: true
     field :notes, :string
     field :installment_number, :integer
+    field :parent_transaction_id, :binary_id
     belongs_to :account, CashLens.Accounts.Account
     belongs_to :category, CashLens.Categories.Category
     belongs_to :installment_group, CashLens.Installments.InstallmentGroup
@@ -53,12 +54,14 @@ defmodule CashLens.Transactions.Transaction do
       :notes,
       :installment_group_id,
       :installment_number,
-      :occurrence_index
+      :occurrence_index,
+      :parent_transaction_id
     ])
     |> validate_required([:date, :description, :amount, :account_id])
     |> put_dedup_key()
     |> generate_fingerprint()
     |> unique_constraint(:fingerprint)
+    |> foreign_key_constraint(:parent_transaction_id)
   end
 
   defp identity_attrs(changeset) do

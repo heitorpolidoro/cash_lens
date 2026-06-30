@@ -249,4 +249,21 @@ defmodule CashLens.Transactions.TransactionTest do
       assert cs1.changes.fingerprint == cs2.changes.fingerprint
     end
   end
+
+  describe "parent_transaction_id" do
+    test "changeset accepts parent_transaction_id" do
+      parent_id = Ecto.UUID.generate()
+
+      changeset =
+        Transaction.changeset(%Transaction{}, %{
+          date: ~D[2026-01-01],
+          description: "Uber",
+          amount: "-30.00",
+          account_id: Ecto.UUID.generate(),
+          parent_transaction_id: parent_id
+        })
+
+      assert Ecto.Changeset.get_change(changeset, :parent_transaction_id) == parent_id
+    end
+  end
 end
