@@ -1151,6 +1151,27 @@ defmodule CashLens.Transactions do
     |> Repo.all()
   end
 
+  @doc """
+  "Cartão de Crédito"-categorized transactions that have NO children at
+  all — i.e. a payment that was categorized as Cartão de Crédito but never
+  got a matching invoice batch linked to it (auto-match never found a
+  candidate, or the fatura simply hasn't been imported yet). These are
+  invisible to `list_credit_card_divergent_links/0` and
+  `list_credit_card_linked/0` (both require existing children) and to
+  `list_credit_card_link_suggestions/0` (no exact-sum orphan batch exists
+  yet), so this surfaces them on the `/credit_card_links` screen instead
+  of leaving them invisible. Sorted by date descending.
+
+  Same underlying query as `list_credit_card_payment_candidates/0` (a
+  payment with no children is exactly an "unlinked" payment) — kept as a
+  separate, intention-revealing name since the two are used for different
+  purposes on the LiveView (a manual-link candidate list vs. a visibility
+  section).
+  """
+  def list_credit_card_payments_without_children do
+    list_credit_card_payment_candidates()
+  end
+
   defp linked_parent_ids_subquery do
     from(c in Transaction,
       where: not is_nil(c.parent_transaction_id),

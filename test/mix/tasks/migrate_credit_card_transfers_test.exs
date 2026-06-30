@@ -73,6 +73,56 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
     assert Repo.get!(Transaction, real_purchase.id).parent_transaction_id == updated_payment.id
   end
 
+  test "aborts without deleting anything when eligible pairs exceed the safety threshold" do
+    transfer_cat = category_fixture(%{name: "Transferência", slug: "transfer"})
+    category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+    checking = account_fixture(%{is_credit_card: false})
+    card = account_fixture(%{is_credit_card: true})
+
+    Repo.insert!(%TransferRule{
+      description_patterns: ["fatura"],
+      source_account_id: checking.id,
+      destination_account_id: card.id,
+      create_mirror: true
+    })
+
+    pairs =
+      for i <- 1..501 do
+        payment =
+          insert_raw(%{
+            account_id: checking.id,
+            category_id: transfer_cat.id,
+            amount: "-#{i}.00",
+            date: ~D[2026-01-15],
+            description: "Pagamento fatura #{i}"
+          })
+
+        mirror =
+          insert_raw(%{
+            account_id: card.id,
+            category_id: transfer_cat.id,
+            amount: "#{i}.00",
+            date: ~D[2026-01-15],
+            description: "Pagamento fatura #{i}"
+          })
+
+        link(payment, mirror)
+        {payment, mirror}
+      end
+
+    log =
+      capture_log(fn -> Mix.Tasks.MigrateCreditCardTransfers.run([]) end)
+
+    assert log =~ "abort"
+
+    Enum.each(pairs, fn {payment, mirror} ->
+      reloaded_payment = Repo.get!(Transaction, payment.id)
+      assert reloaded_payment.category_id == transfer_cat.id
+      refute is_nil(reloaded_payment.transfer_key)
+      assert Repo.get!(Transaction, mirror.id)
+    end)
+  end
+
   test "does not touch a transfer_key pair with no matching TransferRule" do
     transfer_cat = category_fixture(%{name: "Transferência", slug: "transfer"})
     category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})

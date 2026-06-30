@@ -26,6 +26,18 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
 
   @shortdoc "Migrates historical credit-card transfer pairs to the parent/child model"
 
+  # Coarse circuit-breaker against a runaway/misconfigured run: a personal
+  # finance app realistically accumulates a handful to a few dozen
+  # historical credit-card transfer pairs per year, even across several
+  # years of imported history. 500 eligible pairs in one run is already
+  # far beyond what any plausible real dataset would produce, so it is a
+  # strong signal that `transfer_key` linking or `TransferRule` matching
+  # picked up something unintended (e.g. a buggy rule mass-tagging
+  # unrelated pairs). When exceeded, abort entirely rather than silently
+  # deleting hundreds of "mirror" transactions unattended — better to
+  # require a human to look before any destructive action happens.
+  @safety_threshold 500
+
   @impl Mix.Task
   def run(_args) do
     Mix.Task.run("app.start")
@@ -47,6 +59,31 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
     {migrated, ambiguous} =
       transfer_pairs()
       |> Enum.split_with(fn {payer, card_side} -> eligible?(payer, card_side, rules) end)
+
+    if length(migrated) > @safety_threshold do
+      abort_on_anomaly(migrated)
+    else
+      run_migration(migrated, ambiguous, category)
+    end
+  end
+
+  defp abort_on_anomaly(migrated) do
+    Logger.warning(
+      "MigrateCreditCardTransfers: abort — #{length(migrated)} pair(s) are eligible for " <>
+        "migration, which exceeds the safety threshold of #{@safety_threshold}. This is " <>
+        "far more than a personal-finance dataset would realistically produce, so no " <>
+        "changes were made. Review the eligible pairs manually before re-running: " <>
+        inspect(Enum.map(migrated, fn {a, b} -> {a.id, b.tx.id} end))
+    )
+  end
+
+  defp run_migration(migrated, ambiguous, category) do
+    mirror_ids = Enum.map(migrated, fn {_payer, %{tx: mirror}} -> mirror.id end)
+
+    Logger.info(
+      "MigrateCreditCardTransfers: about to delete #{length(mirror_ids)} mirror " <>
+        "transaction(s) (audit trail before destructive action): " <> inspect(mirror_ids)
+    )
 
     Enum.each(migrated, fn {payer, card_side} -> migrate_pair(payer, card_side, category) end)
 

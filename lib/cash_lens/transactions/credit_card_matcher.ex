@@ -17,9 +17,23 @@ defmodule CashLens.Transactions.CreditCardMatcher do
   Tries to link a freshly-imported batch of credit-card transactions to an
   existing, still-childless "Cartão de Crédito" payment transaction, by
   exact sum and date within #{@tolerance_days} days.
+
+  An import batch normally touches a single credit-card account, in which
+  case this returns that account's result directly:
+  `{:ok, parent_id} | :no_match | :ambiguous | :not_credit_card_batch`.
+
+  In the rare case a batch spans multiple credit-card accounts, each
+  account's group is matched independently (linking side-effects fire for
+  every group) and this returns the list of per-group results instead of
+  silently picking one — callers that only care about a single account's
+  outcome already ignore the return value (e.g. `Ingestor`).
   """
   @spec match_batch([Transaction.t()]) ::
-          {:ok, Ecto.UUID.t()} | :no_match | :ambiguous | :not_credit_card_batch
+          {:ok, Ecto.UUID.t()}
+          | :no_match
+          | :ambiguous
+          | :not_credit_card_batch
+          | [{:ok, Ecto.UUID.t()} | :no_match | :ambiguous]
   def match_batch(transactions) when is_list(transactions) do
     case credit_card_category() do
       nil ->
@@ -36,7 +50,8 @@ defmodule CashLens.Transactions.CreditCardMatcher do
   end
 
   defp summarize_batch_results([]), do: :not_credit_card_batch
-  defp summarize_batch_results([result | _]), do: result
+  defp summarize_batch_results([result]), do: result
+  defp summarize_batch_results(results) when is_list(results), do: results
 
   defp do_match_batch(batch, category) do
     [%{account_id: account_id} | _] = batch

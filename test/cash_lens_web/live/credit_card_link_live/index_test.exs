@@ -105,6 +105,27 @@ defmodule CashLensWeb.CreditCardLinkLive.IndexTest do
     assert Repo.get!(Transaction, purchase.id).parent_transaction_id == payment.id
   end
 
+  test "shows a Cartão de Crédito payment with no children under 'Pagamentos sem Fatura'", %{
+    conn: conn
+  } do
+    cc = cc_category()
+    checking = account_fixture(%{is_credit_card: false})
+
+    payment =
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-321.00",
+        date: ~D[2026-03-05]
+      })
+
+    {:ok, _view, html} = live(conn, ~p"/credit_card_links")
+
+    assert html =~ "Pagamentos sem Fatura"
+    assert html =~ payment.description
+    assert html =~ "321"
+  end
+
   test "unlinking a pair clears the children", %{conn: conn} do
     cc = cc_category()
     checking = account_fixture(%{is_credit_card: false})

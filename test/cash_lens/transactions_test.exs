@@ -890,5 +890,36 @@ defmodule CashLens.TransactionsTest do
 
       assert is_nil(Repo.get!(Transaction, child.id).parent_transaction_id)
     end
+
+    test "list_credit_card_payments_without_children/0 returns Cartão de Crédito payments with no children",
+         %{
+           cc: cc,
+           checking: checking,
+           card: card
+         } do
+      payment_without_children =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-03-05]
+        })
+
+      payment_with_children =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-200.00",
+          date: ~D[2026-04-05]
+        })
+
+      child = transaction_fixture(%{account_id: card.id, amount: "-200.00", date: ~D[2026-04-01]})
+      Transactions.link_credit_card_batch([child.id], payment_with_children.id)
+
+      result = Transactions.list_credit_card_payments_without_children()
+
+      assert Enum.any?(result, &(&1.id == payment_without_children.id))
+      refute Enum.any?(result, &(&1.id == payment_with_children.id))
+    end
   end
 end

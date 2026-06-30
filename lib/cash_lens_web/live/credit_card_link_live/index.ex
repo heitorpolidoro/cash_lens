@@ -103,6 +103,10 @@ defmodule CashLensWeb.CreditCardLinkLive.Index do
     |> assign(:orphan_batches, Transactions.list_credit_card_orphan_batches())
     |> assign(:divergent, Transactions.list_credit_card_divergent_links())
     |> assign(:linked, Transactions.list_credit_card_linked())
+    |> assign(
+      :payments_without_children,
+      Transactions.list_credit_card_payments_without_children()
+    )
     |> assign_new(:show_link_modal, fn -> false end)
     |> assign_new(:link_origin_batch, fn -> nil end)
     |> assign_new(:link_candidates, fn -> [] end)
@@ -116,7 +120,9 @@ defmodule CashLensWeb.CreditCardLinkLive.Index do
         <div>
           <h1 class="text-2xl font-black uppercase tracking-tight">Cartão de Crédito</h1>
           <p class="text-xs opacity-50 mt-1">
-            {length(@suggestions)} faturas para confirmar · {length(@divergent)} com divergência
+            {length(@suggestions)} faturas para confirmar · {length(@divergent)} com divergência · {length(
+              @payments_without_children
+            )} sem fatura
           </p>
         </div>
       </div>
@@ -178,6 +184,29 @@ defmodule CashLensWeb.CreditCardLinkLive.Index do
                   <.icon name="hero-link" class="size-3" /> Vincular
                 </button>
               </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-base-300">
+          <h2 class="font-black uppercase tracking-tight text-sm">Pagamentos sem Fatura</h2>
+        </div>
+        <div :if={@payments_without_children == []} class="px-6 py-12 text-center opacity-40 text-sm">
+          Nenhum pagamento sem fatura vinculada.
+        </div>
+        <table :if={@payments_without_children != []} class="table table-sm w-full text-xs">
+          <tbody>
+            <tr :for={payment <- @payments_without_children} class="hover">
+              <td class="font-mono opacity-60 whitespace-nowrap">
+                {Calendar.strftime(payment.date, "%d/%m/%Y")}
+              </td>
+              <td>
+                {payment.description}
+                <span class="opacity-50">({payment.account && payment.account.name})</span>
+              </td>
+              <td class="text-right font-mono font-black">{format_currency(payment.amount)}</td>
             </tr>
           </tbody>
         </table>

@@ -122,6 +122,29 @@ defmodule CashLens.Transactions.CreditCardMatcherTest do
       assert CreditCardMatcher.match_batch([p1]) == :not_credit_card_batch
     end
 
+    test "returns a list of results when the batch spans multiple credit-card accounts" do
+      category = credit_card_category()
+      card_a = card_account()
+      card_b = card_account()
+      checking = checking_account()
+
+      a1 = purchase(card_a, "-30.00", ~D[2026-03-01])
+      pay_a = payment(checking, category, "-30.00", ~D[2026-03-02])
+
+      b1 = purchase(card_b, "-70.00", ~D[2026-03-01])
+      pay_b = payment(checking, category, "-70.00", ~D[2026-03-02])
+
+      result = CreditCardMatcher.match_batch([a1, b1])
+
+      assert is_list(result)
+      assert {:ok, pay_a.id} in result
+      assert {:ok, pay_b.id} in result
+      assert length(result) == 2
+
+      assert Repo.get!(Transaction, a1.id).parent_transaction_id == pay_a.id
+      assert Repo.get!(Transaction, b1.id).parent_transaction_id == pay_b.id
+    end
+
     test "ignores transactions that already have a parent" do
       category = credit_card_category()
       card = card_account()
