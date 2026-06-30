@@ -7,6 +7,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
 
   alias CashLens.Categories
   alias CashLens.Repo
+  alias CashLens.Transactions.CreditCardMatcher
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferRule
 
@@ -19,13 +20,13 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   Returns the list of newly created mirror transactions.
   """
   def apply_rules(transactions) when is_list(transactions) do
-    case rules_and_category() do
-      nil ->
+    case load_rules_by_source() do
+      rules when rules == %{} ->
         []
 
-      {rules_by_source, transfer_category} ->
+      rules_by_source ->
         Enum.flat_map(transactions, fn tx ->
-          apply_rules_to_transaction(tx, rules_by_source, transfer_category)
+          apply_rules_to_transaction(tx, rules_by_source)
         end)
     end
   end
@@ -36,33 +37,19 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   Returns a list of newly created mirror transactions (0 or 1 elements).
   """
   def maybe_apply_rule(%Transaction{} = transaction) do
-    case rules_and_category() do
-      nil ->
-        []
-
-      {rules_by_source, transfer_category} ->
-        apply_rules_to_transaction(transaction, rules_by_source, transfer_category)
-    end
-  end
-
-  # Returns {rules_by_source, transfer_category} when both transfer rules and the
-  # "transfer" category exist; otherwise nil so callers can short-circuit.
-  defp rules_and_category do
     case load_rules_by_source() do
       rules when rules == %{} ->
-        nil
+        []
 
-      rules ->
-        case get_transfer_category() do
-          nil -> nil
-          category -> {rules, category}
-        end
+      rules_by_source ->
+        apply_rules_to_transaction(transaction, rules_by_source)
     end
   end
 
   defp load_rules_by_source do
     TransferRule
     |> Repo.all()
+    |> Repo.preload(:destination_account)
     |> Enum.group_by(& &1.source_account_id)
   end
 
@@ -80,7 +67,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
     end
   end
 
-  defp apply_rules_to_transaction(tx, rules_by_source, transfer_category) do
+  defp apply_rules_to_transaction(tx, rules_by_source) do
     account_rules = Map.get(rules_by_source, tx.account_id, [])
     description_lower = String.downcase(tx.description || "")
 
@@ -91,25 +78,59 @@ defmodule CashLens.Transactions.TransferRuleApplier do
         end)
       end)
 
-    if matched_rule do
-      set_transfer_category(tx, transfer_category)
-
-      if matched_rule.create_mirror do
-        maybe_create_mirror(tx, matched_rule, transfer_category)
-      else
-        []
-      end
-    else
-      []
+    case matched_rule do
+      nil -> []
+      rule -> apply_matched_rule(tx, rule)
     end
   end
 
-  defp set_transfer_category(tx, transfer_category) do
-    if tx.category_id != transfer_category.id do
+  defp apply_matched_rule(tx, %{destination_account: %{is_credit_card: true}} = rule) do
+    apply_credit_card_rule(tx, rule)
+  end
+
+  defp apply_matched_rule(tx, rule) do
+    case get_transfer_category() do
+      nil ->
+        []
+
+      transfer_category ->
+        set_category(tx, transfer_category)
+
+        if rule.create_mirror do
+          maybe_create_mirror(tx, rule, transfer_category)
+        else
+          []
+        end
+    end
+  end
+
+  defp apply_credit_card_rule(tx, rule) do
+    case Categories.get_category_by_slug("cartao-de-credito") do
+      nil ->
+        Logger.warning(
+          "TransferRuleApplier: 'cartao-de-credito' category not found; skipping rule application."
+        )
+
+        []
+
+      category ->
+        set_category(tx, category)
+
+        CreditCardMatcher.match_payment(
+          %{tx | category_id: category.id},
+          rule.destination_account_id
+        )
+
+        []
+    end
+  end
+
+  defp set_category(tx, category) do
+    if tx.category_id != category.id do
       from(t in Transaction, where: t.id == ^tx.id)
       |> Repo.update_all(
         set: [
-          category_id: transfer_category.id,
+          category_id: category.id,
           updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
         ]
       )
