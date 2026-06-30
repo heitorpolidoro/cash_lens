@@ -9,6 +9,7 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Parsers.OFXParser
   alias CashLens.Parsers.PDFParser
   alias CashLens.Transactions.AutoCategorizer
+  alias CashLens.Transactions.CreditCardMatcher
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.TransferRuleApplier
@@ -256,6 +257,10 @@ defmodule CashLens.Parsers.Ingestor do
 
     # 3. Apply transfer rules for newly inserted transactions, creating mirrors as needed
     mirror_transactions = TransferRuleApplier.apply_rules(inserted_transactions)
+
+    # 3b. Try to link a freshly-imported credit-card invoice batch to an
+    # existing "Cartão de Crédito" payment transaction.
+    CreditCardMatcher.match_batch(inserted_transactions)
 
     # 4. Run TransferMatcher for new transactions (including mirrors) in batch
     matched_account_ids =
