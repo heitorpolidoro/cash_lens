@@ -26,13 +26,23 @@ defmodule CashLens.Transactions.CreditCardMatcherTest do
   end
 
   defp payment(account, category, amount, date) do
-    transaction_fixture(%{
-      account_id: account.id,
-      category_id: category.id,
-      amount: amount,
-      date: date,
-      description: "pagamento fatura"
-    })
+    tx =
+      transaction_fixture(%{
+        account_id: account.id,
+        amount: amount,
+        date: date,
+        description: "pagamento fatura"
+      })
+
+    # Set the category via Repo.update_all/2 (bypassing create_transaction/1's
+    # eager CreditCardMatcher hook) so these tests can exercise match_batch/1
+    # and match_payment/2 directly, in isolation from the now-automatic
+    # matching that happens on transaction creation/category updates.
+    {1, _} =
+      from(t in Transaction, where: t.id == ^tx.id)
+      |> Repo.update_all(set: [category_id: category.id])
+
+    %{tx | category_id: category.id}
   end
 
   describe "match_batch/1" do

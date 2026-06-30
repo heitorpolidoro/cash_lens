@@ -554,4 +554,74 @@ defmodule CashLens.TransactionsTest do
       assert Transactions.count_pending_transactions() >= 1
     end
   end
+
+  describe "update_transaction_category/2 — credit card matching guard" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    defp cc_category,
+      do: category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+
+    defp other_category, do: category_fixture(%{name: "Mercado", slug: "mercado"})
+
+    test "links a pending orphan batch when the category becomes Cartão de Crédito" do
+      category = cc_category()
+      card = account_fixture(%{is_credit_card: true})
+      checking = account_fixture(%{is_credit_card: false})
+
+      purchase =
+        transaction_fixture(%{account_id: card.id, amount: "-50.00", date: ~D[2026-02-01]})
+
+      payment =
+        transaction_fixture(%{account_id: checking.id, amount: "-50.00", date: ~D[2026-02-05]})
+
+      {:ok, _} = Transactions.update_transaction_category(payment.id, category.id)
+
+      assert Repo.get!(Transaction, purchase.id).parent_transaction_id == payment.id
+    end
+
+    test "does not call the matcher when the new category is not Cartão de Crédito" do
+      category = other_category()
+      checking = account_fixture(%{is_credit_card: false})
+      tx = transaction_fixture(%{account_id: checking.id, amount: "-50.00", date: ~D[2026-02-05]})
+
+      assert {:ok, updated} = Transactions.update_transaction_category(tx.id, category.id)
+      assert updated.category_id == category.id
+    end
+  end
+
+  describe "reapply_transfer_rules/0 — credit card retry" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    test "retries matching for Cartão de Crédito payments still without children" do
+      category = category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+      card = account_fixture(%{is_credit_card: true})
+      checking = account_fixture(%{is_credit_card: false})
+
+      purchase =
+        transaction_fixture(%{account_id: card.id, amount: "-50.00", date: ~D[2026-02-01]})
+
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          amount: "-50.00",
+          date: ~D[2026-02-05]
+        })
+
+      # Set the category directly via Repo (bypassing update_transaction_category's
+      # own matching hook) so reapply_transfer_rules/0 is what performs the match.
+      {1, _} =
+        Repo.update_all(
+          from(t in Transaction, where: t.id == ^payment.id),
+          set: [category_id: category.id]
+        )
+
+      assert is_nil(Repo.get!(Transaction, purchase.id).parent_transaction_id)
+
+      Transactions.reapply_transfer_rules()
+
+      assert Repo.get!(Transaction, purchase.id).parent_transaction_id == payment.id
+    end
+  end
 end

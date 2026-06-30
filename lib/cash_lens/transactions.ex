@@ -9,6 +9,7 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.BulkIgnorePattern
   alias CashLens.Transactions.CategorySuggester
+  alias CashLens.Transactions.CreditCardMatcher
   alias CashLens.Transactions.RejectedReimbursementPair
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
@@ -741,6 +742,8 @@ defmodule CashLens.Transactions do
             _ -> nil
           end
 
+        maybe_match_credit_card_payment(transaction)
+
         # Rebuild balances for the original account
         CashLens.Accounting.rebuild_account_balances(transaction.account_id)
 
@@ -776,6 +779,7 @@ defmodule CashLens.Transactions do
     |> Repo.update()
     |> case do
       {:ok, updated_transaction} ->
+        maybe_match_credit_card_payment(updated_transaction)
         CashLens.Accounting.rebuild_account_balances(updated_transaction.account_id)
 
         if old_account_id && old_account_id != updated_transaction.account_id do
@@ -813,6 +817,7 @@ defmodule CashLens.Transactions do
     |> Repo.update()
     |> case do
       {:ok, updated} ->
+        maybe_match_credit_card_payment(updated)
         CashLens.Accounting.rebuild_account_balances(updated.account_id)
         {:ok, updated}
 
@@ -882,12 +887,36 @@ defmodule CashLens.Transactions do
 
     TransferMatcher.match_transfers(unmatched_after)
 
+    retry_credit_card_matching()
+
     # Rebuild balances for all active accounts after applying rules
     Enum.each(CashLens.Accounts.list_active_accounts(), fn account ->
       CashLens.Accounting.rebuild_account_balances(account.id)
     end)
 
     :ok
+  end
+
+  defp retry_credit_card_matching do
+    case get_credit_card_category_id() do
+      nil ->
+        :ok
+
+      cc_id ->
+        linked_parent_ids =
+          from(c in Transaction,
+            where: not is_nil(c.parent_transaction_id),
+            select: c.parent_transaction_id,
+            distinct: true
+          )
+
+        from(t in Transaction,
+          where: t.category_id == ^cc_id,
+          where: t.id not in subquery(linked_parent_ids)
+        )
+        |> Repo.all()
+        |> Enum.each(&CreditCardMatcher.match_payment/1)
+    end
   end
 
   defp process_auto_categorization_reapply(tx) do
@@ -931,6 +960,23 @@ defmodule CashLens.Transactions do
       nil -> nil
       category -> category.id
     end
+  end
+
+  defp get_credit_card_category_id do
+    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+      nil -> nil
+      category -> category.id
+    end
+  end
+
+  defp maybe_match_credit_card_payment(%Transaction{} = tx) do
+    cc_id = get_credit_card_category_id()
+
+    if cc_id && tx.category_id == cc_id do
+      CreditCardMatcher.match_payment(tx)
+    end
+
+    :ok
   end
 
   @doc """
