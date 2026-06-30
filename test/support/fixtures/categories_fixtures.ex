@@ -13,8 +13,7 @@ defmodule CashLens.CategoriesFixtures do
     {:ok, category} =
       attrs
       |> Enum.into(%{
-        name: "category #{unique_id}",
-        slug: "category-#{unique_id}"
+        name: "category #{unique_id}"
       })
       |> CashLens.Categories.create_category()
 
