@@ -101,7 +101,12 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
 
     capture_log(fn -> Mix.Tasks.MigrateCreditCardTransfers.run([]) end)
 
-    assert Repo.get!(Transaction, manual_a.id).category_id == transfer_cat.id
-    assert Repo.get!(Transaction, manual_b.id) != nil
+    reloaded_a = Repo.get!(Transaction, manual_a.id)
+    reloaded_b = Repo.get!(Transaction, manual_b.id)
+
+    assert reloaded_a.category_id == transfer_cat.id
+    assert reloaded_b != nil
+    refute is_nil(reloaded_a.transfer_key)
+    refute is_nil(reloaded_b.transfer_key)
   end
 end

@@ -97,10 +97,12 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
   defp migrate_pair(payer, %{tx: mirror, account: card_account}, category) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    from(t in Transaction, where: t.id == ^payer.id)
-    |> Repo.update_all(set: [category_id: category.id, transfer_key: nil, updated_at: now])
+    Repo.transaction(fn ->
+      from(t in Transaction, where: t.id == ^payer.id)
+      |> Repo.update_all(set: [category_id: category.id, transfer_key: nil, updated_at: now])
 
-    Repo.delete!(mirror)
+      Repo.delete!(mirror)
+    end)
 
     updated_payer = Repo.get!(Transaction, payer.id)
     CreditCardMatcher.match_payment(updated_payer, card_account.id)
