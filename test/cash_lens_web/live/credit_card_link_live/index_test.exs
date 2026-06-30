@@ -66,6 +66,45 @@ defmodule CashLensWeb.CreditCardLinkLive.IndexTest do
     assert Repo.get!(Transaction, purchase.id).parent_transaction_id == payment.id
   end
 
+  test "manually linking an orphan batch via the modal sets the parent", %{conn: conn} do
+    cc = cc_category()
+    checking = account_fixture(%{is_credit_card: false})
+    card = account_fixture(%{is_credit_card: true})
+
+    purchase =
+      transaction_fixture(%{account_id: card.id, amount: "-30.00", date: ~D[2026-03-01]})
+
+    payment =
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-999.00",
+        date: ~D[2026-06-01]
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/credit_card_links")
+
+    batch = List.first(Transactions.list_credit_card_orphan_batches())
+
+    view
+    |> element(
+      "button[phx-click='open_batch_link'][phx-value-batch-account-id='#{batch.account_id}']"
+    )
+    |> render_click()
+
+    assert has_element?(view, "#batch-link-modal")
+    assert render(view) =~ payment.description
+
+    html =
+      view
+      |> element("button[phx-click='link_batch'][phx-value-payment-id='#{payment.id}']")
+      |> render_click()
+
+    refute has_element?(view, "#batch-link-modal")
+    assert html =~ "vinculada"
+    assert Repo.get!(Transaction, purchase.id).parent_transaction_id == payment.id
+  end
+
   test "unlinking a pair clears the children", %{conn: conn} do
     cc = cc_category()
     checking = account_fixture(%{is_credit_card: false})

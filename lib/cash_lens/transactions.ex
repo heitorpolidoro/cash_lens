@@ -1127,6 +1127,21 @@ defmodule CashLens.Transactions do
     end
   end
 
+  @doc """
+  Every unlinked "Cartão de Crédito" payment, sorted by date descending —
+  the candidate list for manually linking an orphan batch on the
+  `/credit_card_links` screen.
+  """
+  def list_credit_card_payment_candidates do
+    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+      nil ->
+        []
+
+      category ->
+        category |> unlinked_credit_card_payments() |> Enum.sort_by(& &1.date, {:desc, Date})
+    end
+  end
+
   defp unlinked_credit_card_payments(category) do
     from(t in Transaction,
       where: t.category_id == ^category.id,

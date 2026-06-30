@@ -34,6 +34,48 @@ defmodule CashLensWeb.CreditCardLinkLive.Index do
     {:noreply, socket |> put_flash(:success, "Vínculo desfeito.") |> load_data()}
   end
 
+  @impl true
+  def handle_event(
+        "open_batch_link",
+        %{"batch-account-id" => account_id, "batch-inserted-at" => inserted_at},
+        socket
+      ) do
+    batch = find_orphan_batch(socket.assigns.orphan_batches, account_id, inserted_at)
+
+    {:noreply,
+     socket
+     |> assign(:show_link_modal, true)
+     |> assign(:link_origin_batch, batch)
+     |> assign(:link_candidates, Transactions.list_credit_card_payment_candidates())}
+  end
+
+  @impl true
+  def handle_event("link_batch", %{"payment-id" => payment_id}, socket) do
+    batch = socket.assigns.link_origin_batch
+
+    if batch do
+      ids = Enum.map(batch.transactions, & &1.id)
+      Transactions.link_credit_card_batch(ids, payment_id)
+    end
+
+    {:noreply,
+     socket
+     |> assign(:show_link_modal, false)
+     |> assign(:link_origin_batch, nil)
+     |> assign(:link_candidates, [])
+     |> put_flash(:success, "Fatura vinculada!")
+     |> load_data()}
+  end
+
+  @impl true
+  def handle_event("close_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_link_modal, false)
+     |> assign(:link_origin_batch, nil)
+     |> assign(:link_candidates, [])}
+  end
+
   defp find_batch(collection, payment_id, account_id, inserted_at) do
     {:ok, parsed_inserted_at, _} = DateTime.from_iso8601(inserted_at)
 
@@ -45,6 +87,15 @@ defmodule CashLensWeb.CreditCardLinkLive.Index do
     end)
   end
 
+  defp find_orphan_batch(batches, account_id, inserted_at) do
+    {:ok, parsed_inserted_at, _} = DateTime.from_iso8601(inserted_at)
+
+    Enum.find(batches, fn batch ->
+      to_string(batch.account_id) == account_id and
+        DateTime.compare(batch.inserted_at, parsed_inserted_at) == :eq
+    end)
+  end
+
   defp load_data(socket) do
     socket
     |> assign(:page_title, "Cartão de Crédito")
@@ -52,6 +103,9 @@ defmodule CashLensWeb.CreditCardLinkLive.Index do
     |> assign(:orphan_batches, Transactions.list_credit_card_orphan_batches())
     |> assign(:divergent, Transactions.list_credit_card_divergent_links())
     |> assign(:linked, Transactions.list_credit_card_linked())
+    |> assign_new(:show_link_modal, fn -> false end)
+    |> assign_new(:link_origin_batch, fn -> nil end)
+    |> assign_new(:link_candidates, fn -> [] end)
   end
 
   @impl true
@@ -114,7 +168,16 @@ defmodule CashLensWeb.CreditCardLinkLive.Index do
               <td>{batch.account && batch.account.name}</td>
               <td>{length(batch.transactions)} transações</td>
               <td class="text-right font-mono font-black">{format_currency(batch.total)}</td>
-              <td class="text-right opacity-40 text-[10px]">vínculo manual na edição da transação</td>
+              <td class="text-right">
+                <button
+                  class="btn btn-outline btn-primary btn-xs"
+                  phx-click="open_batch_link"
+                  phx-value-batch-account-id={batch.account_id}
+                  phx-value-batch-inserted-at={DateTime.to_iso8601(batch.inserted_at)}
+                >
+                  <.icon name="hero-link" class="size-3" /> Vincular
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -174,6 +237,50 @@ defmodule CashLensWeb.CreditCardLinkLive.Index do
           </tbody>
         </table>
       </div>
+
+      <.modal
+        :if={@show_link_modal}
+        id="batch-link-modal"
+        show
+        on_cancel={JS.push("close_modal")}
+      >
+        <div class="p-2">
+          <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
+            Vincular Fatura
+          </h2>
+          <p class="text-xs opacity-60 mb-6">
+            Selecione o pagamento correspondente abaixo para este lote de {format_currency(
+              @link_origin_batch && @link_origin_batch.total
+            )}.
+          </p>
+
+          <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
+            <div :if={@link_candidates == []} class="text-center py-10 opacity-40 italic">
+              Nenhum pagamento de Cartão de Crédito disponível para vincular.
+            </div>
+            <button
+              :for={payment <- @link_candidates}
+              type="button"
+              phx-click="link_batch"
+              phx-value-payment-id={payment.id}
+              class="w-full text-left flex items-center justify-between p-3 border-2 border-base-300 rounded-xl hover:border-primary hover:bg-primary/5 transition-all group"
+            >
+              <div class="flex flex-col">
+                <span class="text-[9px] font-bold uppercase opacity-50">
+                  {Calendar.strftime(payment.date, "%d/%m/%Y")} — {payment.account &&
+                    payment.account.name}
+                </span>
+                <span class="font-black text-md group-hover:text-primary">
+                  {payment.description}
+                </span>
+              </div>
+              <div class="text-right">
+                <span class="font-black text-md">{format_currency(payment.amount)}</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </.modal>
     </div>
     """
   end
