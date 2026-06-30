@@ -782,4 +782,113 @@ defmodule CashLens.TransactionsTest do
       assert "Transporte" in category_names
     end
   end
+
+  describe "credit card link screen queries" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    setup do
+      cc = cc_category()
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+      %{cc: cc, checking: checking, card: card}
+    end
+
+    test "list_credit_card_orphan_batches/0 groups orphan purchases by import batch", %{
+      card: card
+    } do
+      p1 = transaction_fixture(%{account_id: card.id, amount: "-30.00", date: ~D[2026-03-01]})
+      p2 = transaction_fixture(%{account_id: card.id, amount: "-70.00", date: ~D[2026-03-02]})
+
+      {2, _} =
+        from(t in Transaction, where: t.id in [^p1.id, ^p2.id])
+        |> Repo.update_all(set: [inserted_at: ~U[2026-03-02 09:00:00Z]])
+
+      [batch] = Transactions.list_credit_card_orphan_batches()
+      assert batch.account_id == card.id
+      assert Decimal.equal?(batch.total, Decimal.new("-100.00"))
+      assert length(batch.transactions) == 2
+    end
+
+    test "list_credit_card_link_suggestions/0 finds exact-amount matches regardless of date", %{
+      cc: cc,
+      checking: checking,
+      card: card
+    } do
+      transaction_fixture(%{account_id: card.id, amount: "-100.00", date: ~D[2026-03-01]})
+
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-06-01]
+        })
+
+      [{suggested_payment, batch}] = Transactions.list_credit_card_link_suggestions()
+      assert suggested_payment.id == payment.id
+      assert Decimal.equal?(batch.total, Decimal.new("-100.00"))
+    end
+
+    test "list_credit_card_divergent_links/0 and list_credit_card_linked/0 partition by sum match",
+         %{
+           cc: cc,
+           checking: checking,
+           card: card
+         } do
+      ok_payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-03-05]
+        })
+
+      ok_child =
+        transaction_fixture(%{account_id: card.id, amount: "-100.00", date: ~D[2026-03-01]})
+
+      bad_payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-200.00",
+          date: ~D[2026-04-05]
+        })
+
+      bad_child =
+        transaction_fixture(%{account_id: card.id, amount: "-150.00", date: ~D[2026-04-01]})
+
+      Transactions.link_credit_card_batch([ok_child.id], ok_payment.id)
+      Transactions.link_credit_card_batch([bad_child.id], bad_payment.id)
+
+      linked = Transactions.list_credit_card_linked()
+      divergent = Transactions.list_credit_card_divergent_links()
+
+      assert Enum.any?(linked, &(&1.parent.id == ok_payment.id))
+      assert Enum.any?(divergent, &(&1.parent.id == bad_payment.id))
+      refute Enum.any?(linked, &(&1.parent.id == bad_payment.id))
+      refute Enum.any?(divergent, &(&1.parent.id == ok_payment.id))
+    end
+
+    test "unlink_credit_card_children/1 clears parent_transaction_id on all children", %{
+      cc: cc,
+      checking: checking,
+      card: card
+    } do
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-03-05]
+        })
+
+      child = transaction_fixture(%{account_id: card.id, amount: "-100.00", date: ~D[2026-03-01]})
+
+      Transactions.link_credit_card_batch([child.id], payment.id)
+      Transactions.unlink_credit_card_children(payment.id)
+
+      assert is_nil(Repo.get!(Transaction, child.id).parent_transaction_id)
+    end
+  end
 end
