@@ -487,6 +487,7 @@ defmodule CashLens.Transactions do
         having: sum(t.amount) < 0,
         order_by: [asc: sum(t.amount)]
       )
+      |> exclude_transactions_with_children()
       |> Repo.all()
       |> Enum.map(fn row -> %{row | total: Decimal.abs(row.total)} end)
 
@@ -667,7 +668,7 @@ defmodule CashLens.Transactions do
   end
 
   defp query_historical_category_totals do
-    from t in Transaction,
+    from(t in Transaction,
       join: c in assoc(t, :category),
       left_join: p in assoc(c, :parent),
       where: t.amount < 0,
@@ -684,6 +685,23 @@ defmodule CashLens.Transactions do
         type: c.type,
         total: t.amount
       }
+    )
+    |> exclude_transactions_with_children()
+  end
+
+  # Transactions that are themselves a parent (another transaction points its
+  # parent_transaction_id at them) are excluded from category-spend
+  # breakdowns: their amount is the lump sum of their children, who already
+  # carry the real categories. See spec section 7.
+  defp exclude_transactions_with_children(query) do
+    linked_parent_ids =
+      from(c in Transaction,
+        where: not is_nil(c.parent_transaction_id),
+        distinct: true,
+        select: c.parent_transaction_id
+      )
+
+    where(query, [t], t.id not in subquery(linked_parent_ids))
   end
 
   defp group_by_month_year(item) do

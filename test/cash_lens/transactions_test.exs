@@ -694,4 +694,92 @@ defmodule CashLens.TransactionsTest do
       assert Decimal.equal?(row.expenses, Decimal.new("0"))
     end
   end
+
+  describe "category breakdown excludes transactions with children" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    defp cc_category2,
+      do: category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+
+    test "get_month_category_breakdown/2 hides the parent and shows the children's own categories" do
+      cc = cc_category2()
+      uber_cat = category_fixture(%{name: "Transporte", slug: "transporte"})
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-02-10]
+        })
+
+      child =
+        transaction_fixture(%{
+          account_id: card.id,
+          category_id: uber_cat.id,
+          amount: "-100.00",
+          date: ~D[2026-02-10]
+        })
+
+      {1, _} =
+        from(t in Transaction, where: t.id == ^child.id)
+        |> Repo.update_all(set: [parent_transaction_id: payment.id])
+
+      breakdown = Transactions.get_month_category_breakdown(2026, 2)
+
+      refute Enum.any?(breakdown, &(&1.category_id == cc.id))
+      assert Enum.any?(breakdown, &(&1.category_id == uber_cat.id))
+    end
+
+    test "a Cartão de Crédito transaction with no children still appears in the breakdown" do
+      cc = cc_category2()
+      checking = account_fixture(%{is_credit_card: false})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-100.00",
+        date: ~D[2026-02-10]
+      })
+
+      breakdown = Transactions.get_month_category_breakdown(2026, 2)
+      assert Enum.any?(breakdown, &(&1.category_id == cc.id))
+    end
+
+    test "get_historical_category_summary/1 excludes parents with children" do
+      cc = cc_category2()
+      uber_cat = category_fixture(%{name: "Transporte", slug: "transporte"})
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-02-10]
+        })
+
+      child =
+        transaction_fixture(%{
+          account_id: card.id,
+          category_id: uber_cat.id,
+          amount: "-100.00",
+          date: ~D[2026-02-10]
+        })
+
+      {1, _} =
+        from(t in Transaction, where: t.id == ^child.id)
+        |> Repo.update_all(set: [parent_transaction_id: payment.id])
+
+      [month] = Transactions.get_historical_category_summary(limit: 1)
+      category_names = Enum.map(month.categories, & &1.name)
+
+      refute "Cartão de Crédito" in category_names
+      assert "Transporte" in category_names
+    end
+  end
 end
