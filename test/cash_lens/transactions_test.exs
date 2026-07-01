@@ -554,4 +554,372 @@ defmodule CashLens.TransactionsTest do
       assert Transactions.count_pending_transactions() >= 1
     end
   end
+
+  describe "update_transaction_category/2 — credit card matching guard" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    defp cc_category,
+      do: category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+
+    defp other_category, do: category_fixture(%{name: "Mercado", slug: "mercado"})
+
+    test "links a pending orphan batch when the category becomes Cartão de Crédito" do
+      category = cc_category()
+      card = account_fixture(%{is_credit_card: true})
+      checking = account_fixture(%{is_credit_card: false})
+
+      purchase =
+        transaction_fixture(%{account_id: card.id, amount: "-50.00", date: ~D[2026-02-01]})
+
+      payment =
+        transaction_fixture(%{account_id: checking.id, amount: "-50.00", date: ~D[2026-02-05]})
+
+      {:ok, _} = Transactions.update_transaction_category(payment.id, category.id)
+
+      assert Repo.get!(Transaction, purchase.id).parent_transaction_id == payment.id
+    end
+
+    test "does not call the matcher when the new category is not Cartão de Crédito" do
+      category = other_category()
+      checking = account_fixture(%{is_credit_card: false})
+      tx = transaction_fixture(%{account_id: checking.id, amount: "-50.00", date: ~D[2026-02-05]})
+
+      assert {:ok, updated} = Transactions.update_transaction_category(tx.id, category.id)
+      assert updated.category_id == category.id
+    end
+  end
+
+  describe "reapply_transfer_rules/0 — credit card retry" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    test "retries matching for Cartão de Crédito payments still without children" do
+      category = category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+      card = account_fixture(%{is_credit_card: true})
+      checking = account_fixture(%{is_credit_card: false})
+
+      purchase =
+        transaction_fixture(%{account_id: card.id, amount: "-50.00", date: ~D[2026-02-01]})
+
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          amount: "-50.00",
+          date: ~D[2026-02-05]
+        })
+
+      # Set the category directly via Repo (bypassing update_transaction_category's
+      # own matching hook) so reapply_transfer_rules/0 is what performs the match.
+      {1, _} =
+        Repo.update_all(
+          from(t in Transaction, where: t.id == ^payment.id),
+          set: [category_id: category.id]
+        )
+
+      assert is_nil(Repo.get!(Transaction, purchase.id).parent_transaction_id)
+
+      Transactions.reapply_transfer_rules()
+
+      assert Repo.get!(Transaction, purchase.id).parent_transaction_id == payment.id
+    end
+  end
+
+  describe "totals exclude Cartão de Crédito (no double counting)" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    test "get_filtered_summary/1 excludes the payment but counts the itemized purchase" do
+      cc = cc_category()
+      market = other_category()
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: market.id,
+        amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
+      summary = Transactions.get_filtered_summary(%{})
+      assert Decimal.equal?(summary.expenses, Decimal.new("500.00"))
+    end
+
+    test "get_monthly_summary/2 excludes Cartão de Crédito payments" do
+      cc = cc_category()
+      checking = account_fixture(%{is_credit_card: false})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
+      summary = Transactions.get_monthly_summary(~D[2026-02-15])
+      assert Decimal.equal?(summary.expenses, Decimal.new("0"))
+    end
+
+    test "get_historical_summary/1 excludes Cartão de Crédito payments" do
+      cc = cc_category()
+      market = other_category()
+      checking = account_fixture(%{is_credit_card: false})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
+      # A non-excluded transaction in the same month so the group_by produces
+      # a row to assert against (a month with only an excluded transaction
+      # legitimately yields no row at all).
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: market.id,
+        amount: "10.00",
+        date: ~D[2026-02-12]
+      })
+
+      [row] = Transactions.get_historical_summary()
+      assert Decimal.equal?(row.expenses, Decimal.new("0"))
+    end
+  end
+
+  describe "category breakdown excludes transactions with children" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    defp cc_category2,
+      do: category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+
+    test "get_month_category_breakdown/2 hides the parent and shows the children's own categories" do
+      cc = cc_category2()
+      uber_cat = category_fixture(%{name: "Transporte", slug: "transporte"})
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-02-10]
+        })
+
+      child =
+        transaction_fixture(%{
+          account_id: card.id,
+          category_id: uber_cat.id,
+          amount: "-100.00",
+          date: ~D[2026-02-10]
+        })
+
+      {1, _} =
+        from(t in Transaction, where: t.id == ^child.id)
+        |> Repo.update_all(set: [parent_transaction_id: payment.id])
+
+      breakdown = Transactions.get_month_category_breakdown(2026, 2)
+
+      refute Enum.any?(breakdown, &(&1.category_id == cc.id))
+      assert Enum.any?(breakdown, &(&1.category_id == uber_cat.id))
+    end
+
+    test "a Cartão de Crédito transaction with no children still appears in the breakdown" do
+      cc = cc_category2()
+      checking = account_fixture(%{is_credit_card: false})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-100.00",
+        date: ~D[2026-02-10]
+      })
+
+      breakdown = Transactions.get_month_category_breakdown(2026, 2)
+      assert Enum.any?(breakdown, &(&1.category_id == cc.id))
+    end
+
+    test "get_historical_category_summary/1 excludes parents with children" do
+      cc = cc_category2()
+      uber_cat = category_fixture(%{name: "Transporte", slug: "transporte"})
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-02-10]
+        })
+
+      child =
+        transaction_fixture(%{
+          account_id: card.id,
+          category_id: uber_cat.id,
+          amount: "-100.00",
+          date: ~D[2026-02-10]
+        })
+
+      {1, _} =
+        from(t in Transaction, where: t.id == ^child.id)
+        |> Repo.update_all(set: [parent_transaction_id: payment.id])
+
+      [month] = Transactions.get_historical_category_summary(limit: 1)
+      category_names = Enum.map(month.categories, & &1.name)
+
+      refute "Cartão de Crédito" in category_names
+      assert "Transporte" in category_names
+    end
+  end
+
+  describe "credit card link screen queries" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    setup do
+      cc = cc_category()
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+      %{cc: cc, checking: checking, card: card}
+    end
+
+    test "list_credit_card_orphan_batches/0 groups orphan purchases by import batch", %{
+      card: card
+    } do
+      p1 = transaction_fixture(%{account_id: card.id, amount: "-30.00", date: ~D[2026-03-01]})
+      p2 = transaction_fixture(%{account_id: card.id, amount: "-70.00", date: ~D[2026-03-02]})
+
+      {2, _} =
+        from(t in Transaction, where: t.id in [^p1.id, ^p2.id])
+        |> Repo.update_all(set: [inserted_at: ~U[2026-03-02 09:00:00Z]])
+
+      [batch] = Transactions.list_credit_card_orphan_batches()
+      assert batch.account_id == card.id
+      assert Decimal.equal?(batch.total, Decimal.new("-100.00"))
+      assert length(batch.transactions) == 2
+    end
+
+    test "list_credit_card_link_suggestions/0 finds exact-amount matches regardless of date", %{
+      cc: cc,
+      checking: checking,
+      card: card
+    } do
+      transaction_fixture(%{account_id: card.id, amount: "-100.00", date: ~D[2026-03-01]})
+
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-06-01]
+        })
+
+      [{suggested_payment, batch}] = Transactions.list_credit_card_link_suggestions()
+      assert suggested_payment.id == payment.id
+      assert Decimal.equal?(batch.total, Decimal.new("-100.00"))
+    end
+
+    test "list_credit_card_divergent_links/0 and list_credit_card_linked/0 partition by sum match",
+         %{
+           cc: cc,
+           checking: checking,
+           card: card
+         } do
+      ok_payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-03-05]
+        })
+
+      ok_child =
+        transaction_fixture(%{account_id: card.id, amount: "-100.00", date: ~D[2026-03-01]})
+
+      bad_payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-200.00",
+          date: ~D[2026-04-05]
+        })
+
+      bad_child =
+        transaction_fixture(%{account_id: card.id, amount: "-150.00", date: ~D[2026-04-01]})
+
+      Transactions.link_credit_card_batch([ok_child.id], ok_payment.id)
+      Transactions.link_credit_card_batch([bad_child.id], bad_payment.id)
+
+      linked = Transactions.list_credit_card_linked()
+      divergent = Transactions.list_credit_card_divergent_links()
+
+      assert Enum.any?(linked, &(&1.parent.id == ok_payment.id))
+      assert Enum.any?(divergent, &(&1.parent.id == bad_payment.id))
+      refute Enum.any?(linked, &(&1.parent.id == bad_payment.id))
+      refute Enum.any?(divergent, &(&1.parent.id == ok_payment.id))
+    end
+
+    test "unlink_credit_card_children/1 clears parent_transaction_id on all children", %{
+      cc: cc,
+      checking: checking,
+      card: card
+    } do
+      payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-03-05]
+        })
+
+      child = transaction_fixture(%{account_id: card.id, amount: "-100.00", date: ~D[2026-03-01]})
+
+      Transactions.link_credit_card_batch([child.id], payment.id)
+      Transactions.unlink_credit_card_children(payment.id)
+
+      assert is_nil(Repo.get!(Transaction, child.id).parent_transaction_id)
+    end
+
+    test "list_credit_card_payments_without_children/0 returns Cartão de Crédito payments with no children",
+         %{
+           cc: cc,
+           checking: checking,
+           card: card
+         } do
+      payment_without_children =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-100.00",
+          date: ~D[2026-03-05]
+        })
+
+      payment_with_children =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: cc.id,
+          amount: "-200.00",
+          date: ~D[2026-04-05]
+        })
+
+      child = transaction_fixture(%{account_id: card.id, amount: "-200.00", date: ~D[2026-04-01]})
+      Transactions.link_credit_card_batch([child.id], payment_with_children.id)
+
+      result = Transactions.list_credit_card_payments_without_children()
+
+      assert Enum.any?(result, &(&1.id == payment_without_children.id))
+      refute Enum.any?(result, &(&1.id == payment_with_children.id))
+    end
+  end
 end

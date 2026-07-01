@@ -48,6 +48,9 @@ defmodule CashLens.Parsers.IngestorTest do
 
   describe "import_file/2" do
     import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+    import CashLens.TransactionsFixtures
+    import Ecto.Query
 
     test "imports CSV file successfully" do
       account = account_fixture(parser_type: "bb_csv")
@@ -204,6 +207,34 @@ defmodule CashLens.Parsers.IngestorTest do
 
       tx = CashLens.Repo.one(CashLens.Transactions.Transaction)
       assert tx.description == "M\u00E1-formado"
+    end
+
+    test "links an imported credit-card batch to an existing Cartão de Crédito payment" do
+      category = category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true, parser_type: "bb_csv"})
+
+      # bb_sample.csv totals 324.50 across its 3 rows (see other tests in this file).
+      _payment =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: category.id,
+          amount: "324.50",
+          date: ~D[2026-02-24],
+          description: "pagamento fatura"
+        })
+
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(card, @bb_sample)
+
+      linked_count =
+        CashLens.Repo.aggregate(
+          from(t in CashLens.Transactions.Transaction,
+            where: t.account_id == ^card.id and not is_nil(t.parent_transaction_id)
+          ),
+          :count
+        )
+
+      assert linked_count == 3
     end
   end
 

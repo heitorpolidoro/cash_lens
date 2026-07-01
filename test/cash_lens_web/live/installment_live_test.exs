@@ -192,7 +192,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
         description_pattern: "EXPAND ME",
         total_amount: "200.00",
         installments: 2,
-        start_date: ~D[2026-05-05]
+        start_date: ~D[2026-08-05]
       })
 
     acc = account_fixture()

@@ -334,6 +334,85 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
       mirrors = TransferRuleApplier.apply_rules([tx])
       assert mirrors == []
     end
+
+    test "categorizes as Cartão de Crédito and creates no mirror when destination is a credit-card account" do
+      cc_category = category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+      source = account_fixture()
+      card = account_fixture(%{is_credit_card: true})
+      create_rule(source.id, card.id, ["pagamento fatura"])
+
+      tx =
+        insert_raw_transaction(%{
+          account_id: source.id,
+          description: "Pagamento Fatura Cartão",
+          amount: "-500.00",
+          date: ~D[2026-01-15]
+        })
+
+      mirrors = TransferRuleApplier.apply_rules([tx])
+
+      assert mirrors == []
+      updated_tx = Repo.get!(Transaction, tx.id)
+      assert updated_tx.category_id == cc_category.id
+      assert is_nil(updated_tx.transfer_key)
+      assert Repo.all(from t in Transaction, where: t.account_id == ^card.id) == []
+    end
+
+    test "credit-card branch tries to link an existing orphan batch on the destination card" do
+      cc_category = category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+      source = account_fixture()
+      card = account_fixture(%{is_credit_card: true})
+      create_rule(source.id, card.id, ["pagamento fatura"])
+
+      purchase =
+        insert_raw_transaction(%{
+          account_id: card.id,
+          description: "Uber",
+          amount: "-500.00",
+          date: ~D[2026-01-10]
+        })
+
+      tx =
+        insert_raw_transaction(%{
+          account_id: source.id,
+          description: "Pagamento Fatura Cartão",
+          amount: "-500.00",
+          date: ~D[2026-01-15]
+        })
+
+      TransferRuleApplier.apply_rules([tx])
+
+      updated_tx = Repo.get!(Transaction, tx.id)
+      updated_purchase = Repo.get!(Transaction, purchase.id)
+      assert updated_tx.category_id == cc_category.id
+      assert updated_purchase.parent_transaction_id == updated_tx.id
+    end
+
+    test "ignores create_mirror: true for credit-card destinations" do
+      category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+      source = account_fixture()
+      card = account_fixture(%{is_credit_card: true})
+
+      {:ok, _rule} =
+        Repo.insert(%TransferRule{
+          description_patterns: ["pagamento fatura"],
+          source_account_id: source.id,
+          destination_account_id: card.id,
+          create_mirror: true
+        })
+
+      tx =
+        insert_raw_transaction(%{
+          account_id: source.id,
+          description: "Pagamento Fatura Cartão",
+          amount: "-500.00",
+          date: ~D[2026-01-15]
+        })
+
+      mirrors = TransferRuleApplier.apply_rules([tx])
+      assert mirrors == []
+      assert Repo.all(from t in Transaction, where: t.account_id == ^card.id) == []
+    end
   end
 
   describe "maybe_apply_rule/1" do

@@ -42,6 +42,7 @@ defmodule CashLensWeb.Router do
 
       live "/reimbursements", ReimbursementLive.Index, :index
       live "/transfers", TransferLive.Index, :index
+      live "/credit_card_links", CreditCardLinkLive.Index, :index
       live "/installments", InstallmentLive.Index, :index
       live "/forecast", ForecastLive.Index, :index
 

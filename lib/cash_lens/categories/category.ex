@@ -19,7 +19,7 @@ defmodule CashLens.Categories.Category do
   @doc false
   def changeset(category, attrs) do
     category
-    |> cast(attrs, [:name, :parent_id, :keywords, :default_reimbursable, :type])
+    |> cast(attrs, [:name, :parent_id, :keywords, :default_reimbursable, :type, :slug])
     |> validate_required([:name, :type])
     |> validate_inclusion(:type, ["fixed", "variable"])
     |> generate_slug()
@@ -29,26 +29,34 @@ defmodule CashLens.Categories.Category do
   end
 
   defp generate_slug(changeset) do
-    if get_change(changeset, :name) || get_change(changeset, :parent_id) do
-      name = get_field(changeset, :name)
-      # Base slug from current name
-      base_slug =
-        name |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "-") |> String.trim("-")
+    cond do
+      # If an explicit slug was provided, keep it
+      get_change(changeset, :slug) ->
+        changeset
 
-      # Try to find parent slug
-      parent_id = get_field(changeset, :parent_id)
+      # Auto-generate slug if name or parent_id changed
+      get_change(changeset, :name) || get_change(changeset, :parent_id) ->
+        name = get_field(changeset, :name)
+        # Base slug from current name
+        base_slug =
+          name |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "-") |> String.trim("-")
 
-      final_slug =
-        if parent_id do
-          parent = CashLens.Repo.get!(CashLens.Categories.Category, parent_id)
-          "#{parent.slug}-#{base_slug}"
-        else
-          base_slug
-        end
+        # Try to find parent slug
+        parent_id = get_field(changeset, :parent_id)
 
-      put_change(changeset, :slug, final_slug)
-    else
-      changeset
+        final_slug =
+          if parent_id do
+            parent = CashLens.Repo.get!(CashLens.Categories.Category, parent_id)
+            "#{parent.slug}-#{base_slug}"
+          else
+            base_slug
+          end
+
+        put_change(changeset, :slug, final_slug)
+
+      # Otherwise, leave it as is
+      true ->
+        changeset
     end
   end
 

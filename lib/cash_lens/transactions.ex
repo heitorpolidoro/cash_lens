@@ -9,6 +9,7 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.BulkIgnorePattern
   alias CashLens.Transactions.CategorySuggester
+  alias CashLens.Transactions.CreditCardMatcher
   alias CashLens.Transactions.RejectedReimbursementPair
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
@@ -244,11 +245,19 @@ defmodule CashLens.Transactions do
 
   defp filter_unmatched_transfers(query, _), do: query
 
-  # Excludes transactions categorized as transfers from income/expense aggregates.
+  # Excludes transactions categorized as transfers or credit-card payments
+  # from income/expense aggregates (the itemized purchases still count, just
+  # not the lump-sum payment — see spec section 8).
   defp exclude_transfer_category(query) do
-    case Repo.one(from(c in Category, where: c.slug == "transfer", select: c.id)) do
-      nil -> query
-      id -> where(query, [t], is_nil(t.category_id) or t.category_id != ^id)
+    excluded_ids =
+      ["transfer", "cartao-de-credito"]
+      |> Enum.map(&Repo.one(from(c in Category, where: c.slug == ^&1, select: c.id)))
+      |> Enum.reject(&is_nil/1)
+
+    if excluded_ids == [] do
+      query
+    else
+      where(query, [t], is_nil(t.category_id) or t.category_id not in ^excluded_ids)
     end
   end
 
@@ -478,6 +487,7 @@ defmodule CashLens.Transactions do
         having: sum(t.amount) < 0,
         order_by: [asc: sum(t.amount)]
       )
+      |> exclude_transactions_with_children()
       |> Repo.all()
       |> Enum.map(fn row -> %{row | total: Decimal.abs(row.total)} end)
 
@@ -568,9 +578,10 @@ defmodule CashLens.Transactions do
   defp build_summary_base_query(query) do
     from t in query,
       left_join: c in assoc(t, :category),
-      # Transfers (category "transfer") move money between the user's own accounts,
-      # so they never count as income/expense — paired or not.
-      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+      # Transfers and credit-card payments move money between the user's own
+      # "buckets" (another account, or a not-yet-itemized bill), so they
+      # never count as income/expense — paired/itemized or not.
+      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
       where: is_nil(t.reimbursement_link_key)
   end
 
@@ -601,8 +612,9 @@ defmodule CashLens.Transactions do
     query =
       from t in Transaction,
         left_join: c in assoc(t, :category),
-        # Transfers (category "transfer") are excluded from income/expenses, paired or not.
-        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer"],
+        # Transfers and credit-card payments are excluded from income/expenses,
+        # paired/itemized or not.
+        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
         where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
@@ -656,7 +668,7 @@ defmodule CashLens.Transactions do
   end
 
   defp query_historical_category_totals do
-    from t in Transaction,
+    from(t in Transaction,
       join: c in assoc(t, :category),
       left_join: p in assoc(c, :parent),
       where: t.amount < 0,
@@ -673,6 +685,23 @@ defmodule CashLens.Transactions do
         type: c.type,
         total: t.amount
       }
+    )
+    |> exclude_transactions_with_children()
+  end
+
+  # Transactions that are themselves a parent (another transaction points its
+  # parent_transaction_id at them) are excluded from category-spend
+  # breakdowns: their amount is the lump sum of their children, who already
+  # carry the real categories. See spec section 7.
+  defp exclude_transactions_with_children(query) do
+    linked_parent_ids =
+      from(c in Transaction,
+        where: not is_nil(c.parent_transaction_id),
+        distinct: true,
+        select: c.parent_transaction_id
+      )
+
+    where(query, [t], t.id not in subquery(linked_parent_ids))
   end
 
   defp group_by_month_year(item) do
@@ -741,6 +770,8 @@ defmodule CashLens.Transactions do
             _ -> nil
           end
 
+        maybe_match_credit_card_payment(transaction)
+
         # Rebuild balances for the original account
         CashLens.Accounting.rebuild_account_balances(transaction.account_id)
 
@@ -776,6 +807,7 @@ defmodule CashLens.Transactions do
     |> Repo.update()
     |> case do
       {:ok, updated_transaction} ->
+        maybe_match_credit_card_payment(updated_transaction)
         CashLens.Accounting.rebuild_account_balances(updated_transaction.account_id)
 
         if old_account_id && old_account_id != updated_transaction.account_id do
@@ -813,6 +845,7 @@ defmodule CashLens.Transactions do
     |> Repo.update()
     |> case do
       {:ok, updated} ->
+        maybe_match_credit_card_payment(updated)
         CashLens.Accounting.rebuild_account_balances(updated.account_id)
         {:ok, updated}
 
@@ -882,12 +915,36 @@ defmodule CashLens.Transactions do
 
     TransferMatcher.match_transfers(unmatched_after)
 
+    retry_credit_card_matching()
+
     # Rebuild balances for all active accounts after applying rules
     Enum.each(CashLens.Accounts.list_active_accounts(), fn account ->
       CashLens.Accounting.rebuild_account_balances(account.id)
     end)
 
     :ok
+  end
+
+  defp retry_credit_card_matching do
+    case get_credit_card_category_id() do
+      nil ->
+        :ok
+
+      cc_id ->
+        linked_parent_ids =
+          from(c in Transaction,
+            where: not is_nil(c.parent_transaction_id),
+            select: c.parent_transaction_id,
+            distinct: true
+          )
+
+        from(t in Transaction,
+          where: t.category_id == ^cc_id,
+          where: t.id not in subquery(linked_parent_ids)
+        )
+        |> Repo.all()
+        |> Enum.each(&CreditCardMatcher.match_payment/1)
+    end
   end
 
   defp process_auto_categorization_reapply(tx) do
@@ -931,6 +988,23 @@ defmodule CashLens.Transactions do
       nil -> nil
       category -> category.id
     end
+  end
+
+  defp get_credit_card_category_id do
+    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+      nil -> nil
+      category -> category.id
+    end
+  end
+
+  defp maybe_match_credit_card_payment(%Transaction{} = tx) do
+    cc_id = get_credit_card_category_id()
+
+    if cc_id && tx.category_id == cc_id do
+      CreditCardMatcher.match_payment(tx)
+    end
+
+    :ok
   end
 
   @doc """
@@ -998,6 +1072,194 @@ defmodule CashLens.Transactions do
   """
   def count_pending_transactions do
     Repo.aggregate(from(t in Transaction, where: is_nil(t.category_id)), :count)
+  end
+
+  @doc """
+  Groups every still-unlinked credit-card transaction into the import batch
+  it arrived in ({account_id, inserted_at} — see `CreditCardMatcher` docs
+  for why that pair identifies a batch).
+  """
+  def list_credit_card_orphan_batches do
+    credit_card_ids =
+      from(a in CashLens.Accounts.Account, where: a.is_credit_card == true, select: a.id)
+      |> Repo.all()
+
+    from(t in Transaction,
+      where: t.account_id in ^credit_card_ids,
+      where: is_nil(t.parent_transaction_id),
+      preload: [:account, :category]
+    )
+    |> Repo.all()
+    |> Enum.group_by(&{&1.account_id, &1.inserted_at})
+    |> Enum.map(fn {{account_id, inserted_at}, txs} ->
+      %{
+        account_id: account_id,
+        account: List.first(txs).account,
+        inserted_at: inserted_at,
+        transactions: Enum.sort_by(txs, & &1.date, Date),
+        total: Enum.reduce(txs, Decimal.new(0), &Decimal.add(&2, &1.amount))
+      }
+    end)
+    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+  end
+
+  @doc """
+  Orphan batches whose total exactly matches an unlinked "Cartão de
+  Crédito" payment, with no date constraint (wider net than
+  `CreditCardMatcher`'s automatic ±5-day match, for one-click manual
+  confirmation of cases the automatic matcher declined — ties, multiple
+  pending batches, etc).
+  """
+  def list_credit_card_link_suggestions do
+    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+      nil ->
+        []
+
+      category ->
+        payments = unlinked_credit_card_payments(category)
+        batches = list_credit_card_orphan_batches()
+
+        for payment <- payments,
+            batch <- batches,
+            Decimal.equal?(batch.total, payment.amount) do
+          {payment, batch}
+        end
+    end
+  end
+
+  @doc """
+  Every unlinked "Cartão de Crédito" payment, sorted by date descending —
+  the candidate list for manually linking an orphan batch on the
+  `/credit_card_links` screen.
+  """
+  def list_credit_card_payment_candidates do
+    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+      nil ->
+        []
+
+      category ->
+        category |> unlinked_credit_card_payments() |> Enum.sort_by(& &1.date, {:desc, Date})
+    end
+  end
+
+  defp unlinked_credit_card_payments(category) do
+    from(t in Transaction,
+      where: t.category_id == ^category.id,
+      where: t.id not in subquery(linked_parent_ids_subquery()),
+      preload: [:account]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  "Cartão de Crédito"-categorized transactions that have NO children at
+  all — i.e. a payment that was categorized as Cartão de Crédito but never
+  got a matching invoice batch linked to it (auto-match never found a
+  candidate, or the fatura simply hasn't been imported yet). These are
+  invisible to `list_credit_card_divergent_links/0` and
+  `list_credit_card_linked/0` (both require existing children) and to
+  `list_credit_card_link_suggestions/0` (no exact-sum orphan batch exists
+  yet), so this surfaces them on the `/credit_card_links` screen instead
+  of leaving them invisible. Sorted by date descending.
+
+  Same underlying query as `list_credit_card_payment_candidates/0` (a
+  payment with no children is exactly an "unlinked" payment) — kept as a
+  separate, intention-revealing name since the two are used for different
+  purposes on the LiveView (a manual-link candidate list vs. a visibility
+  section).
+  """
+  def list_credit_card_payments_without_children do
+    list_credit_card_payment_candidates()
+  end
+
+  defp linked_parent_ids_subquery do
+    from(c in Transaction,
+      where: not is_nil(c.parent_transaction_id),
+      distinct: true,
+      select: c.parent_transaction_id
+    )
+  end
+
+  @doc """
+  Linked "Cartão de Crédito" payments whose children's total does NOT match
+  the payment amount — the reconciliation alert.
+  """
+  def list_credit_card_divergent_links do
+    "cartao-de-credito"
+    |> linked_credit_card_pairs()
+    |> Enum.reject(&credit_card_sum_matches?/1)
+  end
+
+  @doc """
+  Linked "Cartão de Crédito" payments whose children's total matches the
+  payment amount.
+  """
+  def list_credit_card_linked do
+    "cartao-de-credito"
+    |> linked_credit_card_pairs()
+    |> Enum.filter(&credit_card_sum_matches?/1)
+  end
+
+  defp credit_card_sum_matches?(%{parent: parent, children_total: total}) do
+    Decimal.equal?(total, parent.amount)
+  end
+
+  defp linked_credit_card_pairs(slug) do
+    case CashLens.Categories.get_category_by_slug(slug) do
+      nil ->
+        []
+
+      category ->
+        parents =
+          from(t in Transaction,
+            where: t.category_id == ^category.id,
+            where: t.id in subquery(linked_parent_ids_subquery()),
+            preload: [:account]
+          )
+          |> Repo.all()
+
+        children_by_parent =
+          from(c in Transaction, where: not is_nil(c.parent_transaction_id), preload: [:account])
+          |> Repo.all()
+          |> Enum.group_by(& &1.parent_transaction_id)
+
+        Enum.map(parents, fn parent ->
+          children = Map.get(children_by_parent, parent.id, [])
+          total = Enum.reduce(children, Decimal.new(0), &Decimal.add(&2, &1.amount))
+
+          %{
+            parent: parent,
+            children: Enum.sort_by(children, & &1.date, Date),
+            children_total: total
+          }
+        end)
+    end
+  end
+
+  @doc """
+  Assigns `parent_id` as the `parent_transaction_id` of every transaction in
+  `transaction_ids` (manual reconciliation on the `/credit_card_links`
+  screen).
+  """
+  def link_credit_card_batch(transaction_ids, parent_id) when is_list(transaction_ids) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    from(t in Transaction, where: t.id in ^transaction_ids)
+    |> Repo.update_all(set: [parent_transaction_id: parent_id, updated_at: now])
+
+    :ok
+  end
+
+  @doc """
+  Clears `parent_transaction_id` on every child of `parent_id`.
+  """
+  def unlink_credit_card_children(parent_id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    from(t in Transaction, where: t.parent_transaction_id == ^parent_id)
+    |> Repo.update_all(set: [parent_transaction_id: nil, updated_at: now])
+
+    :ok
   end
 
   @doc """
