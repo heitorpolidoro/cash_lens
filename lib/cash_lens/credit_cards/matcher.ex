@@ -66,16 +66,40 @@ defmodule CashLens.CreditCards.Matcher do
         :not_credit_card_category
 
       _category ->
-        account_ids =
-          if credit_card_account_id,
-            do: [credit_card_account_id],
-            else: all_credit_card_account_ids()
+        if already_linked?(payment) do
+          :no_match
+        else
+          account_ids =
+            if credit_card_account_id,
+              do: [credit_card_account_id],
+              else: all_credit_card_account_ids()
 
-        account_ids
-        |> open_statements()
-        |> Enum.filter(&statement_matches_payment?(&1, payment))
-        |> do_match_payment(payment)
+          account_ids
+          |> open_statements()
+          |> Enum.reject(&(&1.account_id == Map.get(payment, :account_id)))
+          |> Enum.filter(&statement_matches_payment?(&1, payment))
+          |> do_match_payment(payment)
+        end
     end
+  end
+
+  # A payment is "already linked" if either:
+  #   - it carries its own `parent_transaction_id` (defensive: mirrors the
+  #     `is_nil(t.parent_transaction_id)` guard `auto_link/2` applies to
+  #     candidate payments), or
+  #   - some statement already points at it via `payment_transaction_id`
+  #     (the real-world case: `link_payment/2` stamps the statement, not the
+  #     payment, so re-running matching for the same payment must consult
+  #     the statement side to avoid co-linking it to a second statement).
+  defp already_linked?(payment) do
+    not is_nil(Map.get(payment, :parent_transaction_id)) or
+      already_linked_statement_exists?(Map.get(payment, :id))
+  end
+
+  defp already_linked_statement_exists?(nil), do: false
+
+  defp already_linked_statement_exists?(payment_id) do
+    Repo.exists?(from(s in Statement, where: s.payment_transaction_id == ^payment_id))
   end
 
   defp do_match_payment([], _payment), do: :no_match
