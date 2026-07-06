@@ -19,6 +19,7 @@ defmodule CashLensWeb.Router do
 
     get "/", PageController, :home
     get "/.well-known/appspecific/com.chrome.devtools.json", PageController, :chrome_devtools
+    get "/credit_card_links", RedirectController, :statements
 
     live_session :default, layout: {CashLensWeb.Layouts, :app} do
       live "/accounts", AccountLive.Index, :index
@@ -42,7 +43,7 @@ defmodule CashLensWeb.Router do
 
       live "/reimbursements", ReimbursementLive.Index, :index
       live "/transfers", TransferLive.Index, :index
-      live "/credit_card_links", CreditCardLinkLive.Index, :index
+      live "/statements", CreditCardStatementLive.Index, :index
       live "/installments", InstallmentLive.Index, :index
       live "/forecast", ForecastLive.Index, :index
 
