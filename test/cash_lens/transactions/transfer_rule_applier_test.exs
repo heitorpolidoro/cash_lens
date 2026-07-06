@@ -364,12 +364,20 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
       card = account_fixture(%{is_credit_card: true})
       create_rule(source.id, card.id, ["pagamento fatura"])
 
+      statement =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          total_a_pagar: Decimal.new("500.00"),
+          due_date: ~D[2026-01-15]
+        })
+
       purchase =
         insert_raw_transaction(%{
           account_id: card.id,
           description: "Uber",
           amount: "-500.00",
-          date: ~D[2026-01-10]
+          date: ~D[2026-01-10],
+          import_batch_id: statement.id
         })
 
       tx =

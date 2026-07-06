@@ -56,12 +56,20 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
 
     link(payment, mirror)
 
+    statement =
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        total_a_pagar: Decimal.new("500.00"),
+        due_date: ~D[2026-01-15]
+      })
+
     real_purchase =
       insert_raw(%{
         account_id: card.id,
         amount: "-500.00",
         date: ~D[2026-01-10],
-        description: "Uber"
+        description: "Uber",
+        import_batch_id: statement.id
       })
 
     capture_log(fn -> Mix.Tasks.MigrateCreditCardTransfers.run([]) end)

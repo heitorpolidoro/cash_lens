@@ -6,8 +6,8 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   import Ecto.Query
 
   alias CashLens.Categories
+  alias CashLens.CreditCards.Matcher, as: CreditCardMatcher
   alias CashLens.Repo
-  alias CashLens.Transactions.CreditCardMatcher
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferRule
 

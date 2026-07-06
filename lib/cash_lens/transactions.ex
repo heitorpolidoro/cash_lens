@@ -5,11 +5,11 @@ defmodule CashLens.Transactions do
 
   import Ecto.Query, warn: false
   alias CashLens.Categories.Category
+  alias CashLens.CreditCards.Matcher, as: CreditCardMatcher
   alias CashLens.Repo
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.BulkIgnorePattern
   alias CashLens.Transactions.CategorySuggester
-  alias CashLens.Transactions.CreditCardMatcher
   alias CashLens.Transactions.RejectedReimbursementPair
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher

@@ -578,8 +578,20 @@ defmodule CashLens.TransactionsTest do
       card = account_fixture(%{is_credit_card: true})
       checking = account_fixture(%{is_credit_card: false})
 
+      statement =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          total_a_pagar: Decimal.new("50.00"),
+          due_date: ~D[2026-02-05]
+        })
+
       purchase =
-        transaction_fixture(%{account_id: card.id, amount: "-50.00", date: ~D[2026-02-01]})
+        transaction_fixture(%{
+          account_id: card.id,
+          amount: "-50.00",
+          date: ~D[2026-02-01],
+          import_batch_id: statement.id
+        })
 
       payment =
         transaction_fixture(%{account_id: checking.id, amount: "-50.00", date: ~D[2026-02-05]})
@@ -608,8 +620,20 @@ defmodule CashLens.TransactionsTest do
       card = account_fixture(%{is_credit_card: true})
       checking = account_fixture(%{is_credit_card: false})
 
+      statement =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          total_a_pagar: Decimal.new("50.00"),
+          due_date: ~D[2026-02-05]
+        })
+
       purchase =
-        transaction_fixture(%{account_id: card.id, amount: "-50.00", date: ~D[2026-02-01]})
+        transaction_fixture(%{
+          account_id: card.id,
+          amount: "-50.00",
+          date: ~D[2026-02-01],
+          import_batch_id: statement.id
+        })
 
       payment =
         transaction_fixture(%{

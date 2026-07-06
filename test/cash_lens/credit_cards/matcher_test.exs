@@ -1,7 +1,30 @@
 defmodule CashLens.CreditCards.MatcherTest do
   use CashLens.DataCase, async: true
   import CashLens.CreditCardsFixtures
+  import Ecto.Query
   alias CashLens.CreditCards.Matcher
+  alias CashLens.Repo
+  alias CashLens.Transactions.Transaction
+
+  # Sets the category via Repo.update_all/2 (bypassing create_transaction/1's
+  # eager CreditCardMatcher hook) so these tests can exercise match_payment/2
+  # directly, in isolation from the now-automatic matching that happens on
+  # transaction creation/category updates.
+  defp payment(account, category, amount, date) do
+    tx =
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: account.id,
+        amount: amount,
+        date: date,
+        description: "pagamento fatura"
+      })
+
+    {1, _} =
+      from(t in Transaction, where: t.id == ^tx.id)
+      |> Repo.update_all(set: [category_id: category.id])
+
+    %{tx | category_id: category.id}
+  end
 
   setup do
     CashLens.CategoriesFixtures.category_fixture(%{
@@ -31,22 +54,69 @@ defmodule CashLens.CreditCards.MatcherTest do
       date: ~D[2026-06-05]
     })
 
-    payment =
-      CashLens.TransactionsFixtures.transaction_fixture(%{
-        account_id: bank.id,
-        amount: Decimal.new("30.00"),
-        category_id: cat.id,
-        date: ~D[2026-06-16]
-      })
+    pay = payment(bank, cat, Decimal.new("30.00"), ~D[2026-06-16])
 
     assert {:linked, linked} = Matcher.auto_link(s, Decimal.new("30.00"))
-    assert linked.id == payment.id
-    assert CashLens.CreditCards.get_statement!(s.id).payment_transaction_id == payment.id
+    assert linked.id == pay.id
+    assert CashLens.CreditCards.get_statement!(s.id).payment_transaction_id == pay.id
   end
 
   test "auto_link returns :no_match when no candidate amount matches" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     s = statement_fixture(%{account: card, total_a_pagar: Decimal.new("99.00")})
     assert Matcher.auto_link(s, Decimal.new("99.00")) == :no_match
+  end
+
+  describe "match_payment/2" do
+    test "links the payment to the single open statement whose total matches within the window" do
+      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+      bank = CashLens.AccountsFixtures.account_fixture(%{})
+      cat = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      statement =
+        statement_fixture(%{
+          account: card,
+          total_a_pagar: Decimal.new("30.00"),
+          due_date: ~D[2026-06-15]
+        })
+
+      child =
+        CashLens.TransactionsFixtures.transaction_fixture(%{
+          account_id: card.id,
+          amount: Decimal.new("30.00"),
+          import_batch_id: statement.id,
+          date: ~D[2026-06-05]
+        })
+
+      pay = payment(bank, cat, Decimal.new("-30.00"), ~D[2026-06-16])
+
+      assert {:linked, linked} = Matcher.match_payment(pay)
+      assert linked.id == statement.id
+      assert CashLens.CreditCards.get_statement!(statement.id).payment_transaction_id == pay.id
+      assert Repo.get!(Transaction, child.id).parent_transaction_id == pay.id
+    end
+
+    test "returns :no_match when no open statement's total matches the payment" do
+      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+      bank = CashLens.AccountsFixtures.account_fixture(%{})
+      cat = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      statement_fixture(%{account: card, total_a_pagar: Decimal.new("99.00")})
+
+      pay = payment(bank, cat, Decimal.new("-30.00"), ~D[2026-06-16])
+
+      assert Matcher.match_payment(pay) == :no_match
+    end
+
+    test "returns :not_credit_card_category when the payment's category is not Cartão de Crédito" do
+      bank = CashLens.AccountsFixtures.account_fixture(%{})
+
+      other_category =
+        CashLens.CategoriesFixtures.category_fixture(%{name: "Mercado", slug: "mercado"})
+
+      pay = payment(bank, other_category, Decimal.new("-30.00"), ~D[2026-06-16])
+
+      assert Matcher.match_payment(pay) == :not_credit_card_category
+    end
   end
 end
