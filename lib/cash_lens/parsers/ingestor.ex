@@ -8,7 +8,6 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Parsers.OFXParser
   alias CashLens.Parsers.PDFParser
   alias CashLens.Transactions.AutoCategorizer
-  alias CashLens.Transactions.CreditCardMatcher
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.TransferRuleApplier
