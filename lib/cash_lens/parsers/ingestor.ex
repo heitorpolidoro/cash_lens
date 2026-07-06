@@ -4,7 +4,6 @@ defmodule CashLens.Parsers.Ingestor do
   """
   require Logger
   alias CashLens.Accounting
-  alias CashLens.Accounts
   alias CashLens.Parsers.CSVParser
   alias CashLens.Parsers.OFXParser
   alias CashLens.Parsers.PDFParser
@@ -14,8 +13,6 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.TransferRuleApplier
   alias Ecto.UUID
-
-  @special_account_names ["BB MM Ouro", "BB Rende Fácil"]
 
   @doc """
   Parses the content based on the provided parser_type.
@@ -144,9 +141,34 @@ defmodule CashLens.Parsers.Ingestor do
       transactions_data ->
         Logger.info("INGESTOR: Parser returned #{length(transactions_data)} transactions.")
         if notify_fn, do: notify_fn.(length(transactions_data))
-        finalize_import(transactions_data, account.id)
+        statement_id = maybe_create_statement(account, content, file_path)
+        finalize_import(transactions_data, account.id, statement_id)
     end
   end
+
+  # Returns the new statement id for credit-card accounts (so rows can be
+  # stamped and matched), or nil for regular accounts.
+  defp maybe_create_statement(%{is_credit_card: true} = account, content, file_path) do
+    meta =
+      if String.ends_with?(file_path, ".pdf") do
+        PDFParser.extract_statement_meta(content)
+      else
+        %{due_date: nil, total_a_pagar: nil, competencia: nil}
+      end
+
+    {:ok, statement} =
+      CashLens.CreditCards.create_statement(%{
+        account_id: account.id,
+        due_date: meta.due_date,
+        total_a_pagar: meta.total_a_pagar,
+        competencia: meta.competencia,
+        source_file: Path.basename(file_path)
+      })
+
+    statement.id
+  end
+
+  defp maybe_create_statement(_account, _content, _file_path), do: nil
 
   defp prepare_content(content, account, file_path) do
     if String.ends_with?(file_path, ".pdf") or
@@ -168,15 +190,15 @@ defmodule CashLens.Parsers.Ingestor do
       else: :unicode.characters_to_binary(content, :latin1, :utf8)
   end
 
-  defp finalize_import(transactions_data, account_id) do
+  defp finalize_import(transactions_data, account_id, statement_id) do
     # Never persist transactions dated in the future — they have not happened yet.
     today = Date.utc_today()
     transactions_data = Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
 
-    {entries, failed} = prepare_entries(transactions_data, account_id)
+    {entries, failed} = prepare_entries(transactions_data, account_id, statement_id)
 
     {inserted_count, affected_account_ids} =
-      process_entries(entries, transactions_data, account_id)
+      process_entries(entries, transactions_data, account_id, statement_id)
 
     # Rebuild balances for all affected accounts up to the current month/year
     Enum.each(affected_account_ids, fn acc_id ->
@@ -192,7 +214,7 @@ defmodule CashLens.Parsers.Ingestor do
     {:ok, %{imported: inserted_count, skipped: skipped, failed: failed}}
   end
 
-  defp prepare_entries(transactions_data, account_id) do
+  defp prepare_entries(transactions_data, account_id, statement_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     {valid, failed} =
@@ -200,7 +222,7 @@ defmodule CashLens.Parsers.Ingestor do
       |> assign_occurrence_indices(account_id)
       |> Enum.map(fn {data, index} ->
         try do
-          {:ok, prepare_transaction_entry(data, account_id, now, index)}
+          {:ok, prepare_transaction_entry(data, account_id, now, index, statement_id)}
         rescue
           e -> {:error, {data[:description] || "unknown", Exception.message(e)}}
         end
@@ -248,7 +270,7 @@ defmodule CashLens.Parsers.Ingestor do
     |> Transaction.dedup_key()
   end
 
-  defp process_entries(entries, transactions_data, account_id) do
+  defp process_entries(entries, _transactions_data, account_id, statement_id) do
     # 2. Batch Insert with on_conflict: :nothing
     # We use returning: true to get the actually inserted transactions for TransferMatcher.
     # `count` is the number of rows actually inserted (conflicts are not counted),
@@ -260,7 +282,14 @@ defmodule CashLens.Parsers.Ingestor do
 
     # 3b. Try to link a freshly-imported credit-card invoice batch to an
     # existing "Cartão de Crédito" payment transaction.
-    CreditCardMatcher.match_batch(inserted_transactions)
+    if statement_id do
+      statement = CashLens.CreditCards.get_statement!(statement_id)
+
+      line_total =
+        Enum.reduce(inserted_transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
+
+      CashLens.CreditCards.Matcher.auto_link(statement, line_total)
+    end
 
     # 4. Run TransferMatcher for new transactions (including mirrors) in batch
     matched_account_ids =
@@ -271,24 +300,16 @@ defmodule CashLens.Parsers.Ingestor do
     # multiple monthly statements and must be grouped together.
 
     # 5. Collect affected account IDs for balance rebuilding
-    special_accounts = Accounts.get_accounts_by_names(@special_account_names)
-
-    special_account_ids =
-      Enum.reduce(transactions_data, MapSet.new(), fn data, acc ->
-        add_special_account_ids(acc, data, special_accounts)
-      end)
-      |> MapSet.to_list()
-
     mirror_account_ids = Enum.map(mirror_transactions, & &1.account_id)
 
     all_affected_account_ids =
-      [account_id | mirror_account_ids ++ matched_account_ids ++ special_account_ids]
+      [account_id | mirror_account_ids ++ matched_account_ids]
       |> Enum.uniq()
 
     {count, all_affected_account_ids}
   end
 
-  defp prepare_transaction_entry(data, account_id, now, occurrence_index) do
+  defp prepare_transaction_entry(data, account_id, now, occurrence_index, statement_id) do
     categorizer = Application.get_env(:cash_lens, :auto_categorizer, AutoCategorizer)
 
     attrs =
@@ -312,6 +333,7 @@ defmodule CashLens.Parsers.Ingestor do
     |> Map.put(:id, UUID.generate())
     |> Map.put(:inserted_at, now)
     |> Map.put(:updated_at, now)
+    |> Map.put(:import_batch_id, statement_id)
   end
 
   defp batch_insert_transactions(entries) do
@@ -322,27 +344,5 @@ defmodule CashLens.Parsers.Ingestor do
       conflict_target: :fingerprint,
       returning: true
     )
-  end
-
-  defp add_special_account_ids(acc, data, special_accounts) do
-    description = String.upcase(data.description || "")
-
-    cond do
-      String.contains?(description, "BB MM OURO") ->
-        add_account_id_if_exists(acc, special_accounts["BB MM Ouro"])
-
-      String.contains?(description, ["BB RENDE FÁCIL", "BB RENDE FACIL"]) ->
-        add_account_id_if_exists(acc, special_accounts["BB Rende Fácil"])
-
-      true ->
-        acc
-    end
-  end
-
-  defp add_account_id_if_exists(acc, account) do
-    case account do
-      nil -> acc
-      a -> MapSet.put(acc, a.id)
-    end
   end
 end

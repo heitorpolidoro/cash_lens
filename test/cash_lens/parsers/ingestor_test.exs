@@ -236,6 +236,35 @@ defmodule CashLens.Parsers.IngestorTest do
 
       assert linked_count == 3
     end
+
+    test "importing a credit-card file creates a statement and stamps import_batch_id" do
+      account = account_fixture(%{is_credit_card: true, parser_type: "bb_csv"})
+
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+
+      assert [statement] = CashLens.Repo.all(CashLens.CreditCards.Statement)
+      assert statement.account_id == account.id
+      assert statement.source_file == "bb_sample.csv"
+
+      stamped =
+        CashLens.Repo.all(
+          from t in CashLens.Transactions.Transaction,
+            where: t.account_id == ^account.id and t.import_batch_id == ^statement.id
+        )
+
+      assert length(stamped) == 3
+    end
+
+    test "does not create a statement for non-credit-card accounts" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+
+      assert CashLens.Repo.all(CashLens.CreditCards.Statement) == []
+
+      transactions = CashLens.Repo.all(CashLens.Transactions.Transaction)
+      assert Enum.all?(transactions, &is_nil(&1.import_batch_id))
+    end
   end
 
   describe "duplicate-safe re-import" do
