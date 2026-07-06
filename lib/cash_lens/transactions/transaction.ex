@@ -30,6 +30,7 @@ defmodule CashLens.Transactions.Transaction do
     field :notes, :string
     field :installment_number, :integer
     field :parent_transaction_id, :binary_id
+    field :import_batch_id, :binary_id
     belongs_to :account, CashLens.Accounts.Account
     belongs_to :category, CashLens.Categories.Category
     belongs_to :installment_group, CashLens.Installments.InstallmentGroup
@@ -55,7 +56,8 @@ defmodule CashLens.Transactions.Transaction do
       :installment_group_id,
       :installment_number,
       :occurrence_index,
-      :parent_transaction_id
+      :parent_transaction_id,
+      :import_batch_id
     ])
     |> validate_required([:date, :description, :amount, :account_id])
     |> put_dedup_key()
