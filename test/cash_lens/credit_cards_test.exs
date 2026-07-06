@@ -50,4 +50,93 @@ defmodule CashLens.CreditCardsTest do
     assert length(detail.transactions) == 1
     assert detail.payment == nil
   end
+
+  test "link_payment sets statement payment and children parents" do
+    card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    bank = CashLens.AccountsFixtures.account_fixture(%{})
+    s = statement_fixture(%{account: card, total_a_pagar: Decimal.new("30.00")})
+
+    child =
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        amount: Decimal.new("30.00"),
+        import_batch_id: s.id
+      })
+
+    payment =
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: bank.id,
+        amount: Decimal.new("30.00")
+      })
+
+    {:ok, s2} = CashLens.CreditCards.link_payment(s, payment.id)
+    assert s2.payment_transaction_id == payment.id
+
+    assert CashLens.Repo.get!(CashLens.Transactions.Transaction, child.id).parent_transaction_id ==
+             payment.id
+
+    {:ok, s3} = CashLens.CreditCards.unlink_payment(s2)
+    assert s3.payment_transaction_id == nil
+
+    assert CashLens.Repo.get!(CashLens.Transactions.Transaction, child.id).parent_transaction_id ==
+             nil
+  end
+
+  test "suggest_payment returns best matching payment" do
+    card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    bank = CashLens.AccountsFixtures.account_fixture(%{})
+
+    # Create the cartao-de-credito category
+    {:ok, category} =
+      CashLens.Categories.create_category(%{
+        name: "Cartão de Crédito",
+        slug: "cartao-de-credito"
+      })
+
+    # Create statement
+    today = Date.utc_today()
+    s = statement_fixture(%{account: card, total_a_pagar: Decimal.new("100.00"), due_date: today})
+
+    # Create multiple payments to choose from
+    CashLens.TransactionsFixtures.transaction_fixture(%{
+      account_id: bank.id,
+      amount: Decimal.new("50.00"),
+      category_id: category.id,
+      parent_transaction_id: nil
+    })
+
+    CashLens.TransactionsFixtures.transaction_fixture(%{
+      account_id: bank.id,
+      amount: Decimal.new("100.00"),
+      category_id: category.id,
+      date: today,
+      parent_transaction_id: nil
+    })
+
+    # Create a linked payment that should be excluded
+    linked_payment =
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: bank.id,
+        amount: Decimal.new("100.00"),
+        category_id: category.id
+      })
+
+    CashLens.TransactionsFixtures.transaction_fixture(%{
+      account_id: bank.id,
+      amount: Decimal.new("100.00"),
+      category_id: category.id,
+      parent_transaction_id: linked_payment.id
+    })
+
+    best = CashLens.CreditCards.suggest_payment(s)
+    assert best.amount == Decimal.new("100.00")
+    assert best.date == today
+  end
+
+  test "suggest_payment returns nil when no category exists" do
+    card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    s = statement_fixture(%{account: card})
+
+    assert CashLens.CreditCards.suggest_payment(s) == nil
+  end
 end

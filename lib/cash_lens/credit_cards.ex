@@ -4,6 +4,7 @@ defmodule CashLens.CreditCards do
   alias CashLens.Repo
   alias CashLens.CreditCards.Statement
   alias CashLens.Transactions.Transaction
+  alias Ecto.Multi
 
   def create_statement(attrs) do
     %Statement{}
@@ -86,5 +87,69 @@ defmodule CashLens.CreditCards do
       payment: payment,
       status: statement_status(statement, line_total)
     }
+  end
+
+  def link_payment(%Statement{} = statement, payment_id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    Multi.new()
+    |> Multi.update_all(
+      :children,
+      from(t in Transaction, where: t.import_batch_id == ^statement.id),
+      set: [parent_transaction_id: payment_id, updated_at: now]
+    )
+    |> Multi.update(
+      :statement,
+      Statement.changeset(statement, %{payment_transaction_id: payment_id})
+    )
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{statement: s}} -> {:ok, s}
+      {:error, _, reason, _} -> {:error, reason}
+    end
+  end
+
+  def unlink_payment(%Statement{} = statement) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    Multi.new()
+    |> Multi.update_all(
+      :children,
+      from(t in Transaction, where: t.import_batch_id == ^statement.id),
+      set: [parent_transaction_id: nil, updated_at: now]
+    )
+    |> Multi.update(:statement, Statement.changeset(statement, %{payment_transaction_id: nil}))
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{statement: s}} -> {:ok, s}
+      {:error, _, reason, _} -> {:error, reason}
+    end
+  end
+
+  def suggest_payment(%Statement{} = statement) do
+    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+      nil ->
+        nil
+
+      category ->
+        target = statement.total_a_pagar
+        due = statement.due_date
+
+        from(t in Transaction,
+          where: t.category_id == ^category.id,
+          where: t.account_id != ^statement.account_id,
+          where: is_nil(t.parent_transaction_id),
+          preload: [:account]
+        )
+        |> Repo.all()
+        |> Enum.sort_by(fn t ->
+          amount_diff =
+            if target, do: Decimal.abs(Decimal.sub(t.amount, target)), else: Decimal.new(0)
+
+          date_diff = if due, do: abs(Date.diff(t.date, due)), else: 0
+          {Decimal.to_float(amount_diff), date_diff}
+        end)
+        |> List.first()
+    end
   end
 end
