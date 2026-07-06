@@ -282,4 +282,25 @@ defmodule CashLens.PDFParserTest do
       assert tx.date == ~D[2025-12-09]
     end
   end
+
+  describe "extract_statement_meta/1" do
+    test "extract_statement_meta pulls due date, total and competencia" do
+      text = """
+      Vencimento 15/06/2026
+      01/06 UBER TRIP 27,90
+      TOTAL DA FATURA EM REAL 3.812,40
+      """
+
+      meta = PDFParser.extract_statement_meta(text)
+      assert meta.due_date == ~D[2026-06-15]
+      assert Decimal.equal?(meta.total_a_pagar, Decimal.new("3812.40"))
+      assert meta.competencia == ~D[2026-06-01]
+    end
+
+    test "extract_statement_meta degrades to nils when absent" do
+      meta = PDFParser.extract_statement_meta("no relevant lines")
+      assert meta.due_date == nil
+      assert meta.total_a_pagar == nil
+    end
+  end
 end

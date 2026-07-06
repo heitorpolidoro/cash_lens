@@ -380,6 +380,38 @@ defmodule CashLens.Parsers.PDFParser do
     end
   end
 
+  @doc """
+  Statement-level metadata for a credit-card PDF: due date (Vencimento),
+  total_a_pagar (the "TOTAL DA FATURA" amount, previously used only as an
+  end-of-table marker) and competencia (first day of the due month). Any
+  field is nil when the source does not carry it.
+  """
+  def extract_statement_meta(text) do
+    due = extract_statement_date_or_nil(text)
+
+    %{
+      due_date: due,
+      total_a_pagar: extract_total(text),
+      competencia: due && Date.beginning_of_month(due)
+    }
+  end
+
+  defp extract_statement_date_or_nil(text) do
+    case Regex.run(~r/Vencimento\s*(?:\r?\n\s*)?(\d{2})\/(\d{2})\/(\d{4})/i, text) do
+      [_, d, m, y] -> Date.new!(String.to_integer(y), String.to_integer(m), String.to_integer(d))
+      _ -> nil
+    end
+  end
+
+  defp extract_total(text) do
+    regex = ~r/TOTAL (?:DA FATURA|PARA)[^\d]*?([\d.]+,\d{2})/i
+
+    case Regex.run(regex, text) do
+      [_, amount_str] -> parse_amount(amount_str) |> Decimal.abs()
+      _ -> nil
+    end
+  end
+
   defp resolve_purchase_date(date_str, statement_date) do
     [d, m] = String.split(date_str, "/")
     {d_int, _} = Integer.parse(d)
