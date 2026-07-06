@@ -238,6 +238,47 @@ defmodule CashLens.Parsers.DirectoryImporter do
     %{result | accounts: result.accounts ++ [entry]}
   end
 
+  @doc """
+  Walks `path`'s `.account` folder structure exactly like `run/2` does, but
+  only visits credit-card accounts, and instead of importing calls
+  `fun.(account, content, file_path)` for each of that account's files whose
+  extension matches its parser. `content` is prepared the same way `run/2`
+  prepares it (PDF text extraction via the configured converter, or UTF-8
+  normalization) so parsing reproduces the original import exactly.
+
+  Used by the backfill mix task, which needs the parsed rows and file
+  metadata without re-inserting transactions.
+  """
+  def each_credit_card_file(path, fun) do
+    if File.dir?(path) do
+      {account_dirs, _skipped} = classify(path)
+
+      Enum.each(account_dirs, fn dir ->
+        with {:ok, %{bank: bank, account: name}} <- AccountFile.read(dir),
+             {:ok, account} <- resolve_account(bank, name),
+             true <- account.is_credit_card do
+          visit_account_files(dir, account, fun)
+        else
+          _ -> :ok
+        end
+      end)
+    else
+      {:error, "caminho '#{path}' não existe ou não é uma pasta"}
+    end
+  end
+
+  defp visit_account_files(dir, account, fun) do
+    expected = Ingestor.expected_extensions(account.parser_type)
+    {matching, _mismatched} = partition_files(dir, expected)
+
+    Enum.each(matching, fn file_path ->
+      with {:ok, raw} <- File.read(file_path) do
+        content = Ingestor.prepare_content(raw, account, file_path)
+        fun.(account, content, file_path)
+      end
+    end)
+  end
+
   defp format_label(dir, root_path) do
     basename = Path.basename(dir)
 

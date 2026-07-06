@@ -15,6 +15,69 @@ defmodule CashLens.CreditCards do
   def get_statement!(id), do: Repo.get!(Statement, id)
 
   @doc """
+  Backfills a single already-imported statement file: creates a `Statement`
+  record for it, then stamps the matching *already-existing* transactions
+  with `import_batch_id` by recomputing the exact fingerprint the original
+  import produced (same dedup key + same per-file occurrence index), and
+  finally attempts to auto-link the statement to its payment.
+
+  Only `import_batch_id` (and `updated_at`) are touched on the matched rows
+  — category, amount, description, etc. are never modified. Rows whose
+  fingerprint isn't found (e.g. already deleted) are simply not matched;
+  no transactions are inserted here.
+  """
+  def backfill_file(account, parsed_transactions, meta, source_file) do
+    {:ok, statement} =
+      create_statement(%{
+        account_id: account.id,
+        due_date: meta.due_date,
+        total_a_pagar: meta.total_a_pagar,
+        competencia: meta.competencia,
+        source_file: source_file
+      })
+
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    parsed_transactions
+    |> with_occurrence_indices(account.id)
+    |> Enum.each(fn {data, index} ->
+      fp = fingerprint_for(data, account.id, index)
+
+      from(t in Transaction, where: t.fingerprint == ^fp)
+      |> Repo.update_all(set: [import_batch_id: statement.id, updated_at: now])
+    end)
+
+    line_total =
+      Enum.reduce(parsed_transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
+
+    CashLens.CreditCards.Matcher.auto_link(statement, line_total)
+
+    {:ok, statement}
+  end
+
+  # Mirrors CashLens.Parsers.Ingestor's assign_occurrence_indices/2: the
+  # 0-based ordinal of each row among otherwise-identical rows (same
+  # dedup_key) within this single file, in input order. Reproducing the
+  # exact same batch order as the original import is what makes the
+  # recomputed fingerprints match the fingerprints already on disk.
+  defp with_occurrence_indices(parsed, account_id) do
+    {tagged, _seen} =
+      Enum.map_reduce(parsed, %{}, fn data, seen ->
+        key = data |> Map.put(:account_id, account_id) |> Transaction.dedup_key()
+        index = Map.get(seen, key, 0)
+        {{data, index}, Map.put(seen, key, index + 1)}
+      end)
+
+    tagged
+  end
+
+  defp fingerprint_for(data, account_id, index) do
+    data
+    |> Map.put(:account_id, account_id)
+    |> Transaction.fingerprint(index)
+  end
+
+  @doc """
   :open  — no payment linked.
   :divergent — payment linked but its amount differs from the statement's
     total_a_pagar (falling back to line_total when total is nil).

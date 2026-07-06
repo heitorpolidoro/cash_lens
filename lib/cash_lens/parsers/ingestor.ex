@@ -170,7 +170,13 @@ defmodule CashLens.Parsers.Ingestor do
 
   defp maybe_create_statement(_account, _content, _file_path), do: nil
 
-  defp prepare_content(content, account, file_path) do
+  @doc """
+  Reads and normalizes a file's content exactly like the importer does before
+  parsing: PDF text extraction via the configured converter for `.pdf` files
+  (or PDF-only parser types), UTF-8 normalization otherwise. Exposed so other
+  callers (e.g. the backfill mix task) reproduce identical parser input.
+  """
+  def prepare_content(content, account, file_path) do
     if String.ends_with?(file_path, ".pdf") or
          account.parser_type in ["sem_parar_pdf", "bradesco_cartao_pdf"] do
       converter = Application.get_env(:cash_lens, :pdf_converter)
