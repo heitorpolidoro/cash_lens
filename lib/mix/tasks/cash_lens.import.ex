@@ -25,14 +25,39 @@ defmodule Mix.Tasks.CashLens.Import do
     ansi? = IO.ANSI.enabled?()
 
     try do
+      extra_opts =
+        case DirectoryImporter.preflight(path) do
+          :ok ->
+            []
+
+          {:needs_confirmation, missing_accounts} ->
+            Mix.shell().info("\nAs seguintes contas não existem e serão criadas:")
+
+            Enum.each(missing_accounts, fn a ->
+              tag = if a.credit_card, do: " [cartão]", else: ""
+              Mix.shell().info("  • #{a.bank} / #{a.account}#{tag} (parser: #{a.parser})")
+            end)
+
+            if Mix.shell().yes?("\nCriar contas e continuar?") do
+              [create_missing: true]
+            else
+              Mix.shell().info("Importação cancelada.")
+              exit({:shutdown, 0})
+            end
+
+          {:error, reasons} ->
+            Enum.each(reasons, &Mix.shell().error("✗ #{&1}"))
+            exit({:shutdown, 1})
+        end
+
       {result, agent} =
         if ansi? do
           {on_event, agent} = build_on_event()
-          result = DirectoryImporter.run(path, on_event: on_event)
+          result = DirectoryImporter.run(path, Keyword.merge(extra_opts, on_event: on_event))
           Owl.LiveScreen.await_render()
           {result, agent}
         else
-          {DirectoryImporter.run(path), nil}
+          {DirectoryImporter.run(path, extra_opts), nil}
         end
 
       result

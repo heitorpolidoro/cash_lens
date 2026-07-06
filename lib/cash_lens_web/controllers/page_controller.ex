@@ -48,9 +48,11 @@ defmodule CashLensWeb.PageController do
 
     chart_data = Jason.encode!(historical ++ projections)
 
-    # Map accounts to their latest data (Balance final_balance or Account balance)
+    # Credit card and closed accounts are excluded from the dashboard listing.
     accounts_with_data =
-      Enum.map(all_accounts, fn account ->
+      all_accounts
+      |> Enum.reject(&(&1.is_credit_card or &1.is_closed))
+      |> Enum.map(fn account ->
         balance = Enum.find(latest_balances, &(&1.account_id == account.id))
 
         %{
@@ -65,13 +67,8 @@ defmodule CashLensWeb.PageController do
         }
       end)
 
-    # "Saldo Atual" excludes credit cards: their balance is a debt, not cash on hand.
+    # "Saldo Atual" excludes credit cards (already filtered out) and closed accounts
     total_balance =
-      accounts_with_data
-      |> Enum.reject(&(&1.is_closed or &1.is_credit_card))
-      |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
-
-    total_balance_with_credit_cards =
       accounts_with_data
       |> Enum.reject(& &1.is_closed)
       |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
@@ -87,7 +84,6 @@ defmodule CashLensWeb.PageController do
     render(conn, :home,
       layout: {CashLensWeb.Layouts, :app},
       total_balance: total_balance,
-      total_balance_with_credit_cards: total_balance_with_credit_cards,
       monthly_income: summary.income,
       monthly_expenses: summary.expenses,
       accounts: accounts_with_data,

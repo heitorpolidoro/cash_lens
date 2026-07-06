@@ -175,7 +175,13 @@ defmodule CashLens.Transactions do
     |> CategorySuggester.annotate()
   end
 
-  @excluded_reimbursement_slugs ["transfer", "initial_value", "salário", "salario"]
+  @excluded_reimbursement_slugs [
+    "transfer",
+    "initial_value",
+    "salário",
+    "salario",
+    "cartao-de-credito"
+  ]
 
   def list_reimbursement_credit_candidates(search \\ "") do
     excluded_ids =
@@ -470,9 +476,8 @@ defmodule CashLens.Transactions do
         left_join: g in assoc(p, :parent),
         where: t.date >= ^first and t.date <= ^last,
         where: t.amount < 0,
-        # Transfers are not spending categories, so exclude the whole transfer
-        # category (paired or not) along with initial values.
-        where: c.slug not in ["initial_value", "transfer"],
+        # Transfers and credit-card payments are not spending categories, so exclude them.
+        where: c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
@@ -527,7 +532,7 @@ defmodule CashLens.Transactions do
         left_join: g in assoc(p, :parent),
         where: t.date >= ^first and t.date <= ^last,
         where: t.amount > 0,
-        where: c.slug not in ["initial_value", "transfer"],
+        where: c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
@@ -672,9 +677,8 @@ defmodule CashLens.Transactions do
       join: c in assoc(t, :category),
       left_join: p in assoc(c, :parent),
       where: t.amount < 0,
-      # Category breakdown graphs: transfers are not spending, so the whole
-      # transfer category is excluded (paired or not), along with initial values.
-      where: c.slug not in ["initial_value", "transfer"],
+      # Category breakdown graphs: transfers and credit-card payments are not spending, so they are excluded.
+      where: c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
       where: is_nil(t.reimbursement_link_key),
       where: t.reimbursement_status != "pending" or is_nil(t.reimbursement_status),
       select: %{
@@ -899,6 +903,14 @@ defmodule CashLens.Transactions do
   Reapplies transfer rules to all unmatched transactions and attempts matching.
   """
   def reapply_transfer_rules do
+    transfer_cat_id = get_transfer_category_id()
+
+    transfer_count_before =
+      if transfer_cat_id,
+        do:
+          Repo.aggregate(from(t in Transaction, where: t.category_id == ^transfer_cat_id), :count),
+        else: 0
+
     unmatched =
       Repo.all(
         from t in Transaction,
@@ -922,7 +934,20 @@ defmodule CashLens.Transactions do
       CashLens.Accounting.rebuild_account_balances(account.id)
     end)
 
-    :ok
+    transfer_count_after =
+      if transfer_cat_id,
+        do:
+          Repo.aggregate(from(t in Transaction, where: t.category_id == ^transfer_cat_id), :count),
+        else: 0
+
+    {:ok, transfer_count_after - transfer_count_before}
+  end
+
+  defp get_transfer_category_id do
+    case CashLens.Categories.get_category_by_slug("transfer") do
+      nil -> nil
+      cat -> cat.id
+    end
   end
 
   defp retry_credit_card_matching do
@@ -980,13 +1005,6 @@ defmodule CashLens.Transactions do
       mirror_ids ++ twin_ids
     else
       []
-    end
-  end
-
-  defp get_transfer_category_id do
-    case CashLens.Categories.get_category_by_slug("transfer") do
-      nil -> nil
-      category -> category.id
     end
   end
 
@@ -1272,16 +1290,19 @@ defmodule CashLens.Transactions do
     transfer_cat_id = if transfer_cat, do: transfer_cat.id, else: nil
 
     from(a in Transaction,
+      join: acct_a in assoc(a, :account),
       join: b in Transaction,
       on:
         a.date == b.date and
           a.amount == fragment("? * -1", b.amount) and
           a.account_id != b.account_id and
           a.id < b.id,
+      join: acct_b in assoc(b, :account),
       where: is_nil(a.transfer_key) and is_nil(b.transfer_key),
       where:
         (is_nil(a.category_id) or a.category_id == ^transfer_cat_id) and
           (is_nil(b.category_id) or b.category_id == ^transfer_cat_id),
+      where: not acct_a.is_credit_card and not acct_b.is_credit_card,
       order_by: [desc: a.date],
       select: {a, b}
     )
@@ -1309,26 +1330,31 @@ defmodule CashLens.Transactions do
     else
       cat_id = transfer_cat.id
 
-      # IDs that appear in suggestions
+      # IDs that appear in suggestions (excluding credit-card accounts)
       paired_ids =
         from(a in Transaction,
+          join: acct_a in assoc(a, :account),
           join: b in Transaction,
           on:
             a.date == b.date and
               a.amount == fragment("? * -1", b.amount) and
               a.account_id != b.account_id,
+          join: acct_b in assoc(b, :account),
           where: is_nil(a.transfer_key) and is_nil(b.transfer_key),
           where:
             (is_nil(a.category_id) or a.category_id == ^cat_id) and
               (is_nil(b.category_id) or b.category_id == ^cat_id),
+          where: not acct_a.is_credit_card and not acct_b.is_credit_card,
           select: a.id
         )
         |> Repo.all()
 
       from(t in Transaction,
+        join: acct in assoc(t, :account),
         where: is_nil(t.transfer_key),
         where: t.category_id == ^cat_id,
         where: t.id not in ^paired_ids,
+        where: not acct.is_credit_card,
         order_by: [desc: t.date],
         preload: [:account, :category]
       )
@@ -1454,32 +1480,59 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
-  Links an expense and a credit transaction as a reimbursement.
+  Links a group of expenses and credits under a single reimbursement link key, setting all of them to the same category_id.
   """
-  def link_reimbursement_pair(expense_id, credit_id) do
+  def link_reimbursement_group(expense_ids, credit_ids, category_id) do
     link_key = Ecto.UUID.generate()
-    expense = get_transaction!(expense_id)
-    credit = get_transaction!(credit_id)
-
-    final_category_id = expense.category_id || credit.category_id
 
     Repo.transaction(fn ->
-      {:ok, updated_expense} =
-        update_transaction(expense, %{
-          reimbursement_status: "paid",
-          reimbursement_link_key: link_key,
-          category_id: final_category_id
-        })
+      updated_expenses =
+        Enum.map(expense_ids, fn id ->
+          tx = get_transaction!(id)
 
-      {:ok, updated_credit} =
-        update_transaction(credit, %{
-          reimbursement_status: "paid",
-          reimbursement_link_key: link_key,
-          category_id: final_category_id
-        })
+          {:ok, updated} =
+            update_transaction(tx, %{
+              reimbursement_status: "paid",
+              reimbursement_link_key: link_key,
+              category_id: category_id
+            })
 
-      {:ok, {updated_expense, updated_credit}}
+          updated
+        end)
+
+      updated_credits =
+        Enum.map(credit_ids, fn id ->
+          tx = get_transaction!(id)
+
+          {:ok, updated} =
+            update_transaction(tx, %{
+              reimbursement_status: "paid",
+              reimbursement_link_key: link_key,
+              category_id: category_id
+            })
+
+          updated
+        end)
+
+      {updated_expenses, updated_credits}
     end)
+  end
+
+  @doc """
+  Links an expense and a credit transaction as a reimbursement.
+  """
+  def link_reimbursement_pair(expense_id, credit_id, category_id \\ nil) do
+    expense = get_transaction!(expense_id)
+    credit = get_transaction!(credit_id)
+    final_category_id = category_id || expense.category_id || credit.category_id
+
+    case link_reimbursement_group([expense_id], [credit_id], final_category_id) do
+      {:ok, {[updated_expense], [updated_credit]}} ->
+        {:ok, {updated_expense, updated_credit}}
+
+      {:error, reason} ->
+        Repo.rollback(reason)
+    end
   end
 
   @doc """

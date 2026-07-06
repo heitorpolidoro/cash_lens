@@ -11,6 +11,7 @@ defmodule CashLens.Forecast.RecurringItem do
     field :amount, :decimal
     field :active, :boolean, default: true
     field :manually_edited, :boolean, default: false
+    field :is_salary, :boolean, default: false
 
     timestamps(type: :utc_datetime)
   end
@@ -18,7 +19,15 @@ defmodule CashLens.Forecast.RecurringItem do
   @doc false
   def changeset(recurring_item, attrs) do
     recurring_item
-    |> cast(attrs, [:category_id, :label, :day_of_month, :amount, :active, :manually_edited])
+    |> cast(attrs, [
+      :category_id,
+      :label,
+      :day_of_month,
+      :amount,
+      :active,
+      :manually_edited,
+      :is_salary
+    ])
     |> validate_required([:category_id, :label, :day_of_month, :amount])
     |> validate_number(:day_of_month, greater_than_or_equal_to: 1, less_than_or_equal_to: 31)
     |> validate_amount_not_zero()

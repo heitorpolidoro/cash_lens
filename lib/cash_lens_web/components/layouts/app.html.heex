@@ -1,63 +1,31 @@
-<div class="drawer">
+<div id="app-drawer" class="drawer lg:drawer-open">
   <input id="my-drawer" type="checkbox" class="drawer-toggle" />
+
   <div class="drawer-content flex flex-col min-h-screen bg-base-200">
     <!-- Navbar -->
-    <div class="w-full navbar bg-base-100 border-b border-base-300 shadow-sm sticky top-0 z-30">
+    <div class="w-full navbar bg-base-100 border-b border-base-300 shadow-sm sticky top-0 z-30 px-4">
       <div class="flex-none lg:hidden">
         <label for="my-drawer" aria-label="open sidebar" class="btn btn-square btn-ghost">
           <.icon name="hero-bars-3" class="size-6" />
         </label>
       </div>
-      <div class="flex-1 px-2 mx-2">
-        <a href="/" class="flex items-center gap-2">
+      
+<!-- Mobile Logo -->
+      <div class="flex-1 lg:hidden">
+        <a href="/" class="flex items-center gap-2 pl-2">
           <span class="text-xl font-black tracking-tight text-primary">CashLens</span>
         </a>
       </div>
-      <div class="flex-none hidden lg:block">
-        <ul class="menu menu-horizontal font-bold gap-2">
-          <li><a href="/" class="rounded-lg hover:bg-base-200 transition-all">Painel</a></li>
-          <li>
-            <a href="/accounts" class="rounded-lg hover:bg-base-200 transition-all">Contas</a>
-          </li>
-          <li>
-            <a href="/transactions" class="rounded-lg hover:bg-base-200 transition-all">
-              Transações
-            </a>
-          </li>
-          <li>
-            <a href="/categories" class="rounded-lg hover:bg-base-200 transition-all">
-              Categorias
-            </a>
-          </li>
-          <li>
-            <a href="/balances" class="rounded-lg hover:bg-base-200 transition-all">Saldos</a>
-          </li>
-          <li>
-            <a href="/reimbursements" class="rounded-lg hover:bg-base-200 transition-all">
-              Reembolsos
-            </a>
-          </li>
-          <li>
-            <a href="/transfers" class="rounded-lg hover:bg-base-200 transition-all">
-              Transferências
-            </a>
-          </li>
-          <li>
-            <a href="/credit_card_links" class="rounded-lg hover:bg-base-200 transition-all">
-              Cartão de Crédito
-            </a>
-          </li>
-          <li>
-            <a href="/installments" class="rounded-lg hover:bg-base-200 transition-all">
-              Parcelamentos
-            </a>
-          </li>
-          <li>
-            <a href="/forecast" class="rounded-lg hover:bg-base-200 transition-all">Previsão</a>
-          </li>
-        </ul>
+      
+<!-- Desktop Breadcrumbs / Spacer -->
+      <div class="flex-1 hidden lg:block">
+        <span class="text-sm font-semibold opacity-60">Controle Financeiro Inteligente</span>
       </div>
-      <div class="flex-none gap-4 ml-4">
+      
+<!-- Theme Toggle and User Icon -->
+      <div class="flex-none gap-4">
+        <.theme_toggle />
+
         <div class="avatar placeholder">
           <div class="bg-neutral text-neutral-content rounded-full w-8">
             <span class="text-xs">U</span>
@@ -86,44 +54,375 @@
     </footer>
   </div>
   
-<!-- Sidebar for Mobile -->
+<!-- Sidebar -->
   <div class="drawer-side z-40">
     <label for="my-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-    <ul class="menu p-4 w-80 min-h-full bg-base-100">
-      <li class="mb-4">
-        <div class="flex items-center gap-2 px-2 py-4 border-b border-base-300">
-          <span class="text-xl font-black text-primary">CashLens</span>
+    <div class="flex flex-col w-72 min-h-full bg-base-100 text-base-content border-r border-base-300 sidebar-container">
+      
+<!-- Sidebar Header / Logo -->
+      <div class="flex items-center justify-between px-6 py-5 border-b border-base-300 header-container">
+        <a href="/" class="flex items-center gap-2 logo-text">
+          <span class="text-2xl font-black tracking-tight text-primary">CashLens</span>
+        </a>
+        <a href="/" class="hidden logo-icon flex items-center justify-center">
+          <span class="text-2xl font-black text-primary">C</span>
+        </a>
+        <button
+          id="sidebar-toggle"
+          class="btn btn-sm btn-circle btn-ghost hidden lg:flex items-center justify-center"
+          type="button"
+          aria-label="Recolher menu"
+        >
+          <.icon name="hero-chevron-double-left" class="size-4" />
+        </button>
+      </div>
+      
+<!-- Navigation Menu -->
+      <ul class="menu p-4 gap-2 flex-grow overflow-y-auto">
+        <!-- Visão Geral -->
+        <li>
+          <details open>
+            <summary class="text-xs font-black uppercase tracking-wider opacity-60 hover:bg-base-200 py-2 px-3 rounded-lg flex items-center justify-between">
+              Visão Geral
+            </summary>
+            <ul class="mt-1 gap-1 pl-2">
+              <li>
+                <a
+                  href="/"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-home" class="size-5" />
+                  <span class="menu-text">Painel</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/balances"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-banknotes" class="size-5" />
+                  <span class="menu-text">Saldos</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/forecast"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-chart-bar" class="size-5" />
+                  <span class="menu-text">Previsão</span>
+                </a>
+              </li>
+            </ul>
+          </details>
+        </li>
+        
+<!-- Operações -->
+        <li>
+          <details open>
+            <summary class="text-xs font-black uppercase tracking-wider opacity-60 hover:bg-base-200 py-2 px-3 rounded-lg flex items-center justify-between">
+              Operações
+            </summary>
+            <ul class="mt-1 gap-1 pl-2">
+              <li>
+                <a
+                  href="/transactions"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-arrows-right-left" class="size-5" />
+                  <span class="menu-text">Transações</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/installments"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-rectangle-group" class="size-5" />
+                  <span class="menu-text">Parcelamentos</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/reimbursements"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-sparkles" class="size-5" />
+                  <span class="menu-text">Reembolsos</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/transfers"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-arrow-path" class="size-5" />
+                  <span class="menu-text">Transferências</span>
+                </a>
+              </li>
+            </ul>
+          </details>
+        </li>
+        
+<!-- Cadastros -->
+        <li>
+          <details open>
+            <summary class="text-xs font-black uppercase tracking-wider opacity-60 hover:bg-base-200 py-2 px-3 rounded-lg flex items-center justify-between">
+              Cadastros
+            </summary>
+            <ul class="mt-1 gap-1 pl-2">
+              <li>
+                <a
+                  href="/accounts"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-credit-card" class="size-5" />
+                  <span class="menu-text">Contas</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/categories"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-tag" class="size-5" />
+                  <span class="menu-text">Categorias</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/credit_card_links"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-link" class="size-5" />
+                  <span class="menu-text">Cartão de Crédito</span>
+                </a>
+              </li>
+            </ul>
+          </details>
+        </li>
+        
+<!-- Administração -->
+        <li>
+          <details open>
+            <summary class="text-xs font-black uppercase tracking-wider opacity-60 hover:bg-base-200 py-2 px-3 rounded-lg flex items-center justify-between">
+              Administração
+            </summary>
+            <ul class="mt-1 gap-1 pl-2">
+              <li>
+                <a
+                  href="/admin/exclusion_rules"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-x-circle" class="size-5" />
+                  <span class="menu-text">Regras de Exclusão</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/admin/transfer_rules"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-adjustments-horizontal" class="size-5" />
+                  <span class="menu-text">Regras de Transferência</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/admin/db"
+                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
+                >
+                  <.icon name="hero-circle-stack" class="size-5" />
+                  <span class="menu-text">Banco de Dados</span>
+                </a>
+              </li>
+            </ul>
+          </details>
+        </li>
+      </ul>
+      
+<!-- Sidebar Footer -->
+      <div class="p-4 border-t border-base-300 flex items-center justify-between gap-4 bg-base-100/50 user-avatar-container">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="avatar placeholder flex-shrink-0">
+            <div class="bg-neutral text-neutral-content rounded-full w-10">
+              <span class="text-sm font-bold">U</span>
+            </div>
+          </div>
+          <div class="min-w-0 user-details">
+            <p class="font-bold text-sm truncate">Usuário Padrão</p>
+            <p class="text-xs opacity-60 truncate">user@cashlens.com</p>
+          </div>
         </div>
-      </li>
-      <li>
-        <a href="/" class="font-bold"><.icon name="hero-home" class="size-5 mr-2" />Painel</a>
-      </li>
-      <li>
-        <a href="/accounts" class="font-bold">
-          <.icon name="hero-credit-card" class="size-5 mr-2" />Contas
-        </a>
-      </li>
-      <li>
-        <a href="/transactions" class="font-bold">
-          <.icon name="hero-arrows-right-left" class="size-5 mr-2" />Transações
-        </a>
-      </li>
-      <li>
-        <a href="/installments" class="font-bold">
-          <.icon name="hero-rectangle-group" class="size-5 mr-2" />Parcelamentos
-        </a>
-      </li>
-      <li>
-        <a href="/forecast" class="font-bold">
-          <.icon name="hero-chart-bar" class="size-5 mr-2" />Previsão
-        </a>
-      </li>
-      <div class="divider"></div>
-      <li>
-        <a href="#" class="opacity-50">
-          <.icon name="hero-cog-6-tooth" class="size-5 mr-2" />Configurações
-        </a>
-      </li>
-    </ul>
+      </div>
+    </div>
   </div>
 </div>
+
+<style>
+  /* Base transition for smooth collapsing */
+  .sidebar-container {
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Collapsed sidebar states */
+  .sidebar-collapsed .logo-text,
+  .sidebar-collapsed .menu li details summary,
+  .sidebar-collapsed .menu li > span,
+  .sidebar-collapsed .menu-text,
+  .sidebar-collapsed .user-details {
+    display: none !important;
+  }
+
+  .sidebar-collapsed .logo-icon {
+    display: flex !important;
+    margin: 0 auto;
+  }
+
+  .sidebar-collapsed .header-container {
+    justify-content: center !important;
+    padding: 1.25rem 0 !important;
+  }
+
+  .sidebar-collapsed .sidebar-container {
+    width: 5rem !important; /* 80px */
+  }
+
+  .sidebar-collapsed .menu {
+    padding: 1rem 0.5rem !important;
+  }
+
+  .sidebar-collapsed .menu li {
+    align-items: center;
+  }
+
+  .sidebar-collapsed .menu li details {
+    width: 100%;
+  }
+
+  .sidebar-collapsed .menu li details[open] > summary::after {
+    display: none !important; /* Hide details chevron */
+  }
+
+  .sidebar-collapsed .menu li details > ul {
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+    border-left: none !important;
+  }
+
+  .sidebar-collapsed .menu a {
+    justify-content: center !important;
+    padding: 0.75rem 0 !important;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 9999px !important;
+  }
+
+  .sidebar-collapsed .menu a .size-5 {
+    margin: 0 !important;
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  .sidebar-collapsed .user-avatar-container {
+    justify-content: center !important;
+    padding: 1rem 0 !important;
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const drawer = document.getElementById("app-drawer");
+    const toggleBtn = document.getElementById("sidebar-toggle");
+    const toggleIcon = document.querySelector("#sidebar-toggle span");
+
+    // Load initial state from localStorage
+    const isCollapsed = localStorage.getItem("sidebar-collapsed") === "true";
+    if (isCollapsed && drawer) {
+      drawer.classList.add("sidebar-collapsed");
+      if (toggleIcon) {
+        toggleIcon.classList.remove("hero-chevron-double-left");
+        toggleIcon.classList.add("hero-chevron-double-right");
+      }
+    }
+
+    const toggleSidebar = () => {
+      if (!drawer) return;
+      const collapsed = drawer.classList.toggle("sidebar-collapsed");
+      localStorage.setItem("sidebar-collapsed", collapsed ? "true" : "false");
+      
+      if (toggleIcon) {
+        if (collapsed) {
+          toggleIcon.classList.remove("hero-chevron-double-left");
+          toggleIcon.classList.add("hero-chevron-double-right");
+        } else {
+          toggleIcon.classList.remove("hero-chevron-double-right");
+          toggleIcon.classList.add("hero-chevron-double-left");
+        }
+      }
+    };
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", toggleSidebar);
+    }
+
+    const updateActiveLink = () => {
+      const path = window.location.pathname;
+      document.querySelectorAll(".drawer-side .menu a").forEach(link => {
+        const href = link.getAttribute("href");
+        // Exact match for home page, prefix match for other paths
+        if (href === path || (href !== "/" && path.startsWith(href))) {
+          link.classList.add("bg-primary/10", "text-primary");
+          link.classList.remove("hover:bg-base-200");
+          
+          // Auto-expand the parent <details> tag if collapsed
+          const details = link.closest("details");
+          if (details) {
+            details.setAttribute("open", "");
+          }
+        } else {
+          link.classList.remove("bg-primary/10", "text-primary");
+          link.classList.add("hover:bg-base-200");
+        }
+      });
+    };
+    
+    updateActiveLink();
+
+    // Listen to Phoenix LiveView navigation hooks
+    window.addEventListener("phx:page-loading-stop", () => {
+      // Re-query toggle and bind event because LiveView might re-render parts of layout
+      const currentToggleBtn = document.getElementById("sidebar-toggle");
+      if (currentToggleBtn && !currentToggleBtn.dataset.hasListener) {
+        currentToggleBtn.addEventListener("click", toggleSidebar);
+        currentToggleBtn.dataset.hasListener = "true";
+      }
+      
+      // Keep state in sync after LiveView render
+      const currentDrawer = document.getElementById("app-drawer");
+      const currentToggleIcon = document.querySelector("#sidebar-toggle span");
+      const currentIsCollapsed = localStorage.getItem("sidebar-collapsed") === "true";
+      if (currentDrawer) {
+        if (currentIsCollapsed) {
+          currentDrawer.classList.add("sidebar-collapsed");
+          if (currentToggleIcon) {
+            currentToggleIcon.classList.remove("hero-chevron-double-left");
+            currentToggleIcon.classList.add("hero-chevron-double-right");
+          }
+        } else {
+          currentDrawer.classList.remove("sidebar-collapsed");
+          if (currentToggleIcon) {
+            currentToggleIcon.classList.remove("hero-chevron-double-right");
+            currentToggleIcon.classList.add("hero-chevron-double-left");
+          }
+        }
+      }
+      
+      updateActiveLink();
+    });
+    
+    if (toggleBtn) {
+      toggleBtn.dataset.hasListener = "true";
+    }
+  });
+</script>

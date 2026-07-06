@@ -54,10 +54,17 @@ defmodule CashLensWeb.Router do
     end
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", CashLensWeb do
-  #   pipe_through :api
-  # end
+  scope "/api", CashLensWeb.Api do
+    pipe_through :api
+
+    resources "/accounts", AccountController, except: [:new, :edit]
+    resources "/categories", CategoryController, except: [:new, :edit]
+    resources "/transactions", TransactionController, except: [:new, :edit, :create]
+    resources "/balances", BalanceController, only: [:index, :show]
+
+    resources "/installment_groups", InstallmentGroupController,
+      only: [:index, :show, :update, :delete]
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:cash_lens, :dev_routes) do

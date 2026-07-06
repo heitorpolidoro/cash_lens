@@ -501,6 +501,73 @@ defmodule CashLensWeb.ReimbursementLive.Index do
         </div>
       </div>
     </.modal>
+
+    <!-- Category Reconciliation Modal -->
+    <.modal
+      :if={@reconcile_modal}
+      id="reconcile-modal"
+      show
+      on_cancel={JS.push("close_reconcile_modal")}
+    >
+      <div class="p-4">
+        <div class="w-20 h-20 rounded-full bg-warning/10 text-warning flex items-center justify-center mx-auto mb-6">
+          <.icon name="hero-tag" class="size-10" />
+        </div>
+        <h2 class="text-2xl font-black text-center mb-2 uppercase tracking-tighter">
+          Conciliar Categoria
+        </h2>
+        <p class="text-base-content/60 text-center mb-6">
+          As transações vinculadas a um reembolso devem possuir a mesma categoria.
+        </p>
+
+        <%= if @reconcile_modal.type == :select do %>
+          <!-- Case: Neither has category -->
+          <div class="space-y-4">
+            <p class="text-xs font-semibold text-center mb-4 opacity-75">
+              Nenhuma das transações possui categoria. Selecione uma categoria para ambas:
+            </p>
+            <form phx-submit="confirm_reconcile_select" class="space-y-4">
+              <select
+                name="category_id"
+                class="select select-bordered w-full rounded-2xl bg-base-200 border-none focus:ring-success"
+                required
+              >
+                <option value="" disabled selected>Escolha uma categoria...</option>
+                <%= for cat <- @reconcile_modal.categories do %>
+                  <option value={cat.id}>{cat.name}</option>
+                <% end %>
+              </select>
+              <button type="submit" class="btn btn-primary w-full rounded-2xl font-black">
+                Confirmar Categoria
+              </button>
+            </form>
+          </div>
+        <% else %>
+          <!-- Case: Both have different categories -->
+          <div class="space-y-6">
+            <p class="text-xs font-semibold text-center mb-4 opacity-75">
+              Ambas as transações possuem categorias diferentes. Escolha qual categoria deseja manter para ambas:
+            </p>
+            <div class="flex flex-col gap-3">
+              <%= for cat <- @reconcile_modal.categories do %>
+                <button
+                  type="button"
+                  phx-click="confirm_reconcile_button"
+                  phx-value-category-id={cat.id}
+                  class="btn btn-outline btn-lg rounded-2xl font-black flex items-center justify-between px-6"
+                >
+                  <span>Usar: {cat.name}</span>
+                </button>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
+        <button phx-click="close_reconcile_modal" class="btn btn-ghost w-full mt-4 rounded-2xl">
+          Cancelar
+        </button>
+      </div>
+    </.modal>
     """
   end
 
@@ -515,6 +582,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
      |> assign(:selected_credit_ids, MapSet.new())
      |> assign(:total_credits_selected, Decimal.new("0"))
      |> assign(:confirm_modal, nil)
+     |> assign(:reconcile_modal, nil)
      |> load_data()}
   end
 
@@ -543,8 +611,43 @@ defmodule CashLensWeb.ReimbursementLive.Index do
 
   @impl true
   def handle_event("confirm_pair", %{"a" => id_a, "b" => id_b}, socket) do
-    {:ok, _} = Transactions.link_reimbursement_pair(id_a, id_b)
-    {:noreply, socket |> put_flash(:success, "Reembolso vinculado com sucesso!") |> load_data()}
+    expense = Transactions.get_transaction!(id_a)
+    credit = Transactions.get_transaction!(id_b)
+
+    {expense, credit} =
+      if Decimal.lt?(expense.amount, 0), do: {expense, credit}, else: {credit, expense}
+
+    cat_a = expense.category_id
+    cat_b = credit.category_id
+
+    cond do
+      (not is_nil(cat_a) and is_nil(cat_b)) or
+        (is_nil(cat_a) and not is_nil(cat_b)) or
+          (not is_nil(cat_a) and cat_a == cat_b) ->
+        category_id = cat_a || cat_b
+        {:ok, _} = Transactions.link_reimbursement_pair(expense.id, credit.id, category_id)
+
+        {:noreply,
+         socket |> put_flash(:success, "Reembolso vinculado com sucesso!") |> load_data()}
+
+      is_nil(cat_a) and is_nil(cat_b) ->
+        {:noreply,
+         assign(socket, :reconcile_modal, %{
+           expense_ids: [expense.id],
+           credit_ids: [credit.id],
+           type: :select,
+           categories: CashLens.Categories.list_categories()
+         })}
+
+      true ->
+        {:noreply,
+         assign(socket, :reconcile_modal, %{
+           expense_ids: [expense.id],
+           credit_ids: [credit.id],
+           type: :buttons,
+           categories: [expense.category, credit.category]
+         })}
+    end
   end
 
   @impl true
@@ -713,45 +816,64 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   def handle_event("confirm_link", _params, socket) do
     selected_expense_ids = socket.assigns.selected_ids
     selected_credit_ids = socket.assigns.selected_credit_ids
-    link_key = Ecto.UUID.generate()
 
-    expense =
-      socket.assigns.unmatched
-      |> Enum.find(&MapSet.member?(selected_expense_ids, &1.id))
+    expenses = Enum.map(selected_expense_ids, &Transactions.get_transaction!/1)
+    credits = Enum.map(selected_credit_ids, &Transactions.get_transaction!/1)
+    all_txs = expenses ++ credits
 
-    cat_id = expense && expense.category_id
+    unique_categories =
+      all_txs
+      |> Enum.map(& &1.category_id)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
 
-    Enum.each(selected_expense_ids, fn id ->
-      tx = Transactions.get_transaction!(id)
+    cond do
+      length(unique_categories) == 0 ->
+        # Neither has category
+        {:noreply,
+         assign(socket, :reconcile_modal, %{
+           expense_ids: Enum.map(expenses, & &1.id),
+           credit_ids: Enum.map(credits, & &1.id),
+           type: :select,
+           categories: CashLens.Categories.list_categories()
+         })}
 
-      Transactions.update_transaction(tx, %{
-        reimbursement_status: "paid",
-        reimbursement_link_key: link_key
-      })
-    end)
+      length(unique_categories) == 1 ->
+        # Only one category exists
+        category_id = List.first(unique_categories)
 
-    Enum.each(selected_credit_ids, fn id ->
-      tx = Transactions.get_transaction!(id)
+        {:ok, _} =
+          Transactions.link_reimbursement_group(
+            Enum.map(expenses, & &1.id),
+            Enum.map(credits, & &1.id),
+            category_id
+          )
 
-      Transactions.update_transaction(tx, %{
-        reimbursement_status: "paid",
-        reimbursement_link_key: link_key,
-        category_id: tx.category_id || cat_id
-      })
-    end)
+        {:noreply,
+         socket
+         |> assign(:show_linker_modal, false)
+         |> assign(:selected_ids, MapSet.new())
+         |> assign(:total_selected, Decimal.new("0"))
+         |> assign(:selected_credit_ids, MapSet.new())
+         |> assign(:total_credits_selected, Decimal.new("0"))
+         |> put_flash(
+           :success,
+           "#{MapSet.size(selected_credit_ids)} crédito(s) vinculado(s) à despesa!"
+         )
+         |> load_data()}
 
-    {:noreply,
-     socket
-     |> assign(:show_linker_modal, false)
-     |> assign(:selected_ids, MapSet.new())
-     |> assign(:total_selected, Decimal.new("0"))
-     |> assign(:selected_credit_ids, MapSet.new())
-     |> assign(:total_credits_selected, Decimal.new("0"))
-     |> put_flash(
-       :success,
-       "#{MapSet.size(selected_credit_ids)} crédito(s) vinculado(s) à despesa!"
-     )
-     |> load_data()}
+      true ->
+        # Multiple different categories
+        categories = Enum.map(unique_categories, &CashLens.Categories.get_category!/1)
+
+        {:noreply,
+         assign(socket, :reconcile_modal, %{
+           expense_ids: Enum.map(expenses, & &1.id),
+           credit_ids: Enum.map(credits, & &1.id),
+           type: :buttons,
+           categories: categories
+         })}
+    end
   end
 
   @impl true
@@ -762,6 +884,49 @@ defmodule CashLensWeb.ReimbursementLive.Index do
      |> assign(:confirm_modal, nil)
      |> assign(:selected_credit_ids, MapSet.new())
      |> assign(:total_credits_selected, Decimal.new("0"))}
+  end
+
+  @impl true
+  def handle_event("confirm_reconcile_select", %{"category_id" => category_id}, socket) do
+    modal = socket.assigns.reconcile_modal
+
+    {:ok, _} =
+      Transactions.link_reimbursement_group(modal.expense_ids, modal.credit_ids, category_id)
+
+    {:noreply,
+     socket
+     |> put_flash(:success, "Reembolso vinculado com sucesso!")
+     |> assign(:reconcile_modal, nil)
+     |> assign(:show_linker_modal, false)
+     |> assign(:selected_ids, MapSet.new())
+     |> assign(:total_selected, Decimal.new("0"))
+     |> assign(:selected_credit_ids, MapSet.new())
+     |> assign(:total_credits_selected, Decimal.new("0"))
+     |> load_data()}
+  end
+
+  @impl true
+  def handle_event("confirm_reconcile_button", %{"category-id" => category_id}, socket) do
+    modal = socket.assigns.reconcile_modal
+
+    {:ok, _} =
+      Transactions.link_reimbursement_group(modal.expense_ids, modal.credit_ids, category_id)
+
+    {:noreply,
+     socket
+     |> put_flash(:success, "Reembolso vinculado com sucesso!")
+     |> assign(:reconcile_modal, nil)
+     |> assign(:show_linker_modal, false)
+     |> assign(:selected_ids, MapSet.new())
+     |> assign(:total_selected, Decimal.new("0"))
+     |> assign(:selected_credit_ids, MapSet.new())
+     |> assign(:total_credits_selected, Decimal.new("0"))
+     |> load_data()}
+  end
+
+  @impl true
+  def handle_event("close_reconcile_modal", _, socket) do
+    {:noreply, assign(socket, :reconcile_modal, nil)}
   end
 
   defp load_data(socket) do

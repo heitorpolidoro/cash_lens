@@ -13,6 +13,98 @@ const liveSocket = new LiveSocket("/live", Socket, {
   params: {_csrf_token: csrfToken},
   hooks: {
     ...colocatedHooks,
+    ForecastChart: {
+      mounted() {
+        this.initChart();
+      },
+      updated() {
+        this.initChart();
+      },
+      destroyed() {
+        if (this.chart) this.chart.destroy();
+      },
+      initChart() {
+        const rawPoints = this.el.getAttribute("data-points");
+        if (!rawPoints) return;
+        const points = JSON.parse(rawPoints);
+
+        if (this.chart) {
+          this.chart.destroy();
+        }
+
+        const labels = points.map(p => {
+          const d = new Date(p.date + "T00:00:00");
+          return d.toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" });
+        });
+        const balances = points.map(p => p.balance);
+
+        const ctx = this.el.getContext("2d");
+        this.chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Saldo Projetado',
+              data: balances,
+              borderColor: 'rgb(59, 130, 246)',
+              backgroundColor: 'rgba(59, 130, 246, 0.05)',
+              borderWidth: 3,
+              fill: true,
+              tension: 0.2,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: balances.map(b => b < 0 ? 'rgb(239, 68, 68)' : 'rgb(59, 130, 246)'),
+              pointBorderColor: '#fff',
+              pointBorderWidth: 1,
+              segment: {
+                borderColor: ctx => {
+                  const y0 = ctx.p0.parsed.y;
+                  const y1 = ctx.p1.parsed.y;
+                  return (y0 < 0 || y1 < 0) ? 'rgb(239, 68, 68)' : 'rgb(59, 130, 246)';
+                }
+              }
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    let label = context.dataset.label || '';
+                    if (label) label += ': ';
+                    if (context.parsed.y !== null) {
+                      label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                    }
+                    return label;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: {
+                  maxTicksLimit: 12,
+                  font: { size: 10 }
+                }
+              },
+              y: {
+                ticks: {
+                  callback: function(value) {
+                    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value);
+                  },
+                  font: { size: 10 }
+                }
+              }
+            }
+          }
+        });
+      }
+    },
     DirectoryUpload: {
       mounted() {
         this.el.addEventListener("change", e => {

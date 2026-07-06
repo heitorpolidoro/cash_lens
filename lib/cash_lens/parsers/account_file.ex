@@ -26,7 +26,12 @@ defmodule CashLens.Parsers.AccountFile do
     end
   end
 
-  @doc "Parses `.account` file content into `%{bank: ..., account: ...}`."
+  @valid_parsers ~w(bb_csv bradesco_csv mercado_pago_csv standard_ofx ourocard_ofx sem_parar_pdf bradesco_cartao_pdf)
+
+  @doc "Returns the list of valid parser identifiers."
+  def valid_parsers, do: @valid_parsers
+
+  @doc "Parses `.account` file content into a map with bank, account, and optional parser/credit_card."
   def parse(content) do
     fields =
       content
@@ -45,9 +50,20 @@ defmodule CashLens.Parsers.AccountFile do
 
     with {:ok, bank} <- fetch(fields, "bank"),
          {:ok, account} <- fetch(fields, "account") do
-      {:ok, %{bank: bank, account: account}}
+      parser = Map.get(fields, "parser")
+      credit_card = Map.get(fields, "credit_card", "false") == "true"
+      {:ok, %{bank: bank, account: account, parser: parser, credit_card: credit_card}}
     end
   end
+
+  @doc "Validates the parser field if present. Returns :ok or {:error, reason}."
+  def validate_parser(%{parser: nil}), do: :ok
+  def validate_parser(%{parser: p}) when p in @valid_parsers, do: :ok
+
+  def validate_parser(%{bank: bank, account: account, parser: p}),
+    do:
+      {:error,
+       "conta '#{bank} / #{account}': parser '#{p}' inválido (válidos: #{Enum.join(@valid_parsers, ", ")})"}
 
   defp fetch(fields, key) do
     case Map.get(fields, key) do

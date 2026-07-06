@@ -38,11 +38,18 @@ defmodule CashLensWeb.TransferLive.Index do
 
   @impl true
   def handle_event("reapply_rules", _params, socket) do
-    Transactions.reapply_transfer_rules()
+    {:ok, categorized} = Transactions.reapply_transfer_rules()
+
+    message =
+      case categorized do
+        0 -> "Regras reaplicadas — nenhuma transação nova categorizada como transferência."
+        1 -> "Regras reaplicadas — 1 transação categorizada como transferência."
+        n -> "Regras reaplicadas — #{n} transações categorizadas como transferência."
+      end
 
     {:noreply,
      socket
-     |> put_flash(:success, "Regras de transferência reaplicadas com sucesso!")
+     |> put_flash(:success, message)
      |> load_data()}
   end
 
@@ -137,6 +144,7 @@ defmodule CashLensWeb.TransferLive.Index do
           </.link>
           <button
             phx-click="reapply_rules"
+            phx-disable-with="Processando..."
             class="btn btn-outline btn-sm"
           >
             <.icon name="hero-play" class="size-4" /> Reaplicar Regras

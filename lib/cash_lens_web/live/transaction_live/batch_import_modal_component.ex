@@ -10,7 +10,8 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
     current_account: nil,
     current_account_file_index: 0,
     current_account_file_total: 0,
-    result: nil
+    result: nil,
+    missing_accounts: []
   }
 
   @impl true
@@ -37,14 +38,36 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
   def handle_event("start_batch_import", %{"path" => path}, socket) do
     path = String.trim(path)
     CashLens.Settings.put("last_batch_import_path", path)
+    socket = assign(socket, :batch_path, path)
 
-    socket =
-      socket
-      |> assign(:batch_path, path)
-      |> assign(:batch_progress, %{@idle_progress | phase: :importing})
+    case DirectoryImporter.preflight(path) do
+      :ok ->
+        socket = assign(socket, :batch_progress, %{@idle_progress | phase: :importing})
+        start_batch_import(path, create_missing: false)
+        {:noreply, socket}
 
-    start_batch_import(path)
+      {:needs_confirmation, missing_accounts} ->
+        progress = %{@idle_progress | phase: :confirming, missing_accounts: missing_accounts}
+        {:noreply, assign(socket, :batch_progress, progress)}
+
+      {:error, reasons} ->
+        result = %DirectoryImporter.Result{errors: reasons}
+        progress = %{@idle_progress | phase: :done, result: result}
+        {:noreply, assign(socket, :batch_progress, progress)}
+    end
+  end
+
+  @impl true
+  def handle_event("confirm_create_accounts", _params, socket) do
+    path = socket.assigns.batch_path
+    socket = assign(socket, :batch_progress, %{@idle_progress | phase: :importing})
+    start_batch_import(path, create_missing: true)
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("cancel_confirmation", _params, socket) do
+    {:noreply, assign(socket, :batch_progress, @idle_progress)}
   end
 
   @impl true
@@ -53,7 +76,7 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
     {:noreply, assign(socket, :batch_progress, @idle_progress)}
   end
 
-  defp start_batch_import(path) do
+  defp start_batch_import(path, extra_opts) do
     pid = self()
 
     process_import = fn ->
@@ -63,7 +86,8 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
         end)
 
       try do
-        result = DirectoryImporter.run(path, on_event: build_on_event(pid, agent))
+        opts = Keyword.merge(extra_opts, on_event: build_on_event(pid, agent))
+        result = DirectoryImporter.run(path, opts)
         send(pid, {:batch_import_finished, result})
       rescue
         # coveralls-ignore-start — defensive guard so a crash inside the import Task
@@ -138,6 +162,11 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
           <%= case @batch_progress.phase do %>
             <% :importing -> %>
               <.progress_view progress={@batch_progress} />
+            <% :confirming -> %>
+              <.confirm_create_view
+                missing_accounts={@batch_progress.missing_accounts}
+                myself={@myself}
+              />
             <% :done -> %>
               <.result_view result={@batch_progress.result} myself={@myself} />
             <% _ -> %>
@@ -193,6 +222,46 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
           Iniciar Importação em Lote
         </button>
       </form>
+    </div>
+    """
+  end
+
+  defp confirm_create_view(assigns) do
+    ~H"""
+    <div>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-warning">
+        Contas não encontradas
+      </h2>
+      <p class="text-sm opacity-60 mb-4">
+        As seguintes contas serão criadas automaticamente antes da importação:
+      </p>
+
+      <ul class="mb-6 space-y-2">
+        <li :for={a <- @missing_accounts} class="flex items-center gap-2 text-sm">
+          <span class="badge badge-warning badge-sm">nova</span>
+          <span class="font-semibold">{a.bank}</span>
+          <span class="opacity-60">/</span>
+          <span>{a.account}</span>
+          <span :if={a.credit_card} class="badge badge-ghost badge-xs">cartão</span>
+        </li>
+      </ul>
+
+      <div class="flex gap-3">
+        <button
+          phx-click="confirm_create_accounts"
+          phx-target={@myself}
+          class="btn btn-warning btn-lg flex-1 rounded-2xl"
+        >
+          Criar e importar
+        </button>
+        <button
+          phx-click="cancel_confirmation"
+          phx-target={@myself}
+          class="btn btn-ghost btn-lg rounded-2xl"
+        >
+          Cancelar
+        </button>
+      </div>
     </div>
     """
   end

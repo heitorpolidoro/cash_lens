@@ -16,7 +16,7 @@ defmodule CashLens.Forecast do
 
   @history_months 6
   @min_occurrences 2
-  @default_horizon_days 90
+  @default_horizon_days 365
 
   @doc """
   Creates a recurring item directly. Used both by fixtures/tests and by
@@ -146,6 +146,15 @@ defmodule CashLens.Forecast do
     |> Repo.update()
   end
 
+  def set_as_salary(%RecurringItem{} = item) do
+    Repo.update_all(RecurringItem, set: [is_salary: false])
+    item |> RecurringItem.changeset(%{"is_salary" => true}) |> Repo.update()
+  end
+
+  def unset_salary(%RecurringItem{} = item) do
+    item |> RecurringItem.changeset(%{"is_salary" => false}) |> Repo.update()
+  end
+
   defp median(sorted_list) do
     Enum.at(sorted_list, div(length(sorted_list) - 1, 2))
   end
@@ -190,12 +199,12 @@ defmodule CashLens.Forecast do
   end
 
   @doc """
-  Date of the next occurrence with a positive amount (income), or today + 30
-  days when no income item is configured yet.
+  Date of the next occurrence of the salary item (is_salary: true).
+  Falls back to today + 30 days when none is configured.
   """
   def next_income_date(%{occurrences: occurrences}) do
     occurrences
-    |> Enum.find(&Decimal.positive?(&1.item.amount))
+    |> Enum.find(& &1.item.is_salary)
     |> case do
       nil -> Date.add(Date.utc_today(), 30)
       occ -> occ.date

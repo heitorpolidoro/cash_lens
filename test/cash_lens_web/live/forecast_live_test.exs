@@ -12,8 +12,8 @@ defmodule CashLensWeb.ForecastLiveTest do
       {:ok, _live, html} = live(conn, ~p"/forecast")
 
       assert html =~ "Previsão"
-      assert html =~ "Não fica negativo"
-      assert html =~ "Nenhuma conta fixa detectada"
+      assert html =~ "Sem saldo negativo previsto"
+      assert html =~ "Nenhuma conta fixa configurada"
     end
 
     test "lists recurring items", %{conn: conn} do
@@ -44,7 +44,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       })
 
       {:ok, live, _html} = live(conn, ~p"/forecast")
-      html = live |> element("button", "Sincronizar com Histórico") |> render_click()
+      html = render_click(live, :sync_all)
 
       assert html =~ "Água"
     end
@@ -58,29 +58,22 @@ defmodule CashLensWeb.ForecastLiveTest do
       assert CashLens.Forecast.get_recurring_item!(item.id).active == false
     end
 
-    test "update_day persists a manual edit", %{conn: conn} do
+    test "update_day persists a manual edit via modal", %{conn: conn} do
       item = recurring_item_fixture(%{day_of_month: 5})
 
       {:ok, live, _html} = live(conn, ~p"/forecast")
 
       live
-      |> element("input[phx-value-id='#{item.id}'][phx-blur='update_day']")
-      |> render_blur(%{"value" => "20"})
+      |> element("button[phx-click='open_edit'][phx-value-id='#{item.id}']")
+      |> render_click()
+
+      live
+      |> element("form[phx-submit='save_item']")
+      |> render_submit(%{"day_of_month" => "20", "amount" => item.amount})
 
       reloaded = CashLens.Forecast.get_recurring_item!(item.id)
       assert reloaded.day_of_month == 20
       assert reloaded.manually_edited == true
-    end
-
-    test "change_target_date recalculates the projected balance", %{conn: conn} do
-      {:ok, live, _html} = live(conn, ~p"/forecast")
-
-      html =
-        live
-        |> element("form[phx-change='change_target_date']")
-        |> render_change(%{"date" => Date.add(Date.utc_today(), 5) |> Date.to_iso8601()})
-
-      assert html =~ "Saldo em"
     end
   end
 end

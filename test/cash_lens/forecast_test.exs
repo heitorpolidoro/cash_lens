@@ -408,12 +408,20 @@ defmodule CashLens.ForecastTest do
   end
 
   describe "next_income_date/1" do
-    test "returns the date of the first occurrence with a positive amount" do
+    test "returns the date of the first occurrence with is_salary: true" do
       projection = %{
         starting_balance: Decimal.new("0"),
         occurrences: [
-          %{date: ~D[2026-07-01], item: %{amount: Decimal.new("-50.00")}, balance_after: nil},
-          %{date: ~D[2026-07-05], item: %{amount: Decimal.new("3000.00")}, balance_after: nil}
+          %{
+            date: ~D[2026-07-01],
+            item: %{amount: Decimal.new("-50.00"), is_salary: false},
+            balance_after: nil
+          },
+          %{
+            date: ~D[2026-07-05],
+            item: %{amount: Decimal.new("3000.00"), is_salary: true},
+            balance_after: nil
+          }
         ],
         zero_date: nil
       }
@@ -421,7 +429,7 @@ defmodule CashLens.ForecastTest do
       assert Forecast.next_income_date(projection) == ~D[2026-07-05]
     end
 
-    test "falls back to today + 30 days when there is no income item" do
+    test "falls back to today + 30 days when no is_salary item exists" do
       projection = %{starting_balance: Decimal.new("0"), occurrences: [], zero_date: nil}
       assert Forecast.next_income_date(projection) == Date.add(Date.utc_today(), 30)
     end

@@ -51,9 +51,7 @@ defmodule CashLens.Transactions.AutoCategorizer do
         params
       end
     else
-      # Fallback: check transfer rules, then hardcoded special rules
-      check_transfer_rules(transaction_params) ||
-        check_special_rules(transaction_params, description)
+      check_transfer_rules(transaction_params) || transaction_params
     end
   end
 
@@ -78,14 +76,6 @@ defmodule CashLens.Transactions.AutoCategorizer do
       if matching_rule do
         assign_category_by_slug(params, "transfer")
       end
-    end
-  end
-
-  defp check_special_rules(params, description) do
-    if String.contains?(description, ["BB MM OURO", "BB RENDE FÁCIL", "BB RENDE FACIL"]) do
-      assign_category_by_slug(params, "transfer")
-    else
-      params
     end
   end
 

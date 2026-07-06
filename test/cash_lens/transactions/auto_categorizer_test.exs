@@ -28,16 +28,6 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
       assert result.reimbursement_status == "pending"
     end
 
-    test "applies special rules for transfers" do
-      # Ensure transfer category exists
-      category = category_fixture(%{name: "Transfer", slug: "transfer", keywords: ""})
-
-      params = %{description: "BB MM OURO TRANSACTION"}
-      result = AutoCategorizer.categorize(params)
-
-      assert result.category_id == category.id
-    end
-
     test "returns original params if no match" do
       params = %{description: "UNKNOWN STORE"}
       result = AutoCategorizer.categorize(params)

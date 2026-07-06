@@ -7,6 +7,49 @@ defmodule CashLens.Parsers.DirectoryImporter do
   alias CashLens.Parsers.AccountFile
   alias CashLens.Parsers.Ingestor
 
+  @doc """
+  Scans `path` for `.account` files and checks whether all referenced accounts
+  exist. Returns:
+
+    * `:ok`                              — all accounts found, safe to `run/2`
+    * `{:needs_confirmation, [attrs]}`   — some accounts missing but parsers valid;
+                                           each entry has `:bank`, `:account`, `:parser`, `:credit_card`
+    * `{:error, [reason]}`              — one or more `.account` files have invalid parsers
+  """
+  def preflight(path) do
+    if File.dir?(path) do
+      {account_dirs, _skipped} = classify(path)
+
+      {errors, missing} =
+        Enum.reduce(account_dirs, {[], []}, fn dir, {errs, miss} ->
+          case AccountFile.read(dir) do
+            {:error, reason} ->
+              {[reason | errs], miss}
+
+            {:ok, attrs} ->
+              case AccountFile.validate_parser(attrs) do
+                {:error, reason} ->
+                  {[reason | errs], miss}
+
+                :ok ->
+                  case Accounts.find_accounts_by_bank_and_name(attrs.bank, attrs.account) do
+                    [_] -> {errs, miss}
+                    _ -> {errs, [attrs | miss]}
+                  end
+              end
+          end
+        end)
+
+      cond do
+        errors != [] -> {:error, Enum.reverse(errors)}
+        missing != [] -> {:needs_confirmation, Enum.reverse(missing)}
+        true -> :ok
+      end
+    else
+      {:error, ["caminho '#{path}' não existe ou não é uma pasta"]}
+    end
+  end
+
   defmodule Result do
     @moduledoc "Structured outcome of a directory import."
     defstruct accounts: [], warnings: [], errors: []
@@ -18,6 +61,9 @@ defmodule CashLens.Parsers.DirectoryImporter do
   Imports a directory. Options:
     * `:skip_installments` — when true, does not run installment detection
       (used in tests to keep cases isolated).
+    * `:create_missing` — when true, creates accounts referenced in `.account`
+      files that do not yet exist in the database (call `preflight/1` first and
+      confirm with the user before passing this option).
   """
   def run(path, opts \\ []) do
     if File.dir?(path) do
@@ -28,6 +74,10 @@ defmodule CashLens.Parsers.DirectoryImporter do
   end
 
   defp run_existing(path, opts) do
+    if Keyword.get(opts, :create_missing, false) do
+      create_missing_accounts(path)
+    end
+
     emit = Keyword.get(opts, :on_event, fn _ -> :ok end)
     {account_dirs, skipped_dirs} = classify(path)
 
@@ -43,6 +93,26 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end
 
     result
+  end
+
+  defp create_missing_accounts(path) do
+    {account_dirs, _} = classify(path)
+
+    Enum.each(account_dirs, fn dir ->
+      with {:ok, attrs} <- AccountFile.read(dir),
+           :ok <- AccountFile.validate_parser(attrs),
+           [] <- Accounts.find_accounts_by_bank_and_name(attrs.bank, attrs.account) do
+        Accounts.create_account(%{
+          name: attrs.account,
+          bank: attrs.bank,
+          parser_type: attrs.parser,
+          is_credit_card: attrs.credit_card,
+          balance: 0,
+          accepts_import: true,
+          is_closed: false
+        })
+      end
+    end)
   end
 
   # A path that itself has a `.account` is a single account folder. Otherwise,

@@ -123,12 +123,19 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   defp list_groups(filters) do
     Installments.list_installment_groups()
-    |> Enum.map(fn g -> Installments.get_group_with_progress(g.id) end)
+    |> Enum.map(fn g ->
+      g = Installments.get_group_with_progress(g.id)
+      Map.put(g, :last_installment_date, Installments.last_installment_date(g))
+    end)
     |> Enum.reject(& &1.is_finished)
     |> Enum.filter(&matches_filters?(&1, filters))
-    # Fewest remaining parcels first (closest to finishing on top).
-    |> Enum.sort_by(& &1.remaining_count)
-    |> zebra_by_remaining()
+    |> Enum.sort_by(fn g ->
+      case g.last_installment_date do
+        %Date{} = d -> {d.year, d.month}
+        _ -> {9999, 12}
+      end
+    end)
+    |> zebra_by_last_month()
   end
 
   defp default_filters do
@@ -189,13 +196,19 @@ defmodule CashLensWeb.InstallmentLive.Index do
     end
   end
 
-  # Adds a :band (0/1) that flips whenever the remaining-parcels count changes, so the
-  # table can be striped by "parcelas faltantes" (each remaining-count block one shade).
-  defp zebra_by_remaining(groups) do
+  # Adds a :band (0/1) that flips whenever the {year, month} of the last installment
+  # changes, so the table is striped by "mês da última parcela".
+  defp zebra_by_last_month(groups) do
     {rows, _prev, _band} =
       Enum.reduce(groups, {[], nil, 0}, fn g, {acc, prev, band} ->
-        band = if prev != nil and g.remaining_count != prev, do: 1 - band, else: band
-        {[Map.put(g, :band, band) | acc], g.remaining_count, band}
+        month_key =
+          case g.last_installment_date do
+            %Date{} = d -> {d.year, d.month}
+            _ -> nil
+          end
+
+        band = if prev != nil and month_key != prev, do: 1 - band, else: band
+        {[Map.put(g, :band, band) | acc], month_key, band}
       end)
 
     Enum.reverse(rows)

@@ -17,9 +17,10 @@ defmodule CashLens.TransactionsTest do
     import CashLens.AccountsFixtures
     import CashLens.CategoriesFixtures
 
-    test "list_reimbursement_credit_candidates/1 excludes transfer/salary categories and their children" do
+    test "list_reimbursement_credit_candidates/1 excludes transfer/salary/credit card categories and their children" do
       transfer = category_fixture(%{name: "Transfer", slug: "transfer"})
       _child = category_fixture(%{name: "Sub", slug: "sub-transfer", parent_id: transfer.id})
+      cc = category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
 
       acc = account_fixture()
 
@@ -37,9 +38,17 @@ defmodule CashLens.TransactionsTest do
         category_id: transfer.id
       })
 
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "300.00",
+        description: "Fatura CC",
+        category_id: cc.id
+      })
+
       candidates = Transactions.list_reimbursement_credit_candidates()
       descriptions = Enum.map(candidates, & &1.description)
       refute "Movido" in descriptions
+      refute "Fatura CC" in descriptions
     end
 
     test "list_all_transactions/1 handles partial and invalid date ranges" do
@@ -734,7 +743,7 @@ defmodule CashLens.TransactionsTest do
       assert Enum.any?(breakdown, &(&1.category_id == uber_cat.id))
     end
 
-    test "a Cartão de Crédito transaction with no children still appears in the breakdown" do
+    test "a Cartão de Crédito transaction with no children is excluded from the breakdown" do
       cc = cc_category2()
       checking = account_fixture(%{is_credit_card: false})
 
@@ -746,7 +755,7 @@ defmodule CashLens.TransactionsTest do
       })
 
       breakdown = Transactions.get_month_category_breakdown(2026, 2)
-      assert Enum.any?(breakdown, &(&1.category_id == cc.id))
+      refute Enum.any?(breakdown, &(&1.category_id == cc.id))
     end
 
     test "get_historical_category_summary/1 excludes parents with children" do

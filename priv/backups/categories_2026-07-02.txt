@@ -1,0 +1,536 @@
+{
+    "data": [
+        {
+            "id": "c048c329-364d-43c9-a9bf-04b67494e750",
+            "name": "APRASVI",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "Pix - Recebido - 08529107000133 ASSOCIACAO",
+            "slug": "aprasvi",
+            "default_reimbursable": false
+        },
+        {
+            "id": "673f6d5d-d03b-431b-a2e2-72ae1b666e88",
+            "name": "Assinatura",
+            "parent": null,
+            "type": "fixed",
+            "keywords": null,
+            "slug": "assinatura",
+            "default_reimbursable": false
+        },
+        {
+            "id": "e6f65bbf-e219-4a8c-bfe3-762522c4b079",
+            "name": "Brinquedo",
+            "parent": null,
+            "type": "variable",
+            "keywords": "PBKIDS BRINQUEDOS",
+            "slug": "brinquedo",
+            "default_reimbursable": false
+        },
+        {
+            "id": "ed39353f-76da-41c2-83b9-42133eb852d6",
+            "name": "Carro",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "carro",
+            "default_reimbursable": false
+        },
+        {
+            "id": "0844a113-b863-40e8-b7ee-6e33bdfb0c04",
+            "name": "Lavagem",
+            "parent": {
+                "id": "ed39353f-76da-41c2-83b9-42133eb852d6",
+                "name": "Carro",
+                "slug": "carro"
+            },
+            "type": "variable",
+            "keywords": "Pix - Enviado - VERON ESTETICA AUTOMOTIVA, Wagner Donizetti da Silva",
+            "slug": "carro-lavagem",
+            "default_reimbursable": false
+        },
+        {
+            "id": "69dc65b6-e6ae-45db-9dd5-eb9192dc4599",
+            "name": "Multa",
+            "parent": {
+                "id": "ed39353f-76da-41c2-83b9-42133eb852d6",
+                "name": "Carro",
+                "slug": "carro"
+            },
+            "type": "variable",
+            "keywords": "RENAINF ON-LINE SP",
+            "slug": "carro-multa",
+            "default_reimbursable": false
+        },
+        {
+            "id": "86822b1e-9f04-4258-b818-8d6639b528ec",
+            "name": "Cart\u00e3o de Cr\u00e9dito",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "cart--o-de-cr--dito",
+            "default_reimbursable": false
+        },
+        {
+            "id": "31ab0e23-5be8-4ddf-8527-ce04eeadf5c1",
+            "name": "Casa",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "casa",
+            "default_reimbursable": false
+        },
+        {
+            "id": "2eab1342-c278-4354-aa40-7b6ec57b3327",
+            "name": "Manuten\u00e7\u00e3o",
+            "parent": {
+                "id": "31ab0e23-5be8-4ddf-8527-ce04eeadf5c1",
+                "name": "Casa",
+                "slug": "casa"
+            },
+            "type": "variable",
+            "keywords": null,
+            "slug": "casa-manuten----o",
+            "default_reimbursable": false
+        },
+        {
+            "id": "2251312e-f0e9-4fe8-b675-9599a4f8cb18",
+            "name": "Jardim",
+            "parent": {
+                "id": "2eab1342-c278-4354-aa40-7b6ec57b3327",
+                "name": "Manuten\u00e7\u00e3o",
+                "slug": "casa-manuten----o"
+            },
+            "type": "fixed",
+            "keywords": "Lucas Vicente da Silva",
+            "slug": "casa-manuten----o-jardim",
+            "default_reimbursable": false
+        },
+        {
+            "id": "9535061f-115b-4868-81da-5f97d5dfe5e2",
+            "name": "Piscineiro",
+            "parent": {
+                "id": "2eab1342-c278-4354-aa40-7b6ec57b3327",
+                "name": "Manuten\u00e7\u00e3o",
+                "slug": "casa-manuten----o"
+            },
+            "type": "fixed",
+            "keywords": "Pix - Enviado - RAFAEL CUSTODIO DA CRUZ",
+            "slug": "casa-manuten----o-piscineiro",
+            "default_reimbursable": false
+        },
+        {
+            "id": "557651a5-4b1c-4d72-95da-0174202763fb",
+            "name": "Sof\u00e1",
+            "parent": {
+                "id": "2eab1342-c278-4354-aa40-7b6ec57b3327",
+                "name": "Manuten\u00e7\u00e3o",
+                "slug": "casa-manuten----o"
+            },
+            "type": "variable",
+            "keywords": "CREUSA REGINA DOS SANTOS",
+            "slug": "casa-manuten----o-sof",
+            "default_reimbursable": false
+        },
+        {
+            "id": "adf4b565-c238-4cdd-bbef-ccf5584fee75",
+            "name": "Combust\u00edvel",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "combust--vel",
+            "default_reimbursable": false
+        },
+        {
+            "id": "f5d7c890-5457-466e-a7c7-ef7ce2276f2a",
+            "name": "Comida",
+            "parent": null,
+            "type": "variable",
+            "keywords": "Pix - Enviado - 99 FOOD, FREDDO, MARIA C ABUD LANCHON, RESTAURANTE, REPUBLIC C.A PIZZ, PASTERELLO, crepenicolas, BARBARESCO, LAMEN YA, DOCEIRA E BUFFET MAR",
+            "slug": "comida",
+            "default_reimbursable": false
+        },
+        {
+            "id": "480408f6-7d9a-44cf-9504-fcd0d75cbefd",
+            "name": "Condom\u00ednio",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "Pagamento de Boleto - ASSOCIACAO DOS PROPRIETARIOS DO RESIDE",
+            "slug": "condom--nio",
+            "default_reimbursable": false
+        },
+        {
+            "id": "9763ca19-6cb1-43f9-8537-cac51f2c3c90",
+            "name": "Cons\u00f3rcio",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "PORTO SEGURO ADMINISTRADORA DE",
+            "slug": "cons--rcio",
+            "default_reimbursable": false
+        },
+        {
+            "id": "707f963e-6e55-4108-b8b5-c987a1bf8349",
+            "name": "Cuidados Pessoais",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "cuidados-pessoais",
+            "default_reimbursable": false
+        },
+        {
+            "id": "ae134efe-0b6f-4f4d-8f79-296bc218abfd",
+            "name": "Educa\u00e7\u00e3o",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "educa----o",
+            "default_reimbursable": false
+        },
+        {
+            "id": "0e85708a-5ecc-4c2d-8530-2e0d92fae4f7",
+            "name": "Monteiro Lobato",
+            "parent": {
+                "id": "ae134efe-0b6f-4f4d-8f79-296bc218abfd",
+                "name": "Educa\u00e7\u00e3o",
+                "slug": "educa----o"
+            },
+            "type": "fixed",
+            "keywords": "TRILHARES ESTRUTURA EDUCA",
+            "slug": "educa----o-monteiro-lobato",
+            "default_reimbursable": false
+        },
+        {
+            "id": "8bbc8f98-e5cc-4351-afad-47dd89ec28e6",
+            "name": "Empr\u00e9stimo",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "Pgto CDC - 208696315-BB CR\u00c9DITO AUTOM\u00c1TICO",
+            "slug": "empr--stimo",
+            "default_reimbursable": false
+        },
+        {
+            "id": "80039fe7-310e-47a5-bd18-cd7885ae663e",
+            "name": "Entretenimento",
+            "parent": null,
+            "type": "variable",
+            "keywords": "TERMAS DO VALE",
+            "slug": "entretenimento",
+            "default_reimbursable": false
+        },
+        {
+            "id": "5875fae3-b1a9-4a38-8ecc-2ff6d1718d81",
+            "name": "Estacionamento",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "estacionamento",
+            "default_reimbursable": false
+        },
+        {
+            "id": "45cf97d6-c322-4a2e-987c-a0582774aea8",
+            "name": "Financiamento",
+            "parent": null,
+            "type": "fixed",
+            "keywords": null,
+            "slug": "financiamento",
+            "default_reimbursable": false
+        },
+        {
+            "id": "01b01f71-44e9-42eb-b5fe-b46fd6905841",
+            "name": "Carro",
+            "parent": {
+                "id": "45cf97d6-c322-4a2e-987c-a0582774aea8",
+                "name": "Financiamento",
+                "slug": "financiamento"
+            },
+            "type": "variable",
+            "keywords": "BANCO GM SA",
+            "slug": "financiamento-carro",
+            "default_reimbursable": false
+        },
+        {
+            "id": "0d05794e-a952-43d2-941e-28c596007445",
+            "name": "G\u00e1s",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "COMGAS",
+            "slug": "g--s",
+            "default_reimbursable": false
+        },
+        {
+            "id": "14777d08-ebd2-4f3a-be5c-457f8a55bd3b",
+            "name": "\u00c1gua",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "SABESP",
+            "slug": "gua",
+            "default_reimbursable": false
+        },
+        {
+            "id": "f3a51836-be8e-43da-8bb0-522d2e6ada54",
+            "name": "Imposto",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "PREF. SAO JOSE DOS CAMPOS, LICENCIAMENTO SP, SEFAZ SP",
+            "slug": "imposto",
+            "default_reimbursable": false
+        },
+        {
+            "id": "1d39338e-1d59-4fa6-9cc3-a5af5e98946b",
+            "name": "Valor Inicial",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "initial_value",
+            "default_reimbursable": false
+        },
+        {
+            "id": "b9987f0f-f28a-47c9-9172-5e6e249cbf4a",
+            "name": "Internet + Celular",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "NIPTELECOM",
+            "slug": "internet---celular",
+            "default_reimbursable": false
+        },
+        {
+            "id": "af2a3281-7799-4629-95fd-e4bcf0e388bb",
+            "name": "Luz",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "EDP SP",
+            "slug": "luz",
+            "default_reimbursable": false
+        },
+        {
+            "id": "5a8a880f-37b0-4324-b3a9-2b2d6aee83a9",
+            "name": "M\u00fasica",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "m--sica",
+            "default_reimbursable": false
+        },
+        {
+            "id": "470b9a7e-c432-49f8-ab37-f51cf65ead6a",
+            "name": "Mercado",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "SUPERMERCADO, MINUTO PA, MAXIMO, CASA DE CARNES, ATACADAO, Istok, ASSAI ATACADISTA, URBA HORTA",
+            "slug": "mercado",
+            "default_reimbursable": false
+        },
+        {
+            "id": "3f5e0f93-1a0a-4095-a80a-79bee3800d0f",
+            "name": "Cigarro",
+            "parent": {
+                "id": "470b9a7e-c432-49f8-ab37-f51cf65ead6a",
+                "name": "Mercado",
+                "slug": "mercado"
+            },
+            "type": "variable",
+            "keywords": null,
+            "slug": "mercado-cigarro",
+            "default_reimbursable": false
+        },
+        {
+            "id": "f2016236-0631-496f-8318-ac81759a2ac0",
+            "name": "Outros",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "outros",
+            "default_reimbursable": false
+        },
+        {
+            "id": "e11f2ea4-7765-42ef-835d-4d859e5d475a",
+            "name": "Padaria",
+            "parent": null,
+            "type": "variable",
+            "keywords": "PADARIA",
+            "slug": "padaria",
+            "default_reimbursable": false
+        },
+        {
+            "id": "fad4b705-380f-42c9-8889-4ba9d0c95cb2",
+            "name": "Papelaria",
+            "parent": null,
+            "type": "variable",
+            "keywords": "TRIBO DO PAPEL",
+            "slug": "papelaria",
+            "default_reimbursable": false
+        },
+        {
+            "id": "031b9ef1-c93c-4704-903e-76288576a776",
+            "name": "Ped\u00e1gio",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "Pagamento Ped\u00e1gio - SEM PARAR",
+            "slug": "ped--gio",
+            "default_reimbursable": false
+        },
+        {
+            "id": "428d0bc1-3e77-499b-8dd0-0d7b42e7469d",
+            "name": "Pets",
+            "parent": null,
+            "type": "variable",
+            "keywords": "POPULAR PET",
+            "slug": "pets",
+            "default_reimbursable": false
+        },
+        {
+            "id": "b4735144-6389-45a7-a932-6f7c95b0c7f6",
+            "name": "Banho",
+            "parent": {
+                "id": "428d0bc1-3e77-499b-8dd0-0d7b42e7469d",
+                "name": "Pets",
+                "slug": "pets"
+            },
+            "type": "fixed",
+            "keywords": "MIRIAM DOURADO",
+            "slug": "pets-banho",
+            "default_reimbursable": false
+        },
+        {
+            "id": "eaba05a8-3b71-424c-b8e3-45490a1cc3ba",
+            "name": "Plantas",
+            "parent": null,
+            "type": "variable",
+            "keywords": "TECPLANT GARDEN",
+            "slug": "plantas",
+            "default_reimbursable": false
+        },
+        {
+            "id": "5677c1b6-d1b8-434c-8a96-8b11cfb37275",
+            "name": "Pod\u00f3loga",
+            "parent": null,
+            "type": "variable",
+            "keywords": "Fabricia Silva Leite",
+            "slug": "pod--loga",
+            "default_reimbursable": false
+        },
+        {
+            "id": "f1dc092a-eba6-4acd-8b2a-81276dc3145b",
+            "name": "Sa\u00fade",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "sa--de",
+            "default_reimbursable": false
+        },
+        {
+            "id": "0062a7c2-f5f0-45ce-aa6c-5e36d68c473d",
+            "name": "Cirurgia",
+            "parent": {
+                "id": "f1dc092a-eba6-4acd-8b2a-81276dc3145b",
+                "name": "Sa\u00fade",
+                "slug": "sa--de"
+            },
+            "type": "variable",
+            "keywords": "ANA CAROLINA SILVA CIRILO",
+            "slug": "sa--de-cirurgia",
+            "default_reimbursable": true
+        },
+        {
+            "id": "a6cc344b-ecf4-4400-b4be-c1945acfe2fc",
+            "name": "Consulta",
+            "parent": {
+                "id": "f1dc092a-eba6-4acd-8b2a-81276dc3145b",
+                "name": "Sa\u00fade",
+                "slug": "sa--de"
+            },
+            "type": "variable",
+            "keywords": "ARRAIS ALMEIDA SERVICOS M",
+            "slug": "sa--de-consulta",
+            "default_reimbursable": true
+        },
+        {
+            "id": "7b9bf9be-01e8-4426-b05c-6ba5dc617b0e",
+            "name": "Farm\u00e1cia",
+            "parent": {
+                "id": "f1dc092a-eba6-4acd-8b2a-81276dc3145b",
+                "name": "Sa\u00fade",
+                "slug": "sa--de"
+            },
+            "type": "variable",
+            "keywords": "RAIA2349, RAIA4347, DROGARIA",
+            "slug": "sa--de-farm--cia",
+            "default_reimbursable": false
+        },
+        {
+            "id": "ac1c8953-f1b8-41da-a56d-210701b910d5",
+            "name": "Fisioterapia",
+            "parent": {
+                "id": "f1dc092a-eba6-4acd-8b2a-81276dc3145b",
+                "name": "Sa\u00fade",
+                "slug": "sa--de"
+            },
+            "type": "variable",
+            "keywords": "ORTOSPORTS FISIOTERAPIA",
+            "slug": "sa--de-fisioterapia",
+            "default_reimbursable": true
+        },
+        {
+            "id": "3feb4ec2-473b-4f79-b833-b25f9bd795ae",
+            "name": "Plano de Sa\u00fade",
+            "parent": {
+                "id": "f1dc092a-eba6-4acd-8b2a-81276dc3145b",
+                "name": "Sa\u00fade",
+                "slug": "sa--de"
+            },
+            "type": "fixed",
+            "keywords": "Pagamento de Boleto - BRADESCO SAUDE S A",
+            "slug": "sa--de-plano-de-sa--de",
+            "default_reimbursable": false
+        },
+        {
+            "id": "73db0cea-aa2f-4205-b6b2-fea706d88ce6",
+            "name": "Sal\u00e1rio",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "sal--rio",
+            "default_reimbursable": false
+        },
+        {
+            "id": "d7b06a3d-868f-4375-a412-abeb01645f4f",
+            "name": "Avant",
+            "parent": {
+                "id": "73db0cea-aa2f-4205-b6b2-fea706d88ce6",
+                "name": "Sal\u00e1rio",
+                "slug": "sal--rio"
+            },
+            "type": "fixed",
+            "keywords": "JMHP CONSULTORIA EM ENGE,  SONIA M F P, HEITOR AGUI",
+            "slug": "sal--rio-avant",
+            "default_reimbursable": false
+        },
+        {
+            "id": "6a9ca0b4-5d50-4fe5-8f29-d8ac1d146baa",
+            "name": "Streaming",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "NETFLIX",
+            "slug": "streaming",
+            "default_reimbursable": false
+        },
+        {
+            "id": "de43b027-b0c8-49ab-9021-db916f44e432",
+            "name": "Tarifa",
+            "parent": null,
+            "type": "fixed",
+            "keywords": "Tarifa Pacote de Servi\u00e7os",
+            "slug": "tarifa",
+            "default_reimbursable": false
+        },
+        {
+            "id": "b1e1c355-97f5-4061-9092-3de317b2b92c",
+            "name": "Transfer\u00eancia",
+            "parent": null,
+            "type": "variable",
+            "keywords": null,
+            "slug": "transfer",
+            "default_reimbursable": false
+        }
+    ]
+}

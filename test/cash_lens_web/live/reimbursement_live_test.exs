@@ -4,6 +4,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
   import CashLens.AccountsFixtures
+  import CashLens.CategoriesFixtures
 
   describe "Index" do
     test "lists reimbursements", %{conn: conn} do
@@ -237,6 +238,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
     test "links an expense with a credit", %{conn: conn} do
       acc = account_fixture()
+      cat = category_fixture()
 
       expense =
         transaction_fixture(%{
@@ -244,6 +246,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
           reimbursement_status: "requested",
           amount: "-150.00",
           description: "Travel expense",
+          category_id: cat.id,
           date: ~D[2026-02-23]
         })
 
@@ -252,6 +255,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
           account_id: acc.id,
           amount: "150.00",
           description: "Company refund",
+          category_id: cat.id,
           date: ~D[2026-03-20]
         })
 
@@ -287,6 +291,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
     test "confirms a suggested reimbursement pair", %{conn: conn} do
       acc = account_fixture()
+      cat = category_fixture()
 
       expense =
         transaction_fixture(%{
@@ -294,6 +299,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
           reimbursement_status: "pending",
           amount: "-45.00",
           description: "Suggest expense",
+          category_id: cat.id,
           date: ~D[2026-02-23]
         })
 
@@ -302,6 +308,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
           account_id: acc.id,
           amount: "45.00",
           description: "Suggest credit",
+          category_id: cat.id,
           date: ~D[2026-02-24]
         })
 
@@ -320,6 +327,103 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       assert render(index_live) =~ "Reembolso vinculado com sucesso!"
       assert CashLens.Transactions.get_transaction!(expense.id).reimbursement_status == "paid"
       assert CashLens.Transactions.get_transaction!(credit.id).reimbursement_status == "paid"
+    end
+
+    test "shows category reconcile select modal when neither has category", %{conn: conn} do
+      acc = account_fixture()
+      cat = category_fixture(%{name: "Alimentação", slug: "alimentacao"})
+
+      expense =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-50.00",
+          description: "No cat expense",
+          date: ~D[2026-02-23]
+        })
+
+      credit =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "50.00",
+          description: "No cat credit",
+          date: ~D[2026-02-24]
+        })
+
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+
+      # Click confirm_pair -> should show the select reconcile modal
+      index_live
+      |> element(
+        "button[phx-click='confirm_pair'][phx-value-a='#{expense.id}'][phx-value-b='#{credit.id}']"
+      )
+      |> render_click()
+
+      html = render(index_live)
+      assert html =~ "Conciliar Categoria"
+      assert html =~ "Nenhuma das transações possui categoria."
+
+      # Submit the form with selected category
+      index_live
+      |> form("#reconcile-modal form", %{category_id: cat.id})
+      |> render_submit()
+
+      assert render(index_live) =~ "Reembolso vinculado com sucesso!"
+      assert CashLens.Transactions.get_transaction!(expense.id).category_id == cat.id
+      assert CashLens.Transactions.get_transaction!(credit.id).category_id == cat.id
+    end
+
+    test "shows category reconcile buttons modal when both have different categories", %{
+      conn: conn
+    } do
+      acc = account_fixture()
+      cat_a = category_fixture(%{name: "Saúde", slug: "saude"})
+      cat_b = category_fixture(%{name: "Lazer", slug: "lazer"})
+
+      expense =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-70.00",
+          description: "Saude expense",
+          category_id: cat_a.id,
+          date: ~D[2026-02-23]
+        })
+
+      credit =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "70.00",
+          description: "Lazer credit",
+          category_id: cat_b.id,
+          date: ~D[2026-02-24]
+        })
+
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+
+      # Click confirm_pair -> should show the buttons reconcile modal
+      index_live
+      |> element(
+        "button[phx-click='confirm_pair'][phx-value-a='#{expense.id}'][phx-value-b='#{credit.id}']"
+      )
+      |> render_click()
+
+      html = render(index_live)
+      assert html =~ "Conciliar Categoria"
+      assert html =~ "Ambas as transações possuem categorias diferentes."
+      assert html =~ "Usar: Saúde"
+      assert html =~ "Usar: Lazer"
+
+      # Click to use category A (Saúde)
+      index_live
+      |> element(
+        "button[phx-click='confirm_reconcile_button'][phx-value-category-id='#{cat_a.id}']"
+      )
+      |> render_click()
+
+      assert render(index_live) =~ "Reembolso vinculado com sucesso!"
+      assert CashLens.Transactions.get_transaction!(expense.id).category_id == cat_a.id
+      assert CashLens.Transactions.get_transaction!(credit.id).category_id == cat_a.id
     end
 
     test "confirms all suggested reimbursement pairs", %{conn: conn} do

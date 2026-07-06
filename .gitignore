@@ -55,3 +55,6 @@ npm-debug.log
 *.swp
 *.swn
 
+
+# Superpowers skill scratch (brainstorm companion, SDD ledger)
+.superpowers/

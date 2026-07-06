@@ -149,7 +149,7 @@ defmodule CashLensWeb.TransferLiveTest do
       |> element("button[phx-click='reapply_rules']")
       |> render_click()
 
-    assert html =~ "Regras de transferência reaplicadas com sucesso!"
+    assert html =~ "Regras reaplicadas"
     assert html =~ "R$ 200,00"
   end
 
