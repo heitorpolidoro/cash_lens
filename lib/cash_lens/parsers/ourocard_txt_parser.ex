@@ -17,6 +17,21 @@ defmodule CashLens.Parsers.OurocardTXTParser do
     |> Enum.flat_map(&parse_line/1)
   end
 
+  @doc """
+  Statement-level metadata from the TXT header: due date (Vencimento), total
+  (Total da fatura, stored positive) and competência (first day of the due
+  month). Any field is nil when its line is absent.
+  """
+  def extract_statement_meta(content) do
+    due = extract_due_date(content)
+
+    %{
+      due_date: due,
+      total_a_pagar: extract_total(content),
+      competencia: due && Date.beginning_of_month(due)
+    }
+  end
+
   defp parse_line(line) do
     case Regex.run(@line_regex, line) do
       [_, d, m, y, desc, value] ->
@@ -50,6 +65,26 @@ defmodule CashLens.Parsers.OurocardTXTParser do
 
     case Decimal.parse(cleaned) do
       {decimal, ""} -> decimal
+      _ -> nil
+    end
+  end
+
+  defp extract_due_date(content) do
+    case Regex.run(~r/Vencimento\s*:\s*(\d{2})\.(\d{2})\.(\d{4})/i, content) do
+      [_, d, m, y] ->
+        case Date.new(String.to_integer(y), String.to_integer(m), String.to_integer(d)) do
+          {:ok, date} -> date
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp extract_total(content) do
+    case Regex.run(~r/Total da fatura\s*:\s*R\$\s*([\d.]+,\d{2})/i, content) do
+      [_, value] -> parse_amount(value)
       _ -> nil
     end
   end

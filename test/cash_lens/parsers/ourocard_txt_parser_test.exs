@@ -50,4 +50,20 @@ defmodule CashLens.Parsers.OurocardTXTParserTest do
              :ourocard
            ) == []
   end
+
+  describe "extract_statement_meta/1" do
+    test "pulls Vencimento, Total da fatura and competência" do
+      meta = OurocardTXTParser.extract_statement_meta(@sample)
+      assert meta.due_date == ~D[2026-07-16]
+      assert Decimal.equal?(meta.total_a_pagar, Decimal.new("11938.58"))
+      assert meta.competencia == ~D[2026-07-01]
+    end
+
+    test "degrades to nils when the fields are absent" do
+      meta = OurocardTXTParser.extract_statement_meta("no relevant lines")
+      assert meta.due_date == nil
+      assert meta.total_a_pagar == nil
+      assert meta.competencia == nil
+    end
+  end
 end
