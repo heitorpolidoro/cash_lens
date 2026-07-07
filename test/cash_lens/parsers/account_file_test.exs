@@ -58,4 +58,10 @@ defmodule CashLens.Parsers.AccountFileTest do
       assert {:error, _} = AccountFile.read(dir)
     end
   end
+
+  describe "validate_parser/1" do
+    test "validate_parser accepts ourocard_txt" do
+      assert :ok = AccountFile.validate_parser(%{parser: "ourocard_txt"})
+    end
+  end
 end

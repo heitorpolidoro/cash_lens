@@ -26,7 +26,7 @@ defmodule CashLens.Parsers.AccountFile do
     end
   end
 
-  @valid_parsers ~w(bb_csv bradesco_csv mercado_pago_csv standard_ofx ourocard_ofx sem_parar_pdf bradesco_cartao_pdf)
+  @valid_parsers ~w(bb_csv bradesco_csv mercado_pago_csv standard_ofx ourocard_ofx ourocard_txt sem_parar_pdf bradesco_cartao_pdf)
 
   @doc "Returns the list of valid parser identifiers."
   def valid_parsers, do: @valid_parsers
