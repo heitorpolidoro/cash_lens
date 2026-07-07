@@ -42,6 +42,22 @@ defmodule CashLensWeb.FormattersTest do
     end
   end
 
+  describe "format_competencia/1" do
+    test "formats nil as empty string" do
+      assert Formatters.format_competencia(nil) == ""
+    end
+
+    test "formats a Date as Mmm/YY in Portuguese" do
+      assert Formatters.format_competencia(~D[2026-01-01]) == "Jan/26"
+      assert Formatters.format_competencia(~D[2025-12-01]) == "Dez/25"
+      assert Formatters.format_competencia(~D[2026-08-15]) == "Ago/26"
+    end
+
+    test "pads single-digit years" do
+      assert Formatters.format_competencia(~D[2005-03-01]) == "Mar/05"
+    end
+  end
+
   describe "format_time/1" do
     test "formats nil as empty string" do
       assert Formatters.format_time(nil) == ""

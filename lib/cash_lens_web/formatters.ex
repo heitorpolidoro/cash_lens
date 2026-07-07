@@ -117,6 +117,16 @@ defmodule CashLensWeb.Formatters do
   def month_name(m), do: Enum.at(@full_months, m - 1)
 
   @doc """
+  Formats a competência Date as `Mmm/YY` in Portuguese (e.g. "Jan/26").
+  """
+  def format_competencia(nil), do: ""
+
+  def format_competencia(%Date{} = date) do
+    year = date.year |> rem(100) |> Integer.to_string() |> String.pad_leading(2, "0")
+    "#{String.capitalize(month_label(date.month))}/#{year}"
+  end
+
+  @doc """
   Translates parser types to human readable names.
   """
   def translate_parser_type("bb_csv"), do: "Banco do Brasil (CSV)"

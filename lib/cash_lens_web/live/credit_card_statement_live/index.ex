@@ -188,7 +188,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                 phx-click={JS.patch(~p"/statements?id=#{s.statement.id}")}
               >
                 <td>{s.account && s.account.name}</td>
-                <td>{format_date(s.statement.competencia)}</td>
+                <td>{format_competencia(s.statement.competencia)}</td>
                 <td>{format_date(s.statement.due_date)}</td>
                 <td class="text-right font-mono font-black">
                   {format_currency(s.statement.total_a_pagar || s.line_total)}
@@ -219,9 +219,9 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                 {@selected.account && @selected.account.name}
               </h1>
               <p class="text-xs opacity-60 mt-1">
-                Competência {format_date(@selected.statement.competencia)} · Vence em {format_date(
+                Competência {format_competencia(@selected.statement.competencia)}<span :if={
                   @selected.statement.due_date
-                )}
+                }>· Vence em {format_date(@selected.statement.due_date)}</span>
               </p>
               <p class="text-[10px] opacity-40 mt-1">{@selected.statement.source_file}</p>
             </div>
