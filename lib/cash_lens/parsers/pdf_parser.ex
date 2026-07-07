@@ -396,9 +396,28 @@ defmodule CashLens.Parsers.PDFParser do
     }
   end
 
+  # Mirrors the proven `extract_statement_date/1` Vencimento matching (a strict
+  # "label then date" form plus a lenient dotall fallback for layouts where the
+  # date sits apart from the label), but returns nil instead of falling back to
+  # today's date — statement metadata must be absent (nil) when the source
+  # carries no due date (e.g. OFX), never a fabricated one.
   defp extract_statement_date_or_nil(text) do
-    case Regex.run(~r/Vencimento\s*(?:\r?\n\s*)?(\d{2})\/(\d{2})\/(\d{4})/i, text) do
-      [_, d, m, y] -> Date.new!(String.to_integer(y), String.to_integer(m), String.to_integer(d))
+    regexes = [
+      ~r/Vencimento\s*(?:\r?\n\s*)?(\d{2})\/(\d{2})\/(\d{4})/i,
+      ~r/Vencimento.*?(\d{2})\/(\d{2})\/(\d{4})/s
+    ]
+
+    Enum.find_value(regexes, fn regex ->
+      case Regex.run(regex, text) do
+        [_, d, m, y] -> build_date(y, m, d)
+        _ -> nil
+      end
+    end)
+  end
+
+  defp build_date(y, m, d) do
+    case Date.new(String.to_integer(y), String.to_integer(m), String.to_integer(d)) do
+      {:ok, date} -> date
       _ -> nil
     end
   end

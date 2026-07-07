@@ -11,34 +11,35 @@ defmodule CashLens.CreditCards.Matcher do
   @window_days 15
 
   def auto_link(statement, line_total) do
-    with category when not is_nil(category) <-
-           CashLens.Categories.get_category_by_slug("cartao-de-credito") do
-      target = statement.total_a_pagar || line_total
-      ref = statement.due_date || statement.competencia
+    case credit_card_category_ids() do
+      [] ->
+        :no_match
 
-      candidates =
-        from(t in Transaction,
-          where: t.category_id == ^category.id,
-          where: t.account_id != ^statement.account_id,
-          where: is_nil(t.parent_transaction_id),
-          where: t.amount == ^target or t.amount == ^Decimal.negate(target)
-        )
-        |> Repo.all()
-        |> Enum.filter(&within_window?(&1, ref))
+      category_ids ->
+        target = statement.total_a_pagar || line_total
+        ref = statement.due_date
 
-      case candidates do
-        [payment] ->
-          {:ok, _} = CreditCards.link_payment(statement, payment.id)
-          {:linked, payment}
+        candidates =
+          from(t in Transaction,
+            where: t.category_id in ^category_ids,
+            where: t.account_id != ^statement.account_id,
+            where: is_nil(t.parent_transaction_id),
+            where: t.amount == ^target or t.amount == ^Decimal.negate(target)
+          )
+          |> Repo.all()
+          |> Enum.filter(&within_window?(&1, ref))
 
-        [] ->
-          :no_match
+        case candidates do
+          [payment] ->
+            {:ok, _} = CreditCards.link_payment(statement, payment.id)
+            {:linked, payment}
 
-        _ ->
-          :ambiguous
-      end
-    else
-      _ -> :no_match
+          [] ->
+            :no_match
+
+          _ ->
+            :ambiguous
+        end
     end
   end
 
@@ -58,28 +59,41 @@ defmodule CashLens.CreditCards.Matcher do
   @spec match_payment(Transaction.t() | map(), Ecto.UUID.t() | nil) ::
           {:linked, Statement.t()} | :no_match | :ambiguous | :not_credit_card_category
   def match_payment(payment, credit_card_account_id \\ nil) do
+    category_ids = credit_card_category_ids()
+
+    cond do
+      category_ids == [] ->
+        :not_credit_card_category
+
+      payment.category_id not in category_ids ->
+        :not_credit_card_category
+
+      already_linked?(payment) ->
+        :no_match
+
+      true ->
+        account_ids =
+          if credit_card_account_id,
+            do: [credit_card_account_id],
+            else: all_credit_card_account_ids()
+
+        account_ids
+        |> open_statements()
+        |> Enum.reject(&(&1.account_id == Map.get(payment, :account_id)))
+        |> Enum.filter(&statement_matches_payment?(&1, payment))
+        |> do_match_payment(payment)
+    end
+  end
+
+  # A payment counts as a credit-card payment if its category is
+  # "cartao-de-credito" OR any descendant (users file bill payments under
+  # per-card children like `cartao-de-credito-amex` and
+  # `cartao-de-credito-pagamento`, not the bare parent slug). Returns [] when
+  # the parent category doesn't exist.
+  defp credit_card_category_ids do
     case Categories.get_category_by_slug("cartao-de-credito") do
-      nil ->
-        :not_credit_card_category
-
-      %{id: category_id} when payment.category_id != category_id ->
-        :not_credit_card_category
-
-      _category ->
-        if already_linked?(payment) do
-          :no_match
-        else
-          account_ids =
-            if credit_card_account_id,
-              do: [credit_card_account_id],
-              else: all_credit_card_account_ids()
-
-          account_ids
-          |> open_statements()
-          |> Enum.reject(&(&1.account_id == Map.get(payment, :account_id)))
-          |> Enum.filter(&statement_matches_payment?(&1, payment))
-          |> do_match_payment(payment)
-        end
+      nil -> []
+      category -> Categories.get_category_ids_with_children(category.id)
     end
   end
 
@@ -113,7 +127,7 @@ defmodule CashLens.CreditCards.Matcher do
 
   defp statement_matches_payment?(statement, payment) do
     target = statement.total_a_pagar || line_total(statement)
-    ref = statement.due_date || statement.competencia
+    ref = statement.due_date
 
     (Decimal.equal?(target, payment.amount) or
        Decimal.equal?(target, Decimal.negate(payment.amount))) and

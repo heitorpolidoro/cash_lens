@@ -140,14 +140,17 @@ defmodule CashLens.Parsers.Ingestor do
       transactions_data ->
         Logger.info("INGESTOR: Parser returned #{length(transactions_data)} transactions.")
         if notify_fn, do: notify_fn.(length(transactions_data))
-        statement_id = maybe_create_statement(account, content, file_path)
+
+        statement_id =
+          maybe_create_statement(account, content, file_path, transactions_data)
+
         finalize_import(transactions_data, account.id, statement_id)
     end
   end
 
   # Returns the new statement id for credit-card accounts (so rows can be
   # stamped and matched), or nil for regular accounts.
-  defp maybe_create_statement(%{is_credit_card: true} = account, content, file_path) do
+  defp maybe_create_statement(%{is_credit_card: true} = account, content, file_path, transactions) do
     meta =
       if String.ends_with?(file_path, ".pdf") do
         PDFParser.extract_statement_meta(content)
@@ -160,14 +163,14 @@ defmodule CashLens.Parsers.Ingestor do
         account_id: account.id,
         due_date: meta.due_date,
         total_a_pagar: meta.total_a_pagar,
-        competencia: meta.competencia,
+        competencia: CashLens.CreditCards.competencia_from(meta.competencia, transactions),
         source_file: Path.basename(file_path)
       })
 
     statement.id
   end
 
-  defp maybe_create_statement(_account, _content, _file_path), do: nil
+  defp maybe_create_statement(_account, _content, _file_path, _transactions), do: nil
 
   @doc """
   Reads and normalizes a file's content exactly like the importer does before

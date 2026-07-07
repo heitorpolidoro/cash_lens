@@ -297,6 +297,22 @@ defmodule CashLens.PDFParserTest do
       assert meta.competencia == ~D[2026-06-01]
     end
 
+    test "extract_statement_meta finds Vencimento when the date is separated from the label" do
+      # Real Bradesco card layout: the "Vencimento" label and its date sit on
+      # different lines with other content (the total) between them.
+      text = """
+      Total da fatura                                          Vencimento
+      R$ 56,53                                                 10/03/2026
+
+      Total da fatura em real                                  56,53
+      """
+
+      meta = PDFParser.extract_statement_meta(text)
+      assert meta.due_date == ~D[2026-03-10]
+      assert meta.competencia == ~D[2026-03-01]
+      assert Decimal.equal?(meta.total_a_pagar, Decimal.new("56.53"))
+    end
+
     test "extract_statement_meta degrades to nils when absent" do
       meta = PDFParser.extract_statement_meta("no relevant lines")
       assert meta.due_date == nil

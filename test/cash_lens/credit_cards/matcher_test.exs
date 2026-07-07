@@ -61,6 +61,40 @@ defmodule CashLens.CreditCards.MatcherTest do
     assert CashLens.CreditCards.get_statement!(s.id).payment_transaction_id == pay.id
   end
 
+  test "auto_link matches a payment categorized under a descendant category" do
+    card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    bank = CashLens.AccountsFixtures.account_fixture(%{})
+    parent = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+    child =
+      CashLens.CategoriesFixtures.category_fixture(%{
+        name: "Amex",
+        slug: "cartao-de-credito-amex",
+        parent_id: parent.id
+      })
+
+    s =
+      statement_fixture(%{
+        account: card,
+        total_a_pagar: Decimal.new("1099.28"),
+        due_date: ~D[2026-05-10]
+      })
+
+    CashLens.TransactionsFixtures.transaction_fixture(%{
+      account_id: card.id,
+      amount: Decimal.new("-1099.28"),
+      import_batch_id: s.id,
+      date: ~D[2026-05-01]
+    })
+
+    # Bank-side debit filed under the per-card CHILD category, as the user does.
+    pay = payment(bank, child, Decimal.new("-1099.28"), ~D[2026-05-11])
+
+    assert {:linked, linked} = Matcher.auto_link(s, Decimal.new("-1099.28"))
+    assert linked.id == pay.id
+    assert CashLens.CreditCards.get_statement!(s.id).payment_transaction_id == pay.id
+  end
+
   test "auto_link returns :no_match when no candidate amount matches" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     s = statement_fixture(%{account: card, total_a_pagar: Decimal.new("99.00")})

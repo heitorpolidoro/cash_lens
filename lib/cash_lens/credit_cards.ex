@@ -15,6 +15,25 @@ defmodule CashLens.CreditCards do
   def get_statement!(id), do: Repo.get!(Statement, id)
 
   @doc """
+  Resolves a statement's competência: the parsed due-date month when the source
+  carried a Vencimento, otherwise the month of the statement's latest
+  transaction. The fallback keeps every statement labelled — including sources
+  with no due date at all (OFX, or Bradesco's minimal near-zero PDFs) — instead
+  of leaving competência blank. Returns nil only when neither is available.
+  """
+  def competencia_from(%Date{} = competencia, _transactions), do: competencia
+
+  def competencia_from(nil, transactions) do
+    transactions
+    |> Enum.map(&Map.get(&1, :date))
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] -> nil
+      dates -> dates |> Enum.max(Date) |> Date.beginning_of_month()
+    end
+  end
+
+  @doc """
   Backfills a single already-imported statement file: creates a `Statement`
   record for it, then stamps the matching *already-existing* transactions
   with `import_batch_id` by recomputing the exact fingerprint the original
@@ -32,7 +51,7 @@ defmodule CashLens.CreditCards do
         account_id: account.id,
         due_date: meta.due_date,
         total_a_pagar: meta.total_a_pagar,
-        competencia: meta.competencia,
+        competencia: competencia_from(meta.competencia, parsed_transactions),
         source_file: source_file
       })
 

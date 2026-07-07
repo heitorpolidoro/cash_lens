@@ -13,6 +13,22 @@ defmodule CashLens.CreditCardsTest do
     assert CreditCards.statement_status(s, Decimal.new("100.00")) == :open
   end
 
+  describe "competencia_from/2" do
+    test "keeps the parsed due-date competência when present" do
+      txns = [%{date: ~D[2026-05-20]}]
+      assert CreditCards.competencia_from(~D[2026-06-01], txns) == ~D[2026-06-01]
+    end
+
+    test "falls back to the latest transaction's month when competência is nil" do
+      txns = [%{date: ~D[2026-05-03]}, %{date: ~D[2026-05-28]}, %{date: ~D[2026-04-11]}]
+      assert CreditCards.competencia_from(nil, txns) == ~D[2026-05-01]
+    end
+
+    test "is nil when there is no competência and no dated transaction" do
+      assert CreditCards.competencia_from(nil, []) == nil
+    end
+  end
+
   test "list_statements returns rows with line totals and status" do
     account = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     s = statement_fixture(%{account: account, total_a_pagar: Decimal.new("30.00")})
