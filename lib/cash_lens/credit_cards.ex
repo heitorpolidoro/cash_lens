@@ -234,4 +234,19 @@ defmodule CashLens.CreditCards do
         |> List.first()
     end
   end
+
+  @doc """
+  Wipes a credit-card account's imported data ahead of a clean re-import:
+  deletes its `credit_card_statements` and all its `transactions`. Returns
+  `{deleted_statements, deleted_transactions}`.
+  """
+  def reset_account_statements(account_id) do
+    {stmts, _} =
+      from(s in Statement, where: s.account_id == ^account_id) |> Repo.delete_all()
+
+    {txns, _} =
+      from(t in Transaction, where: t.account_id == ^account_id) |> Repo.delete_all()
+
+    {stmts, txns}
+  end
 end

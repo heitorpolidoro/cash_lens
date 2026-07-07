@@ -1,6 +1,7 @@
 defmodule CashLens.CreditCardsTest do
   use CashLens.DataCase, async: true
   alias CashLens.CreditCards
+  import Ecto.Query
   import CashLens.CreditCardsFixtures
 
   test "create_statement and get_statement!" do
@@ -154,5 +155,30 @@ defmodule CashLens.CreditCardsTest do
     s = statement_fixture(%{account: card})
 
     assert CashLens.CreditCards.suggest_payment(s) == nil
+  end
+
+  test "reset_account_statements deletes the account's transactions and statements" do
+    card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    other = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    s = statement_fixture(%{account: card})
+
+    CashLens.TransactionsFixtures.transaction_fixture(%{
+      account_id: card.id,
+      import_batch_id: s.id
+    })
+
+    keep = statement_fixture(%{account: other})
+
+    {stmts, txns} = CashLens.CreditCards.reset_account_statements(card.id)
+    assert stmts == 1
+    assert txns == 1
+
+    assert CashLens.Repo.aggregate(
+             from(t in CashLens.Transactions.Transaction, where: t.account_id == ^card.id),
+             :count
+           ) == 0
+
+    # other account untouched
+    assert CashLens.CreditCards.get_statement!(keep.id).id == keep.id
   end
 end
