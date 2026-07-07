@@ -23,6 +23,31 @@ defmodule CashLens.Parsers.OFXParser do
     |> Enum.reject(&is_nil/1)
   end
 
+  @doc """
+  Statement-level metadata for a credit-card OFX export.
+
+  Uses the ledger balance (`<LEDGERBAL><BALAMT>`) — the outstanding amount
+  owed — as `total_a_pagar`, stored positive. OFX carries no due date
+  (Vencimento), so `due_date` and `competencia` are nil here; competência is
+  derived from the statement's transactions upstream.
+  """
+  def extract_statement_meta(content) do
+    %{
+      due_date: nil,
+      total_a_pagar: extract_balance(content),
+      competencia: nil
+    }
+  end
+
+  defp extract_balance(content) do
+    with val when not is_nil(val) <- extract_tag(content, "BALAMT"),
+         {:ok, decimal} <- parse_decimal(val) do
+      Decimal.abs(decimal)
+    else
+      _ -> nil
+    end
+  end
+
   defp parse_transaction_block(block) do
     # Extract values using regex (case-insensitive for tags)
     memo = extract_tag(block, "MEMO") || extract_tag(block, "NAME")

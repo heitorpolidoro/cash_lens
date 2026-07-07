@@ -17,7 +17,6 @@ defmodule Mix.Tasks.CashLens.BackfillStatements do
   alias CashLens.CreditCards
   alias CashLens.Parsers.DirectoryImporter
   alias CashLens.Parsers.Ingestor
-  alias CashLens.Parsers.PDFParser
 
   @impl Mix.Task
   def run(args) do
@@ -40,12 +39,7 @@ defmodule Mix.Tasks.CashLens.BackfillStatements do
   end
 
   defp backfill_one(account, content, file_path) do
-    meta =
-      if String.ends_with?(file_path, ".pdf") do
-        PDFParser.extract_statement_meta(content)
-      else
-        %{due_date: nil, total_a_pagar: nil, competencia: nil}
-      end
+    meta = Ingestor.statement_meta(content, file_path)
 
     case Ingestor.parse(content, account.parser_type) do
       {:error, reason} ->

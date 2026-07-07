@@ -216,4 +216,27 @@ defmodule CashLens.Parsers.OFXParserTest do
       assert t.date == ~D[2026-04-15]
     end
   end
+
+  describe "extract_statement_meta/1" do
+    test "uses the ledger balance as a positive total_a_pagar" do
+      content = """
+      <OFX>
+      <LEDGERBAL>
+      <BALAMT>-10457.35
+      <DTASOF>20251107
+      </LEDGERBAL>
+      </OFX>
+      """
+
+      meta = OFXParser.extract_statement_meta(content)
+      assert Decimal.equal?(meta.total_a_pagar, Decimal.new("10457.35"))
+      assert meta.due_date == nil
+      assert meta.competencia == nil
+    end
+
+    test "returns nil total when no balance is present" do
+      meta = OFXParser.extract_statement_meta("<OFX></OFX>")
+      assert meta.total_a_pagar == nil
+    end
+  end
 end

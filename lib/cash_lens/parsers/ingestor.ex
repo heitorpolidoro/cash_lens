@@ -151,12 +151,7 @@ defmodule CashLens.Parsers.Ingestor do
   # Returns the new statement id for credit-card accounts (so rows can be
   # stamped and matched), or nil for regular accounts.
   defp maybe_create_statement(%{is_credit_card: true} = account, content, file_path, transactions) do
-    meta =
-      if String.ends_with?(file_path, ".pdf") do
-        PDFParser.extract_statement_meta(content)
-      else
-        %{due_date: nil, total_a_pagar: nil, competencia: nil}
-      end
+    meta = statement_meta(content, file_path)
 
     {:ok, statement} =
       CashLens.CreditCards.create_statement(%{
@@ -171,6 +166,17 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   defp maybe_create_statement(_account, _content, _file_path, _transactions), do: nil
+
+  # Statement metadata (due date, total, competência) extracted from the file,
+  # by source format. OFX carries a ledger balance; PDF a Vencimento + total;
+  # anything else has none.
+  def statement_meta(content, file_path) do
+    cond do
+      String.ends_with?(file_path, ".pdf") -> PDFParser.extract_statement_meta(content)
+      String.ends_with?(file_path, ".ofx") -> OFXParser.extract_statement_meta(content)
+      true -> %{due_date: nil, total_a_pagar: nil, competencia: nil}
+    end
+  end
 
   @doc """
   Reads and normalizes a file's content exactly like the importer does before
