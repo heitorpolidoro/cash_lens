@@ -44,6 +44,27 @@ defmodule CashLens.Parsers.IngestorTest do
     test "returns error for unknown parser" do
       assert {:error, _} = Ingestor.parse("any", "unknown")
     end
+
+    test "parse/2 routes ourocard_txt to the TXT parser" do
+      content = """
+      Vencimento      : 16.07.2026
+      Total da fatura : R$ 537,82
+      15.06.2026SCHOOL OF ROCK         SAO JOSE DOS  BR              537,82        0,00
+      """
+
+      [tx] = Ingestor.parse(content, "ourocard_txt")
+      assert tx.date == ~D[2026-06-15]
+      assert Decimal.equal?(tx.amount, Decimal.new("-537.82"))
+    end
+
+    test "expected_extensions and statement_meta handle ourocard_txt/.txt" do
+      assert Ingestor.expected_extensions("ourocard_txt") == [".txt"]
+
+      content = "Vencimento : 16.07.2026\nTotal da fatura : R$ 10,00\n"
+      meta = Ingestor.statement_meta(content, "OUROCARD-Jul_26.txt")
+      assert meta.due_date == ~D[2026-07-16]
+      assert Decimal.equal?(meta.total_a_pagar, Decimal.new("10.00"))
+    end
   end
 
   describe "import_file/2" do

@@ -6,6 +6,7 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Accounting
   alias CashLens.Parsers.CSVParser
   alias CashLens.Parsers.OFXParser
+  alias CashLens.Parsers.OurocardTXTParser
   alias CashLens.Parsers.PDFParser
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.Transaction
@@ -46,6 +47,10 @@ defmodule CashLens.Parsers.Ingestor do
         Logger.info("Using Ourocard OFX Parser")
         OFXParser.parse(content, :ourocard)
 
+      "ourocard_txt" ->
+        Logger.info("Using Ourocard TXT Parser")
+        OurocardTXTParser.parse(content, :ourocard)
+
       _ ->
         {:error, "Extrator não configurado ou não suportado para esta conta."}
     end
@@ -60,6 +65,7 @@ defmodule CashLens.Parsers.Ingestor do
       t when t in ["bradesco_csv", "bb_csv", "mercado_pago_csv"] -> [".csv"]
       t when t in ["ourocard_ofx", "standard_ofx"] -> [".ofx"]
       t when t in ["sem_parar_pdf", "bradesco_cartao_pdf"] -> [".pdf"]
+      "ourocard_txt" -> [".txt"]
       _ -> []
     end
   end
@@ -174,6 +180,7 @@ defmodule CashLens.Parsers.Ingestor do
     cond do
       String.ends_with?(file_path, ".pdf") -> PDFParser.extract_statement_meta(content)
       String.ends_with?(file_path, ".ofx") -> OFXParser.extract_statement_meta(content)
+      String.ends_with?(file_path, ".txt") -> OurocardTXTParser.extract_statement_meta(content)
       true -> %{due_date: nil, total_a_pagar: nil, competencia: nil}
     end
   end

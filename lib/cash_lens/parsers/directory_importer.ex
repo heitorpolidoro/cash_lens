@@ -55,7 +55,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
     defstruct accounts: [], warnings: [], errors: []
   end
 
-  @supported_extensions ~w(.csv .ofx .pdf)
+  @supported_extensions ~w(.csv .ofx .pdf .txt)
 
   @doc """
   Imports a directory. Options:
