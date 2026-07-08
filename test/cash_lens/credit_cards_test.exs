@@ -14,6 +14,37 @@ defmodule CashLens.CreditCardsTest do
     assert CreditCards.statement_status(s, Decimal.new("100.00")) == :open
   end
 
+  describe "statement_status pending/absorbed" do
+    test ":absorbed when absorbed_by is set (highest priority)" do
+      s = %CashLens.CreditCards.Statement{
+        absorbed_by_statement_id: Ecto.UUID.generate(),
+        due_date: nil
+      }
+
+      assert CashLens.CreditCards.statement_status(s, Decimal.new("0")) == :absorbed
+    end
+
+    test ":pending when no Vencimento, no payment, not absorbed" do
+      s = %CashLens.CreditCards.Statement{
+        due_date: nil,
+        payment_transaction_id: nil,
+        absorbed_by_statement_id: nil
+      }
+
+      assert CashLens.CreditCards.statement_status(s, Decimal.new("0")) == :pending
+    end
+
+    test ":open still applies to an unpaid boleto (has Vencimento)" do
+      s = %CashLens.CreditCards.Statement{
+        due_date: ~D[2026-03-10],
+        payment_transaction_id: nil,
+        absorbed_by_statement_id: nil
+      }
+
+      assert CashLens.CreditCards.statement_status(s, Decimal.new("0")) == :open
+    end
+  end
+
   describe "competencia_from/2" do
     test "keeps the parsed due-date competência when present" do
       txns = [%{date: ~D[2026-05-20]}]

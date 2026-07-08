@@ -97,11 +97,20 @@ defmodule CashLens.CreditCards do
   end
 
   @doc """
-  :open  — no payment linked.
+  :absorbed — absorbed by another statement (highest priority).
+  :pending — no due date, no payment linked, not absorbed.
+  :open  — no payment linked (but has due date).
   :divergent — payment linked but its amount differs from the statement's
     total_a_pagar (falling back to line_total when total is nil).
   :linked — payment linked and amount matches.
   """
+  def statement_status(%Statement{absorbed_by_statement_id: id}, _line_total)
+      when not is_nil(id),
+      do: :absorbed
+
+  def statement_status(%Statement{due_date: nil, payment_transaction_id: nil}, _line_total),
+    do: :pending
+
   def statement_status(%Statement{payment_transaction_id: nil}, _line_total), do: :open
 
   def statement_status(%Statement{} = statement, line_total) do
