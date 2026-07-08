@@ -258,4 +258,55 @@ defmodule CashLens.CreditCards do
 
     {stmts, txns}
   end
+
+  @doc """
+  Absorbs a boleto's eligible earlier pending statements when the accounts
+  reconcile exactly: `boleto.total_a_pagar - |sum(boleto items)| == Σ
+  eligible_pending.total_a_pagar`. Stamps each absorbed statement with
+  `absorbed_by_statement_id = boleto.id` and returns them. Returns [] for
+  non-boletos, boletos without a total, or when the sum does not match.
+  """
+  def absorb_pending(%Statement{due_date: nil}), do: []
+  def absorb_pending(%Statement{total_a_pagar: nil}), do: []
+
+  def absorb_pending(%Statement{} = boleto) do
+    pending = eligible_pending(boleto)
+
+    if pending == [] do
+      []
+    else
+      line_total = boleto.id |> statement_transactions() |> sum_amounts()
+      rolled = Decimal.sub(boleto.total_a_pagar, Decimal.abs(line_total))
+
+      sum_pending =
+        Enum.reduce(pending, Decimal.new(0), &Decimal.add(&2, &1.total_a_pagar || Decimal.new(0)))
+
+      if Decimal.equal?(rolled, sum_pending) do
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+        ids = Enum.map(pending, & &1.id)
+
+        from(s in Statement, where: s.id in ^ids)
+        |> Repo.update_all(set: [absorbed_by_statement_id: boleto.id, updated_at: now])
+
+        pending
+      else
+        []
+      end
+    end
+  end
+
+  defp eligible_pending(%Statement{} = boleto) do
+    from(s in Statement,
+      where: s.account_id == ^boleto.account_id,
+      where: is_nil(s.due_date),
+      where: is_nil(s.absorbed_by_statement_id),
+      where: not is_nil(s.competencia),
+      where: s.competencia < ^boleto.competencia
+    )
+    |> Repo.all()
+  end
+
+  defp sum_amounts(transactions) do
+    Enum.reduce(transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
+  end
 end

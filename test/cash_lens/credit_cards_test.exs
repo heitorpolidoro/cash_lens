@@ -212,4 +212,93 @@ defmodule CashLens.CreditCardsTest do
     # other account untouched
     assert CashLens.CreditCards.get_statement!(keep.id).id == keep.id
   end
+
+  describe "absorb_pending/1" do
+    setup do
+      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+      %{card: card}
+    end
+
+    test "absorbs an earlier pending when total - |items| equals its total", %{card: card} do
+      # Pending Feb: total_a_pagar 3.40 (its line items are irrelevant to the formula)
+      pending =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: nil,
+          competencia: ~D[2026-01-01],
+          total_a_pagar: Decimal.new("3.40")
+        })
+
+      # Boleto March: total 56.53, line items summing to -53.13 -> 56.53 - 53.13 = 3.40
+      boleto =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: ~D[2026-03-10],
+          competencia: ~D[2026-03-01],
+          total_a_pagar: Decimal.new("56.53")
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        amount: Decimal.new("-53.13"),
+        import_batch_id: boleto.id,
+        date: ~D[2026-02-20]
+      })
+
+      assert [absorbed] = CashLens.CreditCards.absorb_pending(boleto)
+      assert absorbed.id == pending.id
+      assert CashLens.CreditCards.get_statement!(pending.id).absorbed_by_statement_id == boleto.id
+    end
+
+    test "does not absorb when the sum is off by a cent", %{card: card} do
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: nil,
+        competencia: ~D[2026-01-01],
+        total_a_pagar: Decimal.new("3.41")
+      })
+
+      boleto =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: ~D[2026-03-10],
+          competencia: ~D[2026-03-01],
+          total_a_pagar: Decimal.new("56.53")
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        amount: Decimal.new("-53.13"),
+        import_batch_id: boleto.id
+      })
+
+      assert CashLens.CreditCards.absorb_pending(boleto) == []
+    end
+
+    test "ignores pending that are not earlier than the boleto", %{card: card} do
+      # competencia == boleto's (not strictly earlier) -> not eligible
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: nil,
+        competencia: ~D[2026-03-01],
+        total_a_pagar: Decimal.new("0.00")
+      })
+
+      boleto =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: ~D[2026-03-10],
+          competencia: ~D[2026-03-01],
+          total_a_pagar: Decimal.new("53.13")
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        amount: Decimal.new("-53.13"),
+        import_batch_id: boleto.id
+      })
+
+      assert CashLens.CreditCards.absorb_pending(boleto) == []
+    end
+  end
 end
