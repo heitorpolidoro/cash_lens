@@ -136,7 +136,10 @@ defmodule CashLens.CreditCards do
 
   def list_statements do
     statements =
-      from(s in Statement, preload: [:account], order_by: [desc: s.due_date, desc: s.competencia])
+      from(s in Statement,
+        preload: [:account, :absorbed_by],
+        order_by: [desc: s.due_date, desc: s.competencia]
+      )
       |> Repo.all()
 
     totals =
@@ -156,7 +159,8 @@ defmodule CashLens.CreditCards do
         account: s.account,
         line_total: line_total,
         line_count: line_count,
-        status: statement_status(s, line_total)
+        status: statement_status(s, line_total),
+        absorbed_into: s.absorbed_by && s.absorbed_by.competencia
       }
     end)
   end

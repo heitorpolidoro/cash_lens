@@ -82,6 +82,7 @@ defmodule CashLens.CreditCardsTest do
     assert Decimal.equal?(row.line_total, Decimal.new("30.00"))
     assert row.line_count == 2
     assert row.status == :open
+    assert row.absorbed_into == nil
   end
 
   test "get_statement_detail returns transactions and payment" do

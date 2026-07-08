@@ -130,6 +130,8 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   defp status_badge(:linked), do: {"badge-success", "✅", "Vinculada"}
   defp status_badge(:open), do: {"badge-warning", "⚠", "Aberta"}
   defp status_badge(:divergent), do: {"badge-error", "❗", "Divergente"}
+  defp status_badge(:pending), do: {"badge-warning", "⏳", "Pendente"}
+  defp status_badge(:absorbed), do: {"badge-ghost", "📥", "Incorporada"}
 
   @impl true
   def render(assigns) do
@@ -197,6 +199,12 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                   <% {badge_class, emoji, label} = status_badge(s.status) %>
                   <span class={"badge #{badge_class} badge-sm gap-1"}>
                     {emoji} {label}
+                  </span>
+                  <span :if={s.status == :pending} class="text-[10px] opacity-50 ml-1 block">
+                    possível cobrança na próxima fatura
+                  </span>
+                  <span :if={s.status == :absorbed} class="text-[10px] opacity-50 ml-1 block">
+                    em {format_competencia(s.absorbed_into)}
                   </span>
                 </td>
               </tr>

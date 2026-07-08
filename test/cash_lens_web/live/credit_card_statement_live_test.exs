@@ -27,6 +27,19 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
     assert html =~ "Fatura em aberto"
   end
 
+  test "overview shows a Pendente badge for a pending statement", %{conn: conn} do
+    account = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true, name: "Amazon"})
+
+    statement_fixture(%{
+      account: account,
+      due_date: nil,
+      total_a_pagar: Decimal.new("3.40")
+    })
+
+    {:ok, _view, html} = live(conn, ~p"/statements")
+    assert html =~ "Pendente"
+  end
+
   test "redirect from old path", %{conn: conn} do
     conn = get(conn, ~p"/credit_card_links")
     assert redirected_to(conn) == ~p"/statements"
