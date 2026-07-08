@@ -286,6 +286,36 @@ defmodule CashLens.Parsers.IngestorTest do
       transactions = CashLens.Repo.all(CashLens.Transactions.Transaction)
       assert Enum.all?(transactions, &is_nil(&1.import_batch_id))
     end
+
+    test "importing a boleto absorbs an eligible earlier pending statement" do
+      account = account_fixture(%{is_credit_card: true, parser_type: "ourocard_txt"})
+
+      # Pre-seed a PENDING statement (no Vencimento), earlier competência, total 3.40.
+      pending =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: account,
+          due_date: nil,
+          competencia: ~D[2026-01-01],
+          total_a_pagar: Decimal.new("3.40")
+        })
+
+      # A .txt boleto: Vencimento 10.03.2026, Total da fatura 56,53, one line item 53,13
+      # (the TXT parser negates -> -53.13). 56.53 - |−53.13| = 3.40 == pending.total -> absorbs.
+      content = """
+      Vencimento      : 10.03.2026
+      Total da fatura : R$ 56,53
+
+      20.02.2026COMPRA TESTE          SAO PAULO   BR              53,13        0,00
+      """
+
+      path = Path.join(System.tmp_dir!(), "boleto_#{System.unique_integer([:positive])}.txt")
+      File.write!(path, content)
+      on_exit(fn -> File.rm(path) end)
+
+      assert {:ok, %{imported: 1}} = Ingestor.import_file(account, path)
+
+      assert CashLens.CreditCards.get_statement!(pending.id).absorbed_by_statement_id != nil
+    end
   end
 
   describe "duplicate-safe re-import" do

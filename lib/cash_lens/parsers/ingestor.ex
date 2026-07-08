@@ -305,6 +305,7 @@ defmodule CashLens.Parsers.Ingestor do
     # existing "Cartão de Crédito" payment transaction.
     if statement_id do
       statement = CashLens.CreditCards.get_statement!(statement_id)
+      CashLens.CreditCards.absorb_pending(statement)
 
       line_total =
         Enum.reduce(inserted_transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
