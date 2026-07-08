@@ -244,7 +244,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
           </div>
 
           <div
-            :if={@selected.status != :open}
+            :if={@selected.status in [:linked, :divergent]}
             class={[
               "px-6 py-4 flex items-center justify-between",
               if(@selected.status == :linked, do: "bg-success/10", else: "bg-error/10")
@@ -268,6 +268,24 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
             <button class="btn btn-ghost btn-sm text-error" phx-click="unlink">
               <.icon name="hero-link-slash" class="size-4" /> Desvincular
             </button>
+          </div>
+
+          <div :if={@selected.status == :pending} class="px-6 py-4 bg-warning/10">
+            <p class="text-xs font-bold uppercase opacity-60">Fatura pendente</p>
+            <p class="text-sm opacity-40 italic mt-1">possível cobrança na próxima fatura</p>
+          </div>
+
+          <div :if={@selected.status == :absorbed} class="px-6 py-4 bg-base-200">
+            <p class="text-xs font-bold uppercase opacity-60">
+              Incorporada na fatura {format_competencia(@selected.absorbed_into)}
+            </p>
+            <.link
+              :if={@selected.absorbed_by_id}
+              patch={~p"/statements?id=#{@selected.absorbed_by_id}"}
+              class="link"
+            >
+              ver fatura
+            </.link>
           </div>
 
           <div :if={@selected.status == :open} class="px-6 py-4 bg-warning/10">

@@ -166,7 +166,10 @@ defmodule CashLens.CreditCards do
   end
 
   def get_statement_detail(id) do
-    statement = from(s in Statement, where: s.id == ^id, preload: [:account]) |> Repo.one!()
+    statement =
+      from(s in Statement, where: s.id == ^id, preload: [:account, :absorbed_by])
+      |> Repo.one!()
+
     transactions = statement_transactions(id)
     line_total = Enum.reduce(transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
 
@@ -180,7 +183,9 @@ defmodule CashLens.CreditCards do
       transactions: transactions,
       line_total: line_total,
       payment: payment,
-      status: statement_status(statement, line_total)
+      status: statement_status(statement, line_total),
+      absorbed_into: statement.absorbed_by && statement.absorbed_by.competencia,
+      absorbed_by_id: statement.absorbed_by_statement_id
     }
   end
 
