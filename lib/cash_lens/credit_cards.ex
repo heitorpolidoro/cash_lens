@@ -186,7 +186,7 @@ defmodule CashLens.CreditCards do
     Multi.new()
     |> Multi.update_all(
       :children,
-      from(t in Transaction, where: t.import_batch_id == ^statement.id),
+      from(t in Transaction, where: t.import_batch_id in ^covered_statement_ids(statement)),
       set: [parent_transaction_id: payment_id, updated_at: now]
     )
     |> Multi.update(
@@ -206,7 +206,7 @@ defmodule CashLens.CreditCards do
     Multi.new()
     |> Multi.update_all(
       :children,
-      from(t in Transaction, where: t.import_batch_id == ^statement.id),
+      from(t in Transaction, where: t.import_batch_id in ^covered_statement_ids(statement)),
       set: [parent_transaction_id: nil, updated_at: now]
     )
     |> Multi.update(:statement, Statement.changeset(statement, %{payment_transaction_id: nil}))
@@ -308,5 +308,15 @@ defmodule CashLens.CreditCards do
 
   defp sum_amounts(transactions) do
     Enum.reduce(transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
+  end
+
+  # Statement ids whose transactions a boleto's payment covers: the boleto
+  # itself plus every statement absorbed into it.
+  defp covered_statement_ids(%Statement{} = boleto) do
+    absorbed =
+      from(s in Statement, where: s.absorbed_by_statement_id == ^boleto.id, select: s.id)
+      |> Repo.all()
+
+    [boleto.id | absorbed]
   end
 end

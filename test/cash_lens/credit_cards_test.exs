@@ -130,6 +130,57 @@ defmodule CashLens.CreditCardsTest do
              nil
   end
 
+  test "link_payment also parents transactions of absorbed statements" do
+    card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    bank = CashLens.AccountsFixtures.account_fixture(%{})
+
+    boleto =
+      statement_fixture(%{account: card, total_a_pagar: Decimal.new("56.53")})
+
+    # Create absorbed statement with unique source_file to avoid collisions
+    absorbed =
+      statement_fixture(%{
+        account: card,
+        due_date: nil,
+        total_a_pagar: Decimal.new("3.40"),
+        absorbed_by_statement_id: boleto.id,
+        source_file: "absorbed-#{Ecto.UUID.generate()}.pdf"
+      })
+
+    boleto_tx =
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        import_batch_id: boleto.id,
+        amount: "50.00",
+        date: ~D[2026-02-20],
+        description: "boleto tx"
+      })
+
+    absorbed_tx =
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        import_batch_id: absorbed.id,
+        amount: "60.00",
+        date: ~D[2026-02-21],
+        description: "absorbed tx"
+      })
+
+    payment = CashLens.TransactionsFixtures.transaction_fixture(%{account_id: bank.id})
+
+    {:ok, _} = CashLens.CreditCards.link_payment(boleto, payment.id)
+
+    reload = fn id ->
+      CashLens.Repo.get!(CashLens.Transactions.Transaction, id).parent_transaction_id
+    end
+
+    assert reload.(boleto_tx.id) == payment.id
+    assert reload.(absorbed_tx.id) == payment.id
+
+    {:ok, _} = CashLens.CreditCards.unlink_payment(boleto)
+    assert reload.(boleto_tx.id) == nil
+    assert reload.(absorbed_tx.id) == nil
+  end
+
   test "suggest_payment returns best matching payment" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     bank = CashLens.AccountsFixtures.account_fixture(%{})
