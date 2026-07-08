@@ -319,4 +319,32 @@ defmodule CashLens.CreditCards do
 
     [boleto.id | absorbed]
   end
+
+  @doc """
+  Applies `absorb_pending/1` to every existing boleto in chronological order,
+  propagating an already-linked payment to newly-absorbed transactions.
+  Returns the number of statements newly absorbed. Idempotent.
+  """
+  def reconcile_pending do
+    boletos =
+      from(s in Statement,
+        where: not is_nil(s.due_date),
+        order_by: [asc: s.competencia, asc: s.inserted_at]
+      )
+      |> Repo.all()
+
+    Enum.reduce(boletos, 0, fn boleto, count ->
+      case absorb_pending(boleto) do
+        [] ->
+          count
+
+        absorbed ->
+          if boleto.payment_transaction_id do
+            link_payment(boleto, boleto.payment_transaction_id)
+          end
+
+          count + length(absorbed)
+      end
+    end)
+  end
 end

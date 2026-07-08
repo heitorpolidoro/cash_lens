@@ -352,4 +352,50 @@ defmodule CashLens.CreditCardsTest do
       assert CashLens.CreditCards.absorb_pending(boleto) == []
     end
   end
+
+  test "reconcile_pending absorbs existing pending and propagates an existing payment" do
+    card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    bank = CashLens.AccountsFixtures.account_fixture(%{})
+
+    pending =
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: nil,
+        competencia: ~D[2026-01-01],
+        total_a_pagar: Decimal.new("3.40")
+      })
+
+    pending_tx =
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        amount: Decimal.new("-3.40"),
+        import_batch_id: pending.id
+      })
+
+    payment = CashLens.TransactionsFixtures.transaction_fixture(%{account_id: bank.id})
+
+    boleto =
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: ~D[2026-03-10],
+        competencia: ~D[2026-03-01],
+        total_a_pagar: Decimal.new("56.53"),
+        payment_transaction_id: payment.id
+      })
+
+    CashLens.TransactionsFixtures.transaction_fixture(%{
+      account_id: card.id,
+      amount: Decimal.new("-53.13"),
+      import_batch_id: boleto.id
+    })
+
+    assert CashLens.CreditCards.reconcile_pending() == 1
+    assert CashLens.CreditCards.get_statement!(pending.id).absorbed_by_statement_id == boleto.id
+    # payment propagated to the absorbed statement's transaction
+    assert CashLens.Repo.get!(CashLens.Transactions.Transaction, pending_tx.id).parent_transaction_id ==
+             payment.id
+
+    # idempotent
+    assert CashLens.CreditCards.reconcile_pending() == 0
+  end
 end
