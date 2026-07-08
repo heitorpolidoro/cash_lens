@@ -12,6 +12,7 @@ defmodule CashLens.CreditCards.Statement do
 
     belongs_to :account, CashLens.Accounts.Account
     belongs_to :payment_transaction, CashLens.Transactions.Transaction
+    belongs_to :absorbed_by, __MODULE__, foreign_key: :absorbed_by_statement_id
 
     timestamps(type: :utc_datetime)
   end
@@ -26,10 +27,12 @@ defmodule CashLens.CreditCards.Statement do
       :due_date,
       :total_a_pagar,
       :source_file,
-      :payment_transaction_id
+      :payment_transaction_id,
+      :absorbed_by_statement_id
     ])
     |> validate_required([:account_id])
     |> foreign_key_constraint(:account_id)
     |> foreign_key_constraint(:payment_transaction_id)
+    |> foreign_key_constraint(:absorbed_by_statement_id)
   end
 end
