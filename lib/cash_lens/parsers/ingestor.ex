@@ -164,7 +164,7 @@ defmodule CashLens.Parsers.Ingestor do
         account_id: account.id,
         due_date: meta.due_date,
         total_a_pagar: meta.total_a_pagar,
-        competencia: CashLens.CreditCards.competencia_from(meta.competencia, transactions),
+        competencia: CashLens.CreditCards.competencia_for(account, meta, transactions),
         source_file: Path.basename(file_path)
       })
 

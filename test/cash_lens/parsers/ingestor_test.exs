@@ -287,6 +287,31 @@ defmodule CashLens.Parsers.IngestorTest do
       assert Enum.all?(transactions, &is_nil(&1.import_batch_id))
     end
 
+    test "non-boleto import uses the account's cycle for competência" do
+      account =
+        CashLens.AccountsFixtures.account_fixture(%{
+          is_credit_card: true,
+          parser_type: "ourocard_txt",
+          closing_day: 3,
+          due_day: 10
+        })
+
+      # A .txt with NO Vencimento line, one transaction dated 27/01 -> cycle -> Fev/26.
+      content = "27.01.2026COMPRA          SAO PAULO   BR              50,00        0,00\n"
+      path = Path.join(System.tmp_dir!(), "nb_#{System.unique_integer([:positive])}.txt")
+      File.write!(path, content)
+
+      {:ok, %{imported: 1}} = Ingestor.import_file(account, path)
+
+      [s] =
+        CashLens.Repo.all(
+          from s in CashLens.CreditCards.Statement, where: s.account_id == ^account.id
+        )
+
+      assert s.due_date == nil
+      assert s.competencia == ~D[2026-02-01]
+    end
+
     test "importing a boleto absorbs an eligible earlier pending statement" do
       account = account_fixture(%{is_credit_card: true, parser_type: "ourocard_txt"})
 
