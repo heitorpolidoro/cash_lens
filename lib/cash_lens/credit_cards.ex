@@ -6,6 +6,8 @@ defmodule CashLens.CreditCards do
   alias CashLens.Transactions.Transaction
   alias Ecto.Multi
 
+  @closing_offset 7
+
   def create_statement(attrs) do
     %Statement{}
     |> Statement.changeset(attrs)
@@ -417,5 +419,38 @@ defmodule CashLens.CreditCards do
           count + length(absorbed)
       end
     end)
+  end
+
+  @doc """
+  Best-effort billing-cycle estimate from the account's imported boletos:
+  `due_day` = most common Vencimento day, `closing_day` = 7 days earlier
+  (wrapped into 1..31). Nils when there are no boletos. The user confirms.
+  """
+  def estimate_cycle(account) do
+    days =
+      from(s in Statement,
+        where: s.account_id == ^account.id and not is_nil(s.due_date),
+        select: s.due_date
+      )
+      |> Repo.all()
+      |> Enum.map(& &1.day)
+
+    case days do
+      [] ->
+        %{closing_day: nil, due_day: nil}
+
+      days ->
+        due_day = mode(days)
+        closing = due_day - @closing_offset
+        closing_day = if closing < 1, do: closing + 30, else: closing
+        %{closing_day: closing_day, due_day: due_day}
+    end
+  end
+
+  defp mode(list) do
+    list
+    |> Enum.frequencies()
+    |> Enum.max_by(fn {_value, count} -> count end)
+    |> elem(0)
   end
 end

@@ -447,4 +447,26 @@ defmodule CashLens.CreditCardsTest do
     # idempotent
     assert CashLens.CreditCards.reconcile_pending() == 0
   end
+
+  describe "estimate_cycle/1" do
+    test "estimates due_day as the modal boleto due day and closing 7 days earlier" do
+      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+      statement_fixture(%{account: card, due_date: ~D[2026-01-10]})
+      statement_fixture(%{account: card, due_date: ~D[2026-02-10]})
+      statement_fixture(%{account: card, due_date: ~D[2026-03-15]})
+
+      assert CashLens.CreditCards.estimate_cycle(card) == %{closing_day: 3, due_day: 10}
+    end
+
+    test "wraps closing_day when due_day <= 7" do
+      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+      statement_fixture(%{account: card, due_date: ~D[2026-01-05]})
+      assert CashLens.CreditCards.estimate_cycle(card) == %{closing_day: 28, due_day: 5}
+    end
+
+    test "nils when the account has no boletos" do
+      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+      assert CashLens.CreditCards.estimate_cycle(card) == %{closing_day: nil, due_day: nil}
+    end
+  end
 end
