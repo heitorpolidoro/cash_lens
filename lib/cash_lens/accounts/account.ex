@@ -14,6 +14,8 @@ defmodule CashLens.Accounts.Account do
     field :parser_type, :string
     field :is_closed, :boolean, default: false
     field :is_credit_card, :boolean, default: false
+    field :closing_day, :integer
+    field :due_day, :integer
 
     timestamps(type: :utc_datetime)
   end
@@ -30,8 +32,12 @@ defmodule CashLens.Accounts.Account do
       :accepts_import,
       :parser_type,
       :is_closed,
-      :is_credit_card
+      :is_credit_card,
+      :closing_day,
+      :due_day
     ])
     |> validate_required([:name, :bank, :balance, :accepts_import, :is_closed])
+    |> validate_inclusion(:closing_day, 1..31)
+    |> validate_inclusion(:due_day, 1..31)
   end
 end

@@ -102,6 +102,35 @@ defmodule CashLens.AccountsTest do
       refute Map.has_key?(result, "Missing")
       refute Map.has_key?(result, "Gamma")
     end
+
+    test "changeset accepts closing_day/due_day and validates range" do
+      valid =
+        Account.changeset(%Account{}, %{
+          name: "C",
+          bank: "B",
+          balance: 0,
+          accepts_import: true,
+          is_closed: false,
+          is_credit_card: true,
+          closing_day: 3,
+          due_day: 10
+        })
+
+      assert valid.valid?
+
+      invalid =
+        Account.changeset(%Account{}, %{
+          name: "C",
+          bank: "B",
+          balance: 0,
+          accepts_import: true,
+          is_closed: false,
+          closing_day: 0,
+          due_day: 40
+        })
+
+      refute invalid.valid?
+    end
   end
 
   describe "find_accounts_by_bank_and_name/2" do
