@@ -21,6 +21,24 @@ defmodule CashLens.Installments do
   end
 
   @doc """
+  Sum of installment parcels due in `month` for groups that touch
+  `account_id` (i.e. at least one of the group's transactions belongs to
+  that account). Positive magnitude, same convention as the internal
+  month-total helper used by `upcoming_installments/1`.
+  """
+  def account_installment_total(account_id, %Date{} = month) do
+    from(g in InstallmentGroup,
+      join: t in assoc(g, :transactions),
+      where: t.account_id == ^account_id,
+      distinct: true,
+      select: g
+    )
+    |> Repo.all()
+    |> Enum.filter(&parcel_due_in_month?(&1, month))
+    |> Enum.reduce(Decimal.new("0"), fn g, acc -> Decimal.add(acc, parcel_value(g)) end)
+  end
+
+  @doc """
   Gets a single installment group.
   """
   def get_installment_group!(id) do

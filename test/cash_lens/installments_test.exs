@@ -424,4 +424,53 @@ defmodule CashLens.InstallmentsTest do
       assert Installments.list_group_transactions(group.id) == []
     end
   end
+
+  describe "account_installment_total/2" do
+    test "sums parcels due in the given month for groups touching the account" do
+      card = account_fixture(%{is_credit_card: true})
+      other_card = account_fixture(%{is_credit_card: true})
+
+      {:ok, group} =
+        Installments.create_installment_group(%{
+          description_pattern: "FORECAST_TEST_ITEM",
+          installments: 3,
+          start_date: ~D[2026-06-01],
+          total_amount: Decimal.new("300.00")
+        })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: group.id,
+        installment_number: 1,
+        date: ~D[2026-06-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      # A group touching a DIFFERENT account must not be counted.
+      {:ok, other_group} =
+        Installments.create_installment_group(%{
+          description_pattern: "FORECAST_TEST_OTHER",
+          installments: 2,
+          start_date: ~D[2026-06-01],
+          total_amount: Decimal.new("200.00")
+        })
+
+      transaction_fixture(%{
+        account_id: other_card.id,
+        installment_group_id: other_group.id,
+        installment_number: 1,
+        date: ~D[2026-06-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      total = Installments.account_installment_total(card.id, ~D[2026-07-01])
+      assert Decimal.equal?(total, Decimal.new("100.00"))
+    end
+
+    test "returns 0 when nothing is due for the account in that month" do
+      card = account_fixture(%{is_credit_card: true})
+      total = Installments.account_installment_total(card.id, ~D[2026-01-01])
+      assert Decimal.equal?(total, Decimal.new("0"))
+    end
+  end
 end
