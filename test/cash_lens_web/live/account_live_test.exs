@@ -162,6 +162,46 @@ defmodule CashLensWeb.AccountLiveTest do
     end
   end
 
+  describe "Credit card billing cycle" do
+    test "credit-card account form shows cycle fields and estimate button", %{conn: conn} do
+      account = account_fixture(%{is_credit_card: true})
+      {:ok, _view, html} = live(conn, ~p"/accounts/#{account}/edit")
+      assert html =~ "Dia de fechamento"
+      assert html =~ "Dia de vencimento"
+      assert html =~ "Estimar do histórico"
+    end
+
+    test "non-credit-card account form hides cycle fields", %{conn: conn} do
+      account = account_fixture(%{is_credit_card: false})
+      {:ok, _view, html} = live(conn, ~p"/accounts/#{account}/edit")
+      refute html =~ "Dia de fechamento"
+      refute html =~ "Estimar do histórico"
+    end
+
+    test "estimate_cycle fills fields from history without saving", %{conn: conn} do
+      account = account_fixture(%{is_credit_card: true})
+
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: account,
+        due_date: ~D[2026-06-15]
+      })
+
+      {:ok, form_live, _html} = live(conn, ~p"/accounts/#{account}/edit")
+
+      html =
+        form_live
+        |> element("button", "Estimar do histórico")
+        |> render_click()
+
+      assert html =~ ~s(value="15")
+      assert html =~ ~s(value="8")
+
+      reloaded = CashLens.Accounts.get_account!(account.id)
+      assert reloaded.closing_day == nil
+      assert reloaded.due_day == nil
+    end
+  end
+
   describe "Show" do
     setup [:create_account]
 

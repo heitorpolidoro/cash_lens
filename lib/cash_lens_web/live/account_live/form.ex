@@ -85,6 +85,23 @@ defmodule CashLensWeb.AccountLive.Form do
           <.input field={@form[:color]} type="text" label="Cor (opcional)" class="w-32" />
         </div>
 
+        <div :if={@form[:is_credit_card].value in [true, "true"]} class="space-y-4">
+          <h3 class="text-sm font-black uppercase tracking-wider opacity-40">Ciclo de Fatura</h3>
+          <div class="flex flex-wrap items-end gap-4">
+            <.input
+              field={@form[:closing_day]}
+              type="number"
+              label="Dia de fechamento"
+              min="1"
+              max="31"
+            />
+            <.input field={@form[:due_day]} type="number" label="Dia de vencimento" min="1" max="31" />
+            <button type="button" class="btn btn-xs btn-outline" phx-click="estimate_cycle">
+              Estimar do histórico
+            </button>
+          </div>
+        </div>
+
         <div class="flex items-end gap-4">
           <div class="flex-1">
             <.input field={@form[:icon]} type="text" label="URL do Ícone (opcional)" />
@@ -162,6 +179,21 @@ defmodule CashLensWeb.AccountLive.Form do
 
   def handle_event("save", %{"account" => account_params}, socket) do
     save_account(socket, socket.assigns.live_action, account_params)
+  end
+
+  def handle_event("estimate_cycle", _params, socket) do
+    account = socket.assigns.account
+
+    if account.id do
+      est = CashLens.CreditCards.estimate_cycle(account)
+
+      changeset =
+        Ecto.Changeset.change(account, closing_day: est.closing_day, due_day: est.due_day)
+
+      {:noreply, assign(socket, :form, to_form(changeset))}
+    else
+      {:noreply, socket}
+    end
   end
 
   defp save_account(socket, :edit, account_params) do
