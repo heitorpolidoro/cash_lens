@@ -76,6 +76,34 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
     {:noreply, assign(socket, :batch_progress, @idle_progress)}
   end
 
+  @impl true
+  def handle_event("update_cycle", %{"account-id" => account_id, "due-day" => due_day}, socket) do
+    due_day = String.to_integer(due_day)
+    closing_day = wrap_closing_day(due_day)
+
+    account = CashLens.Repo.get!(CashLens.Accounts.Account, account_id)
+
+    account
+    |> Ecto.Changeset.change(due_day: due_day, closing_day: closing_day)
+    |> CashLens.Repo.update()
+
+    {:noreply, update(socket, :batch_progress, &drop_cycle_warning(&1, account_id))}
+  end
+
+  @closing_offset 7
+
+  defp wrap_closing_day(due_day) do
+    closing = due_day - @closing_offset
+    if closing < 1, do: closing + 30, else: closing
+  end
+
+  defp drop_cycle_warning(%{result: nil} = progress, _account_id), do: progress
+
+  defp drop_cycle_warning(%{result: result} = progress, account_id) do
+    updated_warnings = Enum.reject(result.cycle_warnings, &(&1.account_id == account_id))
+    %{progress | result: %{result | cycle_warnings: updated_warnings}}
+  end
+
   defp start_batch_import(path, extra_opts) do
     pid = self()
 
@@ -345,6 +373,27 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
         <div :for={error <- @result.errors} class="flex items-center gap-2 text-error">
           <.icon name="hero-x-circle" class="size-4 shrink-0" />
           <span class="text-xs">{error}</span>
+        </div>
+      </div>
+
+      <div :if={@result.cycle_warnings != []} class="mt-4">
+        <p class="text-xs font-bold uppercase opacity-60">Divergências de ciclo</p>
+        <div
+          :for={w <- @result.cycle_warnings}
+          class="flex items-center justify-between text-xs py-1"
+        >
+          <span>
+            {w.account_name}: vencimento do arquivo (dia {w.file_due_day}) ≠ configurado (dia {w.configured_due_day})
+          </span>
+          <button
+            class="btn btn-xs"
+            phx-click="update_cycle"
+            phx-value-account-id={w.account_id}
+            phx-value-due-day={w.file_due_day}
+            phx-target={@myself}
+          >
+            Atualizar
+          </button>
         </div>
       </div>
 
