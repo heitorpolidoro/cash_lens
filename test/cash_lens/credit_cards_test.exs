@@ -85,6 +85,16 @@ defmodule CashLens.CreditCardsTest do
     assert row.absorbed_into == nil
   end
 
+  test "list_statements orders by competência descending (nulls last)" do
+    account = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    older = statement_fixture(%{account: account, competencia: ~D[2026-01-01]})
+    newer = statement_fixture(%{account: account, competencia: ~D[2026-03-01]})
+    no_comp = statement_fixture(%{account: account, competencia: nil, due_date: nil})
+
+    ids = CashLens.CreditCards.list_statements() |> Enum.map(& &1.statement.id)
+    assert ids == [newer.id, older.id, no_comp.id]
+  end
+
   test "get_statement_detail returns transactions and payment" do
     account = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     s = statement_fixture(%{account: account})

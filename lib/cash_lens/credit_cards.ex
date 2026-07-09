@@ -138,7 +138,7 @@ defmodule CashLens.CreditCards do
     statements =
       from(s in Statement,
         preload: [:account, :absorbed_by],
-        order_by: [desc: s.due_date, desc: s.competencia]
+        order_by: [desc_nulls_last: s.competencia, desc_nulls_last: s.due_date]
       )
       |> Repo.all()
 
