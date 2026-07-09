@@ -18,6 +18,15 @@ defmodule CashLens.CreditCards do
   def get_statement!(id), do: Repo.get!(Statement, id)
 
   @doc """
+  Lists the boletos (statements with a `due_date`) belonging to an account.
+  Used by the directory importer to detect billing-cycle divergences.
+  """
+  def list_boletos_for_account(account_id) do
+    from(s in Statement, where: s.account_id == ^account_id and not is_nil(s.due_date))
+    |> Repo.all()
+  end
+
+  @doc """
   Resolves a statement's competência: the parsed due-date month when the source
   carried a Vencimento, otherwise the month of the statement's latest
   transaction. The fallback keeps every statement labelled — including sources

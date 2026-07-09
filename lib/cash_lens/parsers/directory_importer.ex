@@ -52,7 +52,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
 
   defmodule Result do
     @moduledoc "Structured outcome of a directory import."
-    defstruct accounts: [], warnings: [], errors: []
+    defstruct accounts: [], warnings: [], errors: [], cycle_warnings: []
   end
 
   @supported_extensions ~w(.csv .ofx .pdf .txt)
@@ -235,7 +235,37 @@ defmodule CashLens.Parsers.DirectoryImporter do
     emit.({:account_done, summary})
 
     entry = Map.merge(summary, %{account: account, bank: bank, name: name, folder_path: label})
-    %{result | accounts: result.accounts ++ [entry]}
+
+    statements = CashLens.CreditCards.list_boletos_for_account(account.id)
+    divergences = cycle_divergences(account, statements)
+
+    %{
+      result
+      | accounts: result.accounts ++ [entry],
+        cycle_warnings: result.cycle_warnings ++ divergences
+    }
+  end
+
+  @doc false
+  # Compares each statement's due_date day against the account's configured
+  # due_day, returning one divergence entry per mismatch. Statements without a
+  # due_date (non-boleto statements) are ignored, as is an account without a
+  # configured due_day. Public (but undocumented) so it can be exercised
+  # directly in tests.
+  def cycle_divergences(%{due_day: nil}, _statements), do: []
+
+  def cycle_divergences(account, statements) do
+    statements
+    |> Enum.filter(&(&1.due_date != nil and &1.due_date.day != account.due_day))
+    |> Enum.map(fn s ->
+      %{
+        account_id: account.id,
+        account_name: account.name,
+        file: s.source_file,
+        file_due_day: s.due_date.day,
+        configured_due_day: account.due_day
+      }
+    end)
   end
 
   @doc """

@@ -1,6 +1,7 @@
 defmodule CashLens.Parsers.DirectoryImporterTest do
   use CashLens.DataCase, async: false
   import CashLens.AccountsFixtures
+  import CashLens.CreditCardsFixtures
 
   alias CashLens.Parsers.DirectoryImporter
   alias CashLens.Parsers.DirectoryImporter.Result
@@ -164,6 +165,43 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
                DirectoryImporter.run(root, skip_installments: true)
 
       assert error =~ "não encontrada"
+    end
+  end
+
+  describe "cycle_divergences/2" do
+    test "flags a boleto whose Vencimento day differs from the account's due_day" do
+      account = account_fixture(%{is_credit_card: true, due_day: 7})
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          due_date: ~D[2026-06-16],
+          source_file: "fatura.pdf"
+        })
+
+      assert [warning] = DirectoryImporter.cycle_divergences(account, [statement])
+
+      assert warning == %{
+               account_id: account.id,
+               account_name: account.name,
+               file: "fatura.pdf",
+               file_due_day: 16,
+               configured_due_day: 7
+             }
+    end
+
+    test "returns [] when the Vencimento day matches the configured due_day" do
+      account = account_fixture(%{is_credit_card: true, due_day: 16})
+      statement = statement_fixture(%{account: account, due_date: ~D[2026-06-16]})
+
+      assert DirectoryImporter.cycle_divergences(account, [statement]) == []
+    end
+
+    test "returns [] when the account has no configured due_day" do
+      account = account_fixture(%{is_credit_card: true, due_day: nil})
+      statement = statement_fixture(%{account: account, due_date: ~D[2026-06-16]})
+
+      assert DirectoryImporter.cycle_divergences(account, [statement]) == []
     end
   end
 
