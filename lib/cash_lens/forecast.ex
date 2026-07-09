@@ -13,6 +13,9 @@ defmodule CashLens.Forecast do
   alias CashLens.Transactions.Transaction
   alias CashLens.Accounting
   alias CashLens.Accounts
+  alias CashLens.CreditCards
+  alias CashLens.CreditCards.Statement
+  alias CashLens.Installments
 
   @history_months 6
   @min_occurrences 2
@@ -264,5 +267,107 @@ defmodule CashLens.Forecast do
   defp clamp_day(year, month, day) do
     last_day = Date.new!(year, month, 1) |> Date.days_in_month()
     Date.new!(year, month, min(day, last_day))
+  end
+
+  @doc """
+  One outflow occurrence per credit-card account (with a configured
+  closing_day/due_day) per due-month in [today, horizon_end]: the real
+  unpaid boleto for that month if one was imported, otherwise an estimate
+  from the account's most recent boleto (within @history_months) plus that
+  month's known installments. Paid months and cycle-less accounts produce
+  no occurrence.
+  """
+  def card_occurrences(today, horizon_end) do
+    card_accounts()
+    |> Enum.flat_map(&card_account_occurrences(&1, today, horizon_end))
+  end
+
+  defp card_accounts do
+    Accounts.list_accounts()
+    |> Enum.filter(fn a ->
+      a.is_credit_card and not a.is_closed and is_integer(a.closing_day) and
+        is_integer(a.due_day)
+    end)
+  end
+
+  defp card_account_occurrences(account, today, horizon_end) do
+    card_due_dates(account.due_day, today, horizon_end)
+    |> Enum.map(&card_occurrence_for_date(account, &1))
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp card_due_dates(due_day, today, horizon_end) do
+    next_occurrence_date(due_day, today)
+    |> Stream.iterate(&next_month_date(&1, due_day))
+    |> Enum.take_while(&(Date.compare(&1, horizon_end) != :gt))
+  end
+
+  defp card_occurrence_for_date(account, date) do
+    month = Date.beginning_of_month(date)
+
+    case statement_for_month(account.id, month) do
+      %Statement{payment_transaction_id: nil} = s ->
+        build_card_occurrence(account, s.due_date, statement_amount(s), :boleto)
+
+      %Statement{} ->
+        nil
+
+      nil ->
+        case estimate_for_month(account, month) do
+          nil -> nil
+          amount -> build_card_occurrence(account, date, amount, :estimado)
+        end
+    end
+  end
+
+  defp statement_for_month(account_id, month) do
+    month_end = Date.end_of_month(month)
+
+    from(s in Statement,
+      where: s.account_id == ^account_id and s.due_date >= ^month and s.due_date <= ^month_end
+    )
+    |> Repo.one()
+  end
+
+  defp statement_amount(%Statement{total_a_pagar: total}) when not is_nil(total),
+    do: Decimal.negate(total)
+
+  defp statement_amount(%Statement{id: id}) do
+    id
+    |> CreditCards.statement_transactions()
+    |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
+  end
+
+  defp estimate_for_month(account, month) do
+    since = Date.add(Date.utc_today(), -30 * @history_months)
+
+    recent =
+      from(s in Statement,
+        where: s.account_id == ^account.id and not is_nil(s.due_date) and s.due_date >= ^since,
+        order_by: [desc: s.due_date],
+        limit: 1
+      )
+      |> Repo.one()
+
+    case recent do
+      nil ->
+        nil
+
+      statement ->
+        recent_month = Date.beginning_of_month(statement.due_date)
+        recent_installments = Installments.account_installment_total(account.id, recent_month)
+        variable = Decimal.add(statement_amount(statement), recent_installments)
+        future_installments = Installments.account_installment_total(account.id, month)
+        Decimal.sub(variable, future_installments)
+    end
+  end
+
+  defp build_card_occurrence(account, date, amount, origin) do
+    %{
+      date: date,
+      item: %{id: account.id, label: "Fatura #{account.name}", amount: amount, is_salary: false},
+      balance_after: nil,
+      origin: origin
+    }
   end
 end

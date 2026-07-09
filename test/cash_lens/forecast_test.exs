@@ -434,4 +434,129 @@ defmodule CashLens.ForecastTest do
       assert Forecast.next_income_date(projection) == Date.add(Date.utc_today(), 30)
     end
   end
+
+  describe "card_occurrences/2" do
+    setup do
+      card =
+        CashLens.AccountsFixtures.account_fixture(%{
+          is_credit_card: true,
+          closing_day: 3,
+          due_day: 10
+        })
+
+      %{card: card}
+    end
+
+    test "real unpaid boleto due in range uses its exact total and date", %{card: card} do
+      s =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: ~D[2026-08-10],
+          competencia: ~D[2026-08-01],
+          total_a_pagar: Decimal.new("1500.00")
+        })
+
+      [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      assert occ.date == s.due_date
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-1500.00"))
+      assert occ.origin == :boleto
+      assert occ.item.id == card.id
+    end
+
+    test "paid boleto produces no occurrence for its month", %{card: card} do
+      payment =
+        CashLens.TransactionsFixtures.transaction_fixture(%{
+          account_id: CashLens.AccountsFixtures.account_fixture().id,
+          amount: Decimal.new("1500.00")
+        })
+
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: ~D[2026-08-10],
+        competencia: ~D[2026-08-01],
+        total_a_pagar: Decimal.new("1500.00"),
+        payment_transaction_id: payment.id
+      })
+
+      assert CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31]) == []
+    end
+
+    test "no boleto for the month estimates from the recent boleto plus that month's installments",
+         %{
+           card: card
+         } do
+      # Recent boleto (within 6 months): total 2000, with a 500 installment of its own.
+      recent =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: Date.add(Date.utc_today(), -30),
+          competencia: Date.beginning_of_month(Date.add(Date.utc_today(), -30)),
+          total_a_pagar: Decimal.new("2000.00")
+        })
+
+      {:ok, recent_group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "RECENT_PARCEL",
+          installments: 2,
+          start_date: Date.beginning_of_month(recent.due_date),
+          total_amount: Decimal.new("1000.00")
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: recent_group.id,
+        installment_number: 1,
+        date: recent.due_date,
+        amount: Decimal.new("-500.00")
+      })
+
+      # Future month has its own different installment of 200.
+      future_month = Date.add(Date.utc_today(), 60)
+      future_first = Date.beginning_of_month(future_month)
+
+      {:ok, future_group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "FUTURE_PARCEL",
+          installments: 2,
+          start_date: future_first,
+          total_amount: Decimal.new("400.00")
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: future_group.id,
+        installment_number: 1,
+        date: future_first,
+        amount: Decimal.new("-200.00")
+      })
+
+      occurrences =
+        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+
+      assert [occ] = occurrences
+      assert occ.origin == :estimado
+      # variable = -2000 + 500 = -1500 ; estimate = -1500 - 200 = -1700
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-1700.00"))
+    end
+
+    test "no recent boleto within history window yields no occurrences", %{card: card} do
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: Date.add(Date.utc_today(), -400),
+        competencia: Date.beginning_of_month(Date.add(Date.utc_today(), -400)),
+        total_a_pagar: Decimal.new("2000.00")
+      })
+
+      future_month = Date.add(Date.utc_today(), 60)
+
+      assert CashLens.Forecast.card_occurrences(future_month, Date.end_of_month(future_month)) ==
+               []
+    end
+
+    test "account without a configured cycle yields no occurrences" do
+      CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+      today = Date.utc_today()
+      assert CashLens.Forecast.card_occurrences(today, Date.add(today, 60)) == []
+    end
+  end
 end
