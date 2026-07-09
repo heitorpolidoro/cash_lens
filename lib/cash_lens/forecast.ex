@@ -172,10 +172,13 @@ defmodule CashLens.Forecast do
     today = Date.utc_today()
     horizon_end = Date.add(today, horizon_days)
 
-    occurrences =
+    recurring_occurrences =
       list_recurring_items()
       |> Enum.filter(& &1.active)
       |> Enum.flat_map(&future_occurrences(&1, today, horizon_end))
+
+    occurrences =
+      (recurring_occurrences ++ card_occurrences(today, horizon_end))
       |> Enum.sort_by(& &1.date, Date)
       |> with_running_balance(starting_balance)
 

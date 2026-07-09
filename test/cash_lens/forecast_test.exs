@@ -332,6 +332,7 @@ defmodule CashLens.ForecastTest do
   describe "project/1" do
     import CashLens.AccountsFixtures
     import CashLens.TransactionsFixtures
+    import CashLens.CreditCardsFixtures
 
     setup do
       account = account_fixture(%{balance: "1000.00"})
@@ -349,6 +350,30 @@ defmodule CashLens.ForecastTest do
       assert Decimal.equal?(projection.starting_balance, "1000.00")
       refute cc_account.is_credit_card == false
       assert closed.is_closed
+    end
+
+    test "includes card occurrences merged with recurring items" do
+      card = account_fixture(%{is_credit_card: true, closing_day: 3, due_day: 10})
+
+      s =
+        statement_fixture(%{
+          account: card,
+          due_date: Date.add(Date.utc_today(), 5),
+          competencia: Date.beginning_of_month(Date.add(Date.utc_today(), 5)),
+          total_a_pagar: Decimal.new("800.00")
+        })
+
+      projection = Forecast.project(30)
+
+      assert Enum.any?(projection.occurrences, fn occ ->
+               occ.origin == :boleto and occ.date == s.due_date and
+                 Decimal.equal?(occ.item.amount, Decimal.new("-800.00"))
+             end)
+
+      # Merged list stays sorted by date and every occurrence got a balance_after.
+      dates = Enum.map(projection.occurrences, & &1.date)
+      assert dates == Enum.sort(dates, Date)
+      assert Enum.all?(projection.occurrences, &(&1.balance_after != nil))
     end
 
     test "inactive items don't appear in the projection" do
