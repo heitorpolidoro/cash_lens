@@ -448,6 +448,35 @@ defmodule CashLens.CreditCardsTest do
     assert CashLens.CreditCards.reconcile_pending() == 0
   end
 
+  test "recompute_competencia fixes a non-boleto's competência from the cycle" do
+    card =
+      CashLens.AccountsFixtures.account_fixture(%{
+        is_credit_card: true,
+        closing_day: 3,
+        due_day: 10
+      })
+
+    s =
+      statement_fixture(%{
+        account: card,
+        due_date: nil,
+        competencia: ~D[2026-01-01],
+        total_a_pagar: Decimal.new("50.00")
+      })
+
+    CashLens.TransactionsFixtures.transaction_fixture(%{
+      account_id: card.id,
+      amount: Decimal.new("-50.00"),
+      import_batch_id: s.id,
+      date: ~D[2026-01-27]
+    })
+
+    assert CashLens.CreditCards.recompute_competencia() == 1
+    assert CashLens.CreditCards.get_statement!(s.id).competencia == ~D[2026-02-01]
+    # idempotent
+    assert CashLens.CreditCards.recompute_competencia() == 0
+  end
+
   describe "estimate_cycle/1" do
     test "estimates due_day as the modal boleto due day and closing 7 days earlier" do
       card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})

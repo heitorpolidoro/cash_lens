@@ -4,6 +4,7 @@ defmodule CashLens.CreditCards do
   alias CashLens.Repo
   alias CashLens.CreditCards.Statement
   alias CashLens.Transactions.Transaction
+  alias CashLens.Accounts.Account
   alias Ecto.Multi
 
   @closing_offset 7
@@ -445,6 +446,44 @@ defmodule CashLens.CreditCards do
         closing_day = if closing < 1, do: closing + 30, else: closing
         %{closing_day: closing_day, due_day: due_day}
     end
+  end
+
+  @doc """
+  Recomputes competência for statements on credit-card accounts that have a
+  cycle, via `competencia_for/3`. Updates only when it changes; returns the
+  count updated. Idempotent. Boletos (with due_date) resolve to their due month
+  either way.
+  """
+  def recompute_competencia do
+    accounts =
+      from(a in Account,
+        where: a.is_credit_card == true and not is_nil(a.closing_day) and not is_nil(a.due_day)
+      )
+      |> Repo.all()
+
+    Enum.reduce(accounts, 0, fn account, count ->
+      statements = from(s in Statement, where: s.account_id == ^account.id) |> Repo.all()
+
+      Enum.reduce(statements, count, fn s, acc ->
+        meta = %{
+          due_date: s.due_date,
+          competencia: s.due_date && Date.beginning_of_month(s.due_date)
+        }
+
+        new_comp = competencia_for(account, meta, statement_transactions(s.id))
+
+        if new_comp && new_comp != s.competencia do
+          {:ok, _} = update_statement_competencia(s, new_comp)
+          acc + 1
+        else
+          acc
+        end
+      end)
+    end)
+  end
+
+  defp update_statement_competencia(%Statement{} = s, competencia) do
+    s |> Statement.changeset(%{competencia: competencia}) |> Repo.update()
   end
 
   defp mode(list) do
