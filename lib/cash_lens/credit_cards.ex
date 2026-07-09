@@ -34,6 +34,68 @@ defmodule CashLens.CreditCards do
   end
 
   @doc """
+  Competência for a statement, preferring the cycle over the transaction-date
+  heuristic. Boleto (meta already has a competência from its Vencimento) → that.
+  Non-boleto with a configured cycle → derived from closing_day/due_day and the
+  latest transaction. Non-boleto without a cycle → `competencia_from/2`.
+  """
+  def competencia_for(_account, %{competencia: %Date{} = competencia}, _transactions),
+    do: competencia
+
+  def competencia_for(%{closing_day: c, due_day: d}, _meta, transactions)
+      when is_integer(c) and is_integer(d) do
+    case latest_transaction_date(transactions) do
+      nil ->
+        nil
+
+      latest ->
+        latest |> first_closing_after(c) |> due_from_closing(c, d) |> Date.beginning_of_month()
+    end
+  end
+
+  def competencia_for(_account, meta, transactions),
+    do: competencia_from(meta.competencia, transactions)
+
+  defp latest_transaction_date(transactions) do
+    transactions
+    |> Enum.map(&Map.get(&1, :date))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.max(Date, fn -> nil end)
+  end
+
+  # First `closing_day` strictly after `date` (rolls to next month if the
+  # closing day of `date`'s month has already passed).
+  defp first_closing_after(%Date{} = date, closing_day) do
+    this = clamp_day(date.year, date.month, closing_day)
+
+    if Date.compare(this, date) == :gt do
+      this
+    else
+      {y, m} = next_month(date.year, date.month)
+      clamp_day(y, m, closing_day)
+    end
+  end
+
+  # Due date after a closing: same month when due_day is later than closing_day,
+  # otherwise the following month.
+  defp due_from_closing(%Date{} = closing, closing_day, due_day) do
+    if due_day > closing_day do
+      clamp_day(closing.year, closing.month, due_day)
+    else
+      {y, m} = next_month(closing.year, closing.month)
+      clamp_day(y, m, due_day)
+    end
+  end
+
+  defp clamp_day(year, month, day) do
+    max_day = Date.days_in_month(Date.new!(year, month, 1))
+    Date.new!(year, month, min(day, max_day))
+  end
+
+  defp next_month(year, 12), do: {year + 1, 1}
+  defp next_month(year, month), do: {year, month + 1}
+
+  @doc """
   Backfills a single already-imported statement file: creates a `Statement`
   record for it, then stamps the matching *already-existing* transactions
   with `import_batch_id` by recomputing the exact fingerprint the original

@@ -61,6 +61,44 @@ defmodule CashLens.CreditCardsTest do
     end
   end
 
+  describe "competencia_for/3" do
+    @cycle %{closing_day: 3, due_day: 10}
+
+    test "boleto uses the parsed competência (due month)" do
+      meta = %{due_date: ~D[2026-03-10], total_a_pagar: nil, competencia: ~D[2026-03-01]}
+      assert CashLens.CreditCards.competencia_for(@cycle, meta, []) == ~D[2026-03-01]
+    end
+
+    test "non-boleto with cycle: latest tx 27/01, closing 3, due 10 -> Fev/26" do
+      meta = %{due_date: nil, total_a_pagar: nil, competencia: nil}
+      txns = [%{date: ~D[2026-01-12]}, %{date: ~D[2026-01-27]}]
+      assert CashLens.CreditCards.competencia_for(@cycle, meta, txns) == ~D[2026-02-01]
+    end
+
+    test "non-boleto, tx before closing_day stays in the same closing month" do
+      meta = %{due_date: nil, competencia: nil}
+
+      # closing 25, due 10 (due <= closing -> due next month). tx 20/06 -> closing 25/06 -> due 10/07
+      cycle = %{closing_day: 25, due_day: 10}
+
+      assert CashLens.CreditCards.competencia_for(cycle, meta, [%{date: ~D[2026-06-20]}]) ==
+               ~D[2026-07-01]
+    end
+
+    test "non-boleto without cycle falls back to transaction month" do
+      meta = %{due_date: nil, competencia: nil}
+      cycle = %{closing_day: nil, due_day: nil}
+
+      assert CashLens.CreditCards.competencia_for(cycle, meta, [%{date: ~D[2026-01-27]}]) ==
+               ~D[2026-01-01]
+    end
+
+    test "non-boleto with cycle but no transactions -> nil" do
+      assert CashLens.CreditCards.competencia_for(@cycle, %{due_date: nil, competencia: nil}, []) ==
+               nil
+    end
+  end
+
   test "list_statements returns rows with line totals and status" do
     account = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     s = statement_fixture(%{account: account, total_a_pagar: Decimal.new("30.00")})
