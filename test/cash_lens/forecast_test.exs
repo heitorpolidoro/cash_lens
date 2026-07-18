@@ -607,5 +607,76 @@ defmodule CashLens.ForecastTest do
       today = Date.utc_today()
       assert CashLens.Forecast.card_occurrences(today, Date.add(today, 60)) == []
     end
+
+    test "estimate subtracts the recent boleto's installment using its competencia month, not its due_date month",
+         %{card: card} do
+      recent_due_date = Date.add(Date.utc_today(), -30)
+      due_month = Date.beginning_of_month(recent_due_date)
+      competencia_month = due_month |> Date.add(-32) |> Date.beginning_of_month()
+
+      recent =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: recent_due_date,
+          competencia: competencia_month,
+          total_a_pagar: Decimal.new("2000.00")
+        })
+
+      {:ok, competencia_group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "COMPETENCIA_PARCEL",
+          installments: 2,
+          start_date: competencia_month,
+          total_amount: Decimal.new("1000.00")
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: competencia_group.id,
+        installment_number: 1,
+        date: competencia_month,
+        amount: Decimal.new("-500.00")
+      })
+
+      # Sanity: due_date and competencia really are in different (non-adjacent) months.
+      refute Date.beginning_of_month(recent.due_date) == recent.competencia
+
+      future_month = Date.add(Date.utc_today(), 60)
+      future_first = Date.beginning_of_month(future_month)
+
+      occurrences =
+        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+
+      assert [occ] = occurrences
+      assert occ.origin == :estimado
+      # If keyed by competencia (correct): variable = -2000 + 500 = -1500, no future
+      # installments this month, so estimate stays -1500.00.
+      # If keyed by due_date's month (the bug): the installment lands outside that
+      # month, recent_installments would be 0, giving -2000.00 instead.
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-1500.00"))
+    end
+
+    test "two statements due in the same month do not crash and resolve deterministically", %{
+      card: card
+    } do
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: ~D[2026-08-05],
+        competencia: ~D[2026-07-01],
+        total_a_pagar: Decimal.new("100.00")
+      })
+
+      s2 =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: ~D[2026-08-20],
+          competencia: ~D[2026-08-01],
+          total_a_pagar: Decimal.new("300.00")
+        })
+
+      assert [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      assert occ.date == s2.due_date
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-300.00"))
+    end
   end
 end

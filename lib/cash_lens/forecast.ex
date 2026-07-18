@@ -336,7 +336,9 @@ defmodule CashLens.Forecast do
     month_end = Date.end_of_month(month)
 
     from(s in Statement,
-      where: s.account_id == ^account_id and s.due_date >= ^month and s.due_date <= ^month_end
+      where: s.account_id == ^account_id and s.due_date >= ^month and s.due_date <= ^month_end,
+      order_by: [desc: s.due_date, desc: s.inserted_at],
+      limit: 1
     )
     |> Repo.one()
   end
@@ -366,7 +368,7 @@ defmodule CashLens.Forecast do
         nil
 
       statement ->
-        recent_month = Date.beginning_of_month(statement.due_date)
+        recent_month = statement.competencia || Date.beginning_of_month(statement.due_date)
         recent_installments = Installments.account_installment_total(account.id, recent_month)
         variable = Decimal.add(statement_amount(statement), recent_installments)
         future_installments = Installments.account_installment_total(account.id, month)
