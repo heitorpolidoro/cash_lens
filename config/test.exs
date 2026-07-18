@@ -9,6 +9,10 @@ config :cash_lens, CashLens.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
+  # 5433 matches this project's own docker-compose.yml ("5433:5432" on the
+  # `db` service) for host-side connections; override via DATABASE_PORT if
+  # running Postgres some other way.
+  port: String.to_integer(System.get_env("DATABASE_PORT", "5433")),
   database: "cash_lens_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
