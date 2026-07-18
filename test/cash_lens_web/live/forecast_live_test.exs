@@ -75,5 +75,32 @@ defmodule CashLensWeb.ForecastLiveTest do
       assert reloaded.day_of_month == 20
       assert reloaded.manually_edited == true
     end
+
+    test "shows a Boleto badge for a card occurrence and Estimado for an estimated one", %{
+      conn: conn
+    } do
+      due_day = 10
+
+      card =
+        CashLens.AccountsFixtures.account_fixture(%{
+          is_credit_card: true,
+          closing_day: 3,
+          due_day: due_day,
+          name: "Ourocard"
+        })
+
+      due_date = CashLens.Forecast.next_occurrence_date(due_day, Date.utc_today())
+
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: due_date,
+        competencia: Date.beginning_of_month(due_date),
+        total_a_pagar: Decimal.new("500.00")
+      })
+
+      {:ok, _view, html} = live(conn, ~p"/forecast")
+      assert html =~ "Fatura Ourocard"
+      assert html =~ "Boleto"
+    end
   end
 end

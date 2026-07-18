@@ -234,6 +234,18 @@ defmodule CashLensWeb.ForecastLive.Index do
                       <div class="flex items-center gap-1.5 flex-wrap">
                         <span class="text-xs font-bold">{occ.item.label}</span>
                         <span
+                          :if={Map.get(occ, :origin) == :boleto}
+                          class="badge badge-xs badge-success ml-1"
+                        >
+                          Boleto
+                        </span>
+                        <span
+                          :if={Map.get(occ, :origin) == :estimado}
+                          class="badge badge-xs badge-ghost ml-1"
+                        >
+                          Estimado
+                        </span>
+                        <span
                           :if={occ.item.is_salary}
                           class="badge badge-success badge-xs text-[8px] font-black uppercase tracking-wider"
                         >
