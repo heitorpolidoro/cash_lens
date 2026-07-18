@@ -257,6 +257,29 @@ defmodule CashLens.ForecastTest do
       assert reloaded.day_of_month == 1
       assert Decimal.equal?(reloaded.amount, "-1.00")
     end
+
+    test "never creates a recurring_item for a credit-card category" do
+      regular_account = account_fixture()
+
+      {:ok, category} =
+        CashLens.Categories.create_category(%{
+          name: "Cartão de Crédito",
+          slug: "cartao-de-credito",
+          type: "fixed"
+        })
+
+      for i <- 1..3 do
+        transaction_fixture(%{
+          account_id: regular_account.id,
+          category_id: category.id,
+          amount: Decimal.new("-100.00"),
+          date: Date.add(Date.utc_today(), -30 * i)
+        })
+      end
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0}
+      assert Forecast.list_recurring_items() == []
+    end
   end
 
   describe "resync_item/1" do

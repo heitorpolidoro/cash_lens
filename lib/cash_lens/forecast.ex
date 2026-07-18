@@ -79,7 +79,10 @@ defmodule CashLens.Forecast do
   existing items that haven't been manually edited.
   """
   def sync_all do
-    fixed_categories = Categories.list_categories() |> Enum.filter(&(&1.type == "fixed"))
+    fixed_categories =
+      Categories.list_categories()
+      |> Enum.filter(&(&1.type == "fixed" and not credit_card_category?(&1)))
+
     existing_by_category = Map.new(list_recurring_items(), &{&1.category_id, &1})
 
     Enum.reduce(fixed_categories, %{created: 0, updated: 0}, fn category, acc ->
@@ -114,6 +117,12 @@ defmodule CashLens.Forecast do
         acc
     end
   end
+
+  defp credit_card_category?(%Category{slug: slug}) when is_binary(slug) do
+    slug == "cartao-de-credito" or String.starts_with?(slug, "cartao-de-credito-")
+  end
+
+  defp credit_card_category?(_category), do: false
 
   @doc """
   Forces a single item to re-derive day_of_month/amount from history and
