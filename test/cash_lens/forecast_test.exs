@@ -377,16 +377,17 @@ defmodule CashLens.ForecastTest do
 
     test "includes card occurrences merged with recurring items" do
       card = account_fixture(%{is_credit_card: true, closing_day: 3, due_day: 10})
+      due_date = Forecast.next_occurrence_date(10, Date.utc_today())
 
       s =
         statement_fixture(%{
           account: card,
-          due_date: Date.add(Date.utc_today(), 5),
-          competencia: Date.beginning_of_month(Date.add(Date.utc_today(), 5)),
+          due_date: due_date,
+          competencia: Date.beginning_of_month(due_date),
           total_a_pagar: Decimal.new("800.00")
         })
 
-      projection = Forecast.project(30)
+      projection = Forecast.project(60)
 
       assert Enum.any?(projection.occurrences, fn occ ->
                occ.origin == :boleto and occ.date == s.due_date and
