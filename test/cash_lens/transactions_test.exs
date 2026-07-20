@@ -726,6 +726,89 @@ defmodule CashLens.TransactionsTest do
       [row] = Transactions.get_historical_summary()
       assert Decimal.equal?(row.expenses, Decimal.new("0"))
     end
+
+    test "get_historical_summary/1 excludes a Cartão de Crédito CHILD category (e.g. Pagamento) too" do
+      cc = cc_category()
+
+      pagamento =
+        category_fixture(%{
+          name: "Pagamento",
+          slug: "cartao-de-credito-pagamento",
+          parent_id: cc.id
+        })
+
+      market = other_category()
+      card = account_fixture(%{is_credit_card: true})
+      checking = account_fixture(%{is_credit_card: false})
+
+      # The bank-side debit that pays the card bill.
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-14391.19",
+        date: ~D[2026-06-16]
+      })
+
+      # The mirror credit inside the card account — this is what leaked as
+      # "income" before the fix, because its OWN category is the CHILD slug
+      # "cartao-de-credito-pagamento", not the parent "cartao-de-credito".
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: pagamento.id,
+        amount: "14391.19",
+        date: ~D[2026-06-16]
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: market.id,
+        amount: "10.00",
+        date: ~D[2026-06-12]
+      })
+
+      [row] = Transactions.get_historical_summary()
+      assert Decimal.equal?(row.income, Decimal.new("10.00"))
+      assert Decimal.equal?(row.expenses, Decimal.new("0"))
+    end
+
+    test "get_month_income_breakdown/2 excludes a Cartão de Crédito child category" do
+      cc = cc_category()
+
+      pagamento =
+        category_fixture(%{
+          name: "Pagamento",
+          slug: "cartao-de-credito-pagamento",
+          parent_id: cc.id
+        })
+
+      market = other_category()
+      card = account_fixture(%{is_credit_card: true})
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: pagamento.id,
+        amount: "14391.19",
+        date: ~D[2026-06-16]
+      })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: market.id,
+        amount: "10.00",
+        date: ~D[2026-06-12]
+      })
+
+      breakdown = Transactions.get_month_income_breakdown(2026, 6)
+
+      # The rollup groups the child under its PARENT's id, so checking for
+      # the child's own id would pass even with the bug present (false
+      # negative) — assert on the parent id and the total instead.
+      refute Enum.any?(breakdown, &(&1.category_id == cc.id))
+      assert Enum.any?(breakdown, &(&1.category_id == market.id))
+
+      total = Enum.reduce(breakdown, Decimal.new("0"), &Decimal.add(&2, &1.total))
+      assert Decimal.equal?(total, Decimal.new("10.00"))
+    end
   end
 
   describe "category breakdown excludes transactions with children" do

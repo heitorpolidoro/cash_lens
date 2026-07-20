@@ -4,6 +4,7 @@ defmodule CashLens.Transactions do
   """
 
   import Ecto.Query, warn: false
+  alias CashLens.Categories
   alias CashLens.Categories.Category
   alias CashLens.CreditCards.Matcher, as: CreditCardMatcher
   alias CashLens.Repo
@@ -477,7 +478,7 @@ defmodule CashLens.Transactions do
         where: t.date >= ^first and t.date <= ^last,
         where: t.amount < 0,
         # Transfers and credit-card payments are not spending categories, so exclude them.
-        where: c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
+        where: c.id not in ^excluded_report_category_ids(),
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
@@ -532,7 +533,7 @@ defmodule CashLens.Transactions do
         left_join: g in assoc(p, :parent),
         where: t.date >= ^first and t.date <= ^last,
         where: t.amount > 0,
-        where: c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
+        where: c.id not in ^excluded_report_category_ids(),
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
@@ -586,7 +587,7 @@ defmodule CashLens.Transactions do
       # Transfers and credit-card payments move money between the user's own
       # "buckets" (another account, or a not-yet-itemized bill), so they
       # never count as income/expense — paired/itemized or not.
-      where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
+      where: is_nil(c.id) or c.id not in ^excluded_report_category_ids(),
       where: is_nil(t.reimbursement_link_key)
   end
 
@@ -619,7 +620,7 @@ defmodule CashLens.Transactions do
         left_join: c in assoc(t, :category),
         # Transfers and credit-card payments are excluded from income/expenses,
         # paired/itemized or not.
-        where: is_nil(c.slug) or c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
+        where: is_nil(c.id) or c.id not in ^excluded_report_category_ids(),
         where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
@@ -678,7 +679,7 @@ defmodule CashLens.Transactions do
       left_join: p in assoc(c, :parent),
       where: t.amount < 0,
       # Category breakdown graphs: transfers and credit-card payments are not spending, so they are excluded.
-      where: c.slug not in ["initial_value", "transfer", "cartao-de-credito"],
+      where: c.id not in ^excluded_report_category_ids(),
       where: is_nil(t.reimbursement_link_key),
       where: t.reimbursement_status != "pending" or is_nil(t.reimbursement_status),
       select: %{
@@ -691,6 +692,22 @@ defmodule CashLens.Transactions do
       }
     )
     |> exclude_transactions_with_children()
+  end
+
+  # Category ids to exclude from every income/expense report: transfers, the
+  # opening-balance placeholder, and the WHOLE "cartao-de-credito" subtree —
+  # not just the exact parent slug. Bill payments are bookkeeping mirrors
+  # between the user's own accounts/statements (the outgoing debit AND the
+  # matching credit inside the card account), never real income or spending,
+  # and they're just as often filed under a per-card child category (e.g.
+  # "cartao-de-credito-pagamento", "cartao-de-credito-ourocard") as under the
+  # bare parent slug.
+  defp excluded_report_category_ids do
+    ["initial_value", "transfer", "cartao-de-credito"]
+    |> Enum.map(&Categories.get_category_by_slug/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.flat_map(&Categories.get_category_ids_with_children(&1.id))
+    |> Enum.uniq()
   end
 
   # Transactions that are themselves a parent (another transaction points its
