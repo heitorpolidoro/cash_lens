@@ -115,5 +115,40 @@ defmodule CashLensWeb.AccountLive.IndexTest do
       assert html =~ "Atualizar com Rendimentos"
       refute Repo.get_by(Transaction, account_id: account.id, description: "Rendimento")
     end
+
+    test "non-numeric balance keeps the modal open without creating a transaction", %{
+      conn: conn,
+      account: account
+    } do
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+
+      render_click(live, "open_update_balance_modal", %{"id" => account.id})
+
+      html =
+        render_submit(live, "update_balance_with_income", %{
+          "balance" => %{"new_balance" => "abc"}
+        })
+
+      assert html =~ "Atualizar com Rendimentos"
+      refute Repo.get_by(Transaction, account_id: account.id, description: "Rendimento")
+    end
+  end
+
+  describe "Atualizar com Rendimentos without a Rendimento category" do
+    test "flashes an error and creates no transaction", %{conn: conn} do
+      account = account_fixture(%{name: "Poupança", balance: "1000.00", is_credit_card: false})
+
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+
+      render_click(live, "open_update_balance_modal", %{"id" => account.id})
+
+      html =
+        render_submit(live, "update_balance_with_income", %{
+          "balance" => %{"new_balance" => "1050.00"}
+        })
+
+      assert html =~ "Categoria Rendimento não encontrada."
+      refute Repo.get_by(Transaction, account_id: account.id, description: "Rendimento")
+    end
   end
 end
