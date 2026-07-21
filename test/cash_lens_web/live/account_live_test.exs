@@ -38,7 +38,10 @@ defmodule CashLensWeb.AccountLiveTest do
     test "cancels delete modal via close_modal", %{conn: conn, account: account} do
       {:ok, index_live, _html} = live(conn, ~p"/accounts")
 
-      index_live |> element("#accounts-#{account.id} button") |> render_click()
+      index_live
+      |> element("#accounts-#{account.id} button[phx-click='confirm_delete']")
+      |> render_click()
+
       assert render(index_live) =~ "Excluir Conta?"
 
       render_click(index_live, "close_modal", %{})
@@ -112,7 +115,10 @@ defmodule CashLensWeb.AccountLiveTest do
     test "deletes account in listing", %{conn: conn, account: account} do
       {:ok, index_live, _html} = live(conn, ~p"/accounts")
 
-      assert index_live |> element("#accounts-#{account.id} button") |> render_click()
+      assert index_live
+             |> element("#accounts-#{account.id} button[phx-click='confirm_delete']")
+             |> render_click()
+
       assert index_live |> element("button", "Sim, Excluir") |> render_click()
       refute has_element?(index_live, "#accounts-#{account.id}")
     end
