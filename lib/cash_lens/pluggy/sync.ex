@@ -28,8 +28,14 @@ defmodule CashLens.Pluggy.Sync do
          {:ok, client_secret} <- fetch_env("PLUGGY_CLIENT_SECRET"),
          {:ok, api_key} <- Client.auth(client_id, client_secret, req_options) do
       Pluggy.list_linked_account_links()
-      |> Enum.map(fn link -> {link, sync_account_link(link, api_key, req_options)} end)
+      |> Enum.map(fn link -> {link, safe_sync_account_link(link, api_key, req_options)} end)
     end
+  end
+
+  defp safe_sync_account_link(link, api_key, req_options) do
+    sync_account_link(link, api_key, req_options)
+  rescue
+    exception -> {:error, {:exception, Exception.message(exception)}}
   end
 
   defp fetch_env(name) do
@@ -64,6 +70,7 @@ defmodule CashLens.Pluggy.Sync do
       results = Enum.map(pluggy_transactions, &import_transaction(account_link, &1))
       created = Enum.count(results, &(&1 == :created))
       skipped = Enum.count(results, &(&1 == :skipped))
+      errors = Enum.count(results, &(&1 == :error))
 
       if account_link.pluggy_account_type == "CREDIT" do
         sync_statement(account_link, api_key, req_options)
@@ -71,7 +78,7 @@ defmodule CashLens.Pluggy.Sync do
 
       {:ok, _} = Pluggy.touch_last_synced_at(account_link)
 
-      {:ok, %{created: created, skipped: skipped}}
+      {:ok, %{created: created, skipped: skipped, errors: errors}}
     end
   end
 
@@ -93,7 +100,7 @@ defmodule CashLens.Pluggy.Sync do
     case Transactions.create_transaction(attrs) do
       {:ok, :duplicate} -> :skipped
       {:ok, _transaction} -> :created
-      {:error, _changeset} -> :skipped
+      {:error, _changeset} -> :error
     end
   end
 
@@ -129,33 +136,53 @@ defmodule CashLens.Pluggy.Sync do
   defp sync_statement(account_link, api_key, req_options) do
     with {:ok, accounts} <-
            Client.list_accounts(api_key, account_link.pluggy_item.item_id, req_options),
-         %{"creditData" => credit_data, "balance" => balance} <-
+         %{
+           "creditData" => %{"balanceDueDate" => due_date_str} = _credit_data,
+           "balance" => balance
+         }
+         when is_binary(due_date_str) <-
            Enum.find(accounts, &(&1["id"] == account_link.pluggy_account_id)) do
-      due_date = Date.from_iso8601!(credit_data["balanceDueDate"])
+      due_date = Date.from_iso8601!(due_date_str)
       competencia = Date.beginning_of_month(due_date)
       total_a_pagar = to_decimal(balance)
 
-      case CreditCards.get_statement_by_account_and_competencia(
-             account_link.account_id,
-             competencia
-           ) do
-        nil ->
-          CreditCards.create_statement(%{
-            account_id: account_link.account_id,
-            competencia: competencia,
-            due_date: due_date,
-            total_a_pagar: total_a_pagar,
-            source_file: "pluggy"
-          })
+      statement_result =
+        case CreditCards.get_statement_by_account_and_competencia(
+               account_link.account_id,
+               competencia
+             ) do
+          nil ->
+            CreditCards.create_statement(%{
+              account_id: account_link.account_id,
+              competencia: competencia,
+              due_date: due_date,
+              total_a_pagar: total_a_pagar,
+              source_file: "pluggy"
+            })
 
-        existing ->
-          CreditCards.update_statement(existing, %{
-            due_date: due_date,
-            total_a_pagar: total_a_pagar
-          })
+          existing ->
+            CreditCards.update_statement(existing, %{
+              due_date: due_date,
+              total_a_pagar: total_a_pagar
+            })
+        end
+
+      case statement_result do
+        {:ok, _statement} ->
+          Accounting.rebuild_account_balances(account_link.account_id)
+
+        {:error, changeset} ->
+          require Logger
+
+          Logger.warning(
+            "Pluggy: failed to write credit card statement for account #{account_link.account_id}: #{inspect(changeset.errors)}"
+          )
       end
 
-      Accounting.rebuild_account_balances(account_link.account_id)
+      :ok
+    else
+      {:error, _reason} = error -> error
+      _ -> :ok
     end
   end
 end

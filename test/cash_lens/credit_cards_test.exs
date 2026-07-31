@@ -9,6 +9,38 @@ defmodule CashLens.CreditCardsTest do
     assert CreditCards.get_statement!(s.id).id == s.id
   end
 
+  test "get_statement_by_account_and_competencia/2 tolerates duplicate rows for the same account+competencia, returning the most recent" do
+    account = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+    competencia = ~D[2026-06-01]
+
+    {:ok, older} =
+      CreditCards.create_statement(%{
+        account_id: account.id,
+        competencia: competencia,
+        due_date: ~D[2026-06-15],
+        total_a_pagar: Decimal.new("100.00"),
+        source_file: "fatura1.pdf"
+      })
+
+    # Force a distinct, later inserted_at so ordering is deterministic
+    older
+    |> Ecto.Changeset.change(inserted_at: DateTime.add(older.inserted_at, -60, :second))
+    |> CashLens.Repo.update!()
+
+    {:ok, newer} =
+      CreditCards.create_statement(%{
+        account_id: account.id,
+        competencia: competencia,
+        due_date: ~D[2026-06-15],
+        total_a_pagar: Decimal.new("200.00"),
+        source_file: "fatura2.pdf"
+      })
+
+    result = CreditCards.get_statement_by_account_and_competencia(account.id, competencia)
+
+    assert result.id == newer.id
+  end
+
   test "statement_status is :open without a payment" do
     s = statement_fixture(%{payment_transaction_id: nil})
     assert CreditCards.statement_status(s, Decimal.new("100.00")) == :open

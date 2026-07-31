@@ -18,7 +18,12 @@ defmodule CashLens.CreditCards do
   def get_statement!(id), do: Repo.get!(Statement, id)
 
   def get_statement_by_account_and_competencia(account_id, %Date{} = competencia) do
-    Repo.get_by(Statement, account_id: account_id, competencia: competencia)
+    from(s in Statement,
+      where: s.account_id == ^account_id and s.competencia == ^competencia,
+      order_by: [desc: s.inserted_at],
+      limit: 1
+    )
+    |> Repo.one()
   end
 
   def update_statement(%Statement{} = statement, attrs) do

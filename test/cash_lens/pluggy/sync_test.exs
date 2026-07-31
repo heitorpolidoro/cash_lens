@@ -81,7 +81,7 @@ defmodule CashLens.Pluggy.SyncTest do
         })
       end)
 
-      assert {:ok, %{created: 1, skipped: 0}} =
+      assert {:ok, %{created: 1, skipped: 0, errors: 0}} =
                Sync.sync_account_link(link, "fake-api-key", req_options)
 
       transaction = Repo.get_by!(Transaction, account_id: account.id, description: "MERCADO XYZ")
@@ -110,10 +110,10 @@ defmodule CashLens.Pluggy.SyncTest do
         })
       end)
 
-      assert {:ok, %{created: 1, skipped: 0}} =
+      assert {:ok, %{created: 1, skipped: 0, errors: 0}} =
                Sync.sync_account_link(link, "fake-api-key", req_options)
 
-      assert {:ok, %{created: 0, skipped: 1}} =
+      assert {:ok, %{created: 0, skipped: 1, errors: 0}} =
                Sync.sync_account_link(link, "fake-api-key", req_options)
 
       assert Repo.aggregate(Transaction, :count) == 1
@@ -283,7 +283,7 @@ defmodule CashLens.Pluggy.SyncTest do
         })
       end)
 
-      assert {:ok, %{created: 1, skipped: 0}} =
+      assert {:ok, %{created: 1, skipped: 0, errors: 0}} =
                Sync.sync_account_link(link, "fake-api-key", req_options)
 
       assert Repo.get_by(Transaction, account_id: account.id, description: "IN WINDOW")
@@ -327,7 +327,7 @@ defmodule CashLens.Pluggy.SyncTest do
         })
       end)
 
-      assert {:ok, %{created: 1, skipped: 0}} =
+      assert {:ok, %{created: 1, skipped: 0, errors: 0}} =
                Sync.sync_account_link(link, "fake-api-key", req_options)
 
       assert Repo.get_by(Transaction, account_id: account.id, description: "IN WINDOW")
@@ -394,8 +394,62 @@ defmodule CashLens.Pluggy.SyncTest do
       {_link, good_result} = Enum.find(results, fn {link, _} -> link.id == good_link.id end)
       {_link, bad_result} = Enum.find(results, fn {link, _} -> link.id == bad_link.id end)
 
-      assert good_result == {:ok, %{created: 0, skipped: 0}}
+      assert good_result == {:ok, %{created: 0, skipped: 0, errors: 0}}
       assert {:error, _reason} = bad_result
+    end
+
+    test "a CREDIT account with null creditData does not crash the batch — other accounts still sync" do
+      System.put_env("PLUGGY_CLIENT_ID", "cid")
+      System.put_env("PLUGGY_CLIENT_SECRET", "csecret")
+
+      item = pluggy_item_fixture()
+      bank_account = account_fixture(%{name: "Banco", is_credit_card: false})
+      credit_account = account_fixture(%{name: "Cartao", is_credit_card: true})
+
+      {:ok, bank_link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "bank-1",
+          pluggy_account_name: "Banco",
+          pluggy_account_type: "BANK"
+        })
+
+      {:ok, bank_link} = Pluggy.link_account(bank_link, bank_account.id)
+
+      {:ok, credit_link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "credit-1",
+          pluggy_account_name: "Cartao",
+          pluggy_account_type: "CREDIT"
+        })
+
+      {:ok, credit_link} = Pluggy.link_account(credit_link, credit_account.id)
+
+      req_options = [plug: {Req.Test, CashLens.Pluggy.Client}, retry: false]
+
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        case conn.request_path do
+          "/auth" ->
+            Req.Test.json(conn, %{"apiKey" => "test-key"})
+
+          "/v2/transactions" ->
+            Req.Test.json(conn, %{"results" => [], "next" => nil})
+
+          "/accounts" ->
+            Req.Test.json(conn, %{
+              "results" => [
+                %{"id" => "credit-1", "balance" => 100.0, "creditData" => nil}
+              ]
+            })
+        end
+      end)
+
+      results = Sync.sync_all(req_options)
+
+      {_link, bank_result} = Enum.find(results, fn {link, _} -> link.id == bank_link.id end)
+      {_link, credit_result} = Enum.find(results, fn {link, _} -> link.id == credit_link.id end)
+
+      assert bank_result == {:ok, %{created: 0, skipped: 0, errors: 0}}
+      assert credit_result == {:ok, %{created: 0, skipped: 0, errors: 0}}
     end
   end
 end
