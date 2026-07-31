@@ -28,6 +28,7 @@ defmodule CashLens.Transactions.Transaction do
     # CategorySuggester.annotate/1; never persisted.
     field :suggested_category, :map, virtual: true
     field :notes, :string
+    field :pluggy_category, :string
     field :installment_number, :integer
     field :parent_transaction_id, :binary_id
     field :import_batch_id, :binary_id
@@ -53,6 +54,7 @@ defmodule CashLens.Transactions.Transaction do
       :reimbursement_status,
       :reimbursement_link_key,
       :notes,
+      :pluggy_category,
       :installment_group_id,
       :installment_number,
       :occurrence_index,
