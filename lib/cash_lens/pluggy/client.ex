@@ -33,6 +33,18 @@ defmodule CashLens.Pluggy.Client do
   Lists every transaction for an account on or after `from_date`, following
   the API's cursor pagination (`next` in the response) until exhausted, and
   returning the full flattened list.
+
+  Fetches every page of the account's history (there is no working
+  server-side date filter on the real Pluggy API — a `from` param is
+  rejected) and filters to `from_date` locally. This means every call
+  downloads the full transaction history, not just the delta since the
+  last sync. Deliberately not optimized with an early pagination stop,
+  since that would require assuming Pluggy returns pages newest-first, an
+  ordering never confirmed against the real API — a wrong assumption there
+  would risk silently dropping transactions, which is worse than the
+  current, safe, full-fetch-then-filter approach. Acceptable for now: this
+  is a manually-triggered, low-frequency import for a single-user app, not
+  an automated high-volume sync.
   """
   def list_transactions(api_key, account_id, %Date{} = from_date, req_options \\ []) do
     req = Keyword.merge([base_url: @base_url], req_options) |> Req.new()
@@ -50,8 +62,10 @@ defmodule CashLens.Pluggy.Client do
         # Filter results to only include transactions on or after from_date
         filtered_results =
           Enum.filter(results, fn tx ->
-            tx_date = Date.from_iso8601!(String.slice(tx["date"], 0..9))
-            Date.compare(tx_date, from_date) != :lt
+            case Date.from_iso8601(String.slice(tx["date"] || "", 0..9)) do
+              {:ok, tx_date} -> Date.compare(tx_date, from_date) != :lt
+              {:error, _} -> false
+            end
           end)
 
         acc = acc ++ filtered_results

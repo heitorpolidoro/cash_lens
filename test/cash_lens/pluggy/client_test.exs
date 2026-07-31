@@ -97,5 +97,20 @@ defmodule CashLens.Pluggy.ClientTest do
       assert {:ok, [%{"id" => "tx-1"}, %{"id" => "tx-2"}]} =
                Client.list_transactions("api-key", "acc-1", ~D[2026-05-01], req_options)
     end
+
+    test "filters out transactions dated before from_date", %{req_options: req_options} do
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        Req.Test.json(conn, %{
+          "results" => [
+            %{"id" => "tx-old", "date" => "2026-04-30T10:00:00.000Z"},
+            %{"id" => "tx-new", "date" => "2026-05-01T10:00:00.000Z"}
+          ],
+          "next" => nil
+        })
+      end)
+
+      assert {:ok, [%{"id" => "tx-new"}]} =
+               Client.list_transactions("api-key", "acc-1", ~D[2026-05-01], req_options)
+    end
   end
 end
