@@ -48,6 +48,19 @@ defmodule CashLensWeb.TransactionLive.PluggyImportTest do
   test "clicking Importar do Pluggy without credentials configured flashes an error", %{
     conn: conn
   } do
+    client_id = System.get_env("PLUGGY_CLIENT_ID")
+    client_secret = System.get_env("PLUGGY_CLIENT_SECRET")
+
+    on_exit(fn ->
+      if client_id,
+        do: System.put_env("PLUGGY_CLIENT_ID", client_id),
+        else: System.delete_env("PLUGGY_CLIENT_ID")
+
+      if client_secret,
+        do: System.put_env("PLUGGY_CLIENT_SECRET", client_secret),
+        else: System.delete_env("PLUGGY_CLIENT_SECRET")
+    end)
+
     System.delete_env("PLUGGY_CLIENT_ID")
     System.delete_env("PLUGGY_CLIENT_SECRET")
 

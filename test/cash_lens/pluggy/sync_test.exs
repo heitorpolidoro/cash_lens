@@ -12,6 +12,27 @@ defmodule CashLens.Pluggy.SyncTest do
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
 
+  # PLUGGY_CLIENT_ID/PLUGGY_CLIENT_SECRET are mutated by several tests below
+  # (this file is async: false). Captures whatever is currently set and
+  # restores it on_exit, so those mutations never leak into later test files
+  # in the same `mix test` run.
+  defp preserve_pluggy_env(_context) do
+    client_id = System.get_env("PLUGGY_CLIENT_ID")
+    client_secret = System.get_env("PLUGGY_CLIENT_SECRET")
+
+    on_exit(fn ->
+      if client_id,
+        do: System.put_env("PLUGGY_CLIENT_ID", client_id),
+        else: System.delete_env("PLUGGY_CLIENT_ID")
+
+      if client_secret,
+        do: System.put_env("PLUGGY_CLIENT_SECRET", client_secret),
+        else: System.delete_env("PLUGGY_CLIENT_SECRET")
+    end)
+
+    :ok
+  end
+
   describe "normalize_amount/2 — sign conversion" do
     test "BANK + DEBIT becomes negative" do
       assert Decimal.equal?(
@@ -368,6 +389,8 @@ defmodule CashLens.Pluggy.SyncTest do
   end
 
   describe "sync_all/0" do
+    setup :preserve_pluggy_env
+
     test "returns {:error, :missing_credentials} when env vars are unset" do
       System.delete_env("PLUGGY_CLIENT_ID")
       System.delete_env("PLUGGY_CLIENT_SECRET")
@@ -482,6 +505,283 @@ defmodule CashLens.Pluggy.SyncTest do
 
       assert bank_result == {:ok, %{created: 0, skipped: 0, errors: 0}}
       assert credit_result == {:ok, %{created: 0, skipped: 0, errors: 0}}
+    end
+  end
+
+  describe "sync_account_link/3 — legitimately-identical same-day transactions (Finding 1)" do
+    setup do
+      item = pluggy_item_fixture()
+      account = account_fixture(%{name: "Conta Corrente", is_credit_card: false})
+
+      {:ok, link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "acc-1",
+          pluggy_account_name: "Conta Corrente",
+          pluggy_account_type: "BANK"
+        })
+
+      {:ok, link} = Pluggy.link_account(link, account.id)
+
+      %{link: link, account: account, req_options: [plug: {Req.Test, CashLens.Pluggy.Client}]}
+    end
+
+    test "two identical same-day transactions in a single sync are both created, not deduped",
+         %{link: link, account: account, req_options: req_options} do
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        Req.Test.json(conn, %{
+          "results" => [
+            %{
+              "id" => "bus-1",
+              "date" => "2026-07-15T00:00:00.000Z",
+              "description" => "PASSAGEM ONIBUS",
+              "amount" => 5.5,
+              "type" => "DEBIT"
+            },
+            %{
+              "id" => "bus-2",
+              "date" => "2026-07-15T00:00:00.000Z",
+              "description" => "PASSAGEM ONIBUS",
+              "amount" => 5.5,
+              "type" => "DEBIT"
+            }
+          ],
+          "next" => nil
+        })
+      end)
+
+      assert {:ok, %{created: 2, skipped: 0, errors: 0}} =
+               Sync.sync_account_link(link, "fake-api-key", req_options)
+
+      transactions =
+        Repo.all(
+          from t in Transaction,
+            where:
+              t.account_id == ^account.id and t.date == ^~D[2026-07-15] and
+                t.description == "PASSAGEM ONIBUS"
+        )
+
+      assert length(transactions) == 2
+      assert Enum.uniq_by(transactions, & &1.id) |> length() == 2
+    end
+  end
+
+  describe "sync_account_link/3 — failed rows keep last_synced_at from advancing (Finding 2 & 6)" do
+    setup do
+      item = pluggy_item_fixture()
+      account = account_fixture(%{name: "Conta Corrente", is_credit_card: false})
+
+      {:ok, link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "acc-1",
+          pluggy_account_name: "Conta Corrente",
+          pluggy_account_type: "BANK"
+        })
+
+      {:ok, link} = Pluggy.link_account(link, account.id)
+
+      %{link: link, account: account, req_options: [plug: {Req.Test, CashLens.Pluggy.Client}]}
+    end
+
+    test "a malformed transaction is counted as an error, does not crash the account, and blocks last_synced_at",
+         %{link: link, account: account, req_options: req_options} do
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        Req.Test.json(conn, %{
+          "results" => [
+            %{
+              "id" => "good",
+              "date" => "2026-07-15T00:00:00.000Z",
+              "description" => "GOOD TRANSACTION",
+              "amount" => 10.0,
+              "type" => "DEBIT"
+            },
+            %{
+              "id" => "bad",
+              "date" => "2026-07-15T00:00:00.000Z",
+              "description" => "BAD TRANSACTION",
+              "amount" => 10.0
+              # missing "type" — normalize_amount/2 has no matching clause for
+              # BANK without a type, so this raises and must be rescued.
+            }
+          ],
+          "next" => nil
+        })
+      end)
+
+      assert {:ok, %{created: 1, skipped: 0, errors: 1}} =
+               Sync.sync_account_link(link, "fake-api-key", req_options)
+
+      assert Repo.get_by(Transaction, account_id: account.id, description: "GOOD TRANSACTION")
+      refute Repo.get_by(Transaction, account_id: account.id, description: "BAD TRANSACTION")
+
+      updated = Repo.get!(CashLens.Pluggy.AccountLink, link.id)
+      assert is_nil(updated.last_synced_at)
+    end
+  end
+
+  describe "sync_account_link/3 for a CREDIT account — import_batch_id linking (Finding 3)" do
+    setup do
+      item = pluggy_item_fixture()
+      account = account_fixture(%{name: "Ourocard", is_credit_card: true})
+
+      {:ok, link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "card-1",
+          pluggy_account_name: "OUROCARD",
+          pluggy_account_type: "CREDIT"
+        })
+
+      {:ok, link} = Pluggy.link_account(link, account.id)
+      link = Repo.preload(link, :pluggy_item)
+
+      %{link: link, account: account, req_options: [plug: {Req.Test, CashLens.Pluggy.Client}]}
+    end
+
+    test "created transactions get import_batch_id set to the synced statement's id",
+         %{link: link, account: account, req_options: req_options} do
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        case conn.request_path do
+          "/v2/transactions" ->
+            Req.Test.json(conn, %{
+              "results" => [
+                %{
+                  "id" => "tx-1",
+                  "date" => "2026-07-20T00:00:00.000Z",
+                  "description" => "COMPRA MERCADO",
+                  "amount" => 89.9,
+                  "type" => "DEBIT"
+                }
+              ],
+              "next" => nil
+            })
+
+          "/accounts" ->
+            Req.Test.json(conn, %{
+              "results" => [
+                %{
+                  "id" => "card-1",
+                  "balance" => 1200.0,
+                  "creditData" => %{
+                    "balanceDueDate" => "2026-08-10",
+                    "balanceCloseDate" => "2026-08-03"
+                  }
+                }
+              ]
+            })
+        end
+      end)
+
+      assert {:ok, %{created: 1, skipped: 0, errors: 0}} =
+               Sync.sync_account_link(link, "fake-api-key", req_options)
+
+      statement = CreditCards.get_statement_by_account_and_competencia(account.id, ~D[2026-08-01])
+      assert statement
+
+      transaction =
+        Repo.get_by!(Transaction, account_id: account.id, description: "COMPRA MERCADO")
+
+      assert transaction.import_batch_id == statement.id
+    end
+  end
+
+  describe "sync_account_link/3 — Pluggy transactions run through the AutoCategorizer (Finding 4)" do
+    setup do
+      item = pluggy_item_fixture()
+      account = account_fixture(%{name: "Conta Corrente", is_credit_card: false})
+
+      {:ok, link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "acc-1",
+          pluggy_account_name: "Conta Corrente",
+          pluggy_account_type: "BANK"
+        })
+
+      {:ok, link} = Pluggy.link_account(link, account.id)
+
+      %{link: link, account: account, req_options: [plug: {Req.Test, CashLens.Pluggy.Client}]}
+    end
+
+    test "a Pluggy transaction matching a category's keywords is auto-categorized",
+         %{link: link, account: account, req_options: req_options} do
+      category = category_fixture(%{name: "Mercado", keywords: "MERCADO XYZ"})
+
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        Req.Test.json(conn, %{
+          "results" => [
+            %{
+              "id" => "tx-1",
+              "date" => "2026-07-15T00:00:00.000Z",
+              "description" => "MERCADO XYZ",
+              "amount" => 42.5,
+              "type" => "DEBIT"
+            }
+          ],
+          "next" => nil
+        })
+      end)
+
+      assert {:ok, %{created: 1, skipped: 0, errors: 0}} =
+               Sync.sync_account_link(link, "fake-api-key", req_options)
+
+      transaction = Repo.get_by!(Transaction, account_id: account.id, description: "MERCADO XYZ")
+      assert transaction.category_id == category.id
+    end
+  end
+
+  describe "sync_account_link/3 for a CREDIT account — never overwrites a file-sourced total_a_pagar (Finding 5)" do
+    setup do
+      item = pluggy_item_fixture()
+      account = account_fixture(%{name: "Ourocard", is_credit_card: true})
+
+      {:ok, link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "card-1",
+          pluggy_account_name: "OUROCARD",
+          pluggy_account_type: "CREDIT"
+        })
+
+      {:ok, link} = Pluggy.link_account(link, account.id)
+      link = Repo.preload(link, :pluggy_item)
+
+      %{link: link, account: account, req_options: [plug: {Req.Test, CashLens.Pluggy.Client}]}
+    end
+
+    test "syncing a CREDIT account leaves a PDF/TXT-sourced statement's total_a_pagar untouched",
+         %{link: link, account: account, req_options: req_options} do
+      {:ok, statement} =
+        CreditCards.create_statement(%{
+          account_id: account.id,
+          competencia: ~D[2026-08-01],
+          due_date: ~D[2026-08-10],
+          total_a_pagar: Decimal.new("999.99"),
+          source_file: "some_real_fatura.pdf"
+        })
+
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        case conn.request_path do
+          "/v2/transactions" ->
+            Req.Test.json(conn, %{"results" => [], "next" => nil})
+
+          "/accounts" ->
+            Req.Test.json(conn, %{
+              "results" => [
+                %{
+                  "id" => "card-1",
+                  "balance" => 1450.0,
+                  "creditData" => %{
+                    "balanceDueDate" => "2026-08-10",
+                    "balanceCloseDate" => "2026-08-03"
+                  }
+                }
+              ]
+            })
+        end
+      end)
+
+      assert {:ok, _} = Sync.sync_account_link(link, "fake-api-key", req_options)
+
+      reloaded = CreditCards.get_statement!(statement.id)
+      assert Decimal.equal?(reloaded.total_a_pagar, Decimal.new("999.99"))
+      assert reloaded.source_file == "some_real_fatura.pdf"
     end
   end
 end
