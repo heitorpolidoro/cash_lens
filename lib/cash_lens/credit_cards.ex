@@ -17,6 +17,16 @@ defmodule CashLens.CreditCards do
 
   def get_statement!(id), do: Repo.get!(Statement, id)
 
+  def get_statement_by_account_and_competencia(account_id, %Date{} = competencia) do
+    Repo.get_by(Statement, account_id: account_id, competencia: competencia)
+  end
+
+  def update_statement(%Statement{} = statement, attrs) do
+    statement
+    |> Statement.changeset(attrs)
+    |> Repo.update()
+  end
+
   @doc """
   Lists the boletos (statements with a `due_date`) belonging to an account.
   Used by the directory importer to detect billing-cycle divergences.
