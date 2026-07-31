@@ -108,5 +108,46 @@ defmodule CashLensWeb.PluggyLive.IndexTest do
       [updated] = Pluggy.list_account_links_for_item(item.id)
       assert updated.account_id == cash_lens_account.id
     end
+
+    test "missing credentials shows an error flash and doesn't create account links", %{
+      conn: conn
+    } do
+      # Save current env vars and delete them
+      client_id = System.get_env("PLUGGY_CLIENT_ID")
+      client_secret = System.get_env("PLUGGY_CLIENT_SECRET")
+      System.delete_env("PLUGGY_CLIENT_ID")
+      System.delete_env("PLUGGY_CLIENT_SECRET")
+
+      # Restore them after the test
+      on_exit(fn ->
+        if client_id, do: System.put_env("PLUGGY_CLIENT_ID", client_id)
+        if client_secret, do: System.put_env("PLUGGY_CLIENT_SECRET", client_secret)
+      end)
+
+      item = pluggy_item_fixture(item_id: "item-missing-creds")
+
+      {:ok, live, _html} = live(conn, ~p"/pluggy")
+
+      html = render_click(live, "sync_accounts", %{"item_id" => item.id})
+
+      assert html =~ "não configurados"
+      assert Pluggy.list_account_links_for_item(item.id) == []
+    end
+
+    test "client error surfaces a flash and doesn't create account links", %{
+      conn: conn,
+      item: item
+    } do
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        conn |> Plug.Conn.put_status(401) |> Req.Test.json(%{"error" => "Invalid credentials"})
+      end)
+
+      {:ok, live, _html} = live(conn, ~p"/pluggy")
+
+      html = render_click(live, "sync_accounts", %{"item_id" => item.id})
+
+      assert html =~ "Falha ao buscar"
+      assert Pluggy.list_account_links_for_item(item.id) == []
+    end
   end
 end
