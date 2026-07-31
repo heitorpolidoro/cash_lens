@@ -142,7 +142,7 @@ defmodule CashLens.Pluggy.Sync do
          }
          when is_binary(due_date_str) <-
            Enum.find(accounts, &(&1["id"] == account_link.pluggy_account_id)) do
-      due_date = Date.from_iso8601!(due_date_str)
+      due_date = parse_date(due_date_str)
       competencia = Date.beginning_of_month(due_date)
       total_a_pagar = to_decimal(balance)
 

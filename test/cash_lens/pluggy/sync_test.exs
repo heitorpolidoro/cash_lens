@@ -218,6 +218,38 @@ defmodule CashLens.Pluggy.SyncTest do
 
       _ = item
     end
+
+    test "tolerates datetime-formatted balanceDueDate (e.g., 2026-08-10T00:00:00.000Z)",
+         %{link: link, account: account} do
+      req_options = [plug: {Req.Test, CashLens.Pluggy.Client}]
+
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        case conn.request_path do
+          "/v2/transactions" ->
+            Req.Test.json(conn, %{"results" => [], "next" => nil})
+
+          "/accounts" ->
+            Req.Test.json(conn, %{
+              "results" => [
+                %{
+                  "id" => "card-1",
+                  "balance" => 1200.0,
+                  "creditData" => %{
+                    "balanceDueDate" => "2026-08-10T00:00:00.000Z",
+                    "balanceCloseDate" => "2026-08-03"
+                  }
+                }
+              ]
+            })
+        end
+      end)
+
+      assert {:ok, _} = Sync.sync_account_link(link, "fake-api-key", req_options)
+
+      statement = CreditCards.get_statement_by_account_and_competencia(account.id, ~D[2026-08-01])
+      assert Decimal.equal?(statement.total_a_pagar, Decimal.new("1200.0"))
+      assert statement.due_date == ~D[2026-08-10]
+    end
   end
 
   describe "sync_account_link/2 — sync window" do
