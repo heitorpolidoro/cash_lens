@@ -779,17 +779,28 @@ defmodule CashLens.Transactions do
   cause a later legitimate file/Pluggy import of the same real-world charge
   to be silently skipped. `source` is always passed as literally "file" or
   "pluggy" by the two callers of this function.
+
+  Matches across a weekend, not just the exact date. Real Pluggy data shows
+  boleto payments dated on the Saturday/Sunday they were scheduled, while
+  bank-exported CSV/OFX files date the same payment on the following Monday
+  (the bank's own settlement/business-day date) — confirmed against 5 real
+  BB checking-account boleto payments, all off by exactly the Sat/Sun ->
+  Mon gap. `business_day_candidates/1` expands a Saturday or Sunday date to
+  also check the following Monday, and a Monday date to also check the
+  preceding Saturday and Sunday, so the match works regardless of which
+  source's date is being queried against which.
   """
   @spec duplicate_from_other_source?(Ecto.UUID.t(), Date.t(), Decimal.t(), String.t()) ::
           boolean()
   def duplicate_from_other_source?(account_id, date, amount, source) do
     other_source = complementary_import_source(source)
+    candidate_dates = business_day_candidates(date)
 
     Repo.exists?(
       from t in Transaction,
         where:
           t.account_id == ^account_id and
-            t.date == ^date and
+            t.date in ^candidate_dates and
             t.amount == ^amount and
             t.source == ^other_source
     )
@@ -798,6 +809,16 @@ defmodule CashLens.Transactions do
   defp complementary_import_source("file"), do: "pluggy"
   defp complementary_import_source("pluggy"), do: "file"
   defp complementary_import_source(_other), do: nil
+
+  # 6 = Saturday, 7 = Sunday, 1 = Monday (Date.day_of_week/1, ISO 8601).
+  defp business_day_candidates(date) do
+    case Date.day_of_week(date) do
+      6 -> [date, Date.add(date, 2)]
+      7 -> [date, Date.add(date, 1)]
+      1 -> [date, Date.add(date, -1), Date.add(date, -2)]
+      _ -> [date]
+    end
+  end
 
   @doc """
   Gets a single transaction.

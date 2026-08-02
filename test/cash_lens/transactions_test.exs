@@ -1037,5 +1037,86 @@ defmodule CashLens.TransactionsTest do
                "file"
              )
     end
+
+    test "true when a Pluggy transaction dated Saturday matches a file row on the following Monday" do
+      account = account_fixture()
+
+      # 2026-06-13 is a Saturday; 2026-06-15 is the following Monday.
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-15],
+        amount: "-461.39",
+        description: "Pagamento de Boleto - ASSOCIACAO DOS PROPRIETARIOS",
+        source: "file"
+      })
+
+      assert Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-13],
+               Decimal.new("-461.39"),
+               "pluggy"
+             )
+    end
+
+    test "true when a Pluggy transaction dated Sunday matches a file row on the following Monday" do
+      account = account_fixture()
+
+      # 2026-06-14 is a Sunday; 2026-06-15 is the following Monday.
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-15],
+        amount: "-461.39",
+        description: "Pagamento de Boleto - ASSOCIACAO DOS PROPRIETARIOS",
+        source: "file"
+      })
+
+      assert Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-14],
+               Decimal.new("-461.39"),
+               "pluggy"
+             )
+    end
+
+    test "true when a file transaction dated Monday matches a Pluggy row on the preceding Saturday or Sunday" do
+      account = account_fixture()
+
+      # 2026-06-13 is a Saturday.
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-13],
+        amount: "-461.39",
+        description: "PAG BOLETO      ASSOCIACAO DOS PROPRIETARIOS",
+        source: "pluggy"
+      })
+
+      assert Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-15],
+               Decimal.new("-461.39"),
+               "file"
+             )
+    end
+
+    test "false when the matching row is more than a weekend away" do
+      account = account_fixture()
+
+      # 2026-06-11 is a Thursday — two business days before the 2026-06-15
+      # Monday being queried, not a weekend-adjacent date.
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-11],
+        amount: "-461.39",
+        description: "PAG BOLETO      ASSOCIACAO DOS PROPRIETARIOS",
+        source: "pluggy"
+      })
+
+      refute Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-15],
+               Decimal.new("-461.39"),
+               "file"
+             )
+    end
   end
 end
