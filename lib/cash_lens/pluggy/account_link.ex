@@ -8,6 +8,7 @@ defmodule CashLens.Pluggy.AccountLink do
     field :pluggy_account_id, :string
     field :pluggy_account_name, :string
     field :pluggy_account_type, :string
+    field :pluggy_balance, :decimal
     field :last_synced_at, :utc_datetime
 
     belongs_to :pluggy_item, CashLens.Pluggy.Item
@@ -24,6 +25,7 @@ defmodule CashLens.Pluggy.AccountLink do
       :pluggy_account_id,
       :pluggy_account_name,
       :pluggy_account_type,
+      :pluggy_balance,
       :account_id,
       :last_synced_at
     ])

@@ -6,13 +6,11 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": [
         "-c",
-        "docker compose -f /Users/heitor/workspace/docker-compose.yml up -d --wait postgres && exec mix phx.server"
+        "docker compose -f /Users/heitor/workspace/docker-compose.yml up -d --wait postgres && export $(grep -v '^#' .env | xargs) && exec mix phx.server"
       ],
       "cwd": ".",
       "port": 4000,
-      "env": {
-        "SECRET_KEY_BASE": "70NLq9pxYF2jWdmvqdkREiQ3rkqig4gb+R68EUwERBxNMOSFRlQ++1XNL3BTf/XO"
-      }
+      "env": {}
     }
   ]
 }

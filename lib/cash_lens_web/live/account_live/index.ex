@@ -13,6 +13,11 @@ defmodule CashLensWeb.AccountLive.Index do
       <.header>
         Contas
         <:actions>
+          <.link navigate={~p"/pluggy"}>
+            <.button>
+              <.icon name="hero-building-library" class="mr-1" /> Pluggy
+            </.button>
+          </.link>
           <.link navigate={~p"/accounts/new"}>
             <.button variant="primary">
               <.icon name="hero-plus" class="mr-1" /> Nova Conta

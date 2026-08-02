@@ -22,9 +22,20 @@ defmodule CashLens.Pluggy do
   def get_item!(id), do: Repo.get!(Item, id)
 
   @doc """
+  Deletes a registered item and, via `on_delete: :delete_all` on
+  `pluggy_account_links.pluggy_item_id`, all of its account links. Already
+  -imported transactions are untouched — they have no relation to Pluggy
+  tables beyond the informational `pluggy_category` string.
+  """
+  def delete_item(%Item{} = item) do
+    Repo.delete(item)
+  end
+
+  @doc """
   Creates a link for `pluggy_account_id` under `item` if none exists yet
   (with `account_id` left nil for the user to fill in), or updates the
-  existing link's name/type without touching a already-chosen `account_id`.
+  existing link's name/type/balance without touching a already-chosen
+  `account_id`.
   """
   def upsert_account_link(%Item{} = item, attrs) do
     pluggy_account_id = Map.fetch!(attrs, :pluggy_account_id)
@@ -40,7 +51,9 @@ defmodule CashLens.Pluggy do
 
       existing ->
         existing
-        |> AccountLink.changeset(Map.take(attrs, [:pluggy_account_name, :pluggy_account_type]))
+        |> AccountLink.changeset(
+          Map.take(attrs, [:pluggy_account_name, :pluggy_account_type, :pluggy_balance])
+        )
         |> Repo.update()
     end
   end

@@ -91,7 +91,7 @@ defmodule CashLens.Pluggy.SyncTest do
           "results" => [
             %{
               "id" => "tx-1",
-              "date" => "2026-07-15T00:00:00.000Z",
+              "date" => "2026-07-15T15:00:00.000Z",
               "description" => "MERCADO XYZ",
               "amount" => 42.5,
               "type" => "DEBIT",
@@ -120,7 +120,7 @@ defmodule CashLens.Pluggy.SyncTest do
           "results" => [
             %{
               "id" => "tx-1",
-              "date" => "2026-07-15T00:00:00.000Z",
+              "date" => "2026-07-15T15:00:00.000Z",
               "description" => "MERCADO XYZ",
               "amount" => 42.5,
               "type" => "DEBIT",
@@ -240,7 +240,7 @@ defmodule CashLens.Pluggy.SyncTest do
       _ = item
     end
 
-    test "tolerates datetime-formatted balanceDueDate (e.g., 2026-08-10T00:00:00.000Z)",
+    test "tolerates datetime-formatted balanceDueDate (e.g., 2026-08-10T15:00:00.000Z)",
          %{link: link, account: account} do
       req_options = [plug: {Req.Test, CashLens.Pluggy.Client}]
 
@@ -256,7 +256,7 @@ defmodule CashLens.Pluggy.SyncTest do
                   "id" => "card-1",
                   "balance" => 1200.0,
                   "creditData" => %{
-                    "balanceDueDate" => "2026-08-10T00:00:00.000Z",
+                    "balanceDueDate" => "2026-08-10T15:00:00.000Z",
                     "balanceCloseDate" => "2026-08-03"
                   }
                 }
@@ -363,14 +363,14 @@ defmodule CashLens.Pluggy.SyncTest do
           "results" => [
             %{
               "id" => "in-window",
-              "date" => "2026-05-10T00:00:00.000Z",
+              "date" => "2026-05-10T15:00:00.000Z",
               "description" => "IN WINDOW",
               "amount" => 10.0,
               "type" => "DEBIT"
             },
             %{
               "id" => "out-of-window",
-              "date" => "2026-05-09T00:00:00.000Z",
+              "date" => "2026-05-09T15:00:00.000Z",
               "description" => "OUT OF WINDOW",
               "amount" => 20.0,
               "type" => "DEBIT"
@@ -532,14 +532,14 @@ defmodule CashLens.Pluggy.SyncTest do
           "results" => [
             %{
               "id" => "bus-1",
-              "date" => "2026-07-15T00:00:00.000Z",
+              "date" => "2026-07-15T15:00:00.000Z",
               "description" => "PASSAGEM ONIBUS",
               "amount" => 5.5,
               "type" => "DEBIT"
             },
             %{
               "id" => "bus-2",
-              "date" => "2026-07-15T00:00:00.000Z",
+              "date" => "2026-07-15T15:00:00.000Z",
               "description" => "PASSAGEM ONIBUS",
               "amount" => 5.5,
               "type" => "DEBIT"
@@ -589,14 +589,14 @@ defmodule CashLens.Pluggy.SyncTest do
           "results" => [
             %{
               "id" => "good",
-              "date" => "2026-07-15T00:00:00.000Z",
+              "date" => "2026-07-15T15:00:00.000Z",
               "description" => "GOOD TRANSACTION",
               "amount" => 10.0,
               "type" => "DEBIT"
             },
             %{
               "id" => "bad",
-              "date" => "2026-07-15T00:00:00.000Z",
+              "date" => "2026-07-15T15:00:00.000Z",
               "description" => "BAD TRANSACTION",
               "amount" => 10.0
               # missing "type" — normalize_amount/2 has no matching clause for
@@ -645,7 +645,7 @@ defmodule CashLens.Pluggy.SyncTest do
               "results" => [
                 %{
                   "id" => "tx-1",
-                  "date" => "2026-07-20T00:00:00.000Z",
+                  "date" => "2026-07-20T15:00:00.000Z",
                   "description" => "COMPRA MERCADO",
                   "amount" => 89.9,
                   "type" => "DEBIT"
@@ -709,7 +709,7 @@ defmodule CashLens.Pluggy.SyncTest do
           "results" => [
             %{
               "id" => "tx-1",
-              "date" => "2026-07-15T00:00:00.000Z",
+              "date" => "2026-07-15T15:00:00.000Z",
               "description" => "MERCADO XYZ",
               "amount" => 42.5,
               "type" => "DEBIT"

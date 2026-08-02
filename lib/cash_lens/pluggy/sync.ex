@@ -195,9 +195,12 @@ defmodule CashLens.Pluggy.Sync do
   defp to_decimal(amount) when is_integer(amount), do: Decimal.new(amount)
   defp to_decimal(%Decimal{} = amount), do: amount
 
+  # Pluggy timestamps are UTC instants; Brazil has used a fixed UTC-3 offset
+  # (no DST) since 2019, so shifting by 3 hours before taking the date gives
+  # the same calendar day the bank itself reports (matching CSV imports).
   defp parse_date(iso8601) do
     case DateTime.from_iso8601(iso8601) do
-      {:ok, dt, _offset} -> DateTime.to_date(dt)
+      {:ok, dt, _offset} -> dt |> DateTime.add(-3, :hour) |> DateTime.to_date()
       _ -> Date.from_iso8601!(String.slice(iso8601, 0, 10))
     end
   end
