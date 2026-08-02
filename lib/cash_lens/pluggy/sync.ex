@@ -193,15 +193,17 @@ defmodule CashLens.Pluggy.Sync do
   Normalizes a Pluggy transaction's amount to the cash_lens convention
   (negative = expense, positive = income).
 
-    * `"BANK"` accounts: Pluggy's `amount` is always positive; `type`
-      (`"DEBIT"` / `"CREDIT"`) says the direction.
+    * `"BANK"` accounts: Pluggy already returns `amount` correctly signed
+      (negative for `"DEBIT"`, positive for `"CREDIT"`) — verified against
+      real BB and Bradesco checking-account data, which contradicted this
+      function's original assumption that `amount` was always positive for
+      BANK. `type` is not used to determine sign; it is only required to be
+      present so a malformed row missing it still degrades to `:error`
+      instead of guessing.
     * `"CREDIT"` accounts: Pluggy's `amount` is already signed, but
       inverted (positive = purchase/expense) relative to cash_lens.
   """
-  def normalize_amount("BANK", %{"amount" => amount, "type" => "DEBIT"}),
-    do: amount |> to_decimal() |> Decimal.negate()
-
-  def normalize_amount("BANK", %{"amount" => amount, "type" => "CREDIT"}),
+  def normalize_amount("BANK", %{"amount" => amount, "type" => _type}),
     do: to_decimal(amount)
 
   def normalize_amount("CREDIT", %{"amount" => amount}),

@@ -34,14 +34,14 @@ defmodule CashLens.Pluggy.SyncTest do
   end
 
   describe "normalize_amount/2 — sign conversion" do
-    test "BANK + DEBIT becomes negative" do
+    test "BANK + DEBIT: Pluggy's already-negative amount stays negative" do
       assert Decimal.equal?(
-               Sync.normalize_amount("BANK", %{"amount" => 150.0, "type" => "DEBIT"}),
+               Sync.normalize_amount("BANK", %{"amount" => -150.0, "type" => "DEBIT"}),
                Decimal.new("-150.0")
              )
     end
 
-    test "BANK + CREDIT stays positive" do
+    test "BANK + CREDIT: Pluggy's already-positive amount stays positive" do
       assert Decimal.equal?(
                Sync.normalize_amount("BANK", %{"amount" => 150.0, "type" => "CREDIT"}),
                Decimal.new("150.0")
@@ -93,7 +93,7 @@ defmodule CashLens.Pluggy.SyncTest do
               "id" => "tx-1",
               "date" => "2026-07-15T15:00:00.000Z",
               "description" => "MERCADO XYZ",
-              "amount" => 42.5,
+              "amount" => -42.5,
               "type" => "DEBIT",
               "category" => "Supermarket"
             }
@@ -122,7 +122,7 @@ defmodule CashLens.Pluggy.SyncTest do
               "id" => "tx-1",
               "date" => "2026-07-15T15:00:00.000Z",
               "description" => "MERCADO XYZ",
-              "amount" => 42.5,
+              "amount" => -42.5,
               "type" => "DEBIT",
               "category" => "Supermarket"
             }
@@ -187,7 +187,7 @@ defmodule CashLens.Pluggy.SyncTest do
               "id" => "tx-1",
               "date" => "2026-06-16T15:00:00.000Z",
               "description" => "PGTO CARTAO     PLATINUM ESTILO VISA",
-              "amount" => 14391.19,
+              "amount" => -14391.19,
               "type" => "DEBIT"
             }
           ],
