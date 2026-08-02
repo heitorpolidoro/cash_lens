@@ -150,7 +150,8 @@ defmodule CashLens.Pluggy.Sync do
       amount: normalize_amount(account_link.pluggy_account_type, pluggy_transaction),
       pluggy_category: pluggy_transaction["category"],
       occurrence_index: occurrence_index,
-      import_batch_id: import_batch_id
+      import_batch_id: import_batch_id,
+      source: "pluggy"
     }
 
     categorizer =
@@ -158,10 +159,19 @@ defmodule CashLens.Pluggy.Sync do
 
     attrs = categorizer.categorize(attrs)
 
-    case Transactions.create_transaction(attrs) do
-      {:ok, :duplicate} -> :skipped
-      {:ok, _transaction} -> :created
-      {:error, _changeset} -> :error
+    if Transactions.duplicate_from_other_source?(
+         attrs.account_id,
+         attrs.date,
+         attrs.amount,
+         "pluggy"
+       ) do
+      :skipped
+    else
+      case Transactions.create_transaction(attrs) do
+        {:ok, :duplicate} -> :skipped
+        {:ok, _transaction} -> :created
+        {:error, _changeset} -> :error
+      end
     end
   rescue
     # A single malformed transaction (missing "type", nil amount/date, an

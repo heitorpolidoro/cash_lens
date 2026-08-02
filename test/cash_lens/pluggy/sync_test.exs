@@ -153,6 +153,55 @@ defmodule CashLens.Pluggy.SyncTest do
     end
   end
 
+  describe "cross-source dedup" do
+    setup do
+      account = CashLens.AccountsFixtures.account_fixture()
+      item = CashLens.PluggyFixtures.pluggy_item_fixture()
+
+      {:ok, link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "acc-1",
+          pluggy_account_name: "Conta",
+          pluggy_account_type: "BANK"
+        })
+
+      {:ok, link} = Pluggy.link_account(link, account.id)
+
+      %{account: account, link: link, req_options: [plug: {Req.Test, CashLens.Pluggy.Client}]}
+    end
+
+    test "skips a Pluggy transaction that duplicates an existing file-sourced one with a different description",
+         %{account: account, link: link, req_options: req_options} do
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-16],
+        amount: "-14391.19",
+        description: "Pagto cartão crédito - PLATINUM ESTILO VISA",
+        source: "file"
+      })
+
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        Req.Test.json(conn, %{
+          "results" => [
+            %{
+              "id" => "tx-1",
+              "date" => "2026-06-16T15:00:00.000Z",
+              "description" => "PGTO CARTAO     PLATINUM ESTILO VISA",
+              "amount" => 14391.19,
+              "type" => "DEBIT"
+            }
+          ],
+          "next" => nil
+        })
+      end)
+
+      assert {:ok, %{created: 0, skipped: 1, errors: 0}} =
+               Sync.sync_account_link(link, "fake-api-key", req_options)
+
+      assert Repo.aggregate(Transaction, :count) == 1
+    end
+  end
+
   describe "sync_account_link/2 for a CREDIT account — statement find-or-update" do
     setup do
       item = pluggy_item_fixture()
