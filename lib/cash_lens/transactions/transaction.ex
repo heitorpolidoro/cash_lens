@@ -29,6 +29,7 @@ defmodule CashLens.Transactions.Transaction do
     field :suggested_category, :map, virtual: true
     field :notes, :string
     field :pluggy_category, :string
+    field :source, :string
     field :installment_number, :integer
     field :parent_transaction_id, :binary_id
     field :import_batch_id, :binary_id
@@ -55,6 +56,7 @@ defmodule CashLens.Transactions.Transaction do
       :reimbursement_link_key,
       :notes,
       :pluggy_category,
+      :source,
       :installment_group_id,
       :installment_number,
       :occurrence_index,
@@ -62,10 +64,26 @@ defmodule CashLens.Transactions.Transaction do
       :import_batch_id
     ])
     |> validate_required([:date, :description, :amount, :account_id])
+    |> put_default_source()
+    |> validate_inclusion(:source, ["file", "pluggy", "manual"])
     |> put_dedup_key()
     |> generate_fingerprint()
     |> unique_constraint(:fingerprint)
     |> foreign_key_constraint(:parent_transaction_id)
+  end
+
+  # Callers that don't know or care about provenance (the manual "new
+  # transaction" form, transfer-pair creation, income adjustments, transfer
+  # mirrors) get a sensible default instead of having to pass `source`
+  # everywhere. Importers that DO know their provenance (Ingestor -> "file",
+  # Pluggy.Sync -> "pluggy") set it explicitly in their attrs and this is a
+  # no-op for them.
+  defp put_default_source(changeset) do
+    if is_nil(get_field(changeset, :source)) do
+      put_change(changeset, :source, "manual")
+    else
+      changeset
+    end
   end
 
   defp identity_attrs(changeset) do

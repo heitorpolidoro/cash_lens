@@ -266,4 +266,47 @@ defmodule CashLens.Transactions.TransactionTest do
       assert Ecto.Changeset.get_change(changeset, :parent_transaction_id) == parent_id
     end
   end
+
+  describe "source" do
+    @account_id "22222222-2222-2222-2222-222222222222"
+
+    test "defaults to \"manual\" when not provided" do
+      changeset =
+        Transaction.changeset(%Transaction{}, %{
+          date: ~D[2026-02-23],
+          description: "some description",
+          amount: "120.5",
+          account_id: @account_id
+        })
+
+      assert Ecto.Changeset.get_field(changeset, :source) == "manual"
+    end
+
+    test "keeps an explicitly provided source" do
+      changeset =
+        Transaction.changeset(%Transaction{}, %{
+          date: ~D[2026-02-23],
+          description: "some description",
+          amount: "120.5",
+          account_id: @account_id,
+          source: "pluggy"
+        })
+
+      assert Ecto.Changeset.get_field(changeset, :source) == "pluggy"
+    end
+
+    test "rejects an unrecognized source" do
+      changeset =
+        Transaction.changeset(%Transaction{}, %{
+          date: ~D[2026-02-23],
+          description: "some description",
+          amount: "120.5",
+          account_id: @account_id,
+          source: "carrier-pigeon"
+        })
+
+      refute changeset.valid?
+      assert "is invalid" in errors_on(changeset).source
+    end
+  end
 end
