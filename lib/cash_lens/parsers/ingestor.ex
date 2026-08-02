@@ -267,12 +267,22 @@ defmodule CashLens.Parsers.Ingestor do
         if is_nil(account_id) or is_nil(date) or is_nil(amount) do
           true
         else
-          not CashLens.Transactions.duplicate_from_other_source?(
-            account_id,
-            date,
-            amount,
-            "file"
-          )
+          if CashLens.Transactions.duplicate_from_other_source?(
+               account_id,
+               date,
+               amount,
+               "file"
+             ) do
+            Logger.warning(
+              "Ingestor: skipping transaction as cross-source duplicate for account #{account_id} " <>
+                "on #{date} (amount #{amount}, description #{inspect(Map.get(entry, :description))}); " <>
+                "existence-based match may skip more rows than actually duplicated"
+            )
+
+            false
+          else
+            true
+          end
         end
       end)
 

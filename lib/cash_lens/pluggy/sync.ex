@@ -165,6 +165,12 @@ defmodule CashLens.Pluggy.Sync do
          attrs.amount,
          "pluggy"
        ) do
+      Logger.warning(
+        "Pluggy: skipping transaction as cross-source duplicate for account #{attrs.account_id} " <>
+          "on #{attrs.date} (amount #{attrs.amount}, description #{inspect(attrs.description)}); " <>
+          "existence-based match may skip more rows than actually duplicated"
+      )
+
       :skipped
     else
       case Transactions.create_transaction(attrs) do
