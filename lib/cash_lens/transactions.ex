@@ -757,6 +757,34 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
+  Returns `true` when a transaction already exists for `account_id`, on
+  `date`, for `amount`, but was recorded by a *different* `source`.
+
+  This is a looser, description-independent dedup signal used in addition to
+  the exact-fingerprint dedup (`Transaction.fingerprint/2`). It exists
+  because the same real-world charge can arrive with genuinely different
+  description text depending on where it was imported from — Pluggy's raw
+  bank-provided description ("PGTO CARTAO     PLATINUM ESTILO VISA") versus
+  the file parsers' human-formatted one ("Pagto cartão crédito - PLATINUM
+  ESTILO VISA") — which makes the exact fingerprint (description included)
+  never match across sources for the very same transaction. Case/diacritic
+  normalization alone does not fix this: the two strings differ in actual
+  wording, not just formatting.
+  """
+  @spec duplicate_from_other_source?(Ecto.UUID.t(), Date.t(), Decimal.t(), String.t()) ::
+          boolean()
+  def duplicate_from_other_source?(account_id, date, amount, source) do
+    Repo.exists?(
+      from t in Transaction,
+        where:
+          t.account_id == ^account_id and
+            t.date == ^date and
+            t.amount == ^amount and
+            t.source != ^source
+    )
+  end
+
+  @doc """
   Gets a single transaction.
   """
   def get_transaction!(id),

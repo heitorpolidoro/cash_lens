@@ -898,4 +898,84 @@ defmodule CashLens.TransactionsTest do
       assert "Transporte" in category_names
     end
   end
+
+  describe "duplicate_from_other_source?/4" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    test "true when an existing transaction has the same account/date/amount but a different source" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-16],
+        amount: "-14391.19",
+        description: "Pagto cartão crédito - PLATINUM ESTILO VISA",
+        source: "file"
+      })
+
+      assert Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-16],
+               Decimal.new("-14391.19"),
+               "pluggy"
+             )
+    end
+
+    test "false when the only match has the SAME source" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-16],
+        amount: "-14391.19",
+        description: "PGTO CARTAO     PLATINUM ESTILO VISA",
+        source: "pluggy"
+      })
+
+      refute Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-16],
+               Decimal.new("-14391.19"),
+               "pluggy"
+             )
+    end
+
+    test "false when there is no matching account/date/amount at all" do
+      account = account_fixture()
+
+      refute Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-16],
+               Decimal.new("-14391.19"),
+               "pluggy"
+             )
+    end
+
+    test "false when date or amount differ, even with a different source" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-16],
+        amount: "-14391.19",
+        description: "Pagto cartão crédito - PLATINUM ESTILO VISA",
+        source: "file"
+      })
+
+      refute Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-17],
+               Decimal.new("-14391.19"),
+               "pluggy"
+             )
+
+      refute Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-16],
+               Decimal.new("-1.00"),
+               "pluggy"
+             )
+    end
+  end
 end
