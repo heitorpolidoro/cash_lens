@@ -216,7 +216,8 @@ defmodule CashLens.Parsers.Ingestor do
     today = Date.utc_today()
     transactions_data = Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
 
-    {entries, failed} = prepare_entries(transactions_data, account_id, statement_id)
+    {entries, failed, cross_source_skipped} =
+      prepare_entries(transactions_data, account_id, statement_id)
 
     {inserted_count, affected_account_ids} =
       process_entries(entries, transactions_data, account_id, statement_id)
@@ -227,10 +228,11 @@ defmodule CashLens.Parsers.Ingestor do
     end)
 
     # `skipped` makes silent dedupe misses observable: it is the number of prepared
-    # input rows the unique index rejected as already-present (or in-batch dups),
-    # i.e. entries that did not result in an insert. A future regression that lets
-    # duplicates back in would surface as a non-zero `skipped` on re-import.
-    skipped = length(entries) - inserted_count
+    # input rows that did not result in an insert — either the unique index rejected
+    # them as already-present (or in-batch dups) via `fingerprint`, or they were
+    # filtered out beforehand as a cross-source duplicate (see
+    # `Transactions.duplicate_from_other_source?/4`).
+    skipped = length(entries) - inserted_count + cross_source_skipped
 
     {:ok, %{imported: inserted_count, skipped: skipped, failed: failed}}
   end
@@ -253,9 +255,20 @@ defmodule CashLens.Parsers.Ingestor do
         _ -> false
       end)
 
-    entries = Enum.map(valid, fn {:ok, entry} -> entry end)
+    all_entries = Enum.map(valid, fn {:ok, entry} -> entry end)
     reasons = Enum.map(failed, fn {:error, reason} -> reason end)
-    {entries, reasons}
+
+    {entries, cross_source_dupes} =
+      Enum.split_with(all_entries, fn entry ->
+        not CashLens.Transactions.duplicate_from_other_source?(
+          entry.account_id,
+          entry.date,
+          entry.amount,
+          "file"
+        )
+      end)
+
+    {entries, reasons, length(cross_source_dupes)}
   end
 
   # Computes the 0-based occurrence index of every incoming row among otherwise
@@ -338,6 +351,7 @@ defmodule CashLens.Parsers.Ingestor do
       data
       |> Map.put(:account_id, account_id)
       |> Map.put(:occurrence_index, occurrence_index)
+      |> Map.put(:source, "file")
       |> categorizer.categorize()
 
     # Generate changeset to get fingerprint and validate

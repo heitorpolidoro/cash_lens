@@ -501,6 +501,25 @@ defmodule CashLens.Parsers.IngestorTest do
       assert {:ok, %{imported: 1, skipped: 1}} = Ingestor.import_file(account, p2)
       assert Repo.aggregate(Transaction, :count) == 2
     end
+
+    test "a file-imported row that duplicates an existing Pluggy transaction by account/date/amount is skipped" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-02-24],
+        amount: "-150.00",
+        description: "PGTO CARTAO BB MM OURO 24/02 SOME MERCHANT",
+        source: "pluggy"
+      })
+
+      assert {:ok, %{imported: 2, skipped: 1}} = Ingestor.import_file(account, @bb_sample)
+
+      # The BB MM OURO row (24/02, -150.00) was skipped as a cross-source
+      # duplicate; only SALDO ANTERIOR/RENDE FACIL/PIX rows from the sample
+      # made it in as brand-new file-sourced transactions.
+      assert Repo.aggregate(Transaction, :count) == 3
+    end
   end
 
   describe "expected_extensions/1" do
