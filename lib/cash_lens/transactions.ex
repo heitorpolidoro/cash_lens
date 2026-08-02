@@ -758,7 +758,8 @@ defmodule CashLens.Transactions do
 
   @doc """
   Returns `true` when a transaction already exists for `account_id`, on
-  `date`, for `amount`, but was recorded by a *different* `source`.
+  `date`, for `amount`, but was recorded by the *complementary real import
+  source* — "file" is foreign to "pluggy" and vice versa.
 
   This is a looser, description-independent dedup signal used in addition to
   the exact-fingerprint dedup (`Transaction.fingerprint/2`). It exists
@@ -770,19 +771,33 @@ defmodule CashLens.Transactions do
   never match across sources for the very same transaction. Case/diacritic
   normalization alone does not fix this: the two strings differ in actual
   wording, not just formatting.
+
+  "manual" transactions (including transfer mirrors created by
+  `CashLens.Transactions.TransferRuleApplier`, which never set `:source` and
+  so default to "manual") are deliberately never treated as foreign to
+  either "file" or "pluggy" — a manual entry or a transfer mirror must never
+  cause a later legitimate file/Pluggy import of the same real-world charge
+  to be silently skipped. `source` is always passed as literally "file" or
+  "pluggy" by the two callers of this function.
   """
   @spec duplicate_from_other_source?(Ecto.UUID.t(), Date.t(), Decimal.t(), String.t()) ::
           boolean()
   def duplicate_from_other_source?(account_id, date, amount, source) do
+    other_source = complementary_import_source(source)
+
     Repo.exists?(
       from t in Transaction,
         where:
           t.account_id == ^account_id and
             t.date == ^date and
             t.amount == ^amount and
-            t.source != ^source
+            t.source == ^other_source
     )
   end
+
+  defp complementary_import_source("file"), do: "pluggy"
+  defp complementary_import_source("pluggy"), do: "file"
+  defp complementary_import_source(_other), do: nil
 
   @doc """
   Gets a single transaction.

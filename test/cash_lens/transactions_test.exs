@@ -977,5 +977,65 @@ defmodule CashLens.TransactionsTest do
                "pluggy"
              )
     end
+
+    test "false when the only match has source \"manual\" (manual entries are never foreign)" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-16],
+        amount: "-14391.19",
+        description: "Transferência entre contas",
+        source: "manual"
+      })
+
+      refute Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-16],
+               Decimal.new("-14391.19"),
+               "pluggy"
+             )
+
+      refute Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-16],
+               Decimal.new("-14391.19"),
+               "file"
+             )
+    end
+
+    test "true with mixed sources present when the query source differs from at least one row" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-16],
+        amount: "-14391.19",
+        description: "Pagto cartão crédito - PLATINUM ESTILO VISA",
+        source: "file"
+      })
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-16],
+        amount: "-14391.19",
+        description: "PGTO CARTAO     PLATINUM ESTILO VISA",
+        source: "pluggy"
+      })
+
+      assert Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-16],
+               Decimal.new("-14391.19"),
+               "pluggy"
+             )
+
+      assert Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-06-16],
+               Decimal.new("-14391.19"),
+               "file"
+             )
+    end
   end
 end

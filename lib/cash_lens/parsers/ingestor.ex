@@ -260,12 +260,20 @@ defmodule CashLens.Parsers.Ingestor do
 
     {entries, cross_source_dupes} =
       Enum.split_with(all_entries, fn entry ->
-        not CashLens.Transactions.duplicate_from_other_source?(
-          entry.account_id,
-          entry.date,
-          entry.amount,
-          "file"
-        )
+        account_id = Map.get(entry, :account_id)
+        date = Map.get(entry, :date)
+        amount = Map.get(entry, :amount)
+
+        if is_nil(account_id) or is_nil(date) or is_nil(amount) do
+          true
+        else
+          not CashLens.Transactions.duplicate_from_other_source?(
+            account_id,
+            date,
+            amount,
+            "file"
+          )
+        end
       end)
 
     {entries, reasons, length(cross_source_dupes)}
