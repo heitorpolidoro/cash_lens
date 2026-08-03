@@ -231,7 +231,7 @@ defmodule CashLens.Parsers.Ingestor do
     # input rows that did not result in an insert — either the unique index rejected
     # them as already-present (or in-batch dups) via `fingerprint`, or they were
     # filtered out beforehand as a cross-source duplicate (see
-    # `Transactions.duplicate_from_other_source?/4`).
+    # `cross_source_duplicate?/5`).
     skipped = length(entries) - inserted_count + cross_source_skipped
 
     {:ok, %{imported: inserted_count, skipped: skipped, failed: failed}}
@@ -285,14 +285,16 @@ defmodule CashLens.Parsers.Ingestor do
     {entries, reasons, length(cross_source_dupes)}
   end
 
-  # Installment identity (parcel number + merchant + amount) is checked first
-  # since it is more precise than date matching for "PARC X/Y" rows — see
-  # `Transactions.duplicate_installment_from_other_source?/4`'s moduledoc for
+  # Installment identity (parcel number + total + merchant + amount, within a
+  # coarse date window) is checked first since it is more precise than plain
+  # date matching for "PARC X/Y" rows — see
+  # `Transactions.duplicate_installment_from_other_source?/5`'s moduledoc for
   # why date matching alone cannot reliably catch these. Falls back to the
   # date-based check (with the credit-card ±1 day window) for everything else.
   defp cross_source_duplicate?(account_id, date, amount, description, credit_card?) do
     CashLens.Transactions.duplicate_installment_from_other_source?(
       account_id,
+      date,
       description,
       amount,
       "file"

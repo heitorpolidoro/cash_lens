@@ -1179,27 +1179,43 @@ defmodule CashLens.TransactionsTest do
     end
   end
 
-  describe "duplicate_installment_from_other_source?/4" do
+  describe "duplicate_installment_from_other_source?/5" do
     import CashLens.AccountsFixtures
     import CashLens.TransactionsFixtures
+    alias CashLens.Installments.InstallmentGroup
 
-    test "true when an existing installment row matches by installment number and merchant base, ignoring date" do
+    # A real file-imported installment row: CashLens.Installments has already
+    # stripped "PARC X/Y" from the description, persisted the parcel number,
+    # and linked it to a group carrying the total installment count.
+    defp installment_fixture(attrs) do
+      {total, attrs} = Map.pop!(attrs, :total)
+
+      group =
+        Repo.insert!(%InstallmentGroup{
+          description_pattern: "test-group-#{System.unique_integer([:positive])}",
+          installments: total,
+          start_date: ~D[2026-01-01]
+        })
+
+      transaction_fixture(Map.put(attrs, :installment_group_id, group.id))
+    end
+
+    test "true when an existing installment row matches by number, total, and merchant base, ignoring date" do
       account = account_fixture()
 
-      # Stored rows have already had "PARC X/Y" stripped from their description
-      # by CashLens.Installments, with the parcel number persisted separately —
-      # this is what a real file-imported installment row looks like in the DB.
-      transaction_fixture(%{
+      installment_fixture(%{
         account_id: account.id,
         date: ~D[2026-06-03],
         amount: "-137.16",
         description: "TRILHARES EST",
         installment_number: 4,
+        total: 9,
         source: "file"
       })
 
       assert Transactions.duplicate_installment_from_other_source?(
                account.id,
+               ~D[2026-06-05],
                "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
                Decimal.new("-137.16"),
                "pluggy"
@@ -1209,17 +1225,90 @@ defmodule CashLens.TransactionsTest do
     test "false when the installment number differs, even with the same merchant and amount" do
       account = account_fixture()
 
-      transaction_fixture(%{
+      installment_fixture(%{
         account_id: account.id,
         date: ~D[2026-06-03],
         amount: "-137.16",
         description: "TRILHARES EST",
         installment_number: 3,
+        total: 9,
         source: "file"
       })
 
       refute Transactions.duplicate_installment_from_other_source?(
                account.id,
+               ~D[2026-06-05],
+               "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
+               Decimal.new("-137.16"),
+               "pluggy"
+             )
+    end
+
+    test "false when the total installment count differs, even with the same merchant, number, and amount" do
+      account = account_fixture()
+
+      # A separate 12x purchase at the same merchant for the same monthly
+      # amount must not be conflated with a 9x purchase's 4th parcel.
+      installment_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-03],
+        amount: "-137.16",
+        description: "TRILHARES EST",
+        installment_number: 4,
+        total: 12,
+        source: "file"
+      })
+
+      refute Transactions.duplicate_installment_from_other_source?(
+               account.id,
+               ~D[2026-06-05],
+               "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
+               Decimal.new("-137.16"),
+               "pluggy"
+             )
+    end
+
+    test "false when the merchant base differs, even with the same number, total, and amount" do
+      account = account_fixture()
+
+      installment_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-03],
+        amount: "-137.16",
+        description: "OUTRA LOJA",
+        installment_number: 4,
+        total: 9,
+        source: "file"
+      })
+
+      refute Transactions.duplicate_installment_from_other_source?(
+               account.id,
+               ~D[2026-06-05],
+               "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
+               Decimal.new("-137.16"),
+               "pluggy"
+             )
+    end
+
+    test "false when the matching row is outside the 60-day window" do
+      account = account_fixture()
+
+      # A separate purchase at the same merchant, same monthly amount, whose
+      # 4th parcel happens to land 4 months away — outside any plausible
+      # billing-cycle drift for the SAME purchase.
+      installment_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-02-03],
+        amount: "-137.16",
+        description: "TRILHARES EST",
+        installment_number: 4,
+        total: 9,
+        source: "file"
+      })
+
+      refute Transactions.duplicate_installment_from_other_source?(
+               account.id,
+               ~D[2026-06-05],
                "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
                Decimal.new("-137.16"),
                "pluggy"
@@ -1229,17 +1318,19 @@ defmodule CashLens.TransactionsTest do
     test "false when the description carries no installment marker" do
       account = account_fixture()
 
-      transaction_fixture(%{
+      installment_fixture(%{
         account_id: account.id,
         date: ~D[2026-06-03],
         amount: "-137.16",
         description: "TRILHARES EST",
         installment_number: 4,
+        total: 9,
         source: "file"
       })
 
       refute Transactions.duplicate_installment_from_other_source?(
                account.id,
+               ~D[2026-06-05],
                "TRILHARES EST SAO JOSE DOSBR",
                Decimal.new("-137.16"),
                "pluggy"
@@ -1249,17 +1340,19 @@ defmodule CashLens.TransactionsTest do
     test "false when the only match has the same source" do
       account = account_fixture()
 
-      transaction_fixture(%{
+      installment_fixture(%{
         account_id: account.id,
         date: ~D[2026-06-03],
         amount: "-137.16",
         description: "TRILHARES EST",
         installment_number: 4,
+        total: 9,
         source: "pluggy"
       })
 
       refute Transactions.duplicate_installment_from_other_source?(
                account.id,
+               ~D[2026-06-05],
                "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
                Decimal.new("-137.16"),
                "pluggy"

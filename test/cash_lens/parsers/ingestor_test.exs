@@ -520,6 +520,54 @@ defmodule CashLens.Parsers.IngestorTest do
       # made it in as brand-new file-sourced transactions.
       assert Repo.aggregate(Transaction, :count) == 3
     end
+
+    test "a credit-card file import skips a Pluggy row dated one day off (the ±1 day window)" do
+      account = account_fixture(%{is_credit_card: true, parser_type: "ourocard_ofx"})
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-05-23],
+        amount: "-51.00",
+        description: "VALE EVENTOS SAO JOSE DOS BR",
+        source: "pluggy"
+      })
+
+      ofx = """
+      <STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260522</DTPOSTED>
+      <TRNAMT>-51.00</TRNAMT><MEMO>VALE EVENTOS SAO JOSE DOS BR</MEMO></STMTTRN>
+      """
+
+      file_path = "test/support/fixtures/files/credit_card_1day_#{account.id}.ofx"
+      File.write!(file_path, ofx)
+      on_exit(fn -> File.rm(file_path) end)
+
+      assert {:ok, %{imported: 0, skipped: 1}} = Ingestor.import_file(account, file_path)
+      assert Repo.aggregate(Transaction, :count) == 1
+    end
+
+    test "a BANK account file import does NOT skip a Pluggy row dated one day off (no ±1 day window)" do
+      account = account_fixture(%{is_credit_card: false, parser_type: "ourocard_ofx"})
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-05-23],
+        amount: "-51.00",
+        description: "VALE EVENTOS SAO JOSE DOS BR",
+        source: "pluggy"
+      })
+
+      ofx = """
+      <STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260522</DTPOSTED>
+      <TRNAMT>-51.00</TRNAMT><MEMO>VALE EVENTOS SAO JOSE DOS BR</MEMO></STMTTRN>
+      """
+
+      file_path = "test/support/fixtures/files/bank_1day_#{account.id}.ofx"
+      File.write!(file_path, ofx)
+      on_exit(fn -> File.rm(file_path) end)
+
+      assert {:ok, %{imported: 1, skipped: 0}} = Ingestor.import_file(account, file_path)
+      assert Repo.aggregate(Transaction, :count) == 2
+    end
   end
 
   describe "expected_extensions/1" do

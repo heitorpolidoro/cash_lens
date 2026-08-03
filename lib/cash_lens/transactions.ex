@@ -11,6 +11,7 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.BulkIgnorePattern
   alias CashLens.Transactions.CategorySuggester
+  alias CashLens.Installments.InstallmentGroup
   alias CashLens.Transactions.InstallmentDetector
   alias CashLens.Transactions.RejectedReimbursementPair
   alias CashLens.Transactions.Transaction
@@ -842,10 +843,24 @@ defmodule CashLens.Transactions do
   for the shared parsing logic), so `description` here must be the RAW,
   not-yet-processed description — callers must pass it before any
   installment clean-up has touched it. Matches against already-stored rows
-  by their persisted `installment_number` column and the parsed merchant
-  base name (normalized the same way the exact-fingerprint dedup
-  normalizes descriptions), since a stored row's own description has
-  already been cleaned of the "PARC X/Y" marker by then.
+  by:
+
+    * `installment_number` and the *total* installment count (joined via
+      `installment_group_id` -> `installment_groups.installments`) —
+      matching on the parcel number and amount alone would conflate two
+      different same-merchant, same-monthly-amount purchases with
+      different plan lengths (e.g. a 9x and a 12x purchase both billing
+      R$137.16/month) at whichever parcel their numbers happen to align.
+    * the parsed merchant base name, normalized the same way the
+      exact-fingerprint dedup normalizes descriptions, since a stored
+      row's own description has already been cleaned of the "PARC X/Y"
+      marker by then.
+    * a coarse ±60 day window around `date` — with no window at all, two
+      unrelated purchases at the same merchant, for the same monthly
+      amount and the same parcel number, but months or years apart, would
+      collide. 60 days comfortably covers every drift confirmed against
+      real data (a few days up to about a week) while still ruling out
+      unrelated purchases far outside any plausible billing cycle.
 
   Returns `false` (never a duplicate) when `description` carries no
   installment marker — callers should fall back to
@@ -853,28 +868,37 @@ defmodule CashLens.Transactions do
   """
   @spec duplicate_installment_from_other_source?(
           Ecto.UUID.t(),
+          Date.t(),
           String.t() | nil,
           Decimal.t(),
           String.t()
         ) :: boolean()
-  def duplicate_installment_from_other_source?(account_id, description, amount, source) do
+  def duplicate_installment_from_other_source?(account_id, date, description, amount, source) do
     case InstallmentDetector.detect(description) do
       nil ->
         false
 
-      %{base: base, number: number} ->
+      %{base: base, number: number, total: total} ->
         other_source = complementary_import_source(source)
         normalized_base = Transaction.normalize_description(base)
+        window_start = Date.add(date, -60)
+        window_end = Date.add(date, 60)
 
         from(t in Transaction,
+          join: g in InstallmentGroup,
+          on: t.installment_group_id == g.id,
           where:
             t.account_id == ^account_id and
               t.installment_number == ^number and
+              g.installments == ^total and
               t.amount == ^amount and
-              t.source == ^other_source
+              t.source == ^other_source and
+              t.date >= ^window_start and
+              t.date <= ^window_end,
+          select: t.description
         )
         |> Repo.all()
-        |> Enum.any?(&(Transaction.normalize_description(&1.description) == normalized_base))
+        |> Enum.any?(&(Transaction.normalize_description(&1) == normalized_base))
     end
   end
 

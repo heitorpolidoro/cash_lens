@@ -202,6 +202,73 @@ defmodule CashLens.Pluggy.SyncTest do
     end
   end
 
+  describe "cross-source dedup for CREDIT accounts (installment identity)" do
+    setup do
+      item = pluggy_item_fixture()
+      account = account_fixture(%{name: "Ourocard", is_credit_card: true})
+
+      {:ok, link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "card-1",
+          pluggy_account_name: "OUROCARD",
+          pluggy_account_type: "CREDIT"
+        })
+
+      {:ok, link} = Pluggy.link_account(link, account.id)
+      link = Repo.preload(link, :pluggy_item)
+
+      %{link: link, account: account, req_options: [plug: {Req.Test, CashLens.Pluggy.Client}]}
+    end
+
+    test "skips a Pluggy installment parcel that matches an existing file-sourced one by installment identity, despite a large date drift",
+         %{account: account, link: link, req_options: req_options} do
+      group =
+        Repo.insert!(%CashLens.Installments.InstallmentGroup{
+          description_pattern: "sync-test-group",
+          installments: 9,
+          start_date: ~D[2026-03-03]
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-03],
+        amount: "-137.16",
+        description: "TRILHARES EST",
+        installment_group_id: group.id,
+        installment_number: 4,
+        source: "file"
+      })
+
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        case conn.request_path do
+          "/v2/transactions" ->
+            Req.Test.json(conn, %{
+              "results" => [
+                %{
+                  "id" => "tx-1",
+                  "date" => "2026-06-08T15:00:00.000Z",
+                  "description" => "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
+                  "amount" => 137.16,
+                  "type" => "DEBIT"
+                }
+              ],
+              "next" => nil
+            })
+
+          "/accounts" ->
+            Req.Test.json(conn, %{
+              "results" => [%{"id" => "card-1", "balance" => 0.0}]
+            })
+        end
+      end)
+
+      assert {:ok, %{created: 0, skipped: 1, errors: 0}} =
+               Sync.sync_account_link(link, "fake-api-key", req_options)
+
+      assert Repo.aggregate(Transaction, :count) == 1
+    end
+  end
+
   describe "sync_account_link/2 for a CREDIT account — statement find-or-update" do
     setup do
       item = pluggy_item_fixture()

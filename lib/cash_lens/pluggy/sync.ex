@@ -163,6 +163,7 @@ defmodule CashLens.Pluggy.Sync do
     cross_source_duplicate? =
       Transactions.duplicate_installment_from_other_source?(
         attrs.account_id,
+        attrs.date,
         attrs.description,
         attrs.amount,
         "pluggy"
