@@ -11,6 +11,7 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.BulkIgnorePattern
   alias CashLens.Transactions.CategorySuggester
+  alias CashLens.Transactions.InstallmentDetector
   alias CashLens.Transactions.RejectedReimbursementPair
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
@@ -785,16 +786,31 @@ defmodule CashLens.Transactions do
   bank-exported CSV/OFX files date the same payment on the following Monday
   (the bank's own settlement/business-day date) — confirmed against 5 real
   BB checking-account boleto payments, all off by exactly the Sat/Sun ->
-  Mon gap. `business_day_candidates/1` expands a Saturday or Sunday date to
+  Mon gap. `business_day_candidates/2` expands a Saturday or Sunday date to
   also check the following Monday, and a Monday date to also check the
   preceding Saturday and Sunday, so the match works regardless of which
   source's date is being queried against which.
+
+  When `credit_card?` is `true`, the candidate window also includes the day
+  before and the day after `date`. Real Pluggy data for both mapped credit
+  cards shows plain (non-installment) purchases made late at night can post
+  to the statement on the following calendar day — a card-network cutoff
+  behavior, not a timezone bug (confirmed: a purchase timestamped
+  2026-05-22T22:13 BRT, already correctly converted, posted to the real
+  bank statement as 2026-05-23). This ±1 day window is deliberately not
+  applied to BANK accounts, which already match near-exactly with only the
+  weekend adjustment above.
   """
-  @spec duplicate_from_other_source?(Ecto.UUID.t(), Date.t(), Decimal.t(), String.t()) ::
+  @spec duplicate_from_other_source?(
+          Ecto.UUID.t(),
+          Date.t(),
+          Decimal.t(),
+          String.t(),
           boolean()
-  def duplicate_from_other_source?(account_id, date, amount, source) do
+        ) :: boolean()
+  def duplicate_from_other_source?(account_id, date, amount, source, credit_card? \\ false) do
     other_source = complementary_import_source(source)
-    candidate_dates = business_day_candidates(date)
+    candidate_dates = business_day_candidates(date, credit_card?)
 
     Repo.exists?(
       from t in Transaction,
@@ -806,17 +822,80 @@ defmodule CashLens.Transactions do
     )
   end
 
+  @doc """
+  Returns `true` when `description` carries an installment marker
+  ("PARC X/Y") and a transaction already exists for `account_id`, at the
+  same installment number and `amount`, recorded by the *complementary real
+  import source* — matched by installment identity instead of date.
+
+  Exists because installment purchases have no reliable shared date to
+  match on at all: cash_lens does not store each parcel's real per-month
+  billing date from the file source — `CashLens.Installments` computes it
+  as `add_months(original_purchase_date, installment_number - 1)`, which
+  can drift from Pluggy's real per-cycle date by anywhere from a few days
+  to over a week, with no fixed offset. `duplicate_from_other_source?/5`'s
+  date-based matching cannot reliably catch these.
+
+  Both Pluggy and the file parsers emit the "PARC X/Y" marker in the raw
+  description before `CashLens.Installments` runs and rewrites the stored
+  description to just the merchant name (see `InstallmentDetector.detect/1`
+  for the shared parsing logic), so `description` here must be the RAW,
+  not-yet-processed description — callers must pass it before any
+  installment clean-up has touched it. Matches against already-stored rows
+  by their persisted `installment_number` column and the parsed merchant
+  base name (normalized the same way the exact-fingerprint dedup
+  normalizes descriptions), since a stored row's own description has
+  already been cleaned of the "PARC X/Y" marker by then.
+
+  Returns `false` (never a duplicate) when `description` carries no
+  installment marker — callers should fall back to
+  `duplicate_from_other_source?/5` for non-installment transactions.
+  """
+  @spec duplicate_installment_from_other_source?(
+          Ecto.UUID.t(),
+          String.t() | nil,
+          Decimal.t(),
+          String.t()
+        ) :: boolean()
+  def duplicate_installment_from_other_source?(account_id, description, amount, source) do
+    case InstallmentDetector.detect(description) do
+      nil ->
+        false
+
+      %{base: base, number: number} ->
+        other_source = complementary_import_source(source)
+        normalized_base = Transaction.normalize_description(base)
+
+        from(t in Transaction,
+          where:
+            t.account_id == ^account_id and
+              t.installment_number == ^number and
+              t.amount == ^amount and
+              t.source == ^other_source
+        )
+        |> Repo.all()
+        |> Enum.any?(&(Transaction.normalize_description(&1.description) == normalized_base))
+    end
+  end
+
   defp complementary_import_source("file"), do: "pluggy"
   defp complementary_import_source("pluggy"), do: "file"
   defp complementary_import_source(_other), do: nil
 
   # 6 = Saturday, 7 = Sunday, 1 = Monday (Date.day_of_week/1, ISO 8601).
-  defp business_day_candidates(date) do
-    case Date.day_of_week(date) do
-      6 -> [date, Date.add(date, 2)]
-      7 -> [date, Date.add(date, 1)]
-      1 -> [date, Date.add(date, -1), Date.add(date, -2)]
-      _ -> [date]
+  defp business_day_candidates(date, credit_card?) do
+    weekend_candidates =
+      case Date.day_of_week(date) do
+        6 -> [date, Date.add(date, 2)]
+        7 -> [date, Date.add(date, 1)]
+        1 -> [date, Date.add(date, -1), Date.add(date, -2)]
+        _ -> [date]
+      end
+
+    if credit_card? do
+      Enum.uniq([Date.add(date, -1), Date.add(date, 1) | weekend_candidates])
+    else
+      weekend_candidates
     end
   end
 

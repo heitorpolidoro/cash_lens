@@ -1118,5 +1118,152 @@ defmodule CashLens.TransactionsTest do
                "file"
              )
     end
+
+    test "credit_card?: true matches a Pluggy purchase dated one day earlier than the file row" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-05-23],
+        amount: "-51.00",
+        description: "VALE EVENTOS SAO JOSE DOS BR",
+        source: "file"
+      })
+
+      assert Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-05-22],
+               Decimal.new("-51.00"),
+               "pluggy",
+               true
+             )
+    end
+
+    test "credit_card?: false (default) does not match a one-day-off date" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-05-23],
+        amount: "-51.00",
+        description: "VALE EVENTOS SAO JOSE DOS BR",
+        source: "file"
+      })
+
+      refute Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-05-22],
+               Decimal.new("-51.00"),
+               "pluggy"
+             )
+    end
+
+    test "credit_card?: true still refutes a match more than one day away" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-05-23],
+        amount: "-51.00",
+        description: "VALE EVENTOS SAO JOSE DOS BR",
+        source: "file"
+      })
+
+      refute Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-05-20],
+               Decimal.new("-51.00"),
+               "pluggy",
+               true
+             )
+    end
+  end
+
+  describe "duplicate_installment_from_other_source?/4" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    test "true when an existing installment row matches by installment number and merchant base, ignoring date" do
+      account = account_fixture()
+
+      # Stored rows have already had "PARC X/Y" stripped from their description
+      # by CashLens.Installments, with the parcel number persisted separately —
+      # this is what a real file-imported installment row looks like in the DB.
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-03],
+        amount: "-137.16",
+        description: "TRILHARES EST",
+        installment_number: 4,
+        source: "file"
+      })
+
+      assert Transactions.duplicate_installment_from_other_source?(
+               account.id,
+               "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
+               Decimal.new("-137.16"),
+               "pluggy"
+             )
+    end
+
+    test "false when the installment number differs, even with the same merchant and amount" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-03],
+        amount: "-137.16",
+        description: "TRILHARES EST",
+        installment_number: 3,
+        source: "file"
+      })
+
+      refute Transactions.duplicate_installment_from_other_source?(
+               account.id,
+               "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
+               Decimal.new("-137.16"),
+               "pluggy"
+             )
+    end
+
+    test "false when the description carries no installment marker" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-03],
+        amount: "-137.16",
+        description: "TRILHARES EST",
+        installment_number: 4,
+        source: "file"
+      })
+
+      refute Transactions.duplicate_installment_from_other_source?(
+               account.id,
+               "TRILHARES EST SAO JOSE DOSBR",
+               Decimal.new("-137.16"),
+               "pluggy"
+             )
+    end
+
+    test "false when the only match has the same source" do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-06-03],
+        amount: "-137.16",
+        description: "TRILHARES EST",
+        installment_number: 4,
+        source: "pluggy"
+      })
+
+      refute Transactions.duplicate_installment_from_other_source?(
+               account.id,
+               "TRILHARES EST PARC 04/09 SAO JOSE DOSBR",
+               Decimal.new("-137.16"),
+               "pluggy"
+             )
+    end
   end
 end

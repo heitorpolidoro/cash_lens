@@ -150,7 +150,7 @@ defmodule CashLens.Parsers.Ingestor do
         statement_id =
           maybe_create_statement(account, content, file_path, transactions_data)
 
-        finalize_import(transactions_data, account.id, statement_id)
+        finalize_import(transactions_data, account.id, account.is_credit_card, statement_id)
     end
   end
 
@@ -211,13 +211,13 @@ defmodule CashLens.Parsers.Ingestor do
       else: :unicode.characters_to_binary(content, :latin1, :utf8)
   end
 
-  defp finalize_import(transactions_data, account_id, statement_id) do
+  defp finalize_import(transactions_data, account_id, credit_card?, statement_id) do
     # Never persist transactions dated in the future — they have not happened yet.
     today = Date.utc_today()
     transactions_data = Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
 
     {entries, failed, cross_source_skipped} =
-      prepare_entries(transactions_data, account_id, statement_id)
+      prepare_entries(transactions_data, account_id, credit_card?, statement_id)
 
     {inserted_count, affected_account_ids} =
       process_entries(entries, transactions_data, account_id, statement_id)
@@ -237,7 +237,7 @@ defmodule CashLens.Parsers.Ingestor do
     {:ok, %{imported: inserted_count, skipped: skipped, failed: failed}}
   end
 
-  defp prepare_entries(transactions_data, account_id, statement_id) do
+  defp prepare_entries(transactions_data, account_id, credit_card?, statement_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     {valid, failed} =
@@ -263,19 +263,15 @@ defmodule CashLens.Parsers.Ingestor do
         account_id = Map.get(entry, :account_id)
         date = Map.get(entry, :date)
         amount = Map.get(entry, :amount)
+        description = Map.get(entry, :description)
 
         if is_nil(account_id) or is_nil(date) or is_nil(amount) do
           true
         else
-          if CashLens.Transactions.duplicate_from_other_source?(
-               account_id,
-               date,
-               amount,
-               "file"
-             ) do
+          if cross_source_duplicate?(account_id, date, amount, description, credit_card?) do
             Logger.warning(
               "Ingestor: skipping transaction as cross-source duplicate for account #{account_id} " <>
-                "on #{date} (amount #{amount}, description #{inspect(Map.get(entry, :description))}); " <>
+                "on #{date} (amount #{amount}, description #{inspect(description)}); " <>
                 "existence-based match may skip more rows than actually duplicated"
             )
 
@@ -287,6 +283,27 @@ defmodule CashLens.Parsers.Ingestor do
       end)
 
     {entries, reasons, length(cross_source_dupes)}
+  end
+
+  # Installment identity (parcel number + merchant + amount) is checked first
+  # since it is more precise than date matching for "PARC X/Y" rows — see
+  # `Transactions.duplicate_installment_from_other_source?/4`'s moduledoc for
+  # why date matching alone cannot reliably catch these. Falls back to the
+  # date-based check (with the credit-card ±1 day window) for everything else.
+  defp cross_source_duplicate?(account_id, date, amount, description, credit_card?) do
+    CashLens.Transactions.duplicate_installment_from_other_source?(
+      account_id,
+      description,
+      amount,
+      "file"
+    ) or
+      CashLens.Transactions.duplicate_from_other_source?(
+        account_id,
+        date,
+        amount,
+        "file",
+        credit_card?
+      )
   end
 
   # Computes the 0-based occurrence index of every incoming row among otherwise
