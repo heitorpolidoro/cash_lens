@@ -782,36 +782,31 @@ defmodule CashLens.Transactions do
   to be silently skipped. `source` is always passed as literally "file" or
   "pluggy" by the two callers of this function.
 
-  Matches across a weekend, not just the exact date. Real Pluggy data shows
-  boleto payments dated on the Saturday/Sunday they were scheduled, while
-  bank-exported CSV/OFX files date the same payment on the following Monday
-  (the bank's own settlement/business-day date) — confirmed against 5 real
-  BB checking-account boleto payments, all off by exactly the Sat/Sun ->
-  Mon gap. `business_day_candidates/2` expands a Saturday or Sunday date to
-  also check the following Monday, and a Monday date to also check the
-  preceding Saturday and Sunday, so the match works regardless of which
-  source's date is being queried against which.
+  Matches within ±2 calendar days of `date`, not just the exact date. Real
+  Pluggy data confirmed two independent sources of date drift this covers:
 
-  When `credit_card?` is `true`, the candidate window also includes the day
-  before and the day after `date`. Real Pluggy data for both mapped credit
-  cards shows plain (non-installment) purchases made late at night can post
-  to the statement on the following calendar day — a card-network cutoff
-  behavior, not a timezone bug (confirmed: a purchase timestamped
-  2026-05-22T22:13 BRT, already correctly converted, posted to the real
-  bank statement as 2026-05-23). This ±1 day window is deliberately not
-  applied to BANK accounts, which already match near-exactly with only the
-  weekend adjustment above.
+    * Boleto payments (BB checking account) dated on the Saturday/Sunday
+      they were scheduled by Pluggy, while bank-exported CSV/OFX files
+      date the same payment on the following Monday (the bank's own
+      settlement/business-day date) — confirmed against 5 real BB
+      boleto payments, all off by exactly the Sat/Sun -> Mon gap.
+    * Recurring Bradesco entries (daily interest sweeps, loan
+      installments, card-bill debits) where the file consistently dates
+      the entry 1-2 *business* days earlier than Pluggy, unrelated to
+      any weekend — confirmed against 9 real Bradesco transactions.
+
+  A plain purchase on a credit card can also post to the statement the
+  following calendar day due to a card-network settlement cutoff
+  (confirmed: a purchase timestamped 2026-05-22T22:13 BRT, already
+  correctly timezone-converted, posted to the real bank statement as
+  2026-05-23) — within the same ±2 day window, so no separate flag is
+  needed for it.
   """
-  @spec duplicate_from_other_source?(
-          Ecto.UUID.t(),
-          Date.t(),
-          Decimal.t(),
-          String.t(),
+  @spec duplicate_from_other_source?(Ecto.UUID.t(), Date.t(), Decimal.t(), String.t()) ::
           boolean()
-        ) :: boolean()
-  def duplicate_from_other_source?(account_id, date, amount, source, credit_card? \\ false) do
+  def duplicate_from_other_source?(account_id, date, amount, source) do
     other_source = complementary_import_source(source)
-    candidate_dates = business_day_candidates(date, credit_card?)
+    candidate_dates = Enum.map(-2..2, &Date.add(date, &1))
 
     Repo.exists?(
       from t in Transaction,
@@ -905,23 +900,6 @@ defmodule CashLens.Transactions do
   defp complementary_import_source("file"), do: "pluggy"
   defp complementary_import_source("pluggy"), do: "file"
   defp complementary_import_source(_other), do: nil
-
-  # 6 = Saturday, 7 = Sunday, 1 = Monday (Date.day_of_week/1, ISO 8601).
-  defp business_day_candidates(date, credit_card?) do
-    weekend_candidates =
-      case Date.day_of_week(date) do
-        6 -> [date, Date.add(date, 2)]
-        7 -> [date, Date.add(date, 1)]
-        1 -> [date, Date.add(date, -1), Date.add(date, -2)]
-        _ -> [date]
-      end
-
-    if credit_card? do
-      Enum.uniq([Date.add(date, -1), Date.add(date, 1) | weekend_candidates])
-    else
-      weekend_candidates
-    end
-  end
 
   @doc """
   Gets a single transaction.

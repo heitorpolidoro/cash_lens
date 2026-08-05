@@ -952,7 +952,7 @@ defmodule CashLens.TransactionsTest do
              )
     end
 
-    test "false when date or amount differ, even with a different source" do
+    test "false when date is more than 2 days off or amount differs, even with a different source" do
       account = account_fixture()
 
       transaction_fixture(%{
@@ -965,7 +965,7 @@ defmodule CashLens.TransactionsTest do
 
       refute Transactions.duplicate_from_other_source?(
                account.id,
-               ~D[2026-06-17],
+               ~D[2026-06-19],
                Decimal.new("-14391.19"),
                "pluggy"
              )
@@ -1119,7 +1119,7 @@ defmodule CashLens.TransactionsTest do
              )
     end
 
-    test "credit_card?: true matches a Pluggy purchase dated one day earlier than the file row" do
+    test "true when a credit-card purchase is dated one day earlier in Pluggy than in the file" do
       account = account_fixture()
 
       transaction_fixture(%{
@@ -1134,31 +1134,33 @@ defmodule CashLens.TransactionsTest do
                account.id,
                ~D[2026-05-22],
                Decimal.new("-51.00"),
-               "pluggy",
-               true
-             )
-    end
-
-    test "credit_card?: false (default) does not match a one-day-off date" do
-      account = account_fixture()
-
-      transaction_fixture(%{
-        account_id: account.id,
-        date: ~D[2026-05-23],
-        amount: "-51.00",
-        description: "VALE EVENTOS SAO JOSE DOS BR",
-        source: "file"
-      })
-
-      refute Transactions.duplicate_from_other_source?(
-               account.id,
-               ~D[2026-05-22],
-               Decimal.new("-51.00"),
                "pluggy"
              )
     end
 
-    test "credit_card?: true still refutes a match more than one day away" do
+    test "true when a Bradesco-style entry is dated two business days earlier in the file than in Pluggy" do
+      account = account_fixture()
+
+      # Real Bradesco pattern: the file dates a recurring entry 1-2 business
+      # days earlier than Pluggy, unrelated to any weekend (2026-05-11 is a
+      # Monday, 2026-05-13 a Wednesday).
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-05-11],
+        amount: "-3531.85",
+        description: "PRESTACAO DE CRED IMOB - PRESTACAO",
+        source: "file"
+      })
+
+      assert Transactions.duplicate_from_other_source?(
+               account.id,
+               ~D[2026-05-13],
+               Decimal.new("-3531.85"),
+               "pluggy"
+             )
+    end
+
+    test "false when the matching row is more than 2 days away" do
       account = account_fixture()
 
       transaction_fixture(%{
@@ -1173,8 +1175,7 @@ defmodule CashLens.TransactionsTest do
                account.id,
                ~D[2026-05-20],
                Decimal.new("-51.00"),
-               "pluggy",
-               true
+               "pluggy"
              )
     end
   end

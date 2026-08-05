@@ -158,7 +158,6 @@ defmodule CashLens.Pluggy.Sync do
       Application.get_env(:cash_lens, :auto_categorizer, CashLens.Transactions.AutoCategorizer)
 
     attrs = categorizer.categorize(attrs)
-    credit_card? = account_link.pluggy_account_type == "CREDIT"
 
     cross_source_duplicate? =
       Transactions.duplicate_installment_from_other_source?(
@@ -172,8 +171,7 @@ defmodule CashLens.Pluggy.Sync do
           attrs.account_id,
           attrs.date,
           attrs.amount,
-          "pluggy",
-          credit_card?
+          "pluggy"
         )
 
     if cross_source_duplicate? do

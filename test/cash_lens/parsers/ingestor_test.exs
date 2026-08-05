@@ -521,7 +521,7 @@ defmodule CashLens.Parsers.IngestorTest do
       assert Repo.aggregate(Transaction, :count) == 3
     end
 
-    test "a credit-card file import skips a Pluggy row dated one day off (the ±1 day window)" do
+    test "a credit-card file import skips a Pluggy row dated one day off (the ±2 day window)" do
       account = account_fixture(%{is_credit_card: true, parser_type: "ourocard_ofx"})
 
       CashLens.TransactionsFixtures.transaction_fixture(%{
@@ -545,28 +545,30 @@ defmodule CashLens.Parsers.IngestorTest do
       assert Repo.aggregate(Transaction, :count) == 1
     end
 
-    test "a BANK account file import does NOT skip a Pluggy row dated one day off (no ±1 day window)" do
+    test "a BANK account file import also skips a Pluggy row two days off (the ±2 day window applies to every account type)" do
       account = account_fixture(%{is_credit_card: false, parser_type: "ourocard_ofx"})
 
       CashLens.TransactionsFixtures.transaction_fixture(%{
         account_id: account.id,
-        date: ~D[2026-05-23],
-        amount: "-51.00",
-        description: "VALE EVENTOS SAO JOSE DOS BR",
+        date: ~D[2026-05-13],
+        amount: "-3531.85",
+        description: "PRESTACAO DE CRED IMOB - PRESTACAO",
         source: "pluggy"
       })
 
+      # Real Bradesco pattern: the file dates the entry 2 business days
+      # earlier than Pluggy, unrelated to any weekend.
       ofx = """
-      <STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260522</DTPOSTED>
-      <TRNAMT>-51.00</TRNAMT><MEMO>VALE EVENTOS SAO JOSE DOS BR</MEMO></STMTTRN>
+      <STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260511</DTPOSTED>
+      <TRNAMT>-3531.85</TRNAMT><MEMO>PRESTACAO DE CRED IMOB</MEMO></STMTTRN>
       """
 
-      file_path = "test/support/fixtures/files/bank_1day_#{account.id}.ofx"
+      file_path = "test/support/fixtures/files/bank_2day_#{account.id}.ofx"
       File.write!(file_path, ofx)
       on_exit(fn -> File.rm(file_path) end)
 
-      assert {:ok, %{imported: 1, skipped: 0}} = Ingestor.import_file(account, file_path)
-      assert Repo.aggregate(Transaction, :count) == 2
+      assert {:ok, %{imported: 0, skipped: 1}} = Ingestor.import_file(account, file_path)
+      assert Repo.aggregate(Transaction, :count) == 1
     end
   end
 
