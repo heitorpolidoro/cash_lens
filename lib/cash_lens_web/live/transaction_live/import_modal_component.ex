@@ -28,7 +28,7 @@ defmodule CashLensWeb.TransactionLive.ImportModalComponent do
       end)
       |> assign_new(:import_account_id, fn -> nil end)
       |> allow_upload(:statement,
-        accept: ~w(.csv .pdf .ofx),
+        accept: ~w(.csv .pdf .ofx .txt),
         max_entries: 100,
         max_file_size: 10_000_000
       )

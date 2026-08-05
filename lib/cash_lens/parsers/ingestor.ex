@@ -108,7 +108,7 @@ defmodule CashLens.Parsers.Ingestor do
 
   defp supported_file?(filename) do
     ext = Path.extname(filename) |> String.downcase()
-    ext in [".csv", ".ofx", ".pdf"]
+    ext in [".csv", ".ofx", ".pdf", ".txt"]
   end
 
   defp summarize_results(results) do

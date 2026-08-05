@@ -619,7 +619,7 @@ defmodule CashLens.Parsers.IngestorTest do
 
     test "skips unsupported file types", %{tmp_dir: tmp_dir} do
       account = account_fixture(parser_type: "bb_csv")
-      File.write!(Path.join(tmp_dir, "readme.txt"), "ignored")
+      File.write!(Path.join(tmp_dir, "readme.doc"), "ignored")
 
       assert {:ok, %{imported: _}} = Ingestor.import_directory(account, tmp_dir)
     end
