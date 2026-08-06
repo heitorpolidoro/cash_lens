@@ -89,11 +89,11 @@ defmodule CashLensWeb.MonthLive.Show do
   defp compare_href(primary_year, primary_month, year, month),
     do: ~p"/months/#{primary_year}/#{primary_month}?#{[compare: "#{year}-#{month}"]}"
 
-  def prev_month(year, 1), do: {year - 1, 12}
-  def prev_month(year, month), do: {year, month - 1}
+  defp prev_month(year, 1), do: {year - 1, 12}
+  defp prev_month(year, month), do: {year, month - 1}
 
-  def next_month(year, 12), do: {year + 1, 1}
-  def next_month(year, month), do: {year, month + 1}
+  defp next_month(year, 12), do: {year + 1, 1}
+  defp next_month(year, month), do: {year, month + 1}
 
   @impl true
   def render(assigns) do

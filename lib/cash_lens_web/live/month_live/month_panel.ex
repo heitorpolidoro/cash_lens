@@ -3,9 +3,6 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
 
   alias CashLens.Transactions
 
-  @month_names ~w(Janeiro Fevereiro Março Abril Maio Junho
-                  Julho Agosto Setembro Outubro Novembro Dezembro)
-
   @impl true
   def update(assigns, socket) do
     changed_month? =
@@ -87,21 +84,23 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
     end)
   end
 
-  defp full_month_name(month), do: Enum.at(@month_names, month - 1)
-
   @impl true
   def render(assigns) do
     ~H"""
     <div id={@id} class="space-y-8">
       <%!-- Header with prev/next navigation --%>
       <div class="flex items-center justify-between">
-        <.link patch={@prev_href} class="btn btn-ghost btn-sm">
+        <.link
+          patch={@prev_href}
+          class="btn btn-ghost btn-sm"
+          aria-label={"Mês anterior — #{month_name(@month)} #{@year}"}
+        >
           <.icon name="hero-chevron-left" class="size-4" />
         </.link>
 
         <div class="text-center">
           <h1 class="text-3xl font-black uppercase tracking-tighter">
-            {full_month_name(@month)} {@year}
+            {month_name(@month)} {@year}
           </h1>
           <.link
             navigate={~p"/transactions?month=#{@month}&year=#{@year}"}
@@ -111,7 +110,11 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
           </.link>
         </div>
 
-        <.link patch={@next_href} class="btn btn-ghost btn-sm">
+        <.link
+          patch={@next_href}
+          class="btn btn-ghost btn-sm"
+          aria-label={"Próximo mês — #{month_name(@month)} #{@year}"}
+        >
           <.icon name="hero-chevron-right" class="size-4" />
         </.link>
       </div>

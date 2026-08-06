@@ -190,5 +190,22 @@ defmodule CashLensWeb.MonthLiveTest do
       assert html =~ "Março"
       refute html =~ "Fechar comparação"
     end
+
+    test "December wraps to January of the next year for both panels", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/months/2026/12?compare=2026-12")
+
+      assert live |> element("#primary a[href*='/months/2027/1']") |> has_element?()
+      assert live |> element("#compare a[href*='compare=2027-1']") |> has_element?()
+    end
+
+    test "primary and compare set to the same month render without crashing", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/months/2026/3?compare=2026-3")
+
+      primary_html = live |> element("#primary") |> render()
+      compare_html = live |> element("#compare") |> render()
+
+      assert primary_html =~ "Março"
+      assert compare_html =~ "Março"
+    end
   end
 end
