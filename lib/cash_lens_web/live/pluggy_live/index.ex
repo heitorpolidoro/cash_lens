@@ -4,6 +4,7 @@ defmodule CashLensWeb.PluggyLive.Index do
   alias CashLens.Accounts
   alias CashLens.Pluggy
   alias CashLens.Pluggy.Client
+  alias CashLens.Pluggy.LivePreviewCache
 
   @impl true
   def render(assigns) do
@@ -226,6 +227,8 @@ defmodule CashLensWeb.PluggyLive.Index do
           if(failed_count > 0, do: ", #{failed_count} falharam.", else: ".")
 
       flash_kind = if failed_count > 0, do: :error, else: :success
+
+      LivePreviewCache.refresh_now()
 
       {:noreply, socket |> load_items() |> put_flash(flash_kind, message)}
     else

@@ -7,6 +7,13 @@ defmodule CashLensWeb.PluggyLive.IndexTest do
 
   alias CashLens.Pluggy
 
+  defmodule StubLivePreview do
+    def fetch_all(_req_options \\ []) do
+      send(Application.get_env(:cash_lens, :pluggy_live_preview_test_pid), :fetch_all_called)
+      {:ok, %{}}
+    end
+  end
+
   describe "registering an item" do
     test "creating an item via the form shows it in the list", %{conn: conn} do
       {:ok, live, _html} = live(conn, ~p"/pluggy")
@@ -268,6 +275,30 @@ defmodule CashLensWeb.PluggyLive.IndexTest do
       html = render_click(live, "sync_all_items", %{})
 
       assert html =~ "não configurados"
+    end
+
+    test "also triggers a live-preview cache refresh", %{conn: conn} do
+      test_pid = self()
+
+      Application.put_env(:cash_lens, :pluggy_live_preview, StubLivePreview)
+      Application.put_env(:cash_lens, :pluggy_live_preview_test_pid, test_pid)
+
+      on_exit(fn ->
+        Application.delete_env(:cash_lens, :pluggy_live_preview)
+        Application.delete_env(:cash_lens, :pluggy_live_preview_test_pid)
+      end)
+
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        case conn.request_path do
+          "/auth" -> Req.Test.json(conn, %{"apiKey" => "test-key"})
+          "/accounts" -> Req.Test.json(conn, %{"results" => []})
+        end
+      end)
+
+      {:ok, live, _html} = live(conn, ~p"/pluggy")
+      render_click(live, "sync_all_items", %{})
+
+      assert_receive :fetch_all_called, 1000
     end
   end
 end
