@@ -3,6 +3,7 @@ defmodule CashLensWeb.PageController do
 
   alias CashLens.Accounting
   alias CashLens.Accounts
+  alias CashLens.Pluggy.LivePreviewCache
   alias CashLens.Transactions
 
   def home(conn, _params) do
@@ -81,22 +82,66 @@ defmodule CashLensWeb.PageController do
 
     month_name = CashLensWeb.Formatters.month_name(summary.month.month)
 
+    # Live (unsaved) Pluggy entries bring the cards up to date with activity
+    # since the last real import/sync. "Saldo Atual" only counts accounts
+    # already reflected in `total_balance` above (no credit cards, no closed
+    # accounts); income/expenses match `get_monthly_summary/0`'s own scope
+    # (every account) and are further narrowed to the summary's own month.
+    live_entries = safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
+    balance_account_ids = MapSet.new(accounts_with_data, & &1.id)
+
+    live_balance_entries =
+      Enum.filter(live_entries, &MapSet.member?(balance_account_ids, &1.account_id))
+
+    live_month_entries = entries_in_month(live_entries, summary.month)
+    {live_income, live_expenses} = split_income_expenses(live_month_entries)
+
     render(conn, :home,
       layout: {CashLensWeb.Layouts, :app},
-      total_balance: total_balance,
-      monthly_income: summary.income,
-      monthly_expenses: summary.expenses,
+      total_balance: Decimal.add(total_balance, sum_amounts(live_balance_entries)),
+      monthly_income: Decimal.add(summary.income, live_income),
+      monthly_expenses: Decimal.add(summary.expenses, live_expenses),
       accounts: accounts_with_data,
       summary_month: month_name,
       chart_data: chart_data,
       fixed_data: fixed_data,
       variable_data: variable_data,
-      historical: historical
+      historical: historical,
+      has_live_balance?: live_balance_entries != [],
+      has_live_month_data?: live_month_entries != []
     )
   end
 
   def chrome_devtools(conn, _params) do
     send_resp(conn, :no_content, "")
+  end
+
+  defp live_preview_cache,
+    do: Application.get_env(:cash_lens, :pluggy_live_preview_cache, LivePreviewCache)
+
+  # The cache is an optional, best-effort component (not started in `:test`).
+  # If it isn't running, the dashboard must still render with plain DB
+  # figures rather than crash.
+  defp safe_cache(fun, default) do
+    fun.()
+  catch
+    :exit, _reason -> default
+  end
+
+  defp entries_in_month(entries, month_date) do
+    Enum.filter(entries, &(&1.date.year == month_date.year and &1.date.month == month_date.month))
+  end
+
+  defp sum_amounts(entries),
+    do: Enum.reduce(entries, Decimal.new("0"), &Decimal.add(&2, &1.amount))
+
+  defp split_income_expenses(entries) do
+    income = entries |> Enum.filter(&Decimal.positive?(&1.amount)) |> sum_amounts()
+
+    expenses =
+      entries |> Enum.filter(&Decimal.negative?(&1.amount)) |> sum_amounts() |> Decimal.abs()
+
+    {income, expenses}
   end
 
   defp extract_category_data(historical_categories, type) do

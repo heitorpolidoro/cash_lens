@@ -5,6 +5,101 @@ defmodule CashLensWeb.PageControllerTest do
   import CashLens.AccountingFixtures
   import CashLens.TransactionsFixtures
 
+  alias CashLens.FakeLivePreviewCache
+
+  describe "GET / with live Pluggy data" do
+    setup do
+      Application.put_env(:cash_lens, :pluggy_live_preview_cache, FakeLivePreviewCache)
+      FakeLivePreviewCache.set_entries(%{})
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
+      on_exit(fn -> Application.delete_env(:cash_lens, :pluggy_live_preview_cache) end)
+      :ok
+    end
+
+    test "a live entry for the current month bumps Saldo Atual, Receitas/Despesas and shows the badge",
+         %{conn: conn} do
+      account = account_fixture()
+      today = Date.utc_today()
+
+      balance_fixture(%{
+        account_id: account.id,
+        year: today.year,
+        month: today.month,
+        final_balance: "500.00"
+      })
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-dash-1",
+        account_id: account.id,
+        date: today,
+        description: "COMPRA TEMPORARIA",
+        amount: Decimal.new("-25.00")
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [entry]})
+
+      conn = get(conn, ~p"/")
+      html = html_response(conn, 200)
+
+      # 500,00 (persisted balance) - 25,00 (live entry) = 475,00
+      assert html =~ "R$ 475,00"
+      # Despesas card picks up the live entry's absolute value.
+      assert html =~ "R$ 25,00"
+      assert html =~ "Atualizado com dados temporários do Pluggy"
+    end
+
+    test "no live entries: no badge, figures are unaffected", %{conn: conn} do
+      account = account_fixture()
+      today = Date.utc_today()
+
+      balance_fixture(%{
+        account_id: account.id,
+        year: today.year,
+        month: today.month,
+        final_balance: "500.00"
+      })
+
+      conn = get(conn, ~p"/")
+      html = html_response(conn, 200)
+
+      assert html =~ "R$ 500,00"
+      refute html =~ "Atualizado com dados temporários do Pluggy"
+    end
+
+    test "a live entry from a different month does not affect Receitas/Despesas but still bumps Saldo Atual",
+         %{conn: conn} do
+      account = account_fixture()
+      today = Date.utc_today()
+
+      balance_fixture(%{
+        account_id: account.id,
+        year: today.year,
+        month: today.month,
+        final_balance: "500.00"
+      })
+
+      last_month = Date.add(Date.beginning_of_month(today), -1)
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-dash-2",
+        account_id: account.id,
+        date: last_month,
+        description: "COMPRA MES PASSADO",
+        amount: Decimal.new("-25.00")
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [entry]})
+
+      conn = get(conn, ~p"/")
+      html = html_response(conn, 200)
+
+      # Saldo Atual still includes it (it affects the current total regardless of date)...
+      assert html =~ "R$ 475,00"
+      # ...but Despesas (this month) does not.
+      refute html =~ "R$ 25,00"
+    end
+  end
+
   test "GET / with data", %{conn: conn} do
     account = account_fixture()
     balance_fixture(%{account_id: account.id, year: 2026, month: 4, final_balance: "500.00"})

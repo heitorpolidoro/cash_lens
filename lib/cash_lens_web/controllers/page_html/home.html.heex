@@ -12,7 +12,9 @@
     <!-- Card de Saldo Atual -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
-        <div class="stat-title">Saldo Atual</div>
+        <div class="stat-title flex items-center gap-1">
+          Saldo Atual <.live_data_badge :if={@has_live_balance?} />
+        </div>
         <div class="stat-value text-primary font-black text-2xl">
           {format_currency(@total_balance)}
         </div>
@@ -23,7 +25,9 @@
 <!-- Card de Receitas -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
-        <div class="stat-title text-success">Receitas ({@summary_month})</div>
+        <div class="stat-title text-success flex items-center gap-1">
+          Receitas ({@summary_month}) <.live_data_badge :if={@has_live_month_data?} />
+        </div>
         <div class="stat-value text-success font-black text-2xl">
           {format_currency(@monthly_income)}
         </div>
@@ -34,7 +38,9 @@
 <!-- Card de Despesas -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
-        <div class="stat-title text-error">Despesas ({@summary_month})</div>
+        <div class="stat-title text-error flex items-center gap-1">
+          Despesas ({@summary_month}) <.live_data_badge :if={@has_live_month_data?} />
+        </div>
         <div class="stat-value text-error font-black text-2xl">
           {format_currency(@monthly_expenses)}
         </div>
@@ -45,7 +51,9 @@
 <!-- Card de Balanço -->
     <div class="stats shadow bg-base-100 border border-base-300">
       <div class="stat">
-        <div class="stat-title">Balanço ({@summary_month})</div>
+        <div class="stat-title flex items-center gap-1">
+          Balanço ({@summary_month}) <.live_data_badge :if={@has_live_month_data?} />
+        </div>
         <% balance = Decimal.sub(@monthly_income, @monthly_expenses) %>
         <div class={[
           "stat-value font-black text-2xl",

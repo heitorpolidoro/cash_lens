@@ -1,35 +1,3 @@
-defmodule CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache do
-  @moduledoc false
-  use Agent
-
-  def start_link(_opts) do
-    Agent.start_link(fn -> %{entries: %{}, status: {:ok, DateTime.utc_now()}} end,
-      name: __MODULE__
-    )
-  end
-
-  def set_entries(entries) do
-    ensure_started()
-    Agent.update(__MODULE__, &Map.put(&1, :entries, entries))
-  end
-
-  def set_status(status) do
-    ensure_started()
-    Agent.update(__MODULE__, &Map.put(&1, :status, status))
-  end
-
-  def get_entries(account_id), do: Agent.get(__MODULE__, &Map.get(&1.entries, account_id, []))
-  def get_all_entries, do: Agent.get(__MODULE__, & &1.entries) |> Map.values() |> List.flatten()
-  def get_status, do: Agent.get(__MODULE__, & &1.status)
-
-  defp ensure_started do
-    case start_link([]) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-    end
-  end
-end
-
 defmodule CashLensWeb.TransactionLive.IndexTest do
   use CashLensWeb.ConnCase, async: false
 
@@ -40,7 +8,7 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
   import CashLens.PluggyFixtures
 
   alias CashLens.Pluggy
-  alias CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache
+  alias CashLens.FakeLivePreviewCache
 
   describe "Pluggy live preview" do
     setup do
@@ -87,13 +55,11 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
         amount: Decimal.new("-25.00")
       }
 
-      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_entries(%{
+      FakeLivePreviewCache.set_entries(%{
         account.id => [entry]
       })
 
-      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_status(
-        {:ok, DateTime.utc_now()}
-      )
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
 
       {:ok, _live, html} = live(conn, ~p"/transactions")
 
@@ -194,13 +160,11 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
         amount: Decimal.new("-25.00")
       }
 
-      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_entries(%{
+      FakeLivePreviewCache.set_entries(%{
         account.id => [entry]
       })
 
-      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_status(
-        {:ok, DateTime.utc_now()}
-      )
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
 
       {:ok, live, _html} = live(conn, ~p"/transactions")
       html = render_patch(live, ~p"/transactions?category_id=#{category.id}")
@@ -228,13 +192,11 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
         amount: Decimal.new("-25.00")
       }
 
-      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_entries(%{
+      FakeLivePreviewCache.set_entries(%{
         account.id => [entry]
       })
 
-      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_status(
-        {:ok, DateTime.utc_now()}
-      )
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
 
       {:ok, live, _html} = live(conn, ~p"/transactions")
       # "search" is a filter live entries can structurally satisfy, so it stays
@@ -261,13 +223,11 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
         amount: Decimal.new("-25.00")
       }
 
-      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_entries(%{
+      FakeLivePreviewCache.set_entries(%{
         account.id => [entry]
       })
 
-      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_status(
-        {:ok, DateTime.utc_now()}
-      )
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
 
       {:ok, live, html} = live(conn, ~p"/transactions")
       assert html =~ "NAO DEVE APARECER NO MES PASSADO"
