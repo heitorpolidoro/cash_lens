@@ -50,19 +50,21 @@ defmodule CashLensWeb.MonthLiveTest do
     {:ok, live, _html} = live(conn, ~p"/months/2026/3")
 
     row_key = "debit:#{cat.id}"
+    selector = "tr[phx-value-category_id='#{row_key}']"
 
-    html = render_click(live, "toggle_category", %{"category_id" => row_key})
+    html = live |> element(selector) |> render_click()
     assert html =~ "Compra mercado"
 
     # Toggling again collapses it.
-    render_click(live, "toggle_category", %{"category_id" => row_key})
+    live |> element(selector) |> render_click()
     refute has_element?(live, "[data-row-key='#{row_key}'] .expanded")
   end
 
   test "toggle_category expands an income row", %{conn: conn, income_cat: cat} do
     {:ok, live, _html} = live(conn, ~p"/months/2026/3")
 
-    html = render_click(live, "toggle_category", %{"category_id" => "credit:#{cat.id}"})
+    row_key = "credit:#{cat.id}"
+    html = live |> element("tr[phx-value-category_id='#{row_key}']") |> render_click()
     assert html =~ "Salário"
   end
 
