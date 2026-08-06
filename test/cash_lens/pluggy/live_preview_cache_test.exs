@@ -8,6 +8,7 @@ defmodule CashLens.Pluggy.LivePreviewCacheTest do
     def fetch_all(_req_options \\ []) do
       case Application.get_env(:cash_lens, :live_preview_stub_result) do
         nil -> {:ok, %{}}
+        {:raise, error} -> raise error
         result -> result
       end
     end
@@ -100,5 +101,42 @@ defmodule CashLens.Pluggy.LivePreviewCacheTest do
 
     assert {:ok, second_success_at} = LivePreviewCache.get_status(pid)
     assert DateTime.compare(second_success_at, first_success_at) != :lt
+  end
+
+  test "an exception raised by fetch_all sets an :error status instead of crashing the GenServer" do
+    account_id = Ecto.UUID.generate()
+
+    entry = %Entry{
+      id: "pluggy-preview-4",
+      account_id: account_id,
+      date: ~D[2026-07-01],
+      description: "TEST",
+      amount: Decimal.new("-10.00")
+    }
+
+    Application.put_env(:cash_lens, :live_preview_stub_result, {:ok, %{account_id => [entry]}})
+    {:ok, pid} = start_supervised({LivePreviewCache, name: :test_cache_4})
+    :sys.get_state(pid)
+
+    {:ok, first_success_at} = LivePreviewCache.get_status(pid)
+
+    # Simulate an exception from fetch_all (e.g., JSON decode error, mock not found, etc.)
+    Application.put_env(:cash_lens, :live_preview_stub_result, {:raise, "Stubbed error"})
+    LivePreviewCache.refresh_now(pid)
+    :sys.get_state(pid)
+
+    # Verify GenServer is still alive and has an error status with exception info
+    assert {:error, {:exception, "Stubbed error"}, ^first_success_at} =
+             LivePreviewCache.get_status(pid)
+
+    # Entries from the last successful fetch are still served
+    assert LivePreviewCache.get_entries(pid, account_id) == [entry]
+
+    # Verify recovery: a successful fetch after an exception works
+    Application.put_env(:cash_lens, :live_preview_stub_result, {:ok, %{account_id => []}})
+    LivePreviewCache.refresh_now(pid)
+    :sys.get_state(pid)
+
+    assert {:ok, _second_success_at} = LivePreviewCache.get_status(pid)
   end
 end

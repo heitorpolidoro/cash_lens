@@ -89,6 +89,15 @@ defmodule CashLens.Pluggy.LivePreviewCache do
         Logger.warning("Pluggy live preview cache: refresh failed: #{inspect(reason)}")
         %{state | status: {:error, reason, last_success_at(state.status)}}
     end
+  rescue
+    exception ->
+      Logger.warning("Pluggy live preview cache: refresh raised: #{Exception.message(exception)}")
+
+      %{
+        state
+        | status:
+            {:error, {:exception, Exception.message(exception)}, last_success_at(state.status)}
+      }
   end
 
   defp last_success_at({:ok, at}), do: at
