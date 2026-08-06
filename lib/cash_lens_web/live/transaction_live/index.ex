@@ -4,6 +4,8 @@ defmodule CashLensWeb.TransactionLive.Index do
   alias CashLens.Accounts
   alias CashLens.Categories
   alias CashLens.Categories.Category
+  alias CashLens.Pluggy.LivePreview
+  alias CashLens.Pluggy.LivePreviewCache
   alias CashLens.Transactions
   alias CashLens.Transactions.CategorySuggester
 
@@ -43,6 +45,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:filtered_count, nil)
      |> assign(:filters_active?, false)
      |> assign(:summary, %{income: Decimal.new("0"), expenses: Decimal.new("0")})
+     |> assign(:pluggy_error, nil)
      |> assign(:transfer_pairs, %{})
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, accounts)
@@ -65,19 +68,12 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     filters = Map.merge(socket.assigns.filters, filters_param || %{})
 
-    txs = Transactions.list_transactions(map_filters(filters), 1)
-
     socket =
       socket
       |> assign(:filters, filters)
       |> assign(:return_to, return_to)
       |> assign(:show_import_modal, open_import == "true")
-      |> assign(:page, 1)
-      |> assign(:end_of_list?, false)
-      |> assign(:transfer_pairs, %{})
-      |> calculate_summary()
-      |> load_transfer_pairs(txs)
-      |> stream(:transactions, txs, reset: true)
+      |> refresh_transactions_page1(filters)
 
     {:noreply, socket}
   end
@@ -111,11 +107,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       {:noreply,
        socket
        |> put_flash(:success, "Vínculo de reembolso removido.")
-       |> stream(
-         :transactions,
-         Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-         reset: true
-       )}
+       |> refresh_transactions_page1(socket.assigns.filters)}
     else
       {:ok, updated} =
         Transactions.update_transaction(tx, %{
@@ -347,13 +339,8 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> calculate_summary()
      |> put_flash(:success, "#{length(selected_items)} transações categorizadas!")
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(socket.assigns.filters)}
   end
 
   @impl true
@@ -418,12 +405,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(new_filters)}
   end
 
   @impl true
@@ -433,12 +415,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(new_filters)}
   end
 
   @impl true
@@ -448,12 +425,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:filters, filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(map_filters(filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(filters)}
   end
 
   @impl true
@@ -467,12 +439,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(new_filters)}
   end
 
   @impl true
@@ -488,12 +455,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(new_filters)}
   end
 
   @impl true
@@ -520,12 +482,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(new_filters)}
   end
 
   @impl true
@@ -552,12 +509,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(new_filters)}
   end
 
   @impl true
@@ -576,12 +528,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(new_filters)}
   end
 
   @impl true
@@ -597,12 +544,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, Transactions.list_transactions(map_filters(new_filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(new_filters)}
   end
 
   @impl true
@@ -663,15 +605,10 @@ defmodule CashLensWeb.TransactionLive.Index do
     safe_params = Map.take(params, valid_keys)
     new_filters = Map.merge(socket.assigns.filters, safe_params)
 
-    txs = Transactions.list_transactions(map_filters(new_filters), 1)
-
     {:noreply,
      socket
      |> assign(:filters, new_filters)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
-     |> calculate_summary()
-     |> stream(:transactions, txs, reset: true)}
+     |> refresh_transactions_page1(new_filters)}
   end
 
   @impl true
@@ -682,13 +619,8 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:auto_categorizing, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> calculate_summary()
      |> put_flash(:success, "Regras aplicadas!")
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(socket.assigns.filters)}
   end
 
   def handle_info(:reimbursement_linked, socket) do
@@ -696,12 +628,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:show_reimbursement_modal, false)
      |> put_flash(:success, "Reembolso vinculado e categorizado!")
-     |> calculate_summary()
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(socket.assigns.filters)}
   end
 
   @impl true
@@ -719,12 +646,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:show_transfer_modal, false)
      |> assign(:show_quick_transfer_modal, false)
      |> put_flash(:success, message)
-     |> calculate_summary()
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(socket.assigns.filters)}
   end
 
   @impl true
@@ -765,15 +687,8 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     {:noreply,
      socket
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> calculate_summary()
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(socket.assigns.filters)}
   end
 
   @impl true
@@ -816,16 +731,9 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:show_import_modal, false)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> calculate_summary()
      |> put_flash(:success, "Sucesso! #{count} transações importadas.")
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(socket.assigns.filters)}
   end
 
   def handle_info({:import_success, %{imported: count, failed: failed}}, socket) do
@@ -834,19 +742,12 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply,
      socket
      |> assign(:show_import_modal, false)
-     |> assign(:page, 1)
-     |> assign(:end_of_list?, false)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> calculate_summary()
      |> put_flash(
        :info,
        "#{count} transações importadas. #{length(failed)} linhas ignoradas: #{failed_msg}"
      )
-     |> stream(
-       :transactions,
-       Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-       reset: true
-     )}
+     |> refresh_transactions_page1(socket.assigns.filters)}
   end
 
   @impl true
@@ -1046,6 +947,130 @@ defmodule CashLensWeb.TransactionLive.Index do
   defp stream_insert_many(socket, stream_name, items) do
     Enum.reduce(items, socket, fn item, acc -> stream_insert(acc, stream_name, item) end)
   end
+
+  defp live_preview_cache,
+    do: Application.get_env(:cash_lens, :pluggy_live_preview_cache, LivePreviewCache)
+
+  defp refresh_transactions_page1(socket, filters) do
+    db_transactions = Transactions.list_transactions(map_filters(filters), 1)
+    {live_entries, pluggy_error} = live_preview_entries(filters)
+
+    socket
+    |> assign(:page, 1)
+    |> assign(:end_of_list?, false)
+    |> assign(:transfer_pairs, %{})
+    |> assign(:pluggy_error, pluggy_error)
+    |> calculate_summary()
+    |> add_live_summary(live_entries)
+    |> load_transfer_pairs(db_transactions)
+    |> stream(:transactions, db_transactions, reset: true)
+    |> insert_live_entries(live_entries)
+  end
+
+  defp insert_live_entries(socket, entries) do
+    Enum.reduce(entries, socket, fn entry, acc -> stream_insert(acc, :transactions, entry) end)
+  end
+
+  defp add_live_summary(socket, []), do: socket
+
+  defp add_live_summary(socket, live_entries) do
+    live_income =
+      live_entries
+      |> Enum.filter(&Decimal.positive?(&1.amount))
+      |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, &1.amount))
+
+    live_expenses =
+      live_entries
+      |> Enum.filter(&Decimal.negative?(&1.amount))
+      |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, &1.amount))
+
+    update(socket, :summary, fn summary ->
+      %{
+        income: Decimal.add(summary.income, live_income),
+        expenses: Decimal.add(summary.expenses, live_expenses)
+      }
+    end)
+  end
+
+  # `nil` filters (category, reimbursement status) that a live entry cannot
+  # structurally have; if either is active, live entries are excluded
+  # entirely rather than guessed at. Returns `{live_entries, pluggy_error}`
+  # where `pluggy_error` is `nil` on a healthy cache, or
+  # `{reason, last_success_at}` when the last refresh failed.
+  defp live_preview_entries(filters) do
+    case live_preview_cache().get_status() do
+      {:ok, _at} ->
+        {matching_live_entries(filters), nil}
+
+      {:error, reason, last_success_at} ->
+        {[], {reason, last_success_at}}
+    end
+  end
+
+  defp matching_live_entries(filters) do
+    if incompatible_filters_active?(filters) do
+      []
+    else
+      filters
+      |> live_entries_for_account_filter()
+      |> Enum.filter(&matches_live_entry_filters?(&1, filters))
+    end
+  end
+
+  defp live_entries_for_account_filter(%{"account_id" => account_id})
+       when account_id not in [nil, ""] do
+    live_preview_cache().get_entries(account_id)
+  end
+
+  defp live_entries_for_account_filter(_filters), do: live_preview_cache().get_all_entries()
+
+  defp incompatible_filters_active?(filters) do
+    (filters["category_id"] || "") != "" or filters["reimbursement_status"] not in [nil, ""] or
+      filters["unmatched_transfers"] == "true"
+  end
+
+  defp matches_live_entry_filters?(entry, filters) do
+    matches_live_search?(entry, filters["search"]) and
+      matches_live_date?(entry, filters["date"]) and
+      matches_live_date_range?(entry, filters["date_from"], filters["date_to"]) and
+      matches_live_type?(entry, filters["type"])
+  end
+
+  defp matches_live_search?(_entry, search) when search in [nil, ""], do: true
+
+  defp matches_live_search?(entry, search) do
+    String.contains?(String.downcase(entry.description), String.downcase(search))
+  end
+
+  defp matches_live_date?(_entry, date) when date in [nil, ""], do: true
+
+  defp matches_live_date?(entry, date) do
+    case Date.from_iso8601(date) do
+      {:ok, parsed} -> Date.compare(entry.date, parsed) == :eq
+      _ -> true
+    end
+  end
+
+  defp matches_live_date_range?(_entry, from, _to) when from in [nil, ""], do: true
+  defp matches_live_date_range?(_entry, _from, to) when to in [nil, ""], do: true
+
+  defp matches_live_date_range?(entry, from, to) do
+    with {:ok, date_from} <- Date.from_iso8601(from),
+         {:ok, date_to} <- Date.from_iso8601(to) do
+      Date.compare(entry.date, date_from) != :lt and Date.compare(entry.date, date_to) != :gt
+    else
+      _ -> true
+    end
+  end
+
+  defp matches_live_type?(_entry, type) when type not in ["debit", "expense", "credit", "income"],
+    do: true
+
+  defp matches_live_type?(entry, type) when type in ["debit", "expense"],
+    do: Decimal.negative?(entry.amount)
+
+  defp matches_live_type?(entry, type) when type in ["credit", "income"],
+    do: Decimal.positive?(entry.amount)
 
   defp calculate_summary(socket) do
     mapped = map_filters(socket.assigns.filters)
