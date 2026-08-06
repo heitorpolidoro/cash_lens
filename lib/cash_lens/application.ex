@@ -13,6 +13,7 @@ defmodule CashLens.Application do
       {DNSCluster, query: Application.get_env(:cash_lens, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: CashLens.PubSub},
       {Oban, Application.fetch_env!(:cash_lens, Oban)},
+      CashLens.Pluggy.LivePreviewCache,
       # Start a worker by calling: CashLens.Worker.start_link(arg)
       # {CashLens.Worker, arg},
       # Start to serve requests, typically the last entry
