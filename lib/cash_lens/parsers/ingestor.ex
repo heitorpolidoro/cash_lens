@@ -216,8 +216,7 @@ defmodule CashLens.Parsers.Ingestor do
     today = Date.utc_today()
     transactions_data = Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
 
-    {entries, failed, cross_source_skipped} =
-      prepare_entries(transactions_data, account_id, statement_id)
+    {entries, failed} = prepare_entries(transactions_data, account_id, statement_id)
 
     {inserted_count, affected_account_ids} =
       process_entries(entries, transactions_data, account_id, statement_id)
@@ -228,11 +227,10 @@ defmodule CashLens.Parsers.Ingestor do
     end)
 
     # `skipped` makes silent dedupe misses observable: it is the number of prepared
-    # input rows that did not result in an insert — either the unique index rejected
-    # them as already-present (or in-batch dups) via `fingerprint`, or they were
-    # filtered out beforehand as a cross-source duplicate (see
-    # `cross_source_duplicate?/5`).
-    skipped = length(entries) - inserted_count + cross_source_skipped
+    # input rows the unique index rejected as already-present (or in-batch dups),
+    # i.e. entries that did not result in an insert. A future regression that lets
+    # duplicates back in would surface as a non-zero `skipped` on re-import.
+    skipped = length(entries) - inserted_count
 
     {:ok, %{imported: inserted_count, skipped: skipped, failed: failed}}
   end
@@ -255,56 +253,9 @@ defmodule CashLens.Parsers.Ingestor do
         _ -> false
       end)
 
-    all_entries = Enum.map(valid, fn {:ok, entry} -> entry end)
+    entries = Enum.map(valid, fn {:ok, entry} -> entry end)
     reasons = Enum.map(failed, fn {:error, reason} -> reason end)
-
-    {entries, cross_source_dupes} =
-      Enum.split_with(all_entries, fn entry ->
-        account_id = Map.get(entry, :account_id)
-        date = Map.get(entry, :date)
-        amount = Map.get(entry, :amount)
-        description = Map.get(entry, :description)
-
-        if is_nil(account_id) or is_nil(date) or is_nil(amount) do
-          true
-        else
-          if cross_source_duplicate?(account_id, date, amount, description) do
-            Logger.warning(
-              "Ingestor: skipping transaction as cross-source duplicate for account #{account_id} " <>
-                "on #{date} (amount #{amount}, description #{inspect(description)}); " <>
-                "existence-based match may skip more rows than actually duplicated"
-            )
-
-            false
-          else
-            true
-          end
-        end
-      end)
-
-    {entries, reasons, length(cross_source_dupes)}
-  end
-
-  # Installment identity (parcel number + total + merchant + amount, within a
-  # coarse date window) is checked first since it is more precise than plain
-  # date matching for "PARC X/Y" rows — see
-  # `Transactions.duplicate_installment_from_other_source?/5`'s moduledoc for
-  # why date matching alone cannot reliably catch these. Falls back to the
-  # date-based check (±2 day window) for everything else.
-  defp cross_source_duplicate?(account_id, date, amount, description) do
-    CashLens.Transactions.duplicate_installment_from_other_source?(
-      account_id,
-      date,
-      description,
-      amount,
-      "file"
-    ) or
-      CashLens.Transactions.duplicate_from_other_source?(
-        account_id,
-        date,
-        amount,
-        "file"
-      )
+    {entries, reasons}
   end
 
   # Computes the 0-based occurrence index of every incoming row among otherwise

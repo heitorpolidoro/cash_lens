@@ -75,9 +75,8 @@ defmodule CashLens.Transactions.Transaction do
   # Callers that don't know or care about provenance (the manual "new
   # transaction" form, transfer-pair creation, income adjustments, transfer
   # mirrors) get a sensible default instead of having to pass `source`
-  # everywhere. Importers that DO know their provenance (Ingestor -> "file",
-  # Pluggy.Sync -> "pluggy") set it explicitly in their attrs and this is a
-  # no-op for them.
+  # everywhere. Ingestor, which does know its provenance, sets `source:
+  # "file"` explicitly and this is a no-op for it.
   defp put_default_source(changeset) do
     if is_nil(get_field(changeset, :source)) do
       put_change(changeset, :source, "manual")

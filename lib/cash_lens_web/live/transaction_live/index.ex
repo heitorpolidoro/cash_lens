@@ -4,7 +4,6 @@ defmodule CashLensWeb.TransactionLive.Index do
   alias CashLens.Accounts
   alias CashLens.Categories
   alias CashLens.Categories.Category
-  alias CashLens.Pluggy.Sync
   alias CashLens.Transactions
   alias CashLens.Transactions.CategorySuggester
 
@@ -229,49 +228,6 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("open_batch_import", _params, socket) do
     {:noreply, assign(socket, :show_batch_import_modal, true)}
-  end
-
-  @impl true
-  def handle_event("import_pluggy", _params, socket) do
-    case Sync.sync_all() do
-      {:error, :missing_credentials} ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           "PLUGGY_CLIENT_ID/PLUGGY_CLIENT_SECRET não configuradas no .env."
-         )}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Falha ao autenticar no Pluggy.")}
-
-      results ->
-        {successes, failures} =
-          Enum.split_with(results, fn {_link, result} -> match?({:ok, _}, result) end)
-
-        created = successes |> Enum.map(fn {_link, {:ok, %{created: c}}} -> c end) |> Enum.sum()
-        skipped = successes |> Enum.map(fn {_link, {:ok, %{skipped: s}}} -> s end) |> Enum.sum()
-        errors = successes |> Enum.map(fn {_link, {:ok, %{errors: e}}} -> e end) |> Enum.sum()
-
-        message =
-          "Pluggy: #{created} transações novas, #{skipped} já existiam" <>
-            if(errors > 0, do: ", #{errors} erros", else: "") <>
-            if(failures == [], do: ".", else: ", #{length(failures)} conta(s) falharam.")
-
-        socket =
-          socket
-          |> assign(:page, 1)
-          |> assign(:end_of_list?, false)
-          |> assign(:pending_count, Transactions.count_pending_transactions())
-          |> calculate_summary()
-          |> stream(
-            :transactions,
-            Transactions.list_transactions(map_filters(socket.assigns.filters), 1),
-            reset: true
-          )
-
-        {:noreply, put_flash(socket, :success, message)}
-    end
   end
 
   @impl true

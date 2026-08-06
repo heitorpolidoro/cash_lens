@@ -70,8 +70,8 @@ defmodule CashLens.Pluggy do
   end
 
   @doc """
-  Links with an `account_id` already chosen — these are the ones
-  `CashLens.Pluggy.Sync` imports transactions for.
+  Links with an `account_id` already chosen — these are the ones the live
+  Pluggy preview (`CashLens.Pluggy.LivePreview`) fetches transactions for.
   """
   def list_linked_account_links do
     from(l in AccountLink, where: not is_nil(l.account_id))
