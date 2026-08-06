@@ -91,12 +91,40 @@ defmodule CashLens.Pluggy.LivePreviewTest do
             Req.Test.json(conn, %{"apiKey" => "test-key"})
 
           "/v2/transactions" ->
-            Req.Test.json(conn, %{"results" => [], "next" => nil})
+            Req.Test.json(conn, %{
+              "results" => [
+                %{
+                  "id" => "tx-before",
+                  "date" => "2026-05-15T10:00:00.000Z",
+                  "description" => "BEFORE CUTOFF",
+                  "amount" => -50.0,
+                  "type" => "DEBIT",
+                  "category" => "Other"
+                },
+                %{
+                  "id" => "tx-after",
+                  "date" => "2026-06-01T14:00:00.000Z",
+                  "description" => "AFTER CUTOFF",
+                  "amount" => -25.0,
+                  "type" => "DEBIT",
+                  "category" => "Other"
+                }
+              ],
+              "next" => nil
+            })
         end
       end)
 
       {:ok, entries_by_account} = LivePreview.fetch_all(req_options)
-      assert entries_by_account[link.account_id] == []
+      entries = entries_by_account[link.account_id]
+
+      # Only the transaction on/after the latest_transaction_date (2026-06-01) should
+      # be included. If from_date was using the 90-day fallback instead of the actual
+      # latest transaction date, both would be included. This assertion proves we're
+      # using Transactions.latest_transaction_date/1, not a fixed lookback.
+      assert length(entries) == 1
+      assert hd(entries).description == "AFTER CUTOFF"
+      assert hd(entries).id == "pluggy-preview-tx-after"
     end
 
     test "one account's fetch failure yields an empty list for it without affecting others", %{
