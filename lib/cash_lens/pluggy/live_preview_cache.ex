@@ -54,12 +54,17 @@ defmodule CashLens.Pluggy.LivePreviewCache do
   @impl true
   def handle_info(:refresh, state) do
     schedule_refresh()
-    {:noreply, do_refresh(state)}
+    {:noreply, start_fetch(state)}
+  end
+
+  @impl true
+  def handle_info({:refresh_result, result}, state) do
+    {:noreply, apply_refresh_result(state, result)}
   end
 
   @impl true
   def handle_cast(:refresh, state) do
-    {:noreply, do_refresh(state)}
+    {:noreply, start_fetch(state)}
   end
 
   @impl true
@@ -77,27 +82,40 @@ defmodule CashLens.Pluggy.LivePreviewCache do
     {:reply, state.status, state}
   end
 
-  defp do_refresh(state) do
+  # The fetch itself is a slow, paginated set of HTTP calls. It runs in a
+  # spawned (unlinked) Task and reports back via `{:refresh_result, result}`,
+  # so the GenServer's own process stays free to answer `get_status/1`,
+  # `get_entries/2` and `get_all_entries/1` instantly at all times — a page
+  # load landing mid-refresh must never block on the network.
+  defp start_fetch(state) do
     live_preview =
       Application.get_env(:cash_lens, :pluggy_live_preview, CashLens.Pluggy.LivePreview)
 
-    case live_preview.fetch_all() do
-      {:ok, entries} ->
-        %{entries: entries, status: {:ok, DateTime.utc_now()}}
+    parent = self()
 
-      {:error, reason} ->
-        Logger.warning("Pluggy live preview cache: refresh failed: #{inspect(reason)}")
-        %{state | status: {:error, reason, last_success_at(state.status)}}
-    end
-  rescue
-    exception ->
-      Logger.warning("Pluggy live preview cache: refresh raised: #{Exception.message(exception)}")
+    Task.start(fn ->
+      result =
+        try do
+          live_preview.fetch_all()
+        rescue
+          exception -> {:error, {:exception, Exception.message(exception)}}
+        catch
+          :exit, reason -> {:error, {:exit, reason}}
+        end
 
-      %{
-        state
-        | status:
-            {:error, {:exception, Exception.message(exception)}, last_success_at(state.status)}
-      }
+      send(parent, {:refresh_result, result})
+    end)
+
+    state
+  end
+
+  defp apply_refresh_result(_state, {:ok, entries}) do
+    %{entries: entries, status: {:ok, DateTime.utc_now()}}
+  end
+
+  defp apply_refresh_result(state, {:error, reason}) do
+    Logger.warning("Pluggy live preview cache: refresh failed: #{inspect(reason)}")
+    %{state | status: {:error, reason, last_success_at(state.status)}}
   end
 
   defp last_success_at({:ok, at}), do: at

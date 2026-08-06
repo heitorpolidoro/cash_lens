@@ -130,7 +130,7 @@
   >
     <.icon name="hero-exclamation-triangle" class="size-5" />
     <span>
-      Não foi possível atualizar dados do Pluggy: {inspect(elem(@pluggy_error, 0))}.
+      Não foi possível atualizar dados do Pluggy: {pluggy_error_message(elem(@pluggy_error, 0))}.
       <%= if elem(@pluggy_error, 1) do %>
         Última atualização bem-sucedida: {Calendar.strftime(elem(@pluggy_error, 1), "%d/%m %H:%M")}.
       <% else %>

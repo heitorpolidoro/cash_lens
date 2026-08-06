@@ -102,8 +102,16 @@ defmodule CashLens.Pluggy.LivePreviewTest do
                   "category" => "Other"
                 },
                 %{
-                  "id" => "tx-after",
+                  "id" => "tx-on-boundary",
                   "date" => "2026-06-01T14:00:00.000Z",
+                  "description" => "ON BOUNDARY",
+                  "amount" => -25.0,
+                  "type" => "DEBIT",
+                  "category" => "Other"
+                },
+                %{
+                  "id" => "tx-after",
+                  "date" => "2026-06-02T14:00:00.000Z",
                   "description" => "AFTER CUTOFF",
                   "amount" => -25.0,
                   "type" => "DEBIT",
@@ -118,10 +126,12 @@ defmodule CashLens.Pluggy.LivePreviewTest do
       {:ok, entries_by_account} = LivePreview.fetch_all(req_options)
       entries = entries_by_account[link.account_id]
 
-      # Only the transaction on/after the latest_transaction_date (2026-06-01) should
-      # be included. If from_date was using the 90-day fallback instead of the actual
-      # latest transaction date, both would be included. This assertion proves we're
-      # using Transactions.latest_transaction_date/1, not a fixed lookback.
+      # Only transactions AFTER the latest_transaction_date (2026-06-01) are
+      # included. If from_date used the 90-day fallback instead of the account's
+      # own latest date, "BEFORE CUTOFF" would be included too. And because the
+      # underlying date filter is inclusive, a transaction dated exactly on the
+      # latest stored date would be re-fetched and shown a second time as a
+      # "temporary" duplicate — hence the cutoff is latest_date + 1 day.
       assert length(entries) == 1
       assert hd(entries).description == "AFTER CUTOFF"
       assert hd(entries).id == "pluggy-preview-tx-after"

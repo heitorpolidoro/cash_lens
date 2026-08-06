@@ -759,10 +759,18 @@ defmodule CashLens.Transactions do
   @doc """
   Returns the most recent transaction date for `account_id`, or `nil` if the
   account has no transactions at all.
+
+  Only permanently-persisted rows (`source` of `"file"` or `"manual"`) count:
+  a leftover `"pluggy"` row from the old persist-based sync must not move the
+  live-preview fetch cutoff.
   """
   @spec latest_transaction_date(Ecto.UUID.t()) :: Date.t() | nil
   def latest_transaction_date(account_id) do
-    Repo.one(from t in Transaction, where: t.account_id == ^account_id, select: max(t.date))
+    Repo.one(
+      from t in Transaction,
+        where: t.account_id == ^account_id and t.source in ["file", "manual"],
+        select: max(t.date)
+    )
   end
 
   @doc """

@@ -228,7 +228,7 @@ defmodule CashLensWeb.PluggyLive.Index do
 
       flash_kind = if failed_count > 0, do: :error, else: :success
 
-      LivePreviewCache.refresh_now()
+      LivePreviewCache.refresh_now(live_preview_cache_server())
 
       {:noreply, socket |> load_items() |> put_flash(flash_kind, message)}
     else
@@ -272,6 +272,11 @@ defmodule CashLensWeb.PluggyLive.Index do
      |> load_items()
      |> put_flash(:success, "Item removido.")}
   end
+
+  # Which LivePreviewCache process to poke. Overridable so tests can point at
+  # their own supervised instance (the cache is not started in `:test`).
+  defp live_preview_cache_server,
+    do: Application.get_env(:cash_lens, :pluggy_live_preview_cache_server, LivePreviewCache)
 
   defp fetch_credentials do
     client_id = System.get_env("PLUGGY_CLIENT_ID")

@@ -62,10 +62,15 @@ defmodule CashLens.Pluggy.LivePreview do
     end
   end
 
+  # The client-side date filter is inclusive (`date >= from_date`), so using
+  # the latest stored date verbatim would re-fetch — and re-render as a
+  # "temporary" duplicate — every transaction already persisted on that day.
+  # Start from the day after instead. With no stored transactions at all
+  # there is no such boundary, so the plain lookback window applies.
   defp from_date(account_id) do
     case Transactions.latest_transaction_date(account_id) do
       nil -> Date.add(Date.utc_today(), -@default_lookback_days)
-      date -> date
+      date -> Date.add(date, 1)
     end
   end
 

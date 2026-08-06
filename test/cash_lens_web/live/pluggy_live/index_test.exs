@@ -283,10 +283,22 @@ defmodule CashLensWeb.PluggyLive.IndexTest do
       Application.put_env(:cash_lens, :pluggy_live_preview, StubLivePreview)
       Application.put_env(:cash_lens, :pluggy_live_preview_test_pid, test_pid)
 
+      # The cache is deliberately not part of the `:test` supervision tree, so
+      # this test owns its own instance and points the LiveView at it.
+      {:ok, cache} =
+        start_supervised({CashLens.Pluggy.LivePreviewCache, name: :pluggy_index_test_cache})
+
+      Application.put_env(:cash_lens, :pluggy_live_preview_cache_server, cache)
+
       on_exit(fn ->
         Application.delete_env(:cash_lens, :pluggy_live_preview)
         Application.delete_env(:cash_lens, :pluggy_live_preview_test_pid)
+        Application.delete_env(:cash_lens, :pluggy_live_preview_cache_server)
       end)
+
+      # The cache fetches once on boot; consume that call so the assertion
+      # below can only be satisfied by the refresh the click triggers.
+      assert_receive :fetch_all_called, 1000
 
       Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
         case conn.request_path do
