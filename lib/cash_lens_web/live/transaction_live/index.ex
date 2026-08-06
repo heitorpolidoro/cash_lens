@@ -982,7 +982,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     live_expenses =
       live_entries
       |> Enum.filter(&Decimal.negative?(&1.amount))
-      |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, &1.amount))
+      |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, Decimal.abs(&1.amount)))
 
     update(socket, :summary, fn summary ->
       %{
@@ -992,11 +992,14 @@ defmodule CashLensWeb.TransactionLive.Index do
     end)
   end
 
-  # `nil` filters (category, reimbursement status) that a live entry cannot
-  # structurally have; if either is active, live entries are excluded
-  # entirely rather than guessed at. Returns `{live_entries, pluggy_error}`
-  # where `pluggy_error` is `nil` on a healthy cache, or
-  # `{reason, last_success_at}` when the last refresh failed.
+  # Filters a live entry cannot structurally satisfy (category, reimbursement
+  # status, unmatched-transfers) or that navigate away from "now" (month/year
+  # — a live entry only ever reflects the current period, so showing it under
+  # a past/future month view would be actively wrong, not just unfiltered):
+  # if any of these are active, live entries are excluded entirely rather
+  # than guessed at. Returns `{live_entries, pluggy_error}` where
+  # `pluggy_error` is `nil` on a healthy cache, or `{reason, last_success_at}`
+  # when the last refresh failed.
   defp live_preview_entries(filters) do
     case live_preview_cache().get_status() do
       {:ok, _at} ->
@@ -1026,7 +1029,8 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   defp incompatible_filters_active?(filters) do
     (filters["category_id"] || "") != "" or filters["reimbursement_status"] not in [nil, ""] or
-      filters["unmatched_transfers"] == "true"
+      filters["unmatched_transfers"] == "true" or (filters["month"] || "") != "" or
+      (filters["year"] || "") != ""
   end
 
   defp matches_live_entry_filters?(entry, filters) do

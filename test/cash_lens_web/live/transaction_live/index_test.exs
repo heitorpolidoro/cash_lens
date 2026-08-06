@@ -36,6 +36,7 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
+  import CashLens.TransactionsFixtures
 
   describe "Pluggy live preview" do
     setup do
@@ -111,6 +112,75 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
       html = render_patch(live, ~p"/transactions?category_id=#{category.id}")
 
       refute html =~ "NAO DEVE APARECER"
+    end
+
+    test "a live entry's (negative) amount is added to the displayed Despesas total as a positive value",
+         %{conn: conn} do
+      account = account_fixture()
+
+      _db_tx =
+        transaction_fixture(
+          account_id: account.id,
+          description: "TESTE-SUMMARY compra",
+          amount: "-10.00",
+          date: ~D[2026-08-05]
+        )
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-live-3",
+        account_id: account.id,
+        date: ~D[2026-08-05],
+        description: "TESTE-SUMMARY live",
+        amount: Decimal.new("-25.00")
+      }
+
+      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_entries(%{
+        account.id => [entry]
+      })
+
+      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_status(
+        {:ok, DateTime.utc_now()}
+      )
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+      # "search" is a filter live entries can structurally satisfy, so it stays
+      # compatible while also flipping `filters_active?` so the summary cards
+      # render actual figures instead of the "—" placeholder.
+      html = render_patch(live, ~p"/transactions?search=TESTE-SUMMARY")
+
+      # DB expense (R$10,00, already stored as a positive "Despesas" figure by
+      # Transactions.get_filtered_summary/1) plus the live entry's R$25,00
+      # (a negative amount, which must be added as a positive contribution to
+      # "Despesas" rather than subtracted) = R$35,00.
+      assert html =~ "R$ 35,00"
+    end
+
+    test "live entries do not leak into a different month's view", %{conn: conn} do
+      account = account_fixture()
+      today = Date.utc_today()
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-live-4",
+        account_id: account.id,
+        date: today,
+        description: "NAO DEVE APARECER NO MES PASSADO",
+        amount: Decimal.new("-25.00")
+      }
+
+      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_entries(%{
+        account.id => [entry]
+      })
+
+      CashLensWeb.TransactionLive.IndexTest.FakeLivePreviewCache.set_status(
+        {:ok, DateTime.utc_now()}
+      )
+
+      {:ok, live, html} = live(conn, ~p"/transactions")
+      assert html =~ "NAO DEVE APARECER NO MES PASSADO"
+
+      html = render_click(live, "prev_month", %{})
+
+      refute html =~ "NAO DEVE APARECER NO MES PASSADO"
     end
   end
 end
