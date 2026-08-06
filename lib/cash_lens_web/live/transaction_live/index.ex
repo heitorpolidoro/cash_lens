@@ -981,8 +981,17 @@ defmodule CashLensWeb.TransactionLive.Index do
     |> add_live_summary(socket.assigns.live_entries)
   end
 
+  # Every live entry's date is newer than any already-persisted transaction
+  # for its account (see `LivePreview.from_date/1`), so they belong ahead of
+  # the real rows, not appended after them (`stream_insert/4`'s default).
+  # Inserting oldest-to-newest, each `at: 0`, lands them at the top in
+  # newest-first order, matching the real rows' own date-desc ordering.
   defp insert_live_entries(socket, entries) do
-    Enum.reduce(entries, socket, fn entry, acc -> stream_insert(acc, :transactions, entry) end)
+    entries
+    |> Enum.sort_by(& &1.date, {:asc, Date})
+    |> Enum.reduce(socket, fn entry, acc ->
+      stream_insert(acc, :transactions, entry, at: 0)
+    end)
   end
 
   defp add_live_summary(socket, []), do: socket

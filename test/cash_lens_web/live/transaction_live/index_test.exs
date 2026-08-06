@@ -101,6 +101,35 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
       assert html =~ "pluggy-preview-live-entry"
     end
 
+    test "a live entry renders before older real transactions, in date order", %{conn: conn} do
+      account = account_fixture()
+
+      older_transaction =
+        transaction_fixture(%{
+          account_id: account.id,
+          date: ~D[2026-08-01],
+          description: "TRANSACAO ANTIGA"
+        })
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-live-order",
+        account_id: account.id,
+        date: ~D[2026-08-05],
+        description: "COMPRA MAIS RECENTE",
+        amount: Decimal.new("-25.00")
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [entry]})
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
+
+      {:ok, _live, html} = live(conn, ~p"/transactions")
+
+      live_index = :binary.match(html, "COMPRA MAIS RECENTE") |> elem(0)
+      real_index = :binary.match(html, older_transaction.description) |> elem(0)
+
+      assert live_index < real_index
+    end
+
     test "a real failure after a previous success shows a banner in plain Portuguese", %{
       conn: conn
     } do
