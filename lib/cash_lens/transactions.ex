@@ -757,6 +757,15 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
+  Returns the most recent transaction date for `account_id`, or `nil` if the
+  account has no transactions at all.
+  """
+  @spec latest_transaction_date(Ecto.UUID.t()) :: Date.t() | nil
+  def latest_transaction_date(account_id) do
+    Repo.one(from t in Transaction, where: t.account_id == ^account_id, select: max(t.date))
+  end
+
+  @doc """
   Gets a single transaction.
   """
   def get_transaction!(id),

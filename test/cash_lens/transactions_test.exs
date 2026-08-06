@@ -13,6 +13,27 @@ defmodule CashLens.TransactionsTest do
     :ok
   end
 
+  describe "latest_transaction_date/1" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    test "returns the most recent date among the account's transactions" do
+      account = account_fixture()
+
+      transaction_fixture(%{account_id: account.id, date: ~D[2026-01-10], amount: "-10"})
+      transaction_fixture(%{account_id: account.id, date: ~D[2026-03-05], amount: "-20"})
+      transaction_fixture(%{account_id: account.id, date: ~D[2026-02-01], amount: "-30"})
+
+      assert Transactions.latest_transaction_date(account.id) == ~D[2026-03-05]
+    end
+
+    test "returns nil when the account has no transactions" do
+      account = account_fixture()
+
+      assert Transactions.latest_transaction_date(account.id) == nil
+    end
+  end
+
   describe "new-code coverage" do
     import CashLens.AccountsFixtures
     import CashLens.CategoriesFixtures
