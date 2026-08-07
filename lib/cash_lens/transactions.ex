@@ -752,7 +752,12 @@ defmodule CashLens.Transactions do
     %{name: name, type: type, total: total}
   end
 
-  defp get_latest_transaction_date do
+  @doc """
+  Returns the most recent transaction date across every account, or `nil` if
+  there are no transactions at all.
+  """
+  @spec get_latest_transaction_date() :: Date.t() | nil
+  def get_latest_transaction_date do
     Repo.one(from t in Transaction, select: max(t.date))
   end
 

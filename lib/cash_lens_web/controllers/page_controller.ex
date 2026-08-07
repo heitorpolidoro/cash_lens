@@ -74,24 +74,29 @@ defmodule CashLensWeb.PageController do
       |> Enum.reject(& &1.is_closed)
       |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
 
-    summary = Transactions.get_monthly_summary()
     historical_categories = Transactions.get_historical_category_summary(limit: 12)
 
     fixed_data = extract_category_data(historical_categories, "fixed")
     variable_data = extract_category_data(historical_categories, "variable")
 
-    month_name = CashLensWeb.Formatters.month_name(summary.month.month)
-
     # Live (unsaved) Pluggy entries bring the cards up to date with activity
     # since the last real import/sync. "Saldo Atual" only counts accounts
     # already reflected in `total_balance` above (no credit cards, no closed
-    # accounts); income/expenses match `get_monthly_summary/0`'s own scope
+    # accounts); income/expenses match `get_monthly_summary/1`'s own scope
     # (every account) and are further narrowed to the summary's own month.
     live_entries = safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
     balance_account_ids = MapSet.new(accounts_with_data, & &1.id)
 
     live_balance_entries =
       Enum.filter(live_entries, &MapSet.member?(balance_account_ids, &1.account_id))
+
+    # `get_monthly_summary/1`'s own no-arg default only looks at persisted
+    # transactions, so a month with only live (unsaved) activity would never
+    # become "the" month — its figures, and the card label, would stay stuck
+    # on the last persisted month. Passing the latest activity date across
+    # BOTH sources explicitly keeps the card in sync with live data too.
+    summary = Transactions.get_monthly_summary(latest_activity_date(live_entries))
+    month_name = CashLensWeb.Formatters.month_name(summary.month.month)
 
     live_month_entries = entries_in_month(live_entries, summary.month)
     {live_income, live_expenses} = split_income_expenses(live_month_entries)
@@ -130,6 +135,19 @@ defmodule CashLensWeb.PageController do
 
   defp entries_in_month(entries, month_date) do
     Enum.filter(entries, &(&1.date.year == month_date.year and &1.date.month == month_date.month))
+  end
+
+  # Starts from `get_monthly_summary/1`'s own default (latest persisted
+  # transaction date, or today if there are none) and only ever moves it
+  # forward — to the latest live (unsaved) entry's date, if any live entry is
+  # newer. A live entry older than that starting point must never drag the
+  # month backward (it stays correctly excluded from the summary, same as
+  # before live entries existed at all).
+  defp latest_activity_date(live_entries) do
+    persisted_fallback = Transactions.get_latest_transaction_date() || Date.utc_today()
+
+    [persisted_fallback | Enum.map(live_entries, & &1.date)]
+    |> Enum.max(Date)
   end
 
   defp sum_amounts(entries),

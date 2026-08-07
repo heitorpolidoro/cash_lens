@@ -16,6 +16,44 @@ defmodule CashLensWeb.PageControllerTest do
       :ok
     end
 
+    test "the summary card follows the latest live-entry month, not just the latest persisted transaction",
+         %{conn: conn} do
+      account = account_fixture()
+
+      balance_fixture(%{
+        account_id: account.id,
+        year: 2026,
+        month: 3,
+        final_balance: "500.00"
+      })
+
+      transaction_fixture(%{
+        account_id: account.id,
+        description: "Compra março",
+        amount: "-50.00",
+        date: ~D[2026-03-10]
+      })
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-dash-3",
+        account_id: account.id,
+        date: ~D[2026-04-05],
+        description: "COMPRA ABRIL",
+        amount: Decimal.new("-30.00")
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [entry]})
+
+      conn = get(conn, ~p"/")
+      html = html_response(conn, 200)
+
+      assert html =~ "(Abril)"
+      refute html =~ "(Março)"
+      # The live April expense must be counted in Despesas, not silently dropped
+      # for being outside a summary month still pinned to March.
+      assert html =~ "R$ 30,00"
+    end
+
     test "a live entry for the current month bumps Saldo Atual, Receitas/Despesas and shows the badge",
          %{conn: conn} do
       account = account_fixture()
