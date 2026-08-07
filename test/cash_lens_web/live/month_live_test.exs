@@ -401,8 +401,8 @@ defmodule CashLensWeb.MonthLiveTest do
       conn: conn,
       expense_cat: cat
     } do
-      {:ok, _live, html} = live(conn, ~p"/months/2026/3")
-      refute html =~ "R$ 0,00"
+      {:ok, live, html} = live(conn, ~p"/months/2026/3")
+      refute has_element?(live, "tr.opacity-40")
       assert html =~ cat.name
     end
   end

@@ -190,17 +190,27 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
   defp rows_for_render(rows, nil), do: Enum.map(rows, &Map.put(&1, :placeholder?, false))
 
   defp rows_for_render(rows, row_order) do
-    Enum.map(row_order, fn entry ->
-      case Enum.find(rows, &(&1.category_id == entry.category_id)) do
-        nil ->
-          entry
-          |> Map.take([:category_id, :name, :type])
-          |> Map.merge(%{total: Decimal.new(0), pct: Decimal.new(0), placeholder?: true})
+    aligned =
+      Enum.map(row_order, fn entry ->
+        case Enum.find(rows, &(&1.category_id == entry.category_id)) do
+          nil ->
+            entry
+            |> Map.take([:category_id, :name, :type])
+            |> Map.merge(%{total: Decimal.new(0), pct: Decimal.new("0.0"), placeholder?: true})
 
-        row ->
-          Map.put(row, :placeholder?, false)
-      end
-    end)
+          row ->
+            Map.put(row, :placeholder?, false)
+        end
+      end)
+
+    aligned_ids = MapSet.new(aligned, & &1.category_id)
+
+    orphans =
+      rows
+      |> Enum.reject(&MapSet.member?(aligned_ids, &1.category_id))
+      |> Enum.map(&Map.put(&1, :placeholder?, false))
+
+    aligned ++ orphans
   end
 
   attr :title, :string, required: true
@@ -242,6 +252,7 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
             <% expanded = !row.placeholder? and MapSet.member?(@expanded_categories, row_key) %>
             <tr
               class={if row.placeholder?, do: "opacity-40", else: "hover cursor-pointer select-none"}
+              aria-label={if row.placeholder?, do: "#{row.name} — sem movimentação neste mês"}
               phx-click={if !row.placeholder?, do: "toggle_category"}
               phx-value-category_id={row_key}
               phx-target={if !row.placeholder?, do: @myself}
