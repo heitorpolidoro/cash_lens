@@ -160,6 +160,7 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
         expanded_categories={@expanded_categories}
         category_transactions={@category_transactions}
         myself={@myself}
+        row_order={section_row_order(@row_order, "credit")}
       />
 
       <%!-- Gastos por categoria --%>
@@ -173,9 +174,33 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
         expanded_categories={@expanded_categories}
         category_transactions={@category_transactions}
         myself={@myself}
+        row_order={section_row_order(@row_order, "debit")}
       />
     </div>
     """
+  end
+
+  defp section_row_order(nil, _type), do: nil
+  defp section_row_order(row_order, type), do: Map.get(row_order, type)
+
+  # Comparison-mode alignment: `nil` row_order means "use this panel's own natural
+  # order" (today's behavior, no placeholders). A given row_order means "render
+  # exactly these rows, in this order" — a category missing from `rows` becomes a
+  # zero-value, non-interactive placeholder so both panels' tables line up.
+  defp rows_for_render(rows, nil), do: Enum.map(rows, &Map.put(&1, :placeholder?, false))
+
+  defp rows_for_render(rows, row_order) do
+    Enum.map(row_order, fn entry ->
+      case Enum.find(rows, &(&1.category_id == entry.category_id)) do
+        nil ->
+          entry
+          |> Map.take([:category_id, :name, :type])
+          |> Map.merge(%{total: Decimal.new(0), pct: Decimal.new(0), placeholder?: true})
+
+        row ->
+          Map.put(row, :placeholder?, false)
+      end
+    end)
   end
 
   attr :title, :string, required: true
@@ -187,6 +212,7 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
   attr :expanded_categories, :any, required: true
   attr :category_transactions, :map, required: true
   attr :myself, :any, required: true
+  attr :row_order, :any, default: nil
 
   defp breakdown_section(assigns) do
     ~H"""
@@ -196,11 +222,13 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
         <span class="text-xs opacity-50">{length(@rows)} categorias</span>
       </div>
 
-      <div :if={@rows == []} class="px-6 py-12 text-center opacity-40 text-sm">
+      <% display_rows = rows_for_render(@rows, @row_order) %>
+
+      <div :if={display_rows == []} class="px-6 py-12 text-center opacity-40 text-sm">
         {@empty_msg}
       </div>
 
-      <table :if={@rows != []} class="table table-sm w-full text-xs">
+      <table :if={display_rows != []} class="table table-sm w-full text-xs">
         <thead class="bg-base-200/50">
           <tr>
             <th>Categoria</th>
@@ -209,23 +237,25 @@ defmodule CashLensWeb.MonthLive.MonthPanel do
           </tr>
         </thead>
         <tbody>
-          <%= for row <- @rows do %>
+          <%= for row <- display_rows do %>
             <% row_key = "#{@type}:#{row.category_id || "nil"}" %>
-            <% expanded = MapSet.member?(@expanded_categories, row_key) %>
+            <% expanded = !row.placeholder? and MapSet.member?(@expanded_categories, row_key) %>
             <tr
-              class="hover cursor-pointer select-none"
-              phx-click="toggle_category"
+              class={if row.placeholder?, do: "opacity-40", else: "hover cursor-pointer select-none"}
+              phx-click={if !row.placeholder?, do: "toggle_category"}
               phx-value-category_id={row_key}
-              phx-target={@myself}
+              phx-target={if !row.placeholder?, do: @myself}
             >
               <td>
                 <div class="flex items-center gap-2">
                   <.icon
+                    :if={!row.placeholder?}
                     name={
                       if expanded, do: "hero-chevron-down-micro", else: "hero-chevron-right-micro"
                     }
                     class="size-3 opacity-50 shrink-0"
                   />
+                  <div :if={row.placeholder?} class="size-3 shrink-0"></div>
                   <div>
                     <div class="font-semibold">{row.name}</div>
                     <%= if @type == "credit" do %>

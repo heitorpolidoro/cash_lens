@@ -207,5 +207,203 @@ defmodule CashLensWeb.MonthLiveTest do
       assert primary_html =~ "Março"
       assert compare_html =~ "Março"
     end
+
+    test "a category present in both months is ordered by the primary panel, even when the compare panel's own ranking differs",
+         %{conn: conn, acc: acc} do
+      cat_a = category_fixture(%{name: "CatA", slug: "cat-a", type: "variable"})
+      cat_b = category_fixture(%{name: "CatB", slug: "cat-b", type: "variable"})
+
+      # Primary (March): CatA is the bigger expense.
+      transaction_fixture(%{
+        account_id: acc.id,
+        category_id: cat_a.id,
+        amount: "-300.00",
+        date: ~D[2026-03-05],
+        description: "Primary CatA"
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        category_id: cat_b.id,
+        amount: "-100.00",
+        date: ~D[2026-03-06],
+        description: "Primary CatB"
+      })
+
+      # Compare (February): CatB is the bigger expense — the opposite ranking.
+      transaction_fixture(%{
+        account_id: acc.id,
+        category_id: cat_a.id,
+        amount: "-50.00",
+        date: ~D[2026-02-05],
+        description: "Compare CatA"
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        category_id: cat_b.id,
+        amount: "-200.00",
+        date: ~D[2026-02-06],
+        description: "Compare CatB"
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/months/2026/3?compare=2026-2")
+
+      primary_html = live |> element("#primary") |> render()
+      compare_html = live |> element("#compare") |> render()
+
+      {a_pos_primary, _} = :binary.match(primary_html, "CatA")
+      {b_pos_primary, _} = :binary.match(primary_html, "CatB")
+      {a_pos_compare, _} = :binary.match(compare_html, "CatA")
+      {b_pos_compare, _} = :binary.match(compare_html, "CatB")
+
+      # Primary's own order (CatA bigger, so first) governs both panels — even
+      # though the compare panel's own unaligned ranking would put CatB first.
+      assert a_pos_primary < b_pos_primary
+      assert a_pos_compare < b_pos_compare
+    end
+
+    test "a category present only on the primary side shows a real value there and a R$ 0,00 placeholder, non-clickable, on the compare side",
+         %{conn: conn, acc: acc} do
+      only_primary = category_fixture(%{name: "SoPrimario", slug: "so-primario", type: "fixed"})
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        category_id: only_primary.id,
+        amount: "-77.00",
+        date: ~D[2026-03-05],
+        description: "Only on primary"
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/months/2026/3?compare=2026-2")
+
+      row_key = "debit:#{only_primary.id}"
+
+      # Real, clickable row on the primary side.
+      assert has_element?(
+               live,
+               "#primary tr[phx-value-category_id='#{row_key}'][phx-click='toggle_category']"
+             )
+
+      primary_row = live |> element("#primary tr[phx-value-category_id='#{row_key}']") |> render()
+      assert primary_row =~ "R$ 77,00"
+
+      # Placeholder, non-clickable row on the compare side, still showing the name.
+      refute has_element?(
+               live,
+               "#compare tr[phx-value-category_id='#{row_key}'][phx-click='toggle_category']"
+             )
+
+      assert has_element?(live, "#compare tr[phx-value-category_id='#{row_key}']")
+      compare_row = live |> element("#compare tr[phx-value-category_id='#{row_key}']") |> render()
+      assert compare_row =~ "SoPrimario"
+      assert compare_row =~ "R$ 0,00"
+    end
+
+    test "a category present only on the compare side appears after the primary's own categories, with a placeholder on the primary side",
+         %{conn: conn, acc: acc, expense_cat: primary_cat} do
+      only_compare =
+        category_fixture(%{name: "SoComparado", slug: "so-comparado", type: "variable"})
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        category_id: only_compare.id,
+        amount: "-40.00",
+        date: ~D[2026-02-05],
+        description: "Only on compare"
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/months/2026/3?compare=2026-2")
+
+      # setup/0 already gave `acc` a "Mercado" (primary_cat) expense in March.
+      primary_html = live |> element("#primary") |> render()
+      {primary_cat_pos, _} = :binary.match(primary_html, primary_cat.name)
+      {only_compare_pos, _} = :binary.match(primary_html, "SoComparado")
+      assert primary_cat_pos < only_compare_pos
+
+      row_key = "debit:#{only_compare.id}"
+
+      refute has_element?(
+               live,
+               "#primary tr[phx-value-category_id='#{row_key}'][phx-click='toggle_category']"
+             )
+
+      primary_row = live |> element("#primary tr[phx-value-category_id='#{row_key}']") |> render()
+      assert primary_row =~ "SoComparado"
+      assert primary_row =~ "R$ 0,00"
+
+      assert has_element?(
+               live,
+               "#compare tr[phx-value-category_id='#{row_key}'][phx-click='toggle_category']"
+             )
+
+      compare_row = live |> element("#compare tr[phx-value-category_id='#{row_key}']") |> render()
+      assert compare_row =~ "R$ 40,00"
+    end
+
+    test "an uncategorized (sem categoria) row participates in the same alignment", %{
+      conn: conn,
+      acc: acc
+    } do
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-15.00",
+        date: ~D[2026-03-07],
+        description: "Sem categoria em março"
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/months/2026/3?compare=2026-2")
+
+      row_key = "debit:nil"
+
+      primary_row = live |> element("#primary tr[phx-value-category_id='#{row_key}']") |> render()
+      assert primary_row =~ "R$ 15,00"
+
+      refute has_element?(
+               live,
+               "#compare tr[phx-value-category_id='#{row_key}'][phx-click='toggle_category']"
+             )
+
+      compare_row = live |> element("#compare tr[phx-value-category_id='#{row_key}']") |> render()
+      assert compare_row =~ "R$ 0,00"
+    end
+
+    test "income and expense sections align independently of each other", %{
+      conn: conn,
+      acc: acc,
+      income_cat: primary_income_cat
+    } do
+      only_compare_income =
+        category_fixture(%{name: "RendaSoComparado", slug: "renda-so-comparado"})
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        category_id: only_compare_income.id,
+        amount: "60.00",
+        date: ~D[2026-02-08],
+        description: "Renda só em fevereiro"
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/months/2026/3?compare=2026-2")
+
+      # setup/0 gave `acc` a "Renda" (primary_income_cat) income in March — the primary
+      # panel's own income category still appears (real value), unaffected by the fact
+      # that the *expense* alignment (tested elsewhere) is a completely separate list.
+      primary_html = live |> element("#primary") |> render()
+      assert primary_html =~ primary_income_cat.name
+
+      row_key = "credit:#{only_compare_income.id}"
+      primary_row = live |> element("#primary tr[phx-value-category_id='#{row_key}']") |> render()
+      assert primary_row =~ "R$ 0,00"
+    end
+
+    test "outside comparison mode, a single panel never renders placeholder rows", %{
+      conn: conn,
+      expense_cat: cat
+    } do
+      {:ok, _live, html} = live(conn, ~p"/months/2026/3")
+      refute html =~ "R$ 0,00"
+      assert html =~ cat.name
+    end
   end
 end
