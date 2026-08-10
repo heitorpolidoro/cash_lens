@@ -58,3 +58,4 @@ npm-debug.log
 
 # Superpowers skill scratch (brainstorm companion, SDD ledger)
 .superpowers/
+.meridian/
