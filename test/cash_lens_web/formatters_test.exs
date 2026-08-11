@@ -111,6 +111,9 @@ defmodule CashLensWeb.FormattersTest do
       assert Formatters.translate_parser_type("ourocard_ofx") == "Ourocard (OFX)"
       assert Formatters.translate_parser_type("sem_parar_pdf") == "Sem Parar (PDF)"
       assert Formatters.translate_parser_type("standard_ofx") == "OFX Padrão"
+
+      assert Formatters.translate_parser_type("mercadopago_cartao_pdf") ==
+               "Mercado Pago Cartão (PDF)"
     end
 
     test "returns default for unknown types" do

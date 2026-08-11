@@ -197,7 +197,7 @@ defmodule CashLens.Parsers.Ingestor do
   """
   def prepare_content(content, account, file_path) do
     if String.ends_with?(file_path, ".pdf") or
-         account.parser_type in ["sem_parar_pdf", "bradesco_cartao_pdf"] do
+         account.parser_type in ["sem_parar_pdf", "bradesco_cartao_pdf", "mercadopago_cartao_pdf"] do
       converter = Application.get_env(:cash_lens, :pdf_converter)
 
       case converter.convert(file_path) do

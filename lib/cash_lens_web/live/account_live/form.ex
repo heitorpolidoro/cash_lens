@@ -28,6 +28,7 @@ defmodule CashLensWeb.AccountLive.Form do
             options={[
               {"Bradesco (CSV)", "bradesco_csv"},
               {"Bradesco Cartão (PDF)", "bradesco_cartao_pdf"},
+              {"Mercado Pago Cartão (PDF)", "mercadopago_cartao_pdf"},
               {"Banco do Brasil (CSV)", "bb_csv"},
               {"Mercado Pago (CSV)", "mercado_pago_csv"},
               {"Ourocard (OFX)", "ourocard_ofx"},

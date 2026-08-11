@@ -1,5 +1,6 @@
 defmodule CashLens.PDFParserTest do
   use CashLens.DataCase, async: false
+  import ExUnit.CaptureLog
   alias CashLens.Parsers.PDFParser
 
   describe "parse/2 (sem_parar)" do
@@ -409,6 +410,137 @@ defmodule CashLens.PDFParserTest do
       # code would append instead.
       refute tx.description =~ ~r/ PARC \d+\/\d+/
     end
+
+    test "logs a reconciliation warning when a purchase row is silently dropped by the regex" do
+      # "LOJA MALFORMADA"'s row is missing "R$", so it fails to match
+      # @mercado_pago_line_regex and is silently dropped — simulating an
+      # unhandled real-world row shape (e.g. a refund/estorno sign marker).
+      # The statement's own "Total" (20,00) therefore no longer reconciles
+      # with the parsed purchases total (10,00).
+      text = """
+      Movimentações na fatura
+
+      17/06     Pagamento da fatura de junho/2026                         R$ 100,00
+
+      Cartão Visa [****1234]
+      Data      Movimentações                          Valor em R$
+      01/03     LOJA BOA                                R$ 10,00
+      02/03     LOJA MALFORMADA                          10,00
+      Total                                             R$ 20,00
+      """
+
+      log =
+        capture_log(fn ->
+          transactions = PDFParser.parse(text, :mercado_pago_card)
+          # Short by one: the malformed row never became a transaction.
+          assert length(transactions) == 2
+        end)
+
+      assert log =~ "reconciliation mismatch"
+    end
+
+    test "does not log a reconciliation warning for the real, fully-parsed fatura" do
+      text = """
+      Detalhes de consumo
+
+      Movimentações na fatura
+
+      Data      Movimentações                                            Valor em R$
+
+
+      17/06     Pagamento da fatura de junho/2026                         R$ 1.412,10
+
+
+
+      Cartão Visa [************8978]
+
+      Data      Movimentações                                            Valor em R$
+
+
+      27/02     MERCADOLIVRE*7PRODUTOS              Parcela 5 de 7         R$ 22,65
+
+
+      02/04     MERCADOLIVRE*26PRODUTOS             Parcela 9 de 12        R$ 42,44
+
+
+      22/04     MERCADOLIVRE*4PRODUTOS               Parcela 3 de 7         R$ 22,14
+
+
+      24/04     MERCADOLIVRE*3PRODUTOS              Parcela 3 de 10         R$ 41,29
+
+
+      29/04     MERCADOLIVRE*MERCADOLIVRE           Parcela 3 de 5          R$ 13,44
+
+
+      12/05     MERCADOLIVRE*MCUTILIDADES           Parcela 2 de 4          R$ 8,40
+
+
+      02/06     MERCADOLIVRE*MERCADOLI              Parcela 2 de 5          R$ 15,56
+
+
+      02/06     MERCADOLIVRE*MERCADOLI              Parcela 2 de 8         R$ 42,57
+
+
+      06/06     MERCADOLIVRE*MASTERREMOTE           Parcela 2 de 6          R$ 19,99
+
+
+      16/06     MERCADOLIVRE*MERCADOLIVRE                                   R$ 76,75
+
+
+      21/06     MERCADOLIVRE*MERCADOLIVRE           Parcela 1 de 12        R$ 48,50
+
+
+      21/06     MERCADOLIVRE*MERCADOLIVRE                                  R$ 301,67
+
+
+      25/06     MERCADOLIVRE*MERCADOLI                                    R$ 402,60
+                                               Heitor Luis Polidoro
+                                            Vencimento: 17/07/2026
+
+
+      Cartão Visa [************8978]
+
+      Data      Movimentações                          Valor em R$
+
+
+      25/06     MERCADOLIVRE*MERCADOLIVRE                R$ 201,41
+
+
+      06/07     MERCADOLIVRE*MERCADOLI                   R$ 98,54
+
+      Total                                             R$ 1.357,95
+      """
+
+      log =
+        capture_log(fn ->
+          transactions = PDFParser.parse(text, :mercado_pago_card)
+          assert length(transactions) == 16
+        end)
+
+      refute log =~ "reconciliation mismatch"
+    end
+
+    test "does not parse a transaction-shaped line placed after the closing Total row, and a repeated 'Movimentações' banner mid-table does not re-enter :payment" do
+      text = """
+      Movimentações na fatura
+
+      Cartão Visa [****1234]
+      Data      Movimentações                          Valor em R$
+      01/03     LOJA SEM PARCELA                        R$ 10,00
+      Movimentações na fatura
+      02/03     LOJA DOIS                                R$ 20,00
+      Total                                             R$ 30,00
+
+      Lançamentos futuros
+      03/03     NAO DEVERIA SER LIDA                    R$ 999,00
+      """
+
+      transactions = PDFParser.parse(text, :mercado_pago_card)
+
+      assert length(transactions) == 2
+      assert Enum.all?(transactions, &Decimal.negative?(&1.amount))
+      refute Enum.any?(transactions, &(&1.amount == Decimal.new("-999.00")))
+    end
   end
 
   describe "extract_statement_meta/1" do
@@ -480,6 +612,46 @@ defmodule CashLens.PDFParserTest do
 
       assert meta.due_date == ~D[2026-07-17]
       assert meta.competencia == ~D[2026-07-01]
+      assert Decimal.equal?(meta.total_a_pagar, Decimal.new("1357.95"))
+    end
+
+    test "extract_statement_meta on a Mercado Pago fatura ignores a decoy Total in a later, unrelated 'Lançamentos futuros' section" do
+      # Real faturas carry a THIRD "Total ... R$" occurrence past the
+      # "Resumo da fatura" section: the "Lançamentos futuros" section's own
+      # unrelated total (a different value). Before this was scoped to the
+      # "Resumo da fatura" section, extraction only got the right answer
+      # because the correct occurrence happened to come first in document
+      # order — this proves it's no longer coincidence-dependent.
+      text = """
+      Olá, Heitor Luis
+      Essa é sua fatura de julho
+      Total a pagar                            Vence em                      Limite total                 Saque total
+                                               17/07/2026                    R$ 23.200,00                 R$ 50,00
+      R$ 1.357,95
+
+      Informações complementares
+      Resumo da fatura
+
+        Consumos de 13/06 a 12/07                               R$ 1.357,95                Juros do mês anterior                                           R$ 0,00
+
+        Total da fatura de junho                                 R$ 1.412,10
+
+
+                                                                                            Total                                         R$ 1.357,95
+
+      Heitor Luis Polidoro
+      Vencimento: 17/07/2026
+
+      Lançamentos futuros
+
+        Compras parceladas                            R$ 1.508,58
+
+        Total                                        R$ 1.508,58
+      """
+
+      meta = PDFParser.extract_statement_meta(text)
+
+      assert meta.due_date == ~D[2026-07-17]
       assert Decimal.equal?(meta.total_a_pagar, Decimal.new("1357.95"))
     end
   end

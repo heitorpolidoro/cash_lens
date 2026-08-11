@@ -4,7 +4,14 @@ defmodule CashLens.Parsers.PDFParser do
   Parser for PDF content (text-based) for various providers.
   """
 
+  require Logger
+
   @mercado_pago_line_regex ~r/^(\d{2}\/\d{2})\s+(.+?)(?:\s+Parcela\s+(\d+)\s+de\s+(\d+))?\s+R\$\s*([\d.]+,\d{2})\s*$/
+
+  # Matches the transaction table's closing "Total" row, the same shape
+  # `extract_mercado_pago_total/1` looks for — used to terminate the
+  # `:purchases` section so nothing past the table is mis-parsed as a row.
+  @mercado_pago_total_line_regex ~r/^Total\s+R\$/
 
   @doc """
   Parses the text content of a PDF statement.
@@ -40,31 +47,69 @@ defmodule CashLens.Parsers.PDFParser do
     lines = String.split(text, "\n")
 
     {transactions, _section} =
-      Enum.reduce(lines, {[], :none}, fn line, {acc, section} ->
-        trimmed = String.trim(line)
+      Enum.reduce(lines, {[], :none}, &mercado_pago_reduce_line(&1, &2, statement_date))
 
-        cond do
-          trimmed == "" ->
-            {acc, section}
+    transactions = Enum.reverse(transactions)
+    check_mercado_pago_reconciliation(transactions, text)
+    transactions
+  end
 
-          String.contains?(trimmed, "Movimentações na fatura") ->
-            {acc, :payment}
+  defp mercado_pago_reduce_line(line, {acc, section}, statement_date) do
+    trimmed = String.trim(line)
 
-          String.starts_with?(trimmed, "Cartão Visa") ->
-            {acc, :purchases}
+    cond do
+      trimmed == "" ->
+        {acc, section}
 
-          section in [:payment, :purchases] ->
-            case parse_mercado_pago_line(trimmed, section, statement_date) do
-              nil -> {acc, section}
-              tx -> {[tx | acc], section}
-            end
+      Regex.match?(@mercado_pago_total_line_regex, trimmed) ->
+        {acc, :none}
 
-          true ->
-            {acc, section}
+      String.contains?(trimmed, "Movimentações na fatura") and section == :none ->
+        {acc, :payment}
+
+      String.starts_with?(trimmed, "Cartão Visa") ->
+        {acc, :purchases}
+
+      section in [:payment, :purchases] ->
+        accumulate_mercado_pago_line(trimmed, section, acc, statement_date)
+
+      true ->
+        {acc, section}
+    end
+  end
+
+  defp accumulate_mercado_pago_line(trimmed, section, acc, statement_date) do
+    case parse_mercado_pago_line(trimmed, section, statement_date) do
+      nil -> {acc, section}
+      tx -> {[tx | acc], section}
+    end
+  end
+
+  # Passive detection only (Finding 1): compares the parsed purchase-row
+  # total against the fatura's own extracted "Total" so a row that silently
+  # failed to match `@mercado_pago_line_regex` (e.g. an unhandled refund/
+  # estorno sign format) surfaces as a warning instead of vanishing without
+  # a trace. Never changes the returned transaction list.
+  defp check_mercado_pago_reconciliation(transactions, text) do
+    case extract_mercado_pago_total(text) do
+      nil ->
+        :ok
+
+      expected_total ->
+        purchases_total =
+          transactions
+          |> Enum.filter(&Decimal.negative?(&1.amount))
+          |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
+          |> Decimal.abs()
+
+        unless Decimal.equal?(purchases_total, expected_total) do
+          Logger.warning(
+            "Mercado Pago fatura reconciliation mismatch: parsed purchases total " <>
+              "#{purchases_total} does not match the statement's Total #{expected_total} " <>
+              "— a transaction row may have been silently dropped during parsing."
+          )
         end
-      end)
-
-    Enum.reverse(transactions)
+    end
   end
 
   defp parse_mercado_pago_line(line, section, statement_date) do
@@ -437,9 +482,11 @@ defmodule CashLens.Parsers.PDFParser do
 
   @doc """
   Statement-level metadata for a credit-card PDF: due date (Vencimento),
-  total_a_pagar (the "TOTAL DA FATURA" amount, previously used only as an
-  end-of-table marker) and competencia (first day of the due month). Any
-  field is nil when the source does not carry it.
+  total_a_pagar (the "TOTAL DA FATURA" amount for Bradesco-style layouts,
+  previously used only as an end-of-table marker, or the "Total a pagar" /
+  "Resumo da fatura" total for Mercado Pago's layout) and competencia
+  (first day of the due month). Any field is nil when the source does not
+  carry it.
   """
   def extract_statement_meta(text) do
     due = extract_statement_date_or_nil(text)
@@ -501,12 +548,31 @@ defmodule CashLens.Parsers.PDFParser do
     end
   end
 
+  # Real Mercado Pago faturas contain three lines matching a bare
+  # "Total ... R$ X,XX" shape: the correct "Resumo da fatura" total, the
+  # transaction table's closing "Total" row (same, correct value), and a
+  # later, unrelated "Lançamentos futuros" section's own "Total" (a
+  # DIFFERENT value). Scoping the search to the "Resumo da fatura" section
+  # (up to the "Lançamentos futuros" marker, when present) picks the right
+  # occurrence structurally instead of relying on document order.
   defp extract_mercado_pago_total(text) do
     regex = ~r/Total\s+R\$\s*([\d.]+,\d{2})/
 
-    case Regex.run(regex, text) do
+    case Regex.run(regex, mercado_pago_total_scope(text)) do
       [_, amount_str] -> parse_amount(amount_str) |> Decimal.abs()
       _ -> nil
+    end
+  end
+
+  defp mercado_pago_total_scope(text) do
+    case String.split(text, "Resumo da fatura", parts: 2) do
+      [_, rest] ->
+        rest
+        |> String.split("Lançamentos futuros", parts: 2)
+        |> List.first()
+
+      _ ->
+        text
     end
   end
 
