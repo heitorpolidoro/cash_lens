@@ -219,10 +219,24 @@ defmodule CashLens.Parsers.DirectoryImporter do
 
     emit.({:account_start, label, length(matching)})
 
-    summary =
-      Enum.reduce(matching, %{imported: 0, skipped: 0, failed: []}, fn file, acc ->
+    {summary, _claimed_fingerprints} =
+      Enum.reduce(matching, {%{imported: 0, skipped: 0, failed: []}, MapSet.new()}, fn file,
+                                                                                       {acc,
+                                                                                        claimed} ->
+        # In a dry run, `claimed` threads the set of fingerprints already counted
+        # as "would be newly imported" by earlier files in this same account
+        # folder, so overlapping rows between two files in one folder aren't
+        # double-counted (a real import wouldn't double-count them either,
+        # since file 1's rows are actually on disk by the time file 2 inserts).
+        {result, claimed} =
+          if dry_run do
+            Ingestor.preview_file(account, file, claimed)
+          else
+            {Ingestor.import_file(account, file, dry_run: dry_run), claimed}
+          end
+
         acc =
-          case Ingestor.import_file(account, file, dry_run: dry_run) do
+          case result do
             {:ok, s} ->
               %{
                 imported: acc.imported + s.imported,
@@ -235,7 +249,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
           end
 
         emit.({:file_done, label})
-        acc
+        {acc, claimed}
       end)
 
     emit.({:account_done, summary})

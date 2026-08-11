@@ -159,7 +159,8 @@ defmodule CashLens.Parsers.Ingestor do
         if notify_fn, do: notify_fn.(length(transactions_data))
 
         if dry_run do
-          preview_import(transactions_data, account.id)
+          {result, _claimed} = preview_import(transactions_data, account.id, MapSet.new())
+          result
         else
           statement_id =
             maybe_create_statement(account, content, file_path, transactions_data)
@@ -227,9 +228,7 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   defp finalize_import(transactions_data, account_id, statement_id) do
-    # Never persist transactions dated in the future — they have not happened yet.
-    today = Date.utc_today()
-    transactions_data = Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
+    transactions_data = reject_future_dated(transactions_data)
 
     {entries, failed} = prepare_entries(transactions_data, account_id, statement_id)
 
@@ -250,24 +249,76 @@ defmodule CashLens.Parsers.Ingestor do
     {:ok, %{imported: inserted_count, skipped: skipped, failed: failed}}
   end
 
+  @doc """
+  Same as `import_file/3` with `dry_run: true`, but for one file within a
+  multi-file dry-run batch (a `DirectoryImporter` preview of an account
+  folder holding several files). `claimed_fingerprints` is the set of
+  fingerprints already counted as "would be newly imported" by earlier files
+  in this same run; it is threaded through and returned updated so the next
+  file in the folder sees it too.
+
+  This mirrors what the real import does across files: file 1's rows land in
+  the DB (via `on_conflict: :nothing`) before file 2's insert runs, so an
+  overlapping row in file 2 is correctly skipped. A dry run writes nothing,
+  so without this threading, file 2's preview can't see file 1's rows and
+  double-counts them as new. Only `DirectoryImporter`'s dry-run path should
+  call this; single-file callers use `import_file/3`.
+  """
+  def preview_file(account, file_path, claimed_fingerprints) do
+    case File.read(file_path) do
+      {:ok, content} ->
+        content = prepare_content(content, account, file_path)
+
+        case parse(content, account.parser_type) do
+          {:error, reason} ->
+            {{:error, reason}, claimed_fingerprints}
+
+          transactions_data ->
+            preview_import(transactions_data, account.id, claimed_fingerprints)
+        end
+
+      {:error, reason} ->
+        {{:error, "Could not read file: #{reason}"}, claimed_fingerprints}
+    end
+  end
+
   # Computes what a real import would do — same future-date filtering and
   # same `prepare_entries/3` (and therefore the same real dedup fingerprint)
   # `finalize_import/3` uses — but performs zero writes: no statement, no
   # transaction rows, no balance rebuild, no transfer/installment linking.
   # `imported` here means "would be newly imported"; `skipped` means "already
-  # present" (a fingerprint that already exists in `transactions`) — the same
-  # meaning `finalize_import/3`'s `on_conflict: :nothing` insert would
-  # produce for the same input.
-  defp preview_import(transactions_data, account_id) do
-    today = Date.utc_today()
-    transactions_data = Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
+  # present" (a fingerprint that already exists in `transactions`, OR one
+  # already claimed as new by an earlier file in this same dry-run batch via
+  # `claimed_fingerprints`) — the same meaning `finalize_import/3`'s
+  # `on_conflict: :nothing` insert would produce for the same input across
+  # files. Returns `{{:ok, summary}, updated_claimed_fingerprints}`.
+  defp preview_import(transactions_data, account_id, claimed_fingerprints) do
+    transactions_data = reject_future_dated(transactions_data)
 
     {entries, failed} = prepare_entries(transactions_data, account_id, nil)
 
     already_present = existing_fingerprints(Enum.map(entries, & &1.fingerprint))
-    new_count = Enum.count(entries, &(&1.fingerprint not in already_present))
 
-    {:ok, %{imported: new_count, skipped: length(entries) - new_count, failed: failed}}
+    {new_count, skipped_count, updated_claimed} =
+      Enum.reduce(entries, {0, 0, claimed_fingerprints}, fn entry, {new, skipped, claimed} ->
+        if MapSet.member?(already_present, entry.fingerprint) or
+             MapSet.member?(claimed, entry.fingerprint) do
+          {new, skipped + 1, claimed}
+        else
+          {new + 1, skipped, MapSet.put(claimed, entry.fingerprint)}
+        end
+      end)
+
+    {{:ok, %{imported: new_count, skipped: skipped_count, failed: failed}}, updated_claimed}
+  end
+
+  # Never persist (or count as newly-importable) transactions dated in the
+  # future — they have not happened yet. Shared by `finalize_import/3` and
+  # `preview_import/3` so the real and dry-run paths can never silently
+  # diverge on this rule.
+  defp reject_future_dated(transactions_data) do
+    today = Date.utc_today()
+    Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
   end
 
   defp existing_fingerprints([]), do: MapSet.new()

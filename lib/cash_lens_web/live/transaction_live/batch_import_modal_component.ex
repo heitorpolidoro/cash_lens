@@ -12,10 +12,27 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
     current_account_file_total: 0,
     result: nil,
     missing_accounts: [],
-    preview?: false
+    preview?: false,
+    run_token: 0
   }
 
+  # A `progress_update` carrying a `:run_token` comes from a
+  # `{:batch_import_finished, ...}` message relayed by the parent LiveView.
+  # If that token doesn't match the run currently tracked in this
+  # component's own state, the message belongs to a stale or superseded run
+  # (e.g. one still in flight when the modal was closed, or a second run
+  # started before the first one's result arrived) — apply it as truth and a
+  # finished-but-outdated run could resurrect a stale confirm screen, or a
+  # duplicate in-flight run could stomp a newer one's result. Ignore it.
   @impl true
+  def update(%{progress_update: %{run_token: token} = progress}, socket) do
+    if token == socket.assigns.batch_progress.run_token do
+      {:ok, update(socket, :batch_progress, &Map.merge(&1, progress))}
+    else
+      {:ok, socket}
+    end
+  end
+
   def update(%{progress_update: progress}, socket) do
     {:ok, update(socket, :batch_progress, &Map.merge(&1, progress))}
   end
@@ -43,19 +60,31 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
 
     case DirectoryImporter.preflight(path) do
       :ok ->
-        socket =
-          assign(socket, :batch_progress, %{@idle_progress | phase: :previewing, preview?: true})
+        token = next_run_token(socket)
 
-        start_batch_import(path, [dry_run: true], true)
+        socket =
+          assign(socket, :batch_progress, %{
+            @idle_progress
+            | phase: :previewing,
+              preview?: true,
+              run_token: token
+          })
+
+        start_batch_import(path, [dry_run: true], true, token)
         {:noreply, socket}
 
       {:needs_confirmation, missing_accounts} ->
-        progress = %{@idle_progress | phase: :confirming, missing_accounts: missing_accounts}
+        progress = %{
+          idle_progress(socket)
+          | phase: :confirming,
+            missing_accounts: missing_accounts
+        }
+
         {:noreply, assign(socket, :batch_progress, progress)}
 
       {:error, reasons} ->
         result = %DirectoryImporter.Result{errors: reasons}
-        progress = %{@idle_progress | phase: :done, result: result}
+        progress = %{idle_progress(socket) | phase: :done, result: result}
         {:noreply, assign(socket, :batch_progress, progress)}
     end
   end
@@ -63,31 +92,41 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
   @impl true
   def handle_event("confirm_create_accounts", _params, socket) do
     path = socket.assigns.batch_path
+    token = next_run_token(socket)
 
     socket =
-      assign(socket, :batch_progress, %{@idle_progress | phase: :previewing, preview?: true})
+      assign(socket, :batch_progress, %{
+        @idle_progress
+        | phase: :previewing,
+          preview?: true,
+          run_token: token
+      })
 
-    start_batch_import(path, [create_missing: true, dry_run: true], true)
+    start_batch_import(path, [create_missing: true, dry_run: true], true, token)
     {:noreply, socket}
   end
 
   @impl true
   def handle_event("confirm_import", _params, socket) do
     path = socket.assigns.batch_path
-    socket = assign(socket, :batch_progress, %{@idle_progress | phase: :importing})
-    start_batch_import(path, [dry_run: false], false)
+    token = next_run_token(socket)
+
+    socket =
+      assign(socket, :batch_progress, %{@idle_progress | phase: :importing, run_token: token})
+
+    start_batch_import(path, [dry_run: false], false, token)
     {:noreply, socket}
   end
 
   @impl true
   def handle_event("cancel_confirmation", _params, socket) do
-    {:noreply, assign(socket, :batch_progress, @idle_progress)}
+    {:noreply, assign(socket, :batch_progress, idle_progress(socket))}
   end
 
   @impl true
   def handle_event("close", _params, socket) do
     send(self(), :close_batch_import_modal)
-    {:noreply, assign(socket, :batch_progress, @idle_progress)}
+    {:noreply, assign(socket, :batch_progress, idle_progress(socket))}
   end
 
   @impl true
@@ -118,7 +157,18 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
     %{progress | result: %{result | cycle_warnings: updated_warnings}}
   end
 
-  defp start_batch_import(path, extra_opts, preview?) do
+  # The idle state resets everything except `run_token`: a run may still be
+  # in flight when the modal is closed or a confirmation step is cancelled,
+  # and its eventual `{:batch_import_finished, ...}` message must still be
+  # recognized as stale (not match whatever token a later run gets) rather
+  # than colliding with a fresh run that started counting from the same
+  # baseline again.
+  defp idle_progress(socket),
+    do: %{@idle_progress | run_token: socket.assigns.batch_progress.run_token}
+
+  defp next_run_token(socket), do: socket.assigns.batch_progress.run_token + 1
+
+  defp start_batch_import(path, extra_opts, preview?, token) do
     pid = self()
 
     process_import = fn ->
@@ -130,7 +180,7 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
       try do
         opts = Keyword.merge(extra_opts, on_event: build_on_event(pid, agent))
         result = DirectoryImporter.run(path, opts)
-        send(pid, {:batch_import_finished, result, preview?})
+        send(pid, {:batch_import_finished, result, preview?, token})
       rescue
         # coveralls-ignore-start — defensive guard so a crash inside the import Task
         # surfaces to the UI instead of dying silently; not deterministically testable.
@@ -139,7 +189,7 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
             errors: ["Erro inesperado: #{Exception.message(e)}"]
           }
 
-          send(pid, {:batch_import_finished, error_result, preview?})
+          send(pid, {:batch_import_finished, error_result, preview?, token})
           # coveralls-ignore-stop
       after
         Agent.stop(agent)
@@ -294,6 +344,7 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
         <button
           phx-click="confirm_create_accounts"
           phx-target={@myself}
+          phx-disable-with="Criando e importando..."
           class="btn btn-warning btn-lg flex-1 rounded-2xl"
         >
           Criar e importar
@@ -355,6 +406,7 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
         <button
           phx-click="confirm_import"
           phx-target={@myself}
+          phx-disable-with="Importando..."
           class="btn btn-primary btn-lg flex-1 rounded-2xl"
         >
           Confirmar Importação

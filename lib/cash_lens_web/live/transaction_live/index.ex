@@ -683,18 +683,18 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_info({:batch_import_finished, result, preview?}, socket) do
+  def handle_info({:batch_import_finished, result, preview?, token}, socket) do
     if preview? do
       send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
         id: "batch-import-modal",
-        progress_update: %{phase: :preview_confirm, result: result}
+        progress_update: %{phase: :preview_confirm, result: result, run_token: token}
       )
 
       {:noreply, socket}
     else
       send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
         id: "batch-import-modal",
-        progress_update: %{phase: :done, result: result}
+        progress_update: %{phase: :done, result: result, run_token: token}
       )
 
       {:noreply,

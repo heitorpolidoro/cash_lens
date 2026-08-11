@@ -107,6 +107,34 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponentTest do
     refute html =~ "Confirmar Importação"
   end
 
+  test "a batch_import_finished-derived progress_update with a stale run_token is ignored", %{
+    conn: conn
+  } do
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
+    index_live |> render_click("open_batch_import")
+
+    # No run has been started in this component instance, so its current
+    # run_token is still the initial 0. A progress_update carrying some other
+    # token simulates a result from an earlier/different run arriving late
+    # (e.g. after the modal was closed and reopened, or a duplicate in-flight
+    # run) — it must not resurrect a confirm screen the current state never
+    # asked for.
+    Phoenix.LiveView.send_update(
+      index_live.pid,
+      CashLensWeb.TransactionLive.BatchImportModalComponent,
+      id: "batch-import-modal",
+      progress_update: %{
+        phase: :preview_confirm,
+        result: %DirectoryImporter.Result{},
+        run_token: 999
+      }
+    )
+
+    html = render(index_live)
+    refute html =~ "Confirmar Importação"
+    assert html =~ "Caminho da Pasta"
+  end
+
   test "submitting a path with all accounts already present previews before importing", %{
     conn: conn
   } do

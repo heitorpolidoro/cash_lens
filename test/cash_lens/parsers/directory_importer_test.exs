@@ -125,6 +125,38 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
     end
 
+    test "two overlapping files in the same account folder are not double-counted as new",
+         %{root: root} do
+      account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+
+      # Same 3-row fixture content written under two different filenames in one
+      # account folder: every row in file 2 fingerprint-collides with file 1.
+      # A dry run must recognize that, exactly like a real import would (file
+      # 1's rows are already on disk by the time file 2's on_conflict: :nothing
+      # insert runs).
+      dir =
+        account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [
+          {"extrato1.csv", @bb_sample},
+          {"extrato2.csv", @bb_sample}
+        ])
+
+      assert %Result{accounts: [preview_entry], errors: []} =
+               DirectoryImporter.run(dir, skip_installments: true, dry_run: true)
+
+      assert preview_entry.imported == 3
+      assert preview_entry.skipped == 3
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 0
+
+      # The preview's `imported` count must equal what a subsequent real run
+      # actually imports — this is the exact promise the preview makes.
+      assert %Result{accounts: [real_entry]} =
+               DirectoryImporter.run(dir, skip_installments: true)
+
+      assert real_entry.imported == preview_entry.imported
+      assert real_entry.imported == 3
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
+    end
+
     test "does not run installment detection", %{root: root} do
       account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
 
