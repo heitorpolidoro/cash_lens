@@ -313,4 +313,29 @@ defmodule CashLensWeb.PluggyLive.IndexTest do
       assert_receive :fetch_all_called, 1000
     end
   end
+
+  describe "account selector" do
+    test "options are labeled \"<bank> - <name>\" and sorted by that label", %{conn: conn} do
+      item = pluggy_item_fixture(item_id: "item-selector")
+
+      {:ok, _link} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "acc-1",
+          pluggy_account_name: "Conta",
+          pluggy_account_type: "BANK"
+        })
+
+      account_fixture(%{bank: "Zeta Bank", name: "Conta A"})
+      account_fixture(%{bank: "Alfa Bank", name: "Conta B"})
+
+      {:ok, _live, html} = live(conn, ~p"/pluggy")
+
+      assert html =~ "Alfa Bank - Conta B"
+      assert html =~ "Zeta Bank - Conta A"
+
+      {alfa_pos, _} = :binary.match(html, "Alfa Bank - Conta B")
+      {zeta_pos, _} = :binary.match(html, "Zeta Bank - Conta A")
+      assert alfa_pos < zeta_pos
+    end
+  end
 end

@@ -57,7 +57,7 @@ defmodule CashLensWeb.PluggyLive.Index do
                       value={account.id}
                       selected={row.link.account_id == account.id}
                     >
-                      {account.name} ({account.bank})
+                      {account.bank} - {account.name}
                     </option>
                   </select>
                 </form>
@@ -157,7 +157,7 @@ defmodule CashLensWeb.PluggyLive.Index do
      socket
      |> assign(:page_title, "Pluggy")
      |> assign(:form, to_form(%{"item_id" => "", "label" => ""}, as: :item))
-     |> assign(:accounts, Accounts.list_accounts())
+     |> assign(:accounts, Enum.sort_by(Accounts.list_accounts(), &"#{&1.bank} - #{&1.name}"))
      |> assign(:confirm_modal, nil)
      |> assign(:show_new_item_modal, false)
      |> load_items()}
