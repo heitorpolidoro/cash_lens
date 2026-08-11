@@ -13,6 +13,7 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.TransferRuleApplier
   alias Ecto.UUID
+  import Ecto.Query, only: [from: 2]
 
   @doc """
   Parses the content based on the provided parser_type.
@@ -77,13 +78,19 @@ defmodule CashLens.Parsers.Ingestor do
   @doc """
   Reads a file, converts encoding/extracts text, parses and saves the transactions.
   Returns `{:ok, count}` or `{:error, reason}`.
+
+  With `dry_run: true`, computes the same `%{imported:, skipped:, failed:}`
+  a real call on the same input would return, using the same fingerprint
+  logic, but performs zero writes (no transaction rows, no credit-card
+  statement, no balance rebuild).
   """
   def import_file(account, file_path, opts \\ []) do
     notify_fn = Keyword.get(opts, :notify_fn)
+    dry_run = Keyword.get(opts, :dry_run, false)
 
     case File.read(file_path) do
       {:ok, content} ->
-        process_imported_content(content, account, file_path, notify_fn)
+        process_imported_content(content, account, file_path, notify_fn, dry_run)
 
       {:error, reason} ->
         {:error, "Could not read file: #{reason}"}
@@ -137,7 +144,7 @@ defmodule CashLens.Parsers.Ingestor do
     end
   end
 
-  defp process_imported_content(content, account, file_path, notify_fn) do
+  defp process_imported_content(content, account, file_path, notify_fn, dry_run) do
     content = prepare_content(content, account, file_path)
 
     Logger.info("INGESTOR: #{account.parser_type} <- #{file_path} (#{account.name})")
@@ -151,10 +158,14 @@ defmodule CashLens.Parsers.Ingestor do
         Logger.info("INGESTOR: Parser returned #{length(transactions_data)} transactions.")
         if notify_fn, do: notify_fn.(length(transactions_data))
 
-        statement_id =
-          maybe_create_statement(account, content, file_path, transactions_data)
+        if dry_run do
+          preview_import(transactions_data, account.id)
+        else
+          statement_id =
+            maybe_create_statement(account, content, file_path, transactions_data)
 
-        finalize_import(transactions_data, account.id, statement_id)
+          finalize_import(transactions_data, account.id, statement_id)
+        end
     end
   end
 
@@ -237,6 +248,35 @@ defmodule CashLens.Parsers.Ingestor do
     skipped = length(entries) - inserted_count
 
     {:ok, %{imported: inserted_count, skipped: skipped, failed: failed}}
+  end
+
+  # Computes what a real import would do — same future-date filtering and
+  # same `prepare_entries/3` (and therefore the same real dedup fingerprint)
+  # `finalize_import/3` uses — but performs zero writes: no statement, no
+  # transaction rows, no balance rebuild, no transfer/installment linking.
+  # `imported` here means "would be newly imported"; `skipped` means "already
+  # present" (a fingerprint that already exists in `transactions`) — the same
+  # meaning `finalize_import/3`'s `on_conflict: :nothing` insert would
+  # produce for the same input.
+  defp preview_import(transactions_data, account_id) do
+    today = Date.utc_today()
+    transactions_data = Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
+
+    {entries, failed} = prepare_entries(transactions_data, account_id, nil)
+
+    already_present = existing_fingerprints(Enum.map(entries, & &1.fingerprint))
+    new_count = Enum.count(entries, &(&1.fingerprint not in already_present))
+
+    {:ok, %{imported: new_count, skipped: length(entries) - new_count, failed: failed}}
+  end
+
+  defp existing_fingerprints([]), do: MapSet.new()
+
+  defp existing_fingerprints(fingerprints) do
+    CashLens.Repo.all(
+      from(t in Transaction, where: t.fingerprint in ^fingerprints, select: t.fingerprint)
+    )
+    |> MapSet.new()
   end
 
   defp prepare_entries(transactions_data, account_id, statement_id) do

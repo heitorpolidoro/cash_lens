@@ -341,6 +341,47 @@ defmodule CashLens.Parsers.IngestorTest do
 
       assert CashLens.CreditCards.get_statement!(pending.id).absorbed_by_statement_id != nil
     end
+
+    test "dry_run: true returns the same counts a real import would, with zero writes" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {:ok, %{imported: 3, skipped: 0, failed: []}} =
+               Ingestor.import_file(account, @bb_sample, dry_run: true)
+
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 0
+
+      assert {:ok, %{imported: 3, skipped: 0, failed: []}} =
+               Ingestor.import_file(account, @bb_sample)
+
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
+    end
+
+    test "dry_run: true reports rows already present as skipped, without inserting anything" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
+
+      assert {:ok, %{imported: 0, skipped: 3, failed: []}} =
+               Ingestor.import_file(account, @bb_sample, dry_run: true)
+
+      # Still exactly 3 — the dry run above did not insert or delete anything.
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
+    end
+
+    test "dry_run: true does not create a credit-card statement" do
+      # Statement creation is driven purely by `account.is_credit_card`, not
+      # by file type (see the existing test right above this describe block,
+      # "importing a credit-card file creates a statement and stamps
+      # import_batch_id", which uses this exact same CSV+is_credit_card
+      # combination for a REAL import) — so no PDF fixture is needed here.
+      account = account_fixture(is_credit_card: true, parser_type: "bb_csv")
+
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample, dry_run: true)
+
+      assert CashLens.Repo.aggregate(CashLens.CreditCards.Statement, :count) == 0
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 0
+    end
   end
 
   describe "duplicate-safe re-import" do

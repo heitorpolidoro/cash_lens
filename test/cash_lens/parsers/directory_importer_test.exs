@@ -101,6 +101,49 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
     end
   end
 
+  describe "run/2 with dry_run: true" do
+    test "computes accurate per-account counts with zero writes", %{root: root} do
+      account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+
+      dir =
+        account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [
+          {"extrato.csv", @bb_sample}
+        ])
+
+      assert %Result{accounts: [entry], errors: []} =
+               DirectoryImporter.run(dir, skip_installments: true, dry_run: true)
+
+      assert entry.imported == 3
+      assert entry.skipped == 0
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 0
+
+      # A real run afterward imports exactly what the preview said it would.
+      assert %Result{accounts: [real_entry]} =
+               DirectoryImporter.run(dir, skip_installments: true)
+
+      assert real_entry.imported == 3
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
+    end
+
+    test "does not run installment detection", %{root: root} do
+      account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+
+      dir =
+        account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [
+          {"extrato.csv", @bb_sample}
+        ])
+
+      # No installment groups exist before or after a dry run — a real (cheap,
+      # observable) proxy for "scan_and_apply_all/0 was not invoked", since
+      # this project's other tests reach for `skip_installments: true` rather
+      # than mocking that function directly (grep this file for the existing
+      # pattern before assuming a different one is expected).
+      assert CashLens.Installments.list_installment_groups() == []
+      DirectoryImporter.run(dir, dry_run: true)
+      assert CashLens.Installments.list_installment_groups() == []
+    end
+  end
+
   describe "run/2 on a parent folder" do
     test "imports each subfolder that has an .account", %{root: root} do
       account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")

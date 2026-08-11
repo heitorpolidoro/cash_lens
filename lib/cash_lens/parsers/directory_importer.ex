@@ -64,6 +64,9 @@ defmodule CashLens.Parsers.DirectoryImporter do
     * `:create_missing` — when true, creates accounts referenced in `.account`
       files that do not yet exist in the database (call `preflight/1` first and
       confirm with the user before passing this option).
+    * `:dry_run` — when true, computes the same per-account counts a real run
+      would, with zero writes (no transactions, no statements, no balance
+      rebuild, no installment scan — regardless of `:skip_installments`).
   """
   def run(path, opts \\ []) do
     if File.dir?(path) do
@@ -79,16 +82,19 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end
 
     emit = Keyword.get(opts, :on_event, fn _ -> :ok end)
+    dry_run = Keyword.get(opts, :dry_run, false)
     {account_dirs, skipped_dirs} = classify(path)
 
     emit.({:start, length(account_dirs)})
 
     result =
       account_dirs
-      |> Enum.reduce(%Result{}, fn dir, acc -> import_account_folder(dir, path, acc, emit) end)
+      |> Enum.reduce(%Result{}, fn dir, acc ->
+        import_account_folder(dir, path, acc, emit, dry_run)
+      end)
       |> add_skipped_warnings(skipped_dirs)
 
-    unless Keyword.get(opts, :skip_installments, false) do
+    unless dry_run or Keyword.get(opts, :skip_installments, false) do
       CashLens.Installments.scan_and_apply_all()
     end
 
@@ -180,10 +186,10 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end)
   end
 
-  defp import_account_folder(dir, root_path, result, emit) do
+  defp import_account_folder(dir, root_path, result, emit, dry_run) do
     with {:ok, %{bank: bank, account: name}} <- AccountFile.read(dir),
          {:ok, account} <- resolve_account(bank, name) do
-      do_import(dir, root_path, account, bank, name, result, emit)
+      do_import(dir, root_path, account, bank, name, result, emit, dry_run)
     else
       {:error, reason} ->
         add_error(result, "pasta #{Path.basename(dir)}/ — #{reason}")
@@ -198,7 +204,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end
   end
 
-  defp do_import(dir, root_path, account, bank, name, result, emit) do
+  defp do_import(dir, root_path, account, bank, name, result, emit, dry_run) do
     label = format_label(dir, root_path)
     expected = Ingestor.expected_extensions(account.parser_type)
     {matching, mismatched} = partition_files(dir, expected)
@@ -216,7 +222,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
     summary =
       Enum.reduce(matching, %{imported: 0, skipped: 0, failed: []}, fn file, acc ->
         acc =
-          case Ingestor.import_file(account, file) do
+          case Ingestor.import_file(account, file, dry_run: dry_run) do
             {:ok, s} ->
               %{
                 imported: acc.imported + s.imported,
