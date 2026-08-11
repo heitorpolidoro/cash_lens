@@ -4,6 +4,8 @@ defmodule CashLens.Parsers.PDFParser do
   Parser for PDF content (text-based) for various providers.
   """
 
+  @mercado_pago_line_regex ~r/^(\d{2}\/\d{2})\s+(.+?)(?:\s+Parcela\s+(\d+)\s+de\s+(\d+))?\s+R\$\s*([\d.]+,\d{2})\s*$/
+
   @doc """
   Parses the text content of a PDF statement.
   """
@@ -32,6 +34,59 @@ defmodule CashLens.Parsers.PDFParser do
     state = finalize_current_tx(state)
     state.parsed_transactions
   end
+
+  def parse(text, :mercado_pago_card) do
+    statement_date = extract_statement_date(text)
+    lines = String.split(text, "\n")
+
+    {transactions, _section} =
+      Enum.reduce(lines, {[], :none}, fn line, {acc, section} ->
+        trimmed = String.trim(line)
+
+        cond do
+          trimmed == "" ->
+            {acc, section}
+
+          String.contains?(trimmed, "Movimentações na fatura") ->
+            {acc, :payment}
+
+          String.starts_with?(trimmed, "Cartão Visa") ->
+            {acc, :purchases}
+
+          section in [:payment, :purchases] ->
+            case parse_mercado_pago_line(trimmed, section, statement_date) do
+              nil -> {acc, section}
+              tx -> {[tx | acc], section}
+            end
+
+          true ->
+            {acc, section}
+        end
+      end)
+
+    Enum.reverse(transactions)
+  end
+
+  defp parse_mercado_pago_line(line, section, statement_date) do
+    case Regex.run(@mercado_pago_line_regex, line) do
+      [_, date_str, desc, parcela_n, parcela_m, amount_str] ->
+        %{
+          date: resolve_purchase_date(date_str, statement_date),
+          time: nil,
+          description: mercado_pago_description(desc, parcela_n, parcela_m),
+          amount: mercado_pago_amount(amount_str, section)
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp mercado_pago_description(desc, "", ""), do: desc
+  defp mercado_pago_description(desc, n, m), do: desc <> " PARC #{n}/#{m}"
+
+  defp mercado_pago_amount(amount_str, :payment), do: parse_amount(amount_str)
+  defp mercado_pago_amount(amount_str, :purchases), do: Decimal.negate(parse_amount(amount_str))
 
   defp detect_max_width(lines, regex) do
     widths =
@@ -391,7 +446,7 @@ defmodule CashLens.Parsers.PDFParser do
 
     %{
       due_date: due,
-      total_a_pagar: extract_total(text),
+      total_a_pagar: extract_total_amount(text),
       competencia: due && Date.beginning_of_month(due)
     }
   end
@@ -424,6 +479,30 @@ defmodule CashLens.Parsers.PDFParser do
 
   defp extract_total(text) do
     regex = ~r/TOTAL (?:DA FATURA|PARA)[^\d]*?([\d.]+,\d{2})/i
+
+    case Regex.run(regex, text) do
+      [_, amount_str] -> parse_amount(amount_str) |> Decimal.abs()
+      _ -> nil
+    end
+  end
+
+  # Mercado Pago's fatura repeats "Total da fatura de <mês anterior>" (a
+  # different month's total) before its own real total — text that
+  # `extract_total/1`'s "TOTAL DA FATURA" pattern (built for Bradesco) would
+  # otherwise match instead of the real one. Route by a marker unique to
+  # Mercado Pago's layout ("Total a pagar", not present in Bradesco's real
+  # statements) rather than widening the shared regex to cover both formats
+  # unsafely.
+  defp extract_total_amount(text) do
+    if String.contains?(text, "Total a pagar") do
+      extract_mercado_pago_total(text)
+    else
+      extract_total(text)
+    end
+  end
+
+  defp extract_mercado_pago_total(text) do
+    regex = ~r/Total\s+R\$\s*([\d.]+,\d{2})/
 
     case Regex.run(regex, text) do
       [_, amount_str] -> parse_amount(amount_str) |> Decimal.abs()

@@ -39,6 +39,10 @@ defmodule CashLens.Parsers.Ingestor do
         Logger.info("Using Bradesco Cartao PDF Parser")
         PDFParser.parse(content, :bradesco_card)
 
+      "mercadopago_cartao_pdf" ->
+        Logger.info("Using Mercado Pago Cartao PDF Parser")
+        PDFParser.parse(content, :mercado_pago_card)
+
       "standard_ofx" ->
         Logger.info("Using Standard OFX Parser")
         OFXParser.parse(content, :standard)
@@ -64,7 +68,7 @@ defmodule CashLens.Parsers.Ingestor do
     case parser_type do
       t when t in ["bradesco_csv", "bb_csv", "mercado_pago_csv"] -> [".csv"]
       t when t in ["ourocard_ofx", "standard_ofx"] -> [".ofx"]
-      t when t in ["sem_parar_pdf", "bradesco_cartao_pdf"] -> [".pdf"]
+      t when t in ["sem_parar_pdf", "bradesco_cartao_pdf", "mercadopago_cartao_pdf"] -> [".pdf"]
       "ourocard_txt" -> [".txt"]
       _ -> []
     end

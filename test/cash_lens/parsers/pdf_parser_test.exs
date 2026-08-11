@@ -283,6 +283,134 @@ defmodule CashLens.PDFParserTest do
     end
   end
 
+  describe "parse/2 (mercado_pago_card)" do
+    test "parses the payment line, every purchase row, and normalizes Parcela to PARC N/M" do
+      # Real fatura text (pdftotext -layout output), trimmed to the
+      # "Detalhes de consumo" section onward — the marketing/informational
+      # pages before and after it don't affect parsing and are omitted.
+      text = """
+      Detalhes de consumo
+
+      Movimentações na fatura
+
+      Data      Movimentações                                            Valor em R$
+
+
+      17/06     Pagamento da fatura de junho/2026                         R$ 1.412,10
+
+
+
+      Cartão Visa [************8978]
+
+      Data      Movimentações                                            Valor em R$
+
+
+      27/02     MERCADOLIVRE*7PRODUTOS              Parcela 5 de 7         R$ 22,65
+
+
+      02/04     MERCADOLIVRE*26PRODUTOS             Parcela 9 de 12        R$ 42,44
+
+
+      22/04     MERCADOLIVRE*4PRODUTOS               Parcela 3 de 7         R$ 22,14
+
+
+      24/04     MERCADOLIVRE*3PRODUTOS              Parcela 3 de 10         R$ 41,29
+
+
+      29/04     MERCADOLIVRE*MERCADOLIVRE           Parcela 3 de 5          R$ 13,44
+
+
+      12/05     MERCADOLIVRE*MCUTILIDADES           Parcela 2 de 4          R$ 8,40
+
+
+      02/06     MERCADOLIVRE*MERCADOLI              Parcela 2 de 5          R$ 15,56
+
+
+      02/06     MERCADOLIVRE*MERCADOLI              Parcela 2 de 8         R$ 42,57
+
+
+      06/06     MERCADOLIVRE*MASTERREMOTE           Parcela 2 de 6          R$ 19,99
+
+
+      16/06     MERCADOLIVRE*MERCADOLIVRE                                   R$ 76,75
+
+
+      21/06     MERCADOLIVRE*MERCADOLIVRE           Parcela 1 de 12        R$ 48,50
+
+
+      21/06     MERCADOLIVRE*MERCADOLIVRE                                  R$ 301,67
+
+
+      25/06     MERCADOLIVRE*MERCADOLI                                    R$ 402,60
+                                               Heitor Luis Polidoro
+                                            Vencimento: 17/07/2026
+
+
+      Cartão Visa [************8978]
+
+      Data      Movimentações                          Valor em R$
+
+
+      25/06     MERCADOLIVRE*MERCADOLIVRE                R$ 201,41
+
+
+      06/07     MERCADOLIVRE*MERCADOLI                   R$ 98,54
+
+      Total                                             R$ 1.357,95
+      """
+
+      transactions = PDFParser.parse(text, :mercado_pago_card)
+
+      assert length(transactions) == 16
+
+      payment = Enum.find(transactions, &(&1.description =~ "Pagamento da fatura"))
+      assert payment.description == "Pagamento da fatura de junho/2026"
+      assert payment.amount == Decimal.new("1412.10")
+      assert payment.date == ~D[2026-06-17]
+
+      installment = Enum.find(transactions, &(&1.description =~ "7PRODUTOS"))
+      assert installment.description == "MERCADOLIVRE*7PRODUTOS PARC 5/7"
+      assert installment.amount == Decimal.new("-22.65")
+      assert installment.date == ~D[2026-02-27]
+
+      plain = Enum.find(transactions, &(&1.amount == Decimal.new("-76.75")))
+      assert plain.description == "MERCADOLIVRE*MERCADOLIVRE"
+      assert plain.date == ~D[2026-06-16]
+
+      # Row from the page-3 continuation of the same "Cartão Visa" table —
+      # proves the section-tracking survives the repeated page header.
+      continuation = Enum.find(transactions, &(&1.amount == Decimal.new("-201.41")))
+      assert continuation.description == "MERCADOLIVRE*MERCADOLIVRE"
+      assert continuation.date == ~D[2026-06-25]
+
+      purchases_total =
+        transactions
+        |> Enum.reject(&(&1.description =~ "Pagamento da fatura"))
+        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
+
+      assert Decimal.equal?(purchases_total, Decimal.new("-1357.95"))
+    end
+
+    test "a row with no Parcela column keeps its description unsuffixed" do
+      text = """
+      Movimentações na fatura
+
+      Cartão Visa [****1234]
+      Data      Movimentações                          Valor em R$
+      01/03     LOJA SEM PARCELA                        R$ 10,00
+      """
+
+      [tx] = PDFParser.parse(text, :mercado_pago_card)
+      assert tx.description == "LOJA SEM PARCELA"
+      # Note: can't assert `refute tx.description =~ "PARC"` here — the
+      # fixture description "LOJA SEM PARCELA" itself contains the substring
+      # "PARC" (from "PARCELA"), so that assertion would always fail
+      # regardless of parser correctness. Assert on the actual suffix our
+      # code would append instead.
+      refute tx.description =~ ~r/ PARC \d+\/\d+/
+    end
+  end
+
   describe "extract_statement_meta/1" do
     test "extract_statement_meta pulls due date, total and competencia" do
       text = """
@@ -317,6 +445,42 @@ defmodule CashLens.PDFParserTest do
       meta = PDFParser.extract_statement_meta("no relevant lines")
       assert meta.due_date == nil
       assert meta.total_a_pagar == nil
+    end
+
+    test "extract_statement_meta on a Mercado Pago fatura ignores the decoy previous-cycle total" do
+      # Real fatura text (pdftotext -layout output): note "Total da fatura de
+      # junho" (a DIFFERENT, previous-cycle number) appears before the real
+      # total — this must not be picked up.
+      text = """
+      Olá, Heitor Luis
+      Essa é sua fatura de julho
+      Total a pagar                            Vence em                      Limite total                 Saque total
+                                               17/07/2026                    R$ 23.200,00                 R$ 50,00
+      R$ 1.357,95
+
+      Informações complementares
+      Resumo da fatura
+
+        Consumos de 13/06 a 12/07                               R$ 1.357,95                Juros do mês anterior                                           R$ 0,00
+
+        Tarifas e encargos                                           R$ 0,00               Pagamentos e créditos devolvidos                            R$ 1.412,10
+
+        Multas por atraso                                            R$ 0,00
+
+        Total da fatura de junho                                 R$ 1.412,10
+
+
+                                                                                            Total                                         R$ 1.357,95
+
+      Heitor Luis Polidoro
+      Vencimento: 17/07/2026
+      """
+
+      meta = PDFParser.extract_statement_meta(text)
+
+      assert meta.due_date == ~D[2026-07-17]
+      assert meta.competencia == ~D[2026-07-01]
+      assert Decimal.equal?(meta.total_a_pagar, Decimal.new("1357.95"))
     end
   end
 end

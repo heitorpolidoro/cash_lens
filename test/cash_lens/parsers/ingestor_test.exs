@@ -518,6 +518,10 @@ defmodule CashLens.Parsers.IngestorTest do
       assert Ingestor.expected_extensions("sem_parar_pdf") == [".pdf"]
     end
 
+    test "expected_extensions/1 recognizes mercadopago_cartao_pdf as a PDF parser" do
+      assert Ingestor.expected_extensions("mercadopago_cartao_pdf") == [".pdf"]
+    end
+
     test "returns empty list for unknown parser" do
       assert Ingestor.expected_extensions("unknown") == []
       assert Ingestor.expected_extensions(nil) == []
