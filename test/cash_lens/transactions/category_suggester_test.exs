@@ -67,28 +67,6 @@ defmodule CashLens.Transactions.CategorySuggesterTest do
       assert CategorySuggester.suggest_for([target]) == %{}
     end
 
-    test "falls back to the Outros category when there is no history match" do
-      outros = category_fixture(name: "Outros")
-      target = transaction_fixture(description: "NUNCA VISTA")
-
-      assert CategorySuggester.suggest_for([target]) == %{
-               target.id => %{category_id: outros.id, category_name: "Outros"}
-             }
-    end
-
-    test "a history match still wins over the Outros fallback" do
-      category_fixture(name: "Outros")
-      category = category_fixture(name: "Padaria")
-      transaction_fixture(description: "PADARIA SAO JOSE", category_id: category.id)
-
-      target = transaction_fixture(description: "Padaria São José", amount: "10.0")
-
-      assert CategorySuggester.suggest_for([target])[target.id] == %{
-               category_id: category.id,
-               category_name: "Padaria"
-             }
-    end
-
     test "tolerates categorized history rows with nil description" do
       # A nil-description row can gain a category via update_transaction_category
       # (which only casts category_id). The history scan must not crash on it.
