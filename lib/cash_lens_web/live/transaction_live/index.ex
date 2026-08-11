@@ -683,16 +683,25 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_info({:batch_import_finished, result}, socket) do
-    send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
-      id: "batch-import-modal",
-      progress_update: %{phase: :done, result: result}
-    )
+  def handle_info({:batch_import_finished, result, preview?}, socket) do
+    if preview? do
+      send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
+        id: "batch-import-modal",
+        progress_update: %{phase: :preview_confirm, result: result}
+      )
 
-    {:noreply,
-     socket
-     |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> refresh_transactions_page1(socket.assigns.filters)}
+      {:noreply, socket}
+    else
+      send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
+        id: "batch-import-modal",
+        progress_update: %{phase: :done, result: result}
+      )
+
+      {:noreply,
+       socket
+       |> assign(:pending_count, Transactions.count_pending_transactions())
+       |> refresh_transactions_page1(socket.assigns.filters)}
+    end
   end
 
   @impl true

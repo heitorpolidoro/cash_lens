@@ -11,7 +11,8 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
     current_account_file_index: 0,
     current_account_file_total: 0,
     result: nil,
-    missing_accounts: []
+    missing_accounts: [],
+    preview?: false
   }
 
   @impl true
@@ -42,8 +43,10 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
 
     case DirectoryImporter.preflight(path) do
       :ok ->
-        socket = assign(socket, :batch_progress, %{@idle_progress | phase: :importing})
-        start_batch_import(path, create_missing: false)
+        socket =
+          assign(socket, :batch_progress, %{@idle_progress | phase: :previewing, preview?: true})
+
+        start_batch_import(path, [dry_run: true], true)
         {:noreply, socket}
 
       {:needs_confirmation, missing_accounts} ->
@@ -60,8 +63,19 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
   @impl true
   def handle_event("confirm_create_accounts", _params, socket) do
     path = socket.assigns.batch_path
+
+    socket =
+      assign(socket, :batch_progress, %{@idle_progress | phase: :previewing, preview?: true})
+
+    start_batch_import(path, [create_missing: true, dry_run: true], true)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("confirm_import", _params, socket) do
+    path = socket.assigns.batch_path
     socket = assign(socket, :batch_progress, %{@idle_progress | phase: :importing})
-    start_batch_import(path, create_missing: true)
+    start_batch_import(path, [dry_run: false], false)
     {:noreply, socket}
   end
 
@@ -104,7 +118,7 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
     %{progress | result: %{result | cycle_warnings: updated_warnings}}
   end
 
-  defp start_batch_import(path, extra_opts) do
+  defp start_batch_import(path, extra_opts, preview?) do
     pid = self()
 
     process_import = fn ->
@@ -116,7 +130,7 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
       try do
         opts = Keyword.merge(extra_opts, on_event: build_on_event(pid, agent))
         result = DirectoryImporter.run(path, opts)
-        send(pid, {:batch_import_finished, result})
+        send(pid, {:batch_import_finished, result, preview?})
       rescue
         # coveralls-ignore-start — defensive guard so a crash inside the import Task
         # surfaces to the UI instead of dying silently; not deterministically testable.
@@ -125,7 +139,7 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
             errors: ["Erro inesperado: #{Exception.message(e)}"]
           }
 
-          send(pid, {:batch_import_finished, error_result})
+          send(pid, {:batch_import_finished, error_result, preview?})
           # coveralls-ignore-stop
       after
         Agent.stop(agent)
@@ -188,8 +202,10 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
       <.modal :if={@show} id="batch-import-modal" show on_cancel={JS.push("close", target: @myself)}>
         <div class="p-2">
           <%= case @batch_progress.phase do %>
-            <% :importing -> %>
+            <% phase when phase in [:previewing, :importing] -> %>
               <.progress_view progress={@batch_progress} />
+            <% :preview_confirm -> %>
+              <.preview_confirm_view result={@batch_progress.result} myself={@myself} />
             <% :confirming -> %>
               <.confirm_create_view
                 missing_accounts={@batch_progress.missing_accounts}
@@ -294,11 +310,72 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
     """
   end
 
+  defp preview_confirm_view(assigns) do
+    ~H"""
+    <div>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter text-primary">
+        Confirmar Importação
+      </h2>
+      <p class="text-sm opacity-60 mb-4">
+        Revise quantas transações seriam importadas antes de gravar no banco.
+      </p>
+
+      <div class="max-h-80 overflow-y-auto space-y-2 mb-6">
+        <div
+          :for={account <- @result.accounts}
+          class="p-3 bg-base-200/50 rounded-xl border border-base-300"
+        >
+          <div class="flex items-center gap-2">
+            <.icon name="hero-folder-open" class="size-4 text-primary shrink-0" />
+            <span class="text-sm font-bold truncate">{account.folder_path}</span>
+          </div>
+          <p class="text-xs opacity-60 ml-6">
+            {account.imported} novas
+            <%= if account.skipped > 0 do %>
+              , {account.skipped} já existem
+            <% end %>
+            <%= if account.failed != [] do %>
+              , {length(account.failed)} com falha
+            <% end %>
+          </p>
+        </div>
+
+        <div :for={warning <- @result.warnings} class="flex items-center gap-2 text-warning">
+          <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
+          <span class="text-xs">{warning}</span>
+        </div>
+
+        <div :for={error <- @result.errors} class="flex items-center gap-2 text-error">
+          <.icon name="hero-x-circle" class="size-4 shrink-0" />
+          <span class="text-xs">{error}</span>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button
+          phx-click="confirm_import"
+          phx-target={@myself}
+          class="btn btn-primary btn-lg flex-1 rounded-2xl"
+        >
+          Confirmar Importação
+        </button>
+        <button
+          phx-click="cancel_confirmation"
+          phx-target={@myself}
+          class="btn btn-ghost btn-lg rounded-2xl"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+    """
+  end
+
   defp progress_view(assigns) do
     ~H"""
     <div class="py-2 space-y-6 min-h-[200px]">
       <h2 class="text-2xl font-black uppercase tracking-tighter text-primary">
-        Importando em Lote...
+        {if @progress.preview?, do: "Calculando Pré-visualização...", else: "Importando em Lote..."}
       </h2>
 
       <div>
