@@ -157,14 +157,15 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponent do
     %{progress | result: %{result | cycle_warnings: updated_warnings}}
   end
 
-  # The idle state resets everything except `run_token`: a run may still be
-  # in flight when the modal is closed or a confirmation step is cancelled,
-  # and its eventual `{:batch_import_finished, ...}` message must still be
-  # recognized as stale (not match whatever token a later run gets) rather
-  # than colliding with a fresh run that started counting from the same
-  # baseline again.
+  # The idle state resets everything, including `run_token`: a run may still
+  # be in flight when the modal is closed or a confirmation step is
+  # cancelled, and its eventual `{:batch_import_finished, ...}` message must
+  # be recognized as stale. Bumping the token here (the same way starting a
+  # new run does) guarantees that message can never match again, since the
+  # `update/2` guard compares against whatever token is current when the
+  # message arrives.
   defp idle_progress(socket),
-    do: %{@idle_progress | run_token: socket.assigns.batch_progress.run_token}
+    do: %{@idle_progress | run_token: next_run_token(socket)}
 
   defp next_run_token(socket), do: socket.assigns.batch_progress.run_token + 1
 

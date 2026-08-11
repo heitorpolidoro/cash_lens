@@ -135,6 +135,66 @@ defmodule CashLensWeb.TransactionLive.BatchImportModalComponentTest do
     assert html =~ "Caminho da Pasta"
   end
 
+  test "closing the modal mid-run invalidates that run's token so its late result is dropped", %{
+    conn: conn
+  } do
+    account_fixture(bank: "Banco do Brasil", name: "Conta Corrente", parser_type: "bb_csv")
+
+    root = Path.join(System.tmp_dir!(), "batchclose_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(root)
+    on_exit(fn -> File.rm_rf!(root) end)
+
+    File.write!(Path.join(root, ".account"), "bank: Banco do Brasil\naccount: Conta Corrente\n")
+
+    File.write!(
+      Path.join(root, "extrato.csv"),
+      File.read!("test/support/fixtures/files/bb_sample.csv")
+    )
+
+    {:ok, index_live, _html} = live(conn, ~p"/transactions")
+    index_live |> render_click("open_batch_import")
+
+    # Starting the run bumps the component's run_token from 0 to 1 (see
+    # `next_run_token/1` in the `:ok` preflight branch of
+    # "start_batch_import"). In :sql_sandbox test mode the dry-run itself
+    # executes inline and may or may not have settled into :preview_confirm
+    # by the time this returns — either way, the token minted for this run
+    # is 1.
+    index_live
+    |> form("#batch-import-form", %{"path" => root})
+    |> render_submit()
+
+    # Close the modal while this run is (or may still be) in flight — the
+    # exact scenario `idle_progress/1` exists to guard: the user walks away
+    # before the dry-run result comes back.
+    index_live
+    |> element("button[aria-label='close']")
+    |> render_click()
+
+    # Simulate that abandoned run's result arriving late, exactly as
+    # `index.ex`'s `handle_info({:batch_import_finished, ...})` would relay
+    # it — tagged with the SAME token (1) that was current when the run
+    # started and the modal was closed.
+    Phoenix.LiveView.send_update(
+      index_live.pid,
+      CashLensWeb.TransactionLive.BatchImportModalComponent,
+      id: "batch-import-modal",
+      progress_update: %{
+        phase: :preview_confirm,
+        result: %DirectoryImporter.Result{},
+        run_token: 1
+      }
+    )
+
+    # Reopen the modal: it must show the idle path-form state, not a stale
+    # confirm screen resurrected by the late-arriving message.
+    index_live |> render_click("open_batch_import")
+    html = render(index_live)
+
+    refute html =~ "Confirmar Importação"
+    assert html =~ "Caminho da Pasta"
+  end
+
   test "submitting a path with all accounts already present previews before importing", %{
     conn: conn
   } do
