@@ -1,0 +1,11 @@
+{
+  "lastUpdated": "2026-08-08T00:00:00Z",
+  "tasks": [
+    {
+      "id": "mercadopago-cartao-pdf-parser",
+      "title": "Add PDF parser for Mercado Pago credit-card faturas",
+      "status": "specreview",
+      "justification": "The Mercado Pago credit-card account has no working import path: its Google Drive folder had no .account file, and even with one there's no parser for its PDF fatura format. Design confirmed with the user (payment-of-previous-cycle line imports as a credit categorized 'Cartão de Crédito > Pagamento'; installment lines get a normalized ' PARC N/M' suffix so the existing installment detector picks them up; due date and total are extracted via the shared PDF statement-meta regexes, extended to also recognize the 'Total a pagar' label). Next: write the design spec doc, then the implementation plan, then implement via subagent-driven-development."
+    }
+  ]
+}
