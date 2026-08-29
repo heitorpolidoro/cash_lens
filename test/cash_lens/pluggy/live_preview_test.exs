@@ -188,4 +188,122 @@ defmodule CashLens.Pluggy.LivePreviewTest do
       assert {:error, :missing_credentials} = LivePreview.fetch_all()
     end
   end
+
+  describe "refresh_balances/1" do
+    test "updates pluggy_balance for every linked account, grouped by item", %{
+      req_options: req_options
+    } do
+      account_a = account_fixture()
+      account_b = account_fixture()
+      item = pluggy_item_fixture(item_id: "item-1")
+
+      {:ok, link_a} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "acc-a",
+          pluggy_account_name: "Conta A",
+          pluggy_account_type: "BANK",
+          pluggy_balance: "1.00"
+        })
+
+      {:ok, link_a} = Pluggy.link_account(link_a, account_a.id)
+
+      {:ok, link_b} =
+        Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "acc-b",
+          pluggy_account_name: "Conta B",
+          pluggy_account_type: "BANK",
+          pluggy_balance: "2.00"
+        })
+
+      {:ok, link_b} = Pluggy.link_account(link_b, account_b.id)
+
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        case conn.request_path do
+          "/auth" ->
+            Req.Test.json(conn, %{"apiKey" => "test-key"})
+
+          "/accounts" ->
+            assert conn.query_params["itemId"] == "item-1"
+
+            Req.Test.json(conn, %{
+              "results" => [
+                %{"id" => "acc-a", "name" => "Conta A", "type" => "BANK", "balance" => 111.11},
+                %{"id" => "acc-b", "name" => "Conta B", "type" => "BANK", "balance" => 222.22}
+              ]
+            })
+        end
+      end)
+
+      assert :ok = LivePreview.refresh_balances(req_options)
+
+      updated_a = CashLens.Repo.get!(Pluggy.AccountLink, link_a.id)
+      updated_b = CashLens.Repo.get!(Pluggy.AccountLink, link_b.id)
+
+      assert Decimal.equal?(updated_a.pluggy_balance, Decimal.new("111.11"))
+      assert Decimal.equal?(updated_b.pluggy_balance, Decimal.new("222.22"))
+    end
+
+    test "an item whose accounts fail to fetch is skipped without affecting other items", %{
+      req_options: req_options
+    } do
+      account_a = account_fixture()
+      account_b = account_fixture()
+      item_ok = pluggy_item_fixture(item_id: "item-ok")
+      item_bad = pluggy_item_fixture(item_id: "item-bad")
+
+      {:ok, link_ok} =
+        Pluggy.upsert_account_link(item_ok, %{
+          pluggy_account_id: "acc-ok",
+          pluggy_account_name: "Conta OK",
+          pluggy_account_type: "BANK",
+          pluggy_balance: "1.00"
+        })
+
+      {:ok, link_ok} = Pluggy.link_account(link_ok, account_a.id)
+
+      {:ok, link_bad} =
+        Pluggy.upsert_account_link(item_bad, %{
+          pluggy_account_id: "acc-bad",
+          pluggy_account_name: "Conta Bad",
+          pluggy_account_type: "BANK",
+          pluggy_balance: "2.00"
+        })
+
+      {:ok, link_bad} = Pluggy.link_account(link_bad, account_b.id)
+
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        case conn.request_path do
+          "/auth" ->
+            Req.Test.json(conn, %{"apiKey" => "test-key"})
+
+          "/accounts" ->
+            if conn.query_params["itemId"] == "item-bad" do
+              conn |> Plug.Conn.put_status(500) |> Req.Test.json(%{"error" => "boom"})
+            else
+              Req.Test.json(conn, %{
+                "results" => [
+                  %{"id" => "acc-ok", "name" => "Conta OK", "type" => "BANK", "balance" => 999.99}
+                ]
+              })
+            end
+        end
+      end)
+
+      assert :ok = LivePreview.refresh_balances(req_options)
+
+      updated_ok = CashLens.Repo.get!(Pluggy.AccountLink, link_ok.id)
+      updated_bad = CashLens.Repo.get!(Pluggy.AccountLink, link_bad.id)
+
+      assert Decimal.equal?(updated_ok.pluggy_balance, Decimal.new("999.99"))
+      # Untouched — the failed item's account keeps its previous balance.
+      assert Decimal.equal?(updated_bad.pluggy_balance, Decimal.new("2.00"))
+    end
+
+    test "returns {:error, :missing_credentials} when env vars are unset" do
+      System.delete_env("PLUGGY_CLIENT_ID")
+      System.delete_env("PLUGGY_CLIENT_SECRET")
+
+      assert {:error, :missing_credentials} = LivePreview.refresh_balances()
+    end
+  end
 end

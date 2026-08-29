@@ -49,12 +49,25 @@ defmodule CashLensWeb.PageController do
 
     chart_data = Jason.encode!(historical ++ projections)
 
+    # A linked account's Pluggy-reported balance, when available, is more
+    # trustworthy than "persisted balance + estimated live-transaction
+    # delta" — it's the bank's own real number, not an approximation that
+    # can miss transactions our own fetch doesn't see (a real gap found
+    # earlier: a PIX present in the bank's own export but absent from
+    # Pluggy's transaction API). Only accounts with a stored `pluggy_balance`
+    # use it; everything else keeps today's calculation.
+    pluggy_balance_by_account_id =
+      CashLens.Pluggy.list_linked_account_links()
+      |> Enum.reject(&is_nil(&1.pluggy_balance))
+      |> Map.new(&{&1.account_id, &1.pluggy_balance})
+
     # Credit card and closed accounts are excluded from the dashboard listing.
     accounts_with_data =
       all_accounts
       |> Enum.reject(&(&1.is_credit_card or &1.is_closed))
       |> Enum.map(fn account ->
         balance = Enum.find(latest_balances, &(&1.account_id == account.id))
+        pluggy_balance = Map.get(pluggy_balance_by_account_id, account.id)
 
         %{
           id: account.id,
@@ -64,7 +77,9 @@ defmodule CashLensWeb.PageController do
           icon: account.icon,
           is_closed: account.is_closed,
           is_credit_card: account.is_credit_card,
-          display_balance: if(balance, do: balance.final_balance, else: account.balance)
+          uses_pluggy_balance?: not is_nil(pluggy_balance),
+          display_balance:
+            pluggy_balance || if(balance, do: balance.final_balance, else: account.balance)
         }
       end)
 
@@ -87,8 +102,18 @@ defmodule CashLensWeb.PageController do
     live_entries = safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
     balance_account_ids = MapSet.new(accounts_with_data, & &1.id)
 
+    # An account already using pluggy_balance directly (above) must not also
+    # have its live entries added on top — pluggy_balance already reflects
+    # the bank's current balance, so adding would double-count it.
+    pluggy_balance_account_ids =
+      accounts_with_data
+      |> Enum.filter(& &1.uses_pluggy_balance?)
+      |> MapSet.new(& &1.id)
+
     live_balance_entries =
-      Enum.filter(live_entries, &MapSet.member?(balance_account_ids, &1.account_id))
+      live_entries
+      |> Enum.filter(&MapSet.member?(balance_account_ids, &1.account_id))
+      |> Enum.reject(&MapSet.member?(pluggy_balance_account_ids, &1.account_id))
 
     # `get_monthly_summary/1`'s own no-arg default only looks at persisted
     # transactions, so a month with only live (unsaved) activity would never
@@ -112,7 +137,8 @@ defmodule CashLensWeb.PageController do
       fixed_data: fixed_data,
       variable_data: variable_data,
       historical: historical,
-      has_live_balance?: live_balance_entries != [],
+      has_live_balance?:
+        live_balance_entries != [] or not Enum.empty?(pluggy_balance_account_ids),
       has_live_month_data?: live_month_entries != []
     )
   end

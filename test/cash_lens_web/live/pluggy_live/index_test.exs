@@ -12,6 +12,8 @@ defmodule CashLensWeb.PluggyLive.IndexTest do
       send(Application.get_env(:cash_lens, :pluggy_live_preview_test_pid), :fetch_all_called)
       {:ok, %{}}
     end
+
+    def refresh_balances(_req_options \\ []), do: :ok
   end
 
   describe "registering an item" do

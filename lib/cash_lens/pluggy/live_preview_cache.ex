@@ -87,6 +87,14 @@ defmodule CashLens.Pluggy.LivePreviewCache do
   # so the GenServer's own process stays free to answer `get_status/1`,
   # `get_entries/2` and `get_all_entries/1` instantly at all times — a page
   # load landing mid-refresh must never block on the network.
+  #
+  # The same cycle also refreshes linked accounts' `pluggy_balance` (see
+  # `LivePreview.refresh_balances/1`) so the dashboard's Saldo Atual — which
+  # uses that field directly for linked accounts — stays as fresh as the
+  # live transaction preview, without requiring a manual "Sincronizar Tudo"
+  # click. Its outcome is independent of the transaction fetch's own status:
+  # a balance-refresh failure is logged and otherwise ignored here, never
+  # reflected in `get_status/1`.
   defp start_fetch(state) do
     live_preview =
       Application.get_env(:cash_lens, :pluggy_live_preview, CashLens.Pluggy.LivePreview)
@@ -103,10 +111,30 @@ defmodule CashLens.Pluggy.LivePreviewCache do
           :exit, reason -> {:error, {:exit, reason}}
         end
 
+      refresh_balances_safely(live_preview)
+
       send(parent, {:refresh_result, result})
     end)
 
     state
+  end
+
+  defp refresh_balances_safely(live_preview) do
+    case live_preview.refresh_balances() do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Pluggy live preview cache: balance refresh failed: #{inspect(reason)}")
+    end
+  rescue
+    exception ->
+      Logger.warning(
+        "Pluggy live preview cache: balance refresh failed: #{Exception.message(exception)}"
+      )
+  catch
+    :exit, reason ->
+      Logger.warning("Pluggy live preview cache: balance refresh failed: #{inspect(reason)}")
   end
 
   defp apply_refresh_result(_state, {:ok, entries}) do

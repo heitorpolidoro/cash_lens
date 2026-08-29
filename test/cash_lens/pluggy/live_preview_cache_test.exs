@@ -13,6 +13,11 @@ defmodule CashLens.Pluggy.LivePreviewCacheTest do
         result -> result
       end
     end
+
+    def refresh_balances(_req_options \\ []) do
+      Application.put_env(:cash_lens, :live_preview_balance_refresh_called?, true)
+      Application.get_env(:cash_lens, :live_preview_balance_stub_result, :ok)
+    end
   end
 
   # The fetch now runs in a Task spawned by the GenServer, so `:sys.get_state/1`
@@ -46,10 +51,14 @@ defmodule CashLens.Pluggy.LivePreviewCacheTest do
   setup do
     Application.put_env(:cash_lens, :pluggy_live_preview, StubLivePreview)
     Application.put_env(:cash_lens, :live_preview_stub_result, nil)
+    Application.put_env(:cash_lens, :live_preview_balance_refresh_called?, false)
+    Application.put_env(:cash_lens, :live_preview_balance_stub_result, :ok)
 
     on_exit(fn ->
       Application.delete_env(:cash_lens, :pluggy_live_preview)
       Application.delete_env(:cash_lens, :live_preview_stub_result)
+      Application.delete_env(:cash_lens, :live_preview_balance_refresh_called?)
+      Application.delete_env(:cash_lens, :live_preview_balance_stub_result)
     end)
 
     :ok
@@ -191,5 +200,27 @@ defmodule CashLens.Pluggy.LivePreviewCacheTest do
 
     # And the result does eventually land.
     wait_for_status(pid, &match?({:ok, _}, &1), 2_000)
+  end
+
+  test "a refresh cycle also refreshes account balances" do
+    Application.put_env(:cash_lens, :live_preview_stub_result, {:ok, %{}})
+    {:ok, pid} = start_supervised({LivePreviewCache, name: :test_cache_6})
+
+    wait_for_success(pid)
+    wait_until(fn -> Application.get_env(:cash_lens, :live_preview_balance_refresh_called?) end)
+
+    assert Application.get_env(:cash_lens, :live_preview_balance_refresh_called?)
+  end
+
+  test "a balance-refresh failure does not affect the transaction fetch's own status" do
+    Application.put_env(:cash_lens, :live_preview_stub_result, {:ok, %{}})
+    Application.put_env(:cash_lens, :live_preview_balance_stub_result, {:error, :boom})
+
+    {:ok, pid} = start_supervised({LivePreviewCache, name: :test_cache_7})
+
+    # The transaction fetch itself still succeeds — a balance-refresh error
+    # is independent and must not sour the cache's overall status.
+    wait_for_success(pid)
+    assert {:ok, _} = LivePreviewCache.get_status(pid)
   end
 end

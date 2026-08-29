@@ -4,6 +4,7 @@ defmodule CashLensWeb.PageControllerTest do
   import CashLens.AccountsFixtures
   import CashLens.AccountingFixtures
   import CashLens.TransactionsFixtures
+  import CashLens.PluggyFixtures
 
   alias CashLens.FakeLivePreviewCache
 
@@ -16,14 +17,91 @@ defmodule CashLensWeb.PageControllerTest do
       :ok
     end
 
+    test "a linked account's Saldo Atual uses pluggy_balance directly, ignoring the persisted balance and its own live entries",
+         %{conn: conn} do
+      account = account_fixture()
+
+      today = Date.utc_today()
+
+      balance_fixture(%{
+        account_id: account.id,
+        year: today.year,
+        month: today.month,
+        final_balance: "500.00"
+      })
+
+      item = pluggy_item_fixture()
+
+      {:ok, link} =
+        CashLens.Pluggy.upsert_account_link(item, %{
+          pluggy_account_id: "acc-#{account.id}",
+          pluggy_account_name: "Conta",
+          pluggy_account_type: "BANK",
+          pluggy_balance: "812.34"
+        })
+
+      {:ok, _link} = CashLens.Pluggy.link_account(link, account.id)
+
+      # A live entry on this same linked account must not also be added on
+      # top of pluggy_balance — pluggy_balance already reflects the bank's
+      # current balance, so adding this would double-count it.
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-dash-linked",
+        account_id: account.id,
+        date: Date.utc_today(),
+        description: "COMPRA QUALQUER",
+        amount: Decimal.new("-30.00")
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [entry]})
+
+      conn = get(conn, ~p"/")
+      html = html_response(conn, 200)
+
+      assert html =~ "R$ 812,34"
+      refute html =~ "R$ 500,00"
+      refute html =~ "R$ 782,34"
+    end
+
+    test "an account with no Pluggy link, or no stored pluggy_balance, keeps the persisted-balance + live-entries calculation",
+         %{conn: conn} do
+      account = account_fixture()
+
+      today = Date.utc_today()
+
+      balance_fixture(%{
+        account_id: account.id,
+        year: today.year,
+        month: today.month,
+        final_balance: "500.00"
+      })
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-dash-unlinked",
+        account_id: account.id,
+        date: Date.utc_today(),
+        description: "COMPRA QUALQUER",
+        amount: Decimal.new("-30.00")
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [entry]})
+
+      conn = get(conn, ~p"/")
+      html = html_response(conn, 200)
+
+      assert html =~ "R$ 470,00"
+    end
+
     test "the summary card follows the latest live-entry month, not just the latest persisted transaction",
          %{conn: conn} do
       account = account_fixture()
 
+      today = Date.utc_today()
+
       balance_fixture(%{
         account_id: account.id,
-        year: 2026,
-        month: 3,
+        year: today.year,
+        month: today.month,
         final_balance: "500.00"
       })
 

@@ -132,6 +132,63 @@ defmodule CashLens.Pluggy.LivePreview do
     end
   end
 
+  @doc """
+  Refreshes every linked account's `pluggy_balance` by re-fetching its Item's
+  account list from the Pluggy API — the same call "Sincronizar Tudo" makes
+  manually on the Pluggy screen. Links are grouped by Item so an Item with
+  several linked accounts is only fetched once. An Item whose fetch fails is
+  logged and skipped (its accounts keep their previous balance) without
+  affecting other items — mirrors `fetch_all/1`'s per-account
+  degrade-gracefully philosophy. Only a total failure (bad/missing
+  credentials, can't authenticate at all) returns `{:error, reason}`.
+
+  This is the one place in this module that writes to the database — a
+  narrow, deliberate exception to "never persists" (see the moduledoc):
+  `pluggy_balance` is a field "Sincronizar Tudo" already writes manually
+  today, so keeping it fresh automatically doesn't change what the app
+  persists, only how often.
+  """
+  @spec refresh_balances(keyword()) :: :ok | {:error, term()}
+  def refresh_balances(req_options \\ default_req_options()) do
+    with {:ok, client_id} <- fetch_env("PLUGGY_CLIENT_ID"),
+         {:ok, client_secret} <- fetch_env("PLUGGY_CLIENT_SECRET"),
+         {:ok, api_key} <- Client.auth(client_id, client_secret, req_options) do
+      Pluggy.list_linked_account_links()
+      |> Enum.group_by(& &1.pluggy_item_id)
+      |> Enum.each(fn {_item_id, links} -> refresh_item_balances(links, api_key, req_options) end)
+
+      :ok
+    end
+  end
+
+  defp refresh_item_balances([%{pluggy_item: item} | _] = links, api_key, req_options) do
+    case Client.list_accounts(api_key, item.item_id, req_options) do
+      {:ok, pluggy_accounts} ->
+        Enum.each(links, &update_link_balance(&1, pluggy_accounts))
+
+      {:error, reason} ->
+        Logger.warning(
+          "Pluggy live preview: failed to refresh balances for item #{item.item_id}: " <>
+            "#{inspect(reason)}"
+        )
+    end
+  end
+
+  defp update_link_balance(link, pluggy_accounts) do
+    case Enum.find(pluggy_accounts, &(&1["id"] == link.pluggy_account_id)) do
+      nil ->
+        :ok
+
+      account ->
+        Pluggy.upsert_account_link(link.pluggy_item, %{
+          pluggy_account_id: link.pluggy_account_id,
+          pluggy_account_name: account["name"],
+          pluggy_account_type: account["type"],
+          pluggy_balance: account["balance"]
+        })
+    end
+  end
+
   defp fetch_env(name) do
     case System.get_env(name) do
       nil -> {:error, :missing_credentials}
