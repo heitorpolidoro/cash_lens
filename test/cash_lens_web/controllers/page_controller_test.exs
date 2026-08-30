@@ -92,7 +92,7 @@ defmodule CashLensWeb.PageControllerTest do
       assert html =~ "R$ 470,00"
     end
 
-    test "the summary card follows the latest live-entry month, not just the latest persisted transaction",
+    test "the summary card follows only the latest persisted transaction, ignoring live-entry dates",
          %{conn: conn} do
       account = account_fixture()
 
@@ -125,14 +125,15 @@ defmodule CashLensWeb.PageControllerTest do
       conn = get(conn, ~p"/")
       html = html_response(conn, 200)
 
-      assert html =~ "(Abril)"
-      refute html =~ "(Março)"
-      # The live April expense must be counted in Despesas, not silently dropped
-      # for being outside a summary month still pinned to March.
-      assert html =~ "R$ 30,00"
+      # The summary month is pinned to the latest persisted transaction
+      # (March) — a live entry in a later month must not pull it forward,
+      # and the live expense must not appear in Despesas.
+      assert html =~ "(Março)"
+      refute html =~ "(Abril)"
+      refute html =~ "R$ 30,00"
     end
 
-    test "a live entry for the current month bumps Saldo Atual, Receitas/Despesas and shows the badge",
+    test "a live entry for the current month bumps Saldo Atual but not Receitas/Despesas",
          %{conn: conn} do
       account = account_fixture()
       today = Date.utc_today()
@@ -159,8 +160,9 @@ defmodule CashLensWeb.PageControllerTest do
 
       # 500,00 (persisted balance) - 25,00 (live entry) = 475,00
       assert html =~ "R$ 475,00"
-      # Despesas card picks up the live entry's absolute value.
-      assert html =~ "R$ 25,00"
+      # Despesas no longer picks up live entries — only imported transactions.
+      refute html =~ "R$ 25,00"
+      # The badge still shows (Saldo Atual and Balanço both reflect the live delta).
       assert html =~ "Atualizado com dados temporários do Pluggy"
     end
 

@@ -94,11 +94,14 @@ defmodule CashLensWeb.PageController do
     fixed_data = extract_category_data(historical_categories, "fixed")
     variable_data = extract_category_data(historical_categories, "variable")
 
-    # Live (unsaved) Pluggy entries bring the cards up to date with activity
-    # since the last real import/sync. "Saldo Atual" only counts accounts
+    # Live (unsaved) Pluggy entries bring "Saldo Atual" up to date with
+    # activity since the last real import/sync — it only counts accounts
     # already reflected in `total_balance` above (no credit cards, no closed
-    # accounts); income/expenses match `get_monthly_summary/1`'s own scope
-    # (every account) and are further narrowed to the summary's own month.
+    # accounts). Receitas/Despesas/Balanço, by contrast, reflect only
+    # already-imported transactions: "Balanço" is derived directly from
+    # Saldo Atual's own delta against the month's opening balance, so it
+    # still captures live activity without a separate live income/expenses
+    # tally that would double-count what Saldo Atual already shows.
     live_entries = safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
     balance_account_ids = MapSet.new(accounts_with_data, & &1.id)
 
@@ -115,31 +118,29 @@ defmodule CashLensWeb.PageController do
       |> Enum.filter(&MapSet.member?(balance_account_ids, &1.account_id))
       |> Enum.reject(&MapSet.member?(pluggy_balance_account_ids, &1.account_id))
 
-    # `get_monthly_summary/1`'s own no-arg default only looks at persisted
-    # transactions, so a month with only live (unsaved) activity would never
-    # become "the" month — its figures, and the card label, would stay stuck
-    # on the last persisted month. Passing the latest activity date across
-    # BOTH sources explicitly keeps the card in sync with live data too.
-    summary = Transactions.get_monthly_summary(latest_activity_date(live_entries))
+    current_total_balance = Decimal.add(total_balance, sum_amounts(live_balance_entries))
+
+    summary = Transactions.get_monthly_summary()
     month_name = CashLensWeb.Formatters.month_name(summary.month.month)
 
-    live_month_entries = entries_in_month(live_entries, summary.month)
-    {live_income, live_expenses} = split_income_expenses(live_month_entries)
+    initial_balance_total =
+      latest_balances
+      |> Enum.filter(&MapSet.member?(balance_account_ids, &1.account_id))
+      |> Enum.reduce(Decimal.new("0"), fn b, acc -> Decimal.add(acc, b.initial_balance) end)
 
     render(conn, :home,
       layout: {CashLensWeb.Layouts, :app},
-      total_balance: Decimal.add(total_balance, sum_amounts(live_balance_entries)),
-      monthly_income: Decimal.add(summary.income, live_income),
-      monthly_expenses: Decimal.add(summary.expenses, live_expenses),
+      total_balance: current_total_balance,
+      monthly_income: summary.income,
+      monthly_expenses: summary.expenses,
+      monthly_balance: Decimal.sub(current_total_balance, initial_balance_total),
       accounts: accounts_with_data,
       summary_month: month_name,
       chart_data: chart_data,
       fixed_data: fixed_data,
       variable_data: variable_data,
       historical: historical,
-      has_live_balance?:
-        live_balance_entries != [] or not Enum.empty?(pluggy_balance_account_ids),
-      has_live_month_data?: live_month_entries != []
+      has_live_balance?: live_balance_entries != [] or not Enum.empty?(pluggy_balance_account_ids)
     )
   end
 
@@ -159,34 +160,8 @@ defmodule CashLensWeb.PageController do
     :exit, _reason -> default
   end
 
-  defp entries_in_month(entries, month_date) do
-    Enum.filter(entries, &(&1.date.year == month_date.year and &1.date.month == month_date.month))
-  end
-
-  # Starts from `get_monthly_summary/1`'s own default (latest persisted
-  # transaction date, or today if there are none) and only ever moves it
-  # forward — to the latest live (unsaved) entry's date, if any live entry is
-  # newer. A live entry older than that starting point must never drag the
-  # month backward (it stays correctly excluded from the summary, same as
-  # before live entries existed at all).
-  defp latest_activity_date(live_entries) do
-    persisted_fallback = Transactions.get_latest_transaction_date() || Date.utc_today()
-
-    [persisted_fallback | Enum.map(live_entries, & &1.date)]
-    |> Enum.max(Date)
-  end
-
   defp sum_amounts(entries),
     do: Enum.reduce(entries, Decimal.new("0"), &Decimal.add(&2, &1.amount))
-
-  defp split_income_expenses(entries) do
-    income = entries |> Enum.filter(&Decimal.positive?(&1.amount)) |> sum_amounts()
-
-    expenses =
-      entries |> Enum.filter(&Decimal.negative?(&1.amount)) |> sum_amounts() |> Decimal.abs()
-
-    {income, expenses}
-  end
 
   defp extract_category_data(historical_categories, type) do
     historical_categories
