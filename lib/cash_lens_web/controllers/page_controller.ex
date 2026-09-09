@@ -3,6 +3,7 @@ defmodule CashLensWeb.PageController do
 
   alias CashLens.Accounting
   alias CashLens.Accounts
+  alias CashLens.Pluggy.LivePreview
   alias CashLens.Pluggy.LivePreviewCache
   alias CashLens.Transactions
 
@@ -29,6 +30,13 @@ defmodule CashLensWeb.PageController do
         historical_balances,
         historical_summary
       )
+
+    # Trailing sums for the "Histórico Mensal" card's 3/6/12-month badges.
+    # `historical` always holds exactly the last 12 real (non-projection)
+    # months, oldest first, so the last N entries are the trailing window.
+    trailing_balance_3m = trailing_balance_sum(historical, 3)
+    trailing_balance_6m = trailing_balance_sum(historical, 6)
+    trailing_balance_12m = trailing_balance_sum(historical, 12)
 
     # 1. Calculate Averages (past 12 months)
     {avg_income, avg_expenses} = calculate_averages(historical_summary)
@@ -102,7 +110,10 @@ defmodule CashLensWeb.PageController do
     # Saldo Atual's own delta against the month's opening balance, so it
     # still captures live activity without a separate live income/expenses
     # tally that would double-count what Saldo Atual already shows.
-    live_entries = safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
+    live_entries =
+      safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
+      |> LivePreview.filter_temporary_entries()
+
     balance_account_ids = MapSet.new(accounts_with_data, & &1.id)
 
     # An account already using pluggy_balance directly (above) must not also
@@ -140,6 +151,9 @@ defmodule CashLensWeb.PageController do
       fixed_data: fixed_data,
       variable_data: variable_data,
       historical: historical,
+      trailing_balance_3m: trailing_balance_3m,
+      trailing_balance_6m: trailing_balance_6m,
+      trailing_balance_12m: trailing_balance_12m,
       has_live_balance?: live_balance_entries != [] or not Enum.empty?(pluggy_balance_account_ids)
     )
   end
@@ -162,6 +176,12 @@ defmodule CashLensWeb.PageController do
 
   defp sum_amounts(entries),
     do: Enum.reduce(entries, Decimal.new("0"), &Decimal.add(&2, &1.amount))
+
+  defp trailing_balance_sum(historical, months) do
+    historical
+    |> Enum.take(-months)
+    |> Enum.reduce(0.0, fn item, acc -> acc + item.balance end)
+  end
 
   defp extract_category_data(historical_categories, type) do
     historical_categories

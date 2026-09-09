@@ -258,6 +258,48 @@ defmodule CashLensWeb.PageControllerTest do
     assert html_response(conn, 200) =~ "Dashboard Financeiro"
   end
 
+  test "GET / shows trailing 3/6/12-month balance totals in Histórico Mensal", %{conn: conn} do
+    account = account_fixture()
+    today = Date.utc_today()
+
+    month_ago = fn date, n ->
+      total = date.year * 12 + (date.month - 1) - n
+      Date.new!(div(total, 12), rem(total, 12) + 1, 1)
+    end
+
+    this_month = Date.beginning_of_month(today)
+    one_month_ago = month_ago.(this_month, 1)
+    two_months_ago = month_ago.(this_month, 2)
+    four_months_ago = month_ago.(this_month, 4)
+
+    balance_fixture(%{account_id: account.id, year: today.year, month: today.month})
+
+    # Four months back: balance 30,00 — inside the 6/12-month window, outside the 3-month one.
+    transaction_fixture(%{account_id: account.id, amount: "30.00", date: four_months_ago})
+
+    # Two months back: balance 200,00 (inside 3/6/12)
+    transaction_fixture(%{account_id: account.id, amount: "200.00", date: two_months_ago})
+
+    # Last month: balance 50,00 (inside 3/6/12)
+    transaction_fixture(%{account_id: account.id, amount: "100.00", date: one_month_ago})
+    transaction_fixture(%{account_id: account.id, amount: "-50.00", date: one_month_ago})
+
+    # This month: balance 200,00 (inside 3/6/12)
+    transaction_fixture(%{account_id: account.id, amount: "300.00", date: today})
+    transaction_fixture(%{account_id: account.id, amount: "-100.00", date: today})
+
+    conn = get(conn, ~p"/")
+    html = html_response(conn, 200)
+
+    assert html =~ "Balanço 3 meses"
+    assert html =~ "Balanço 6 meses"
+    assert html =~ "Balanço 12 meses"
+    # 3 months trailing: this month + last month + two months back = 200+50+200
+    assert html =~ "R$ 450,00"
+    # 6 and 12 months trailing also pick up four_months_ago's 30,00.
+    assert html =~ "R$ 480,00"
+  end
+
   test "GET / with no data renders the dashboard", %{conn: conn} do
     # No accounts/balances/transactions: exercises the empty-history projection fallback.
     conn = get(conn, ~p"/")

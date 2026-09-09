@@ -83,6 +83,35 @@
       <h2 class="card-title text-base-content mb-4 uppercase text-xs opacity-50 font-black">
         Histórico Mensal
       </h2>
+      <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="rounded-lg border border-base-300 px-3 py-2">
+          <div class="text-xs uppercase opacity-50 font-black">Balanço 3 meses</div>
+          <div class={[
+            "font-black text-lg",
+            if(@trailing_balance_3m >= 0, do: "text-success", else: "text-error")
+          ]}>
+            {format_currency(@trailing_balance_3m)}
+          </div>
+        </div>
+        <div class="rounded-lg border border-base-300 px-3 py-2">
+          <div class="text-xs uppercase opacity-50 font-black">Balanço 6 meses</div>
+          <div class={[
+            "font-black text-lg",
+            if(@trailing_balance_6m >= 0, do: "text-success", else: "text-error")
+          ]}>
+            {format_currency(@trailing_balance_6m)}
+          </div>
+        </div>
+        <div class="rounded-lg border border-base-300 px-3 py-2">
+          <div class="text-xs uppercase opacity-50 font-black">Balanço 12 meses</div>
+          <div class={[
+            "font-black text-lg",
+            if(@trailing_balance_12m >= 0, do: "text-success", else: "text-error")
+          ]}>
+            {format_currency(@trailing_balance_12m)}
+          </div>
+        </div>
+      </div>
       <div class="overflow-x-auto">
         <table class="table table-xs w-full">
           <thead>
