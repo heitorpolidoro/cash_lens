@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CashLens — Linha Clicável com Lápis Isolado (/balances)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+  <!-- Top Navbar -->
+  <header class="border-b border-slate-200 bg-white sticky top-0 z-50 px-6 py-4 shadow-sm">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-8">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl font-black tracking-tight text-blue-600">CashLens</span>
+        </div>
+
+        <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Painel</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Transações</a>
+          <a href="#" class="px-3 py-2 rounded-lg bg-blue-50 text-blue-600 font-bold">Saldos</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Contas</a>
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="#" class="text-xs font-bold text-slate-500 hover:text-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50">
+          Voltar ao Painel
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+
+    <!-- Header da Tela -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Histórico de Saldos</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Fechamento contábil e conciliação mês a mês por conta</p>
+      </div>
+
+      <div class="flex items-center gap-2.5">
+        <a href="#" class="btn bg-white hover:bg-slate-50 text-blue-600 border border-blue-200 font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm">
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Ver Detalhes do Mês (Set/2026)
+        </a>
+      </div>
+    </div>
+
+    <!-- Barra de Filtros -->
+    <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+        <div>
+          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Ano</label>
+          <select class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option selected>2026</option>
+            <option>2025</option>
+            <option>2024</option>
+            <option>Todos os anos</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Mês</label>
+          <select class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option selected>Setembro (09)</option>
+            <option>Agosto (08)</option>
+            <option>Julho (07)</option>
+            <option>Todos os meses</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Conta</label>
+          <select class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option selected>Todas as contas</option>
+            <option>Itaú Uniclass</option>
+            <option>Nubank</option>
+            <option>Mercado Pago</option>
+          </select>
+        </div>
+
+        <div>
+          <button class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-3 py-2 rounded-xl text-xs transition border border-slate-200">
+            Limpar Filtros
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback Banner Informativo -->
+    <div class="text-xs text-slate-500 flex items-center gap-1.5 px-1">
+      <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <span>Clique em qualquer linha para abrir o extrato da conta. Clique no lápis (<svg class="w-3 h-3 inline text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>) para ajustar o saldo final sem abrir o extrato.</span>
+    </div>
+
+    <!-- Tabela de Saldos (Linha Inteira Clicável, Coluna de Extrato Eliminada) -->
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
+            <tr>
+              <th class="py-3.5 px-4">Conta</th>
+              <th class="py-3.5 px-3">Período</th>
+              <th class="py-3.5 px-3 text-right">Saldo Inicial</th>
+              <th class="py-3.5 px-3 text-right text-emerald-600">Receitas (+)</th>
+              <th class="py-3.5 px-3 text-right text-rose-600">Despesas (-)</th>
+              <th class="py-3.5 px-3 text-right text-blue-600">Transf. Entrada</th>
+              <th class="py-3.5 px-3 text-right text-amber-600">Transf. Saída</th>
+              <th class="py-3.5 px-4 text-right text-slate-900 font-black">Saldo Final</th>
+              <th class="w-8 py-3.5 pr-4"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            
+            <!-- Linha Itaú: Clicável -->
+            <tr onclick="goToTransactions('Itaú Uniclass', 'Set/2026')" class="hover:bg-blue-50/50 transition cursor-pointer group">
+              <td class="py-3.5 px-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-8 h-8 rounded-lg bg-[#ec7000] flex items-center justify-center font-bold text-white text-xs shadow-sm flex-shrink-0">
+                    It
+                  </div>
+                  <div>
+                    <span class="font-bold text-slate-900 group-hover:text-blue-600 transition">Itaú Uniclass</span>
+                    <span class="block text-[10px] text-slate-400">Conta Corrente</span>
+                  </div>
+                </div>
+              </td>
+              <td class="py-3.5 px-3 font-semibold text-slate-600">Set / 2026</td>
+              <td class="py-3.5 px-3 text-right font-medium text-slate-600">R$ 18.250,00</td>
+              <td class="py-3.5 px-3 text-right font-bold text-emerald-600">+R$ 12.000,00</td>
+              <td class="py-3.5 px-3 text-right font-bold text-rose-600">-R$ 6.250,00</td>
+              <td class="py-3.5 px-3 text-right font-medium text-blue-600">R$ 1.000,00</td>
+              <td class="py-3.5 px-3 text-right font-medium text-amber-600">-R$ 5.000,00</td>
+              
+              <!-- Saldo Final com Lápis Isolado por stopPropagation -->
+              <td class="py-3.5 px-4 text-right font-black text-slate-900 bg-slate-50/40 group-hover:bg-blue-100/30 transition">
+                <div class="flex items-center justify-end gap-2">
+                  <span>R$ 20.000,00</span>
+                  <button 
+                    onclick="event.stopPropagation(); openAdjustModal('Itaú Uniclass', 'Setembro/2026', 20000.00)" 
+                    class="text-slate-400 hover:text-blue-600 hover:bg-white p-1 rounded-md transition shadow-none hover:shadow-sm" 
+                    title="Ajustar saldo desta conta"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                  </button>
+                </div>
+              </td>
+
+              <!-- Setinha discreta que aparece no hover -->
+              <td class="py-3.5 pr-4 text-right">
+                <svg class="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition group-hover:translate-x-0.5 transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              </td>
+            </tr>
+
+            <!-- Linha Nubank: Clicável -->
+            <tr onclick="goToTransactions('Nubank', 'Set/2026')" class="hover:bg-blue-50/50 transition cursor-pointer group">
+              <td class="py-3.5 px-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-8 h-8 rounded-lg bg-[#820ad1] flex items-center justify-center font-bold text-white text-xs shadow-sm flex-shrink-0">
+                    Nu
+                  </div>
+                  <div>
+                    <span class="font-bold text-slate-900 group-hover:text-blue-600 transition">Nubank</span>
+                    <span class="block text-[10px] text-slate-400">Conta Digital</span>
+                  </div>
+                </div>
+              </td>
+              <td class="py-3.5 px-3 font-semibold text-slate-600">Set / 2026</td>
+              <td class="py-3.5 px-3 text-right font-medium text-slate-600">R$ 14.100,00</td>
+              <td class="py-3.5 px-3 text-right font-bold text-emerald-600">+R$ 2.420,00</td>
+              <td class="py-3.5 px-3 text-right font-bold text-rose-600">-R$ 1.520,00</td>
+              <td class="py-3.5 px-3 text-right font-medium text-blue-600">—</td>
+              <td class="py-3.5 px-3 text-right font-medium text-amber-600">—</td>
+              
+              <!-- Saldo Final com Lápis Isolado por stopPropagation -->
+              <td class="py-3.5 px-4 text-right font-black text-slate-900 bg-slate-50/40 group-hover:bg-blue-100/30 transition">
+                <div class="flex items-center justify-end gap-2">
+                  <span>R$ 15.000,00</span>
+                  <button 
+                    onclick="event.stopPropagation(); openAdjustModal('Nubank', 'Setembro/2026', 15000.00)" 
+                    class="text-slate-400 hover:text-blue-600 hover:bg-white p-1 rounded-md transition shadow-none hover:shadow-sm" 
+                    title="Ajustar saldo desta conta"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                  </button>
+                </div>
+              </td>
+
+              <!-- Setinha discreta -->
+              <td class="py-3.5 pr-4 text-right">
+                <svg class="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition group-hover:translate-x-0.5 transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              </td>
+            </tr>
+
+            <!-- Linha Mercado Pago: Clicável -->
+            <tr onclick="goToTransactions('Mercado Pago', 'Set/2026')" class="hover:bg-blue-50/50 transition cursor-pointer group">
+              <td class="py-3.5 px-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-8 h-8 rounded-lg bg-[#009ee3] flex items-center justify-center font-bold text-white text-xs shadow-sm flex-shrink-0">
+                    MP
+                  </div>
+                  <div>
+                    <span class="font-bold text-slate-900 group-hover:text-blue-600 transition">Mercado Pago</span>
+                    <span class="block text-[10px] text-slate-400">Conta Pagamento</span>
+                  </div>
+                </div>
+              </td>
+              <td class="py-3.5 px-3 font-semibold text-slate-600">Set / 2026</td>
+              <td class="py-3.5 px-3 text-right font-medium text-slate-600">R$ 6.639,56</td>
+              <td class="py-3.5 px-3 text-right font-bold text-emerald-600">+R$ 1.000,00</td>
+              <td class="py-3.5 px-3 text-right font-bold text-rose-600">-R$ 380,40</td>
+              <td class="py-3.5 px-3 text-right font-medium text-blue-600">R$ 4.000,00</td>
+              <td class="py-3.5 px-3 text-right font-medium text-amber-600">—</td>
+              
+              <!-- Saldo Final com Lápis Isolado por stopPropagation -->
+              <td class="py-3.5 px-4 text-right font-black text-slate-900 bg-slate-50/40 group-hover:bg-blue-100/30 transition">
+                <div class="flex items-center justify-end gap-2">
+                  <span>R$ 11.259,96</span>
+                  <button 
+                    onclick="event.stopPropagation(); openAdjustModal('Mercado Pago', 'Setembro/2026', 11259.96)" 
+                    class="text-slate-400 hover:text-blue-600 hover:bg-white p-1 rounded-md transition shadow-none hover:shadow-sm" 
+                    title="Ajustar saldo desta conta"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                  </button>
+                </div>
+              </td>
+
+              <!-- Setinha discreta -->
+              <td class="py-3.5 pr-4 text-right">
+                <svg class="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition group-hover:translate-x-0.5 transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              </td>
+            </tr>
+
+          </tbody>
+
+          <!-- LINHA DE TOTAL CONSOLIDADO -->
+          <tfoot class="bg-blue-50/60 border-t-2 border-slate-300 text-slate-900 text-xs">
+            <tr class="font-black">
+              <td class="py-4 px-4 text-blue-900 uppercase tracking-wider text-[11px]">
+                TOTAL CONSOLIDADO (3 Contas)
+              </td>
+              <td class="py-4 px-3 text-slate-600">Set / 2026</td>
+              <td class="py-4 px-3 text-right text-slate-700">R$ 38.989,56</td>
+              <td class="py-4 px-3 text-right text-emerald-700">+R$ 15.420,00</td>
+              <td class="py-4 px-3 text-right text-rose-700">-R$ 8.150,40</td>
+              <td class="py-4 px-3 text-right text-blue-700">R$ 5.000,00</td>
+              <td class="py-4 px-3 text-right text-amber-700">-R$ 5.000,00</td>
+              <td class="py-4 px-4 text-right text-base text-blue-700 bg-blue-100/50">
+                R$ 46.259,96
+              </td>
+              <td class="py-4 pr-4"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL DE AJUSTE DE SALDO -->
+  <div id="modal-adjust" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div>
+          <h3 class="font-bold text-slate-900 text-base">Ajustar Saldo Final</h3>
+          <p id="modal-subtitle" class="text-xs text-slate-500 mt-0.5">Itaú Uniclass — Setembro/2026</p>
+        </div>
+        <button onclick="closeAdjustModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs">
+        <div>
+          <span class="text-slate-400 font-semibold block">Saldo Calculado Atual</span>
+          <span id="modal-current-balance" class="font-extrabold text-slate-700 text-sm">R$ 20.000,00</span>
+        </div>
+        <div>
+          <span class="text-slate-400 font-semibold block">Diferença a Lançar</span>
+          <span id="modal-diff" class="font-extrabold text-emerald-600 text-sm">+R$ 150,00</span>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+          Saldo Real no Banco (Extrato Oficial)
+        </label>
+        <div class="relative">
+          <span class="absolute left-3 top-2.5 text-xs font-bold text-slate-400">R$</span>
+          <input 
+            id="input-real-balance" 
+            type="number" 
+            step="0.01" 
+            value="20150.00" 
+            oninput="recalcDiff()" 
+            class="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      <div class="space-y-2.5">
+        <span class="block text-xs font-bold text-slate-700 uppercase tracking-wider">Tipo de Ajuste</span>
+        
+        <label class="flex items-start gap-3 p-3 rounded-xl border border-blue-200 bg-blue-50/50 cursor-pointer hover:bg-blue-50 transition">
+          <input type="radio" name="adjust_type" value="rendimento" checked class="mt-0.5 text-blue-600 focus:ring-blue-500">
+          <div>
+            <span class="font-bold text-xs text-blue-950 block">Rendimento do Mês</span>
+            <span class="text-[11px] text-blue-800/80 block mt-0.5 leading-relaxed">
+              Cria uma transação de receita na categoria "Rendimentos" no último dia do mês com o valor da diferença.
+            </span>
+          </div>
+        </label>
+
+        <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-slate-50 transition">
+          <input type="radio" name="adjust_type" value="correcao" class="mt-0.5 text-blue-600 focus:ring-blue-500">
+          <div>
+            <span class="font-bold text-xs text-slate-900 block">Correção de Saldo Inicial Histórico</span>
+            <span class="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+              Aplica a diferença no primeiro saldo de abertura desta conta e recalcula toda a cadeia histórica de meses.
+            </span>
+          </div>
+        </label>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button onclick="closeAdjustModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
+          Cancelar
+        </button>
+        <button onclick="confirmAdjust()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm">
+          Aplicar Ajuste
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let currentAccount = "";
+    let currentPeriod = "";
+    let baseBalance = 0;
+
+    function goToTransactions(account, period) {
+      alert(`Abrindo o extrato filtrado de ${account} em ${period} (/transactions)`);
+    }
+
+    function openAdjustModal(account, period, balance) {
+      currentAccount = account;
+      currentPeriod = period;
+      baseBalance = balance;
+
+      document.getElementById('modal-subtitle').textContent = `${account} — ${period}`;
+      document.getElementById('modal-current-balance').textContent = `R$ ${balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      document.getElementById('input-real-balance').value = (balance + 150).toFixed(2);
+      
+      recalcDiff();
+      document.getElementById('modal-adjust').classList.remove('hidden');
+    }
+
+    function closeAdjustModal() {
+      document.getElementById('modal-adjust').classList.add('hidden');
+    }
+
+    function recalcDiff() {
+      const inputVal = parseFloat(document.getElementById('input-real-balance').value) || 0;
+      const diff = inputVal - baseBalance;
+      const diffElem = document.getElementById('modal-diff');
+      
+      const formatted = `R$ ${Math.abs(diff).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      if (diff > 0) {
+        diffElem.textContent = `+${formatted}`;
+        diffElem.className = "font-extrabold text-emerald-600 text-sm";
+      } else if (diff < 0) {
+        diffElem.textContent = `-${formatted}`;
+        diffElem.className = "font-extrabold text-rose-600 text-sm";
+      } else {
+        diffElem.textContent = "R$ 0,00";
+        diffElem.className = "font-extrabold text-slate-500 text-sm";
+      }
+    }
+
+    function confirmAdjust() {
+      const type = document.querySelector('input[name="adjust_type"]:checked').value;
+      const inputVal = parseFloat(document.getElementById('input-real-balance').value);
+      const diff = inputVal - baseBalance;
+      
+      if (type === 'rendimento') {
+        alert(`Transação de Rendimento criada com sucesso: +R$ ${diff.toFixed(2)} em ${currentAccount} (${currentPeriod})!`);
+      } else {
+        alert(`Saldo inicial histórico de ${currentAccount} atualizado e histórico recalculado!`);
+      }
+      closeAdjustModal();
+    }
+  </script>
+</body>
+</html>

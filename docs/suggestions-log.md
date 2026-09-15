@@ -93,3 +93,11 @@
 - `mix quality_check` exits non-zero at `credo --strict` (2 warnings, 19 refactoring, 2 readability, 7 design) in files unrelated to the current redesign tasks: `lib/cash_lens/transactions.ex`, `lib/cash_lens_web/live/reimbursement_live/index.ex`, `test/cash_lens/accounting_test.exs`.
 - Every CL-4..CL-19 task carries "Suite de testes passa com mix quality_check" as an acceptance criterion, which no single task can satisfy without editing unrelated code and polluting its commit.
 - Worth its own cleanup task, after which the criterion becomes meaningful again.
+
+## [CL-5] Reformular tela de Saldos (/balances) com fechamento contábil, linha de total e ajuste de saldo — 2026-09-15
+- SECURITY-adjacent: `to_integer/1` at `balance_live/index.ex:506` uses `String.to_integer/1` on client-controlled `phx-value` data — a crafted payload crashes the LiveView; `Integer.parse/1` into the existing "Saldo não encontrado" branch closes it.
+- DRY: `account_live/index.ex:277-292` duplicates the rendimento-creation rule; it should delegate to `BalanceAdjuster` (its version dates the transaction `Date.utc_today()`, so it is behaviour-affecting).
+- The `tfoot` total is capped at `list_balances/3`'s default `page_size: 20` with no pagination UI, so "TOTAL CONSOLIDADO" can silently be a partial sum.
+- A negative diff under "Rendimento do Mês" books a negative-amount transaction in the income category (arithmetically correct, semantically odd).
+- `format_transfer(nil)` guards a `nil` that `calculate_totals/1` does not — the column is `null: false`, so drop the dead clause.
+- Spec drift: `docs/tasks/CL-5-spec.md` "Files Touched" still names `accounting.ex`.
