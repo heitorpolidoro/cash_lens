@@ -10,9 +10,37 @@ defmodule CashLens.CreditCards do
   @closing_offset 7
 
   def create_statement(attrs) do
-    %Statement{}
-    |> Statement.changeset(attrs)
-    |> Repo.insert()
+    account_id = Map.get(attrs, :account_id) || Map.get(attrs, "account_id")
+    competencia = Map.get(attrs, :competencia) || Map.get(attrs, "competencia")
+    due_date = Map.get(attrs, :due_date) || Map.get(attrs, "due_date")
+
+    existing =
+      cond do
+        account_id && competencia ->
+          get_statement_by_account_and_competencia(account_id, competencia)
+
+        account_id && is_nil(competencia) && due_date ->
+          from(s in Statement,
+            where:
+              s.account_id == ^account_id and s.due_date == ^due_date and is_nil(s.competencia),
+            order_by: [desc: s.inserted_at],
+            limit: 1
+          )
+          |> Repo.one()
+
+        true ->
+          nil
+      end
+
+    case existing do
+      %Statement{} = statement ->
+        update_statement(statement, attrs)
+
+      nil ->
+        %Statement{}
+        |> Statement.changeset(attrs)
+        |> Repo.insert()
+    end
   end
 
   def get_statement!(id), do: Repo.get!(Statement, id)
