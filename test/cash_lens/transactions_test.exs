@@ -49,6 +49,32 @@ defmodule CashLens.TransactionsTest do
     end
   end
 
+  describe "latest_transaction_dates/0" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    test "returns a map of latest transaction dates per account" do
+      acc1 = account_fixture()
+      acc2 = account_fixture()
+
+      transaction_fixture(%{account_id: acc1.id, date: ~D[2026-01-10], amount: "-10"})
+      transaction_fixture(%{account_id: acc1.id, date: ~D[2026-03-05], amount: "-20"})
+      transaction_fixture(%{account_id: acc2.id, date: ~D[2026-02-15], amount: "-30"})
+
+      transaction_fixture(%{
+        account_id: acc2.id,
+        date: ~D[2026-05-01],
+        amount: "-40",
+        source: "pluggy"
+      })
+
+      dates = Transactions.latest_transaction_dates()
+
+      assert Map.get(dates, acc1.id) == ~D[2026-03-05]
+      assert Map.get(dates, acc2.id) == ~D[2026-02-15]
+    end
+  end
+
   describe "new-code coverage" do
     import CashLens.AccountsFixtures
     import CashLens.CategoriesFixtures
@@ -355,6 +381,64 @@ defmodule CashLens.TransactionsTest do
 
       assert normal_summary.income == Decimal.new("0")
       assert bypass_summary.income == Decimal.new("75.00")
+    end
+
+    test "get_monthly_summary/2 income - expenses matches bank cash flow" do
+      salary = CashLens.CategoriesFixtures.category_fixture(%{slug: "salary", type: "fixed"})
+      rent = CashLens.CategoriesFixtures.category_fixture(%{slug: "rent", type: "fixed"})
+
+      cc =
+        CashLens.CategoriesFixtures.category_fixture(%{slug: "cartao-de-credito", type: "fixed"})
+
+      groceries =
+        CashLens.CategoriesFixtures.category_fixture(%{slug: "groceries", type: "variable"})
+
+      checking = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: false})
+      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+
+      # Bank transactions: +5000 salary, -1500 rent, -1200 card bill payment
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: salary.id,
+        amount: "5000.00",
+        date: ~D[2026-03-05]
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: rent.id,
+        amount: "-1500.00",
+        date: ~D[2026-03-10]
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-1200.00",
+        date: ~D[2026-03-20]
+      })
+
+      # Card transactions: -400 groceries, +1200 card bill payment mirror
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: groceries.id,
+        amount: "-400.00",
+        date: ~D[2026-03-15]
+      })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: cc.id,
+        amount: "1200.00",
+        date: ~D[2026-03-20]
+      })
+
+      summary = Transactions.get_monthly_summary(~D[2026-03-01])
+      assert Decimal.equal?(summary.income, Decimal.new("5000.00"))
+      assert Decimal.equal?(summary.expenses, Decimal.new("2700.00"))
+      # Net bank cash flow: 5000 - 2700 = 2300
+      net_cash_flow = Decimal.sub(summary.income, summary.expenses)
+      assert Decimal.equal?(net_cash_flow, Decimal.new("2300.00"))
     end
 
     test "get_historical_summary/0" do
@@ -722,25 +806,46 @@ defmodule CashLens.TransactionsTest do
       assert Decimal.equal?(summary.expenses, Decimal.new("500.00"))
     end
 
-    test "get_monthly_summary/2 excludes Cartão de Crédito payments" do
+    test "get_monthly_summary/2 includes Cartão de Crédito payments on bank accounts and excludes credit card accounts" do
       cc = cc_category()
       checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+      market = other_category()
 
+      # Bank account pays credit card bill -> cash expense
       transaction_fixture(%{
         account_id: checking.id,
         category_id: cc.id,
         amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
+      # Credit card purchase -> NOT direct cash expense from bank account
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: market.id,
+        amount: "-200.00",
+        date: ~D[2026-02-11]
+      })
+
+      # Credit card mirror payment credit -> NOT cash income
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: cc.id,
+        amount: "500.00",
         date: ~D[2026-02-10]
       })
 
       summary = Transactions.get_monthly_summary(~D[2026-02-15])
-      assert Decimal.equal?(summary.expenses, Decimal.new("0"))
+      assert Decimal.equal?(summary.expenses, Decimal.new("500.00"))
+      assert Decimal.equal?(summary.income, Decimal.new("0"))
     end
 
-    test "get_historical_summary/1 excludes Cartão de Crédito payments" do
+    test "get_monthly_summary/2 with specific account_id filter filters by that account" do
       cc = cc_category()
-      market = other_category()
       checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+      market = other_category()
 
       transaction_fixture(%{
         account_id: checking.id,
@@ -749,9 +854,37 @@ defmodule CashLens.TransactionsTest do
         date: ~D[2026-02-10]
       })
 
-      # A non-excluded transaction in the same month so the group_by produces
-      # a row to assert against (a month with only an excluded transaction
-      # legitimately yields no row at all).
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: market.id,
+        amount: "-200.00",
+        date: ~D[2026-02-11]
+      })
+
+      card_summary =
+        Transactions.get_monthly_summary(~D[2026-02-15], %{"account_id" => card.id})
+
+      assert Decimal.equal?(card_summary.expenses, Decimal.new("200.00"))
+
+      checking_summary =
+        Transactions.get_monthly_summary(~D[2026-02-15], %{"account_id" => checking.id})
+
+      assert Decimal.equal?(checking_summary.expenses, Decimal.new("500.00"))
+    end
+
+    test "get_historical_summary/1 includes Cartão de Crédito payments on bank accounts and excludes credit card accounts" do
+      cc = cc_category()
+      market = other_category()
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-500.00",
+        date: ~D[2026-02-10]
+      })
+
       transaction_fixture(%{
         account_id: checking.id,
         category_id: market.id,
@@ -759,11 +892,21 @@ defmodule CashLens.TransactionsTest do
         date: ~D[2026-02-12]
       })
 
+      # Credit card purchase on card account should NOT appear in historical cash summary
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: market.id,
+        amount: "-150.00",
+        date: ~D[2026-02-14]
+      })
+
       [row] = Transactions.get_historical_summary()
-      assert Decimal.equal?(row.expenses, Decimal.new("0"))
+      assert Decimal.equal?(row.income, Decimal.new("10.00"))
+      assert Decimal.equal?(row.expenses, Decimal.new("500.00"))
+      assert Decimal.equal?(row.balance, Decimal.new("-490.00"))
     end
 
-    test "get_historical_summary/1 excludes a Cartão de Crédito CHILD category (e.g. Pagamento) too" do
+    test "get_historical_summary/1 includes Cartão de Crédito child category on bank account but ignores card account" do
       cc = cc_category()
 
       pagamento =
@@ -785,9 +928,7 @@ defmodule CashLens.TransactionsTest do
         date: ~D[2026-06-16]
       })
 
-      # The mirror credit inside the card account — this is what leaked as
-      # "income" before the fix, because its OWN category is the CHILD slug
-      # "cartao-de-credito-pagamento", not the parent "cartao-de-credito".
+      # The mirror credit inside the card account — not included because card is a credit card account.
       transaction_fixture(%{
         account_id: card.id,
         category_id: pagamento.id,
@@ -804,7 +945,8 @@ defmodule CashLens.TransactionsTest do
 
       [row] = Transactions.get_historical_summary()
       assert Decimal.equal?(row.income, Decimal.new("10.00"))
-      assert Decimal.equal?(row.expenses, Decimal.new("0"))
+      assert Decimal.equal?(row.expenses, Decimal.new("14391.19"))
+      assert Decimal.equal?(row.balance, Decimal.new("-14381.19"))
     end
 
     test "get_month_income_breakdown/2 excludes a Cartão de Crédito child category" do

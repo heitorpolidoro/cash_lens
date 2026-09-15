@@ -96,6 +96,18 @@ defmodule CashLensWeb.TransactionLiveTest do
       render_click(index_live, "delete", %{"id" => transaction.id})
       refute has_element?(index_live, "#transactions-#{transaction.id}")
     end
+
+    test "renders sync_pluggy button and handles click", %{conn: conn} do
+      Req.Test.stub(CashLens.Pluggy.Client, fn conn ->
+        Req.Test.json(conn, %{"apiKey" => "test-api-key", "results" => []})
+      end)
+
+      {:ok, index_live, html} = live(conn, ~p"/transactions")
+      Req.Test.allow(CashLens.Pluggy.Client, self(), index_live.pid)
+      assert html =~ "Sincronizar Pluggy"
+
+      assert render_click(index_live, "sync_pluggy") =~ "Pluggy"
+    end
   end
 
   describe "Show" do

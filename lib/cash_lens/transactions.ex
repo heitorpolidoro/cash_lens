@@ -440,8 +440,11 @@ defmodule CashLens.Transactions do
 
   @doc """
   Calculates monthly totals for income (positive) and expenses (negative), ignoring transfers.
+  Considers only bank accounts (is_credit_card: false) unless a specific account_id filter is passed.
+  Includes credit-card bill payments (cartao-de-credito) on bank accounts as cash expenses.
   """
   def get_monthly_summary(date \\ nil, filters \\ %{}) do
+    filters = filters || %{}
     target_date = date || get_latest_transaction_date() || Date.utc_today()
     {first_of_month, last_of_month} = get_summary_period(target_date, filters)
 
@@ -449,7 +452,7 @@ defmodule CashLens.Transactions do
       Transaction
       |> build_summary_base_query()
       |> apply_summary_date_filters(first_of_month, last_of_month, filters)
-      |> filter_by_account(filters["account_id"])
+      |> apply_summary_account_filter(filters)
       |> aggregate_summary_totals()
       |> Repo.one()
 
@@ -584,10 +587,7 @@ defmodule CashLens.Transactions do
   defp build_summary_base_query(query) do
     from t in query,
       left_join: c in assoc(t, :category),
-      # Transfers and credit-card payments move money between the user's own
-      # "buckets" (another account, or a not-yet-itemized bill), so they
-      # never count as income/expense — paired/itemized or not.
-      where: is_nil(c.id) or c.id not in ^excluded_report_category_ids(),
+      where: is_nil(c.id) or c.id not in ^excluded_cash_summary_category_ids(),
       where: is_nil(t.reimbursement_link_key)
   end
 
@@ -598,6 +598,19 @@ defmodule CashLens.Transactions do
 
   defp apply_summary_date_filters(query, first, last, _filters) do
     where(query, [t], t.date >= ^first and t.date <= ^last)
+  end
+
+  defp apply_summary_account_filter(query, filters) do
+    case Map.get(filters, "account_id") || Map.get(filters, :account_id) do
+      account_id when account_id in [nil, ""] ->
+        from(t in query,
+          join: a in assoc(t, :account),
+          where: a.is_credit_card == false
+        )
+
+      account_id ->
+        where(query, [t], t.account_id == ^account_id)
+    end
   end
 
   defp aggregate_summary_totals(query) do
@@ -611,16 +624,17 @@ defmodule CashLens.Transactions do
 
   @doc """
   Returns pure income and expenses history grouped by month, excluding transfers.
+  Considers only bank accounts (is_credit_card: false).
   """
   def get_historical_summary(opts \\ []) do
     limit = Keyword.get(opts, :limit)
 
     query =
       from t in Transaction,
+        join: a in assoc(t, :account),
         left_join: c in assoc(t, :category),
-        # Transfers and credit-card payments are excluded from income/expenses,
-        # paired/itemized or not.
-        where: is_nil(c.id) or c.id not in ^excluded_report_category_ids(),
+        where: a.is_credit_card == false,
+        where: is_nil(c.id) or c.id not in ^excluded_cash_summary_category_ids(),
         where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
@@ -692,6 +706,17 @@ defmodule CashLens.Transactions do
       }
     )
     |> exclude_transactions_with_children()
+  end
+
+  # Category ids to exclude from cash flow summaries (monthly and historical):
+  # transfers and initial opening balance. Credit-card bill payments (cartao-de-credito)
+  # are real cash outflows on bank accounts, so they are INCLUDED in cash flow.
+  defp excluded_cash_summary_category_ids do
+    ["initial_value", "transfer"]
+    |> Enum.map(&Categories.get_category_by_slug/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.flat_map(&Categories.get_category_ids_with_children(&1.id))
+    |> Enum.uniq()
   end
 
   # Category ids to exclude from every income/expense report: transfers, the
@@ -776,6 +801,21 @@ defmodule CashLens.Transactions do
         where: t.account_id == ^account_id and t.source in ["file", "manual"],
         select: max(t.date)
     )
+  end
+
+  @doc """
+  Returns a map of `%{account_id => latest_date}` for all accounts having
+  permanently-persisted transactions (`source` of `"file"` or `"manual"`).
+  """
+  @spec latest_transaction_dates() :: %{Ecto.UUID.t() => Date.t()}
+  def latest_transaction_dates do
+    from(t in Transaction,
+      where: t.source in ["file", "manual"],
+      group_by: t.account_id,
+      select: {t.account_id, max(t.date)}
+    )
+    |> Repo.all()
+    |> Map.new()
   end
 
   @doc """

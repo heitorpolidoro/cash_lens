@@ -8,6 +8,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   alias CashLens.Pluggy.LivePreviewCache
   alias CashLens.Transactions
   alias CashLens.Transactions.CategorySuggester
+  alias CashLens.Transactions.PluggyMatcher
 
   @impl true
   def mount(_params, _session, socket) do
@@ -221,6 +222,67 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("open_batch_import", _params, socket) do
     {:noreply, assign(socket, :show_batch_import_modal, true)}
+  end
+
+  @impl true
+  def handle_event("sync_pluggy", _params, socket) do
+    req_options = Application.get_env(:cash_lens, :pluggy_req_options, [])
+    alias CashLens.Pluggy
+    alias CashLens.Pluggy.Client
+
+    case fetch_pluggy_credentials() do
+      {:ok, client_id, client_secret} ->
+        case Client.auth(client_id, client_secret, req_options) do
+          {:ok, api_key} ->
+            results =
+              Enum.map(Pluggy.list_items(), fn item ->
+                with {:ok, accounts} <- Client.list_accounts(api_key, item.item_id, req_options) do
+                  Enum.each(accounts, fn account ->
+                    Pluggy.upsert_account_link(item, %{
+                      pluggy_account_id: account["id"],
+                      pluggy_account_name: account["name"],
+                      pluggy_account_type: account["type"],
+                      pluggy_balance: account["balance"]
+                    })
+                  end)
+
+                  {:ok, accounts}
+                end
+              end)
+
+            ok_count = Enum.count(results, &match?({:ok, _}, &1))
+            failed_count = length(results) - ok_count
+
+            LivePreviewCache.refresh_now(live_preview_cache())
+
+            items_count = length(Pluggy.list_items())
+
+            {flash_kind, message} =
+              cond do
+                items_count == 0 ->
+                  {:info, "Nenhum item Pluggy cadastrado."}
+
+                failed_count > 0 ->
+                  {:error,
+                   "Sincronização com Pluggy concluída com erros (#{ok_count} ok, #{failed_count} falharam)."}
+
+                true ->
+                  {:success, "Pluggy sincronizado com sucesso."}
+              end
+
+            {:noreply,
+             socket
+             |> put_flash(flash_kind, message)
+             |> refresh_transactions_page1(socket.assigns.filters)}
+
+          {:error, _reason} ->
+            {:noreply, put_flash(socket, :error, "Falha ao autenticar no Pluggy.")}
+        end
+
+      {:error, :missing_credentials} ->
+        {:noreply,
+         put_flash(socket, :error, "PLUGGY_CLIENT_ID/PLUGGY_CLIENT_SECRET não configurados.")}
+    end
   end
 
   @impl true
@@ -554,7 +616,10 @@ defmodule CashLensWeb.TransactionLive.Index do
       {:noreply, socket}
     else
       next_page = socket.assigns.page + 1
-      items = Transactions.list_transactions(map_filters(socket.assigns.filters), next_page)
+
+      items =
+        Transactions.list_transactions(map_filters(socket.assigns.filters), next_page)
+        |> annotate_pluggy_categories()
 
       {:noreply,
        socket
@@ -832,10 +897,14 @@ defmodule CashLensWeb.TransactionLive.Index do
     end
   end
 
-  # Single-row convenience over CategorySuggester.annotate/1 so streamed rows
-  # never lose their suggestion pill, whatever path re-inserts them.
+  # Single-row convenience over CategorySuggester.annotate/1 and PluggyMatcher.annotate/2
+  # so streamed rows never lose their suggestion pill or pluggy category badge.
   defp annotate_one(tx) do
-    [tx] = CategorySuggester.annotate([tx])
+    [tx] =
+      [tx]
+      |> CategorySuggester.annotate()
+      |> annotate_pluggy_categories()
+
     tx
   end
 
@@ -964,8 +1033,23 @@ defmodule CashLensWeb.TransactionLive.Index do
   defp live_preview_cache,
     do: Application.get_env(:cash_lens, :pluggy_live_preview_cache, LivePreviewCache)
 
+  defp fetch_pluggy_credentials do
+    client_id = System.get_env("PLUGGY_CLIENT_ID")
+    client_secret = System.get_env("PLUGGY_CLIENT_SECRET")
+
+    if is_binary(client_id) and is_binary(client_secret) and client_id != "" and
+         client_secret != "" do
+      {:ok, client_id, client_secret}
+    else
+      {:error, :missing_credentials}
+    end
+  end
+
   defp refresh_transactions_page1(socket, filters) do
-    db_transactions = Transactions.list_transactions(map_filters(filters), 1)
+    db_transactions =
+      Transactions.list_transactions(map_filters(filters), 1)
+      |> annotate_pluggy_categories()
+
     {live_entries, pluggy_error} = live_preview_entries(filters)
 
     socket
@@ -978,6 +1062,11 @@ defmodule CashLensWeb.TransactionLive.Index do
     |> load_transfer_pairs(db_transactions)
     |> stream(:transactions, db_transactions, reset: true)
     |> insert_live_entries(live_entries)
+  end
+
+  defp annotate_pluggy_categories(transactions) do
+    all_cached_entries = safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
+    PluggyMatcher.annotate(transactions, all_cached_entries)
   end
 
   # Recomputes the summary INCLUDING the live entries currently on screen.
@@ -1091,6 +1180,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     else
       filters
       |> live_entries_for_account_filter()
+      |> LivePreview.filter_temporary_entries()
       |> Enum.filter(&matches_live_entry_filters?(&1, filters))
     end
   end

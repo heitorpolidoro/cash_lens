@@ -7,8 +7,8 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
   import CashLens.TransactionsFixtures
   import CashLens.PluggyFixtures
 
-  alias CashLens.Pluggy
   alias CashLens.FakeLivePreviewCache
+  alias CashLens.Pluggy
 
   describe "Pluggy live preview" do
     setup do
@@ -187,7 +187,7 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
       entry = %CashLens.Pluggy.LivePreview.Entry{
         id: "pluggy-preview-live-3",
         account_id: account.id,
-        date: ~D[2026-08-05],
+        date: ~D[2026-08-06],
         description: "TESTE-SUMMARY live",
         amount: Decimal.new("-25.00")
       }
@@ -281,6 +281,83 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
 
       # Exactly one occurrence — the one page 1 put there, not a duplicate.
       assert html |> String.split("SO NA PRIMEIRA PAGINA") |> length() == 2
+    end
+
+    test "annotates real transactions with pluggy: <category> badge from cached entries", %{
+      conn: conn
+    } do
+      account = account_fixture()
+
+      _real_tx =
+        transaction_fixture(%{
+          account_id: account.id,
+          date: ~D[2026-08-01],
+          description: "MERCADO LOCAL",
+          amount: "-45.50"
+        })
+
+      matching_entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-match-1",
+        account_id: account.id,
+        date: ~D[2026-08-02],
+        description: "MERCADO LOCAL LTDA",
+        amount: Decimal.new("-45.50"),
+        pluggy_category: "Supermarkets"
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [matching_entry]})
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
+
+      {:ok, _live, html} = live(conn, ~p"/transactions")
+
+      assert html =~ "pluggy: Supermarkets"
+      assert html =~ "MERCADO LOCAL"
+    end
+
+    test "does not render pluggy entries older than or on latest transaction date as temporary rows",
+         %{
+           conn: conn
+         } do
+      account = account_fixture()
+
+      _real_tx =
+        transaction_fixture(%{
+          account_id: account.id,
+          date: ~D[2026-08-05],
+          description: "TRANSACAO REAL",
+          amount: "-50.00"
+        })
+
+      old_entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-old-1",
+        account_id: account.id,
+        date: ~D[2026-08-05],
+        description: "TRANSACAO REPETIDA TEMPORARIA",
+        amount: Decimal.new("-50.00"),
+        pluggy_category: "Shopping"
+      }
+
+      future_entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-future-1",
+        account_id: account.id,
+        date: ~D[2026-08-06],
+        description: "TRANSACAO FUTURA TEMPORARIA",
+        amount: Decimal.new("-20.00"),
+        pluggy_category: "Transport"
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [old_entry, future_entry]})
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
+
+      {:ok, _live, html} = live(conn, ~p"/transactions")
+
+      # Future entry (after latest transaction date) is shown as temporary
+      assert html =~ "TRANSACAO FUTURA TEMPORARIA"
+      # Old entry (dated on/before latest real tx) is NOT rendered as a temporary row
+      refute html =~ "TRANSACAO REPETIDA TEMPORARIA"
+      # Real tx is present and annotated with the pluggy category
+      assert html =~ "TRANSACAO REAL"
+      assert html =~ "pluggy: Shopping"
     end
   end
 end
