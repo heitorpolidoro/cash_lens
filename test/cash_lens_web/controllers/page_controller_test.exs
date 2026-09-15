@@ -162,11 +162,11 @@ defmodule CashLensWeb.PageControllerTest do
       assert html =~ "R$ 475,00"
       # Despesas no longer picks up live entries — only imported transactions.
       refute html =~ "R$ 25,00"
-      # The badge still shows (Saldo Atual and Balanço both reflect the live delta).
-      assert html =~ "Atualizado com dados temporários do Pluggy"
+      # The dashboard no longer carries the live-Pluggy badge.
+      refute html =~ "dados temporários do Pluggy"
     end
 
-    test "no live entries: no badge, figures are unaffected", %{conn: conn} do
+    test "no live entries: figures are unaffected", %{conn: conn} do
       account = account_fixture()
       today = Date.utc_today()
 
@@ -181,7 +181,7 @@ defmodule CashLensWeb.PageControllerTest do
       html = html_response(conn, 200)
 
       assert html =~ "R$ 500,00"
-      refute html =~ "Atualizado com dados temporários do Pluggy"
+      refute html =~ "dados temporários do Pluggy"
     end
 
     test "a live entry from a different month does not affect Receitas/Despesas but still bumps Saldo Atual",
@@ -258,84 +258,124 @@ defmodule CashLensWeb.PageControllerTest do
     assert html_response(conn, 200) =~ "Dashboard Financeiro"
   end
 
-  test "GET / shows trailing 3/6/12-month balance totals in Histórico Mensal", %{conn: conn} do
-    account = account_fixture()
-    today = Date.utc_today()
+  test "GET / with no data renders the dashboard", %{conn: conn} do
+    # No accounts/balances/transactions: exercises the empty-state branches.
+    conn = get(conn, ~p"/")
+    assert html_response(conn, 200) =~ "Dashboard Financeiro"
+  end
 
-    month_ago = fn date, n ->
-      total = date.year * 12 + (date.month - 1) - n
-      Date.new!(div(total, 12), rem(total, 12) + 1, 1)
+  describe "GET / dashboard layout" do
+    test "renders the four KPI cards, the consolidated chart and the Minhas Contas card", %{
+      conn: conn
+    } do
+      account = account_fixture()
+      today = Date.utc_today()
+
+      balance_fixture(%{
+        account_id: account.id,
+        year: today.year,
+        month: today.month,
+        final_balance: "500.00"
+      })
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert html =~ "Saldo Atual"
+      assert html =~ "Receitas ("
+      assert html =~ "Despesas ("
+      assert html =~ "Balanço ("
+      assert html =~ "Evolução Financeira Consolidada"
+      assert html =~ ~s(id="balanceChart")
+      assert html =~ "Minhas Contas"
+      assert html =~ "Total em Contas"
+      assert html =~ account.name
     end
 
-    this_month = Date.beginning_of_month(today)
-    one_month_ago = month_ago.(this_month, 1)
-    two_months_ago = month_ago.(this_month, 2)
-    four_months_ago = month_ago.(this_month, 4)
+    test "Minhas Contas totals the listed accounts' current balances", %{conn: conn} do
+      today = Date.utc_today()
 
-    balance_fixture(%{account_id: account.id, year: today.year, month: today.month})
+      for final <- ["500.00", "250.00"] do
+        account = account_fixture()
 
-    # Four months back: balance 30,00 — inside the 6/12-month window, outside the 3-month one.
-    transaction_fixture(%{account_id: account.id, amount: "30.00", date: four_months_ago})
+        balance_fixture(%{
+          account_id: account.id,
+          year: today.year,
+          month: today.month,
+          final_balance: final
+        })
+      end
 
-    # Two months back: balance 200,00 (inside 3/6/12)
-    transaction_fixture(%{account_id: account.id, amount: "200.00", date: two_months_ago})
+      html = conn |> get(~p"/") |> html_response(200)
 
-    # Last month: balance 50,00 (inside 3/6/12)
-    transaction_fixture(%{account_id: account.id, amount: "100.00", date: one_month_ago})
-    transaction_fixture(%{account_id: account.id, amount: "-50.00", date: one_month_ago})
+      assert html =~ "R$ 500,00"
+      assert html =~ "R$ 250,00"
+      # Consolidated total in the card footer.
+      assert html =~ "R$ 750,00"
+    end
 
-    # This month: balance 200,00 (inside 3/6/12)
-    transaction_fixture(%{account_id: account.id, amount: "300.00", date: today})
-    transaction_fixture(%{account_id: account.id, amount: "-100.00", date: today})
+    test "drops the 12-month history table and the fixed/variable category charts", %{conn: conn} do
+      account = account_fixture()
+      today = Date.utc_today()
 
-    conn = get(conn, ~p"/")
-    html = html_response(conn, 200)
+      balance_fixture(%{account_id: account.id, year: today.year, month: today.month})
 
-    assert html =~ "Balanço 3 meses"
-    assert html =~ "Balanço 6 meses"
-    assert html =~ "Balanço 12 meses"
-    # 3 months trailing: this month + last month + two months back = 200+50+200
-    assert html =~ "R$ 450,00"
-    # 6 and 12 months trailing also pick up four_months_ago's 30,00.
-    assert html =~ "R$ 480,00"
-  end
+      html = conn |> get(~p"/") |> html_response(200)
 
-  test "GET / with no data renders the dashboard", %{conn: conn} do
-    # No accounts/balances/transactions: exercises the empty-history projection fallback.
-    conn = get(conn, ~p"/")
-    assert html_response(conn, 200) =~ "Dashboard Financeiro"
-  end
+      refute html =~ "Histórico Mensal"
+      refute html =~ "Balanço 3 meses"
+      refute html =~ "Balanço 6 meses"
+      refute html =~ "Balanço 12 meses"
+      refute html =~ "fixedChart"
+      refute html =~ "variableChart"
+      refute html =~ "Custo de Vida"
+      refute html =~ "Estilo de Vida"
+    end
 
-  test "GET / factors active installments into projections", %{conn: conn} do
-    account = account_fixture()
-    today = Date.utc_today()
+    test "chart data holds the last 12 real months ending in the current one, with no projections",
+         %{conn: conn} do
+      conn = get(conn, ~p"/")
+      today = Date.utc_today()
 
-    balance_fixture(%{
-      account_id: account.id,
-      year: today.year,
-      month: today.month,
-      final_balance: "1000.00"
-    })
+      refute conn.assigns.chart_data =~ "is_projection"
 
-    # Active group: starts this month, spans into the projected months.
-    {:ok, _group} =
-      CashLens.Installments.create_installment_group(%{
-        description_pattern: "PROJ (6x)",
-        total_amount: "600.00",
-        installments: 6,
-        start_date: Date.new!(today.year, today.month, 1)
-      })
+      series = Jason.decode!(conn.assigns.chart_data)
+      assert length(series) == 12
 
-    # A group with no total_amount exercises the nil branch of the projection helper.
-    {:ok, _g2} =
-      CashLens.Installments.create_installment_group(%{
-        description_pattern: "SEM VALOR (3x)",
-        installments: 3,
-        start_date: Date.new!(today.year, today.month, 1)
-      })
+      assert List.last(series)["year"] == today.year
+      assert List.last(series)["month"] == today.month
 
-    conn = get(conn, ~p"/")
-    assert html_response(conn, 200) =~ "Dashboard Financeiro"
+      for item <- series do
+        assert item["year"] * 12 + item["month"] <= today.year * 12 + today.month
+      end
+    end
+
+    test "assigns are limited to what the simplified dashboard needs", %{conn: conn} do
+      conn = get(conn, ~p"/")
+
+      for key <- [
+            :total_balance,
+            :monthly_income,
+            :monthly_expenses,
+            :monthly_balance,
+            :summary_month,
+            :chart_data,
+            :accounts
+          ] do
+        assert Map.has_key?(conn.assigns, key)
+      end
+
+      for key <- [
+            :fixed_data,
+            :variable_data,
+            :historical,
+            :trailing_balance_3m,
+            :trailing_balance_6m,
+            :trailing_balance_12m,
+            :has_live_balance?
+          ] do
+        refute Map.has_key?(conn.assigns, key)
+      end
+    end
   end
 
   test "GET /.well-known/appspecific/com.chrome.devtools.json", %{conn: conn} do

@@ -372,10 +372,7 @@ window.addEventListener("load", () => {
               backgroundColor: 'rgba(59, 130, 246, 0.1)',
               borderWidth: 3,
               fill: true,
-              tension: 0.4,
-              segment: {
-                borderDash: ctx => history[ctx.p1DataIndex].is_projection ? [6, 6] : []
-              }
+              tension: 0.4
             },
             {
               label: 'Entradas',
@@ -383,8 +380,7 @@ window.addEventListener("load", () => {
               borderColor: 'rgb(34, 197, 94)',
               borderWidth: 2,
               borderDash: [5, 5],
-              tension: 0.4,
-              pointStyle: history.map(item => item.is_projection ? false : 'circle')
+              tension: 0.4
             },
             {
               label: 'Saídas',
@@ -392,52 +388,19 @@ window.addEventListener("load", () => {
               borderColor: 'rgb(239, 68, 68)',
               borderWidth: 2,
               borderDash: [5, 5],
-              tension: 0.4,
-              pointStyle: history.map(item => item.is_projection ? false : 'circle')
+              tension: 0.4
             },
             {
               label: 'Balanço do Mês (Líquido)',
               type: 'bar',
               data: history.map(item => item.balance),
-              backgroundColor: history.map(item => {
-                if (item.is_projection) return 'rgba(156, 163, 175, 0.2)';
-                return item.balance >= 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)';
-              }),
+              backgroundColor: history.map(item =>
+                item.balance >= 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+              ),
               borderRadius: 4
             }
           ]
         },
-        plugins: [{
-          id: 'verticalLine',
-          beforeDraw: (chart) => {
-            const firstProjectionIndex = history.findIndex(h => h.is_projection);
-            if (firstProjectionIndex === -1) return;
-
-            const {ctx, chartArea: {top, bottom}, scales: {x}} = chart;
-            const xPos = x.getPixelForValue(labels[firstProjectionIndex]) - (x.getPixelForValue(labels[firstProjectionIndex]) - x.getPixelForValue(labels[firstProjectionIndex-1])) / 2;
-
-            // Highlight Background for projection
-            ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
-            ctx.fillRect(xPos, top, chart.chartArea.right - xPos, bottom - top);
-
-            // Draw Vertical Line
-            ctx.beginPath();
-            ctx.setLineDash([5, 5]);
-            ctx.moveTo(xPos, top);
-            ctx.lineTo(xPos, bottom);
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = 'rgba(156, 163, 175, 0.5)';
-            ctx.stroke();
-            
-            // Label for projection
-            ctx.fillStyle = 'rgba(156, 163, 175, 0.8)';
-            ctx.font = 'bold 10px sans-serif';
-            ctx.textAlign = 'left';
-            ctx.fillText('PROJEÇÃO (Média 12m)', xPos + 10, top + 20);
-            ctx.restore();
-          }
-        }],
         options: {
           responsive: true,
           maintainAspectRatio: false,
@@ -447,7 +410,7 @@ window.addEventListener("load", () => {
               radius: (ctx) => {
                 const item = history[ctx.dataIndex];
                 if (`${item.month}/${item.year}` === currentMonthLabel) return 8;
-                return item.is_projection ? 0 : 3;
+                return 3;
               },
               hoverRadius: 10,
               backgroundColor: (ctx) => {
@@ -486,80 +449,4 @@ window.addEventListener("load", () => {
     }
   }
 
-  const initCategoryChart = (canvasId) => {
-    const el = document.getElementById(canvasId);
-    if (!el) return;
-
-    const rawData = el.getAttribute('data-categories');
-    if (!rawData) return;
-
-    const history = JSON.parse(rawData);
-    if (history.length === 0) return;
-
-    const allCategories = [...new Set(history.flatMap(h => h.categories.map(c => c.name)))].sort();
-    const labels = history.map(h => `${h.month}/${h.year}`);
-    
-    const colors = [
-      'rgba(59, 130, 246, 0.7)', 'rgba(16, 185, 129, 0.7)', 'rgba(245, 158, 11, 0.7)', 
-      'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(236, 72, 153, 0.7)', 
-      'rgba(20, 184, 166, 0.7)', 'rgba(249, 115, 22, 0.7)', 'rgba(107, 114, 128, 0.7)', 
-      'rgba(14, 165, 233, 0.7)', 'rgba(168, 85, 247, 0.7)', 'rgba(217, 70, 239, 0.7)', 
-      'rgba(244, 63, 94, 0.7)', 'rgba(101, 163, 13, 0.7)', 'rgba(234, 179, 8, 0.7)', 
-      'rgba(2, 132, 199, 0.7)', 'rgba(71, 85, 105, 0.7)', 'rgba(190, 18, 60, 0.7)', 
-      'rgba(15, 118, 110, 0.7)', 'rgba(67, 56, 202, 0.7)'
-    ];
-
-    const datasets = allCategories.map((catName, index) => {
-      const color = colors[index % colors.length];
-      return {
-        label: catName,
-        data: history.map(h => {
-          const found = h.categories.filter(c => c.name === catName);
-          return found.reduce((acc, c) => acc + c.total, 0);
-        }),
-        borderColor: color,
-        backgroundColor: color.replace('0.7', '0.1'),
-        borderWidth: 2,
-        pointRadius: 3,
-        tension: 0.3,
-        fill: false
-      };
-    });
-
-    const chart = new Chart(el, {
-      type: 'line',
-      data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { size: 10, weight: 'bold' } } },
-          tooltip: {
-            itemSort: (a, b) => b.raw - a.raw,
-            filter: (item) => item.raw > 0,
-            callbacks: {
-              label: (context) => {
-                const val = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
-                return `${context.dataset.label}: ${val}`;
-              }
-            }
-          }
-        },
-        scales: {
-          x: { grid: { display: false } },
-          y: { 
-            beginAtZero: true,
-            ticks: {
-              callback: (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value)
-            }
-          }
-        }
-      }
-    });
-    console.debug("Category chart initialized", chart.id);
-  };
-
-  initCategoryChart('fixedChart');
-  initCategoryChart('variableChart');
 });

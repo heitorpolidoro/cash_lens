@@ -7,6 +7,8 @@ defmodule CashLensWeb.PageController do
   alias CashLens.Pluggy.LivePreviewCache
   alias CashLens.Transactions
 
+  @history_months 12
+
   def home(conn, _params) do
     # Get all accounts
     all_accounts = Accounts.list_accounts()
@@ -14,48 +16,17 @@ defmodule CashLensWeb.PageController do
     # Get latest balances per account (triggers read-time self-healing check internally)
     latest_balances = Accounting.list_latest_balances()
 
-    # Get historical data for the chart (ensure we have 12 months of history)
+    # Real history only: the last 12 months up to and including the current one.
     today = Date.utc_today()
-    {start_m, start_y} = calculate_start_period(today, 11)
+    {start_m, start_y} = calculate_start_period(today, @history_months - 1)
 
     historical_balances = Accounting.get_historical_balances(limit: 24)
     historical_summary = Transactions.get_historical_summary(limit: 24)
 
     historical =
-      generate_historical_series(
-        start_y,
-        start_m,
-        today.year,
-        today.month,
-        historical_balances,
-        historical_summary
-      )
+      generate_historical_series(start_y, start_m, historical_balances, historical_summary)
 
-    # Trailing sums for the "Histórico Mensal" card's 3/6/12-month badges.
-    # `historical` always holds exactly the last 12 real (non-projection)
-    # months, oldest first, so the last N entries are the trailing window.
-    trailing_balance_3m = trailing_balance_sum(historical, 3)
-    trailing_balance_6m = trailing_balance_sum(historical, 6)
-    trailing_balance_12m = trailing_balance_sum(historical, 12)
-
-    # 1. Calculate Averages (past 12 months)
-    {avg_income, avg_expenses} = calculate_averages(historical_summary)
-
-    # 2. Get active installment groups to factor into projections
-    active_groups = CashLens.Installments.list_installment_groups()
-
-    # 3. Generate 6 Projection Months
-    # coveralls-ignore-start — the historical series is always non-empty, so the
-    # fallback map is a defensive default that never executes in practice.
-    last_real =
-      List.last(historical) ||
-        %{final_balance: 0.0, year: Date.utc_today().year, month: Date.utc_today().month}
-
-    # coveralls-ignore-stop
-
-    projections = generate_projections(last_real, avg_income, avg_expenses, active_groups, 6)
-
-    chart_data = Jason.encode!(historical ++ projections)
+    chart_data = Jason.encode!(historical)
 
     # A linked account's Pluggy-reported balance, when available, is more
     # trustworthy than "persisted balance + estimated live-transaction
@@ -83,24 +54,17 @@ defmodule CashLensWeb.PageController do
           bank: account.bank,
           color: account.color,
           icon: account.icon,
-          is_closed: account.is_closed,
-          is_credit_card: account.is_credit_card,
           uses_pluggy_balance?: not is_nil(pluggy_balance),
           display_balance:
             pluggy_balance || if(balance, do: balance.final_balance, else: account.balance)
         }
       end)
 
-    # "Saldo Atual" excludes credit cards (already filtered out) and closed accounts
+    # "Saldo Atual" excludes credit cards and closed accounts (already filtered out)
     total_balance =
-      accounts_with_data
-      |> Enum.reject(& &1.is_closed)
-      |> Enum.reduce(Decimal.new("0"), fn a, acc -> Decimal.add(acc, a.display_balance) end)
-
-    historical_categories = Transactions.get_historical_category_summary(limit: 12)
-
-    fixed_data = extract_category_data(historical_categories, "fixed")
-    variable_data = extract_category_data(historical_categories, "variable")
+      Enum.reduce(accounts_with_data, Decimal.new("0"), fn a, acc ->
+        Decimal.add(acc, a.display_balance)
+      end)
 
     # Live (unsaved) Pluggy entries bring "Saldo Atual" up to date with
     # activity since the last real import/sync — it only counts accounts
@@ -147,14 +111,7 @@ defmodule CashLensWeb.PageController do
       monthly_balance: Decimal.sub(current_total_balance, initial_balance_total),
       accounts: accounts_with_data,
       summary_month: month_name,
-      chart_data: chart_data,
-      fixed_data: fixed_data,
-      variable_data: variable_data,
-      historical: historical,
-      trailing_balance_3m: trailing_balance_3m,
-      trailing_balance_6m: trailing_balance_6m,
-      trailing_balance_12m: trailing_balance_12m,
-      has_live_balance?: live_balance_entries != [] or not Enum.empty?(pluggy_balance_account_ids)
+      chart_data: chart_data
     )
   end
 
@@ -177,39 +134,18 @@ defmodule CashLensWeb.PageController do
   defp sum_amounts(entries),
     do: Enum.reduce(entries, Decimal.new("0"), &Decimal.add(&2, &1.amount))
 
-  defp trailing_balance_sum(historical, months) do
-    historical
-    |> Enum.take(-months)
-    |> Enum.reduce(0.0, fn item, acc -> acc + item.balance end)
-  end
-
-  defp extract_category_data(historical_categories, type) do
-    historical_categories
-    |> Enum.map(&filter_and_format_categories(&1, type))
-    |> Jason.encode!()
-  end
-
-  defp filter_and_format_categories(month_data, type) do
-    Map.update!(month_data, :categories, fn categories ->
-      categories
-      |> Enum.filter(&(&1.type == type))
-      |> Enum.map(fn cat -> Map.put(cat, :total, Decimal.to_float(cat.total)) end)
-    end)
-  end
-
   defp calculate_start_period(date, months_back) do
     m = date.month - months_back
     if m <= 0, do: {m + 12, date.year - 1}, else: {m, date.year}
   end
 
-  defp generate_historical_series(start_y, start_m, _end_y, _end_m, balances, summaries) do
+  defp generate_historical_series(start_y, start_m, balances, summaries) do
     # Generate a list of {m, y} pairs for the range (exactly 12 months)
     periods =
-      Enum.reduce(0..11, [], fn i, acc ->
+      Enum.map(0..(@history_months - 1), fn i ->
         m = start_m + i
         y = start_y + div(m - 1, 12)
-        m = rem(m - 1, 12) + 1
-        acc ++ [{m, y}]
+        {rem(m - 1, 12) + 1, y}
       end)
 
     Enum.map(periods, fn {m, y} ->
@@ -228,8 +164,7 @@ defmodule CashLensWeb.PageController do
         final_balance: final_val,
         income: Decimal.to_float(summary.income),
         expenses: Decimal.to_float(summary.expenses),
-        balance: Decimal.to_float(summary.balance),
-        is_projection: false
+        balance: Decimal.to_float(summary.balance)
       }
     end)
     # Fill in missing final_balances by carrying forward
@@ -242,63 +177,4 @@ defmodule CashLensWeb.PageController do
       end
     end)
   end
-
-  defp calculate_averages([]), do: {0.0, 0.0}
-
-  defp calculate_averages(summary) do
-    count = length(summary)
-    total_income = Enum.reduce(summary, 0.0, fn s, acc -> acc + Decimal.to_float(s.income) end)
-
-    total_expenses =
-      Enum.reduce(summary, 0.0, fn s, acc -> acc + Decimal.to_float(s.expenses) end)
-
-    {total_income / count, total_expenses / count}
-  end
-
-  defp generate_projections(last_real, avg_income, avg_expenses, active_groups, count) do
-    Enum.reduce(1..count, {[], last_real}, fn _, {acc_proj, last} ->
-      {next_m, next_y} =
-        if last.month == 12, do: {1, last.year + 1}, else: {last.month + 1, last.year}
-
-      # Factor in installments for this specific future month
-      installment_impact = installment_impact_for(active_groups, next_y, next_m)
-
-      proj_expenses = avg_expenses + installment_impact
-      proj_balance = avg_income - proj_expenses
-      proj_final = last.final_balance + proj_balance
-
-      new_proj = %{
-        year: next_y,
-        month: next_m,
-        final_balance: proj_final,
-        income: avg_income,
-        expenses: proj_expenses,
-        balance: proj_balance,
-        is_projection: true
-      }
-
-      {acc_proj ++ [new_proj], new_proj}
-    end)
-    |> elem(0)
-  end
-
-  # Projected installment burden for a given future month: assumes one installment
-  # is paid per month, counting only groups still active in that month.
-  defp installment_impact_for(active_groups, year, month) do
-    active_groups
-    |> Enum.filter(&group_active_in_month?(&1, year, month))
-    |> Enum.reduce(0.0, fn group, sum -> sum + group_installment_value(group) end)
-  end
-
-  defp group_active_in_month?(group, year, month) do
-    months_since_start =
-      (year - group.start_date.year) * 12 + (month - group.start_date.month)
-
-    months_since_start >= 0 and months_since_start < group.installments
-  end
-
-  defp group_installment_value(%{total_amount: nil}), do: 0.0
-
-  defp group_installment_value(%{total_amount: total, installments: count}),
-    do: Decimal.to_float(total) / count
 end

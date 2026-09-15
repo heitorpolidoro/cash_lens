@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CashLens — Dashboard com Tema Original Claro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+  <!-- Top Navbar (Tema Claro Oficial do CashLens) -->
+  <header class="border-b border-slate-200 bg-white sticky top-0 z-50 px-6 py-4 shadow-sm">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-8">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl font-black tracking-tight text-blue-600">CashLens</span>
+        </div>
+
+        <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+          <a href="#" class="px-3 py-2 rounded-lg bg-slate-100 text-blue-600 font-bold">Painel</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Transações</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Saldos</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Contas</a>
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-sm transition shadow-sm flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          Importar Extrato
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+
+    <!-- Header Section -->
+    <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Dashboard Financeiro</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Visão consolidada do mês corrente e evolução real no tema padrão</p>
+      </div>
+      <span class="text-xs font-bold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+        Setembro 2026
+      </span>
+    </div>
+
+    <!-- KPI Row (4 Cards) com visual clássico do CashLens -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Saldo Atual -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Saldo Atual</span>
+        <div class="text-2xl font-black text-blue-600 mt-2">R$ 46.259,96</div>
+        <div class="text-xs text-slate-400 mt-1">Soma das contas ativas</div>
+      </div>
+
+      <!-- Receitas -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-emerald-600">Receitas (Setembro)</span>
+        <div class="text-2xl font-black text-emerald-600 mt-2">R$ 15.420,00</div>
+        <div class="text-xs text-slate-400 mt-1">Entradas do mês</div>
+      </div>
+
+      <!-- Despesas -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-rose-600">Despesas (Setembro)</span>
+        <div class="text-2xl font-black text-rose-600 mt-2">R$ 8.150,40</div>
+        <div class="text-xs text-slate-400 mt-1">Saídas e faturas pagas</div>
+      </div>
+
+      <!-- Balanço -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Balanço (Setembro)</span>
+        <div class="text-2xl font-black text-emerald-600 mt-2">+R$ 7.269,60</div>
+        <div class="text-xs text-slate-400 mt-1">Resultado líquido do mês</div>
+      </div>
+    </div>
+
+    <!-- Main 2-Column Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      
+      <!-- Left: Evolução Financeira Consolidada (O GRÁFICO ORIGINAL EXATO NO FUNDO CLARO) -->
+      <div class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xs font-black uppercase tracking-wider text-slate-500">Evolução Financeira Consolidada</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Histórico real dos últimos 12 meses (sem projeções)</p>
+          </div>
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600">
+            Últimos 12 meses
+          </span>
+        </div>
+
+        <div class="h-80 w-full pt-2">
+          <canvas id="balanceChartExactOriginal"></canvas>
+        </div>
+      </div>
+
+      <!-- Right: Minhas Contas -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 tracking-tight">Minhas Contas</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Saldo por instituição</p>
+          </div>
+          <a href="#" class="text-xs font-bold text-blue-600 hover:underline">Ver todas</a>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Conta 1 -->
+          <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50/70 border border-slate-200 hover:bg-slate-100 transition">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-[#ec7000] flex items-center justify-center font-bold text-white text-sm shadow-sm">
+                It
+              </div>
+              <div>
+                <p class="font-bold text-sm text-slate-900">Itaú Uniclass</p>
+                <p class="text-xs text-slate-500">Conta Corrente</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <p class="font-extrabold text-sm text-slate-900">R$ 20.000,00</p>
+            </div>
+          </div>
+
+          <!-- Conta 2 -->
+          <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50/70 border border-slate-200 hover:bg-slate-100 transition">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-[#820ad1] flex items-center justify-center font-bold text-white text-sm shadow-sm">
+                Nu
+              </div>
+              <div>
+                <p class="font-bold text-sm text-slate-900">Nubank</p>
+                <p class="text-xs text-slate-500">Conta Digital</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <p class="font-extrabold text-sm text-slate-900">R$ 15.000,00</p>
+            </div>
+          </div>
+
+          <!-- Conta 3 -->
+          <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50/70 border border-slate-200 hover:bg-slate-100 transition">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-[#009ee3] flex items-center justify-center font-bold text-white text-sm shadow-sm">
+                MP
+              </div>
+              <div>
+                <p class="font-bold text-sm text-slate-900">Mercado Pago</p>
+                <p class="text-xs text-slate-500">Conta Pagamento</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <p class="font-extrabold text-sm text-slate-900">R$ 11.259,96</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+          <span>Total em Contas</span>
+          <span class="font-black text-slate-900 text-sm">R$ 46.259,96</span>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    // Dados fiéis aos do print do usuário
+    const history = [
+      { month: 10, year: 2025, final_balance: 24800, income: 40000, expenses: 34500, balance: 5500 },
+      { month: 11, year: 2025, final_balance: 38000, income: 15000, expenses: 32000, balance: -17000 },
+      { month: 12, year: 2025, final_balance: 14500, income: 0,     expenses: 28000, balance: -28000 },
+      { month: 1,  year: 2026, final_balance: 3879.93, income: 21723.23, expenses: 36161.84, balance: -14438.61 },
+      { month: 2,  year: 2026, final_balance: 15200, income: 40200, expenses: 30000, balance: 10200 },
+      { month: 3,  year: 2026, final_balance: 21000, income: 47200, expenses: 44300, balance: 2900 },
+      { month: 4,  year: 2026, final_balance: 18900, income: 40500, expenses: 46500, balance: -6000 },
+      { month: 5,  year: 2026, final_balance: 7500,  income: 32400, expenses: 39500, balance: -7100 },
+      { month: 6,  year: 2026, final_balance: 19100, income: 54300, expenses: 43200, balance: 11100 },
+      { month: 7,  year: 2026, final_balance: 27200, income: 42300, expenses: 34800, balance: 7500 },
+      { month: 8,  year: 2026, final_balance: 23600, income: 37000, expenses: 40800, balance: -3800 },
+      { month: 9,  year: 2026, final_balance: 24200, income: 0,     expenses: 0,     balance: 0 }
+    ];
+
+    const labels = history.map(item => `${item.month}/${item.year}`);
+    const ctx = document.getElementById('balanceChartExactOriginal').getContext('2d');
+
+    // EXATA CONFIGURAÇÃO DO CASH LENS ORIGINAL (SEM PROJEÇÃO)
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Saldo Final',
+            data: history.map(item => item.final_balance),
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.08)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4,
+            pointBackgroundColor: 'rgb(59, 130, 246)',
+            pointRadius: 4.5,
+            pointHoverRadius: 7,
+            order: 1
+          },
+          {
+            label: 'Entradas',
+            data: history.map(item => item.income),
+            borderColor: 'rgb(34, 197, 94)',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            tension: 0.4,
+            pointBackgroundColor: '#000000',
+            pointBorderColor: 'rgb(34, 197, 94)',
+            pointBorderWidth: 2,
+            pointRadius: 4,
+            order: 2
+          },
+          {
+            label: 'Saídas',
+            data: history.map(item => item.expenses),
+            borderColor: 'rgb(239, 68, 68)',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            tension: 0.4,
+            pointBackgroundColor: '#000000',
+            pointBorderColor: 'rgb(239, 68, 68)',
+            pointBorderWidth: 2,
+            pointRadius: 4,
+            order: 3
+          },
+          {
+            label: 'Balanço do Mês (Líquido)',
+            type: 'bar',
+            data: history.map(item => item.balance),
+            backgroundColor: history.map(item => 
+              item.balance >= 0 ? 'rgba(34, 197, 94, 0.45)' : 'rgba(239, 68, 68, 0.45)'
+            ),
+            borderRadius: 4,
+            order: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              color: '#334155',
+              font: { size: 12, weight: '600' },
+              boxWidth: 16,
+              padding: 16
+            }
+          },
+          tooltip: {
+            backgroundColor: '#1e293b',
+            titleColor: '#ffffff',
+            bodyColor: '#f1f5f9',
+            borderColor: '#334155',
+            borderWidth: 1,
+            padding: 12,
+            boxPadding: 6,
+            callbacks: {
+              label: function(context) {
+                return ` ${context.dataset.label}: R$ ${context.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: '#f1f5f9' },
+            ticks: { color: '#64748b', font: { size: 11 } }
+          },
+          y: {
+            grid: { color: '#f1f5f9' },
+            ticks: {
+              color: '#64748b',
+              font: { size: 11 },
+              callback: function(v) { return 'R$ ' + v.toLocaleString('pt-BR'); }
+            }
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>

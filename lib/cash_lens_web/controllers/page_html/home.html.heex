@@ -1,247 +1,138 @@
-<div class="py-6 space-y-8">
-  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-    <h1 class="text-3xl font-bold text-base-content">Dashboard Financeiro</h1>
-    <div class="flex gap-2">
+<div class="py-6 space-y-6">
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Dashboard Financeiro</h1>
+      <p class="text-xs text-slate-500 mt-0.5">
+        Visão consolidada do mês corrente e evolução real dos últimos 12 meses
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="text-xs font-bold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+        {@summary_month}
+      </span>
       <.link href={~p"/transactions?open_import=true"} class="btn btn-outline btn-sm">
         <.icon name="hero-arrow-up-tray" class="size-4 mr-1" /> Importar Extrato
       </.link>
     </div>
   </div>
+  
+<!-- KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Saldo Atual</span>
+      <div class="text-2xl font-black text-blue-600 mt-2">{format_currency(@total_balance)}</div>
+      <div class="text-xs text-slate-400 mt-1">Soma das contas ativas</div>
+    </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-    <!-- Card de Saldo Atual -->
-    <div class="stats shadow bg-base-100 border border-base-300">
-      <div class="stat">
-        <div class="stat-title flex items-center gap-1">
-          Saldo Atual <.live_data_badge :if={@has_live_balance?} />
-        </div>
-        <div class="stat-value text-primary font-black text-2xl">
-          {format_currency(@total_balance)}
-        </div>
-        <div class="stat-desc">Soma de todas as contas</div>
+    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <span class="text-xs font-bold uppercase tracking-wider text-emerald-600">
+        Receitas ({@summary_month})
+      </span>
+      <div class="text-2xl font-black text-emerald-600 mt-2">
+        {format_currency(@monthly_income)}
       </div>
+      <div class="text-xs text-slate-400 mt-1">Entradas do mês</div>
     </div>
-    
-<!-- Card de Receitas -->
-    <div class="stats shadow bg-base-100 border border-base-300">
-      <div class="stat">
-        <div class="stat-title text-success flex items-center gap-1">
-          Receitas ({@summary_month})
-        </div>
-        <div class="stat-value text-success font-black text-2xl">
-          {format_currency(@monthly_income)}
-        </div>
-        <div class="stat-desc">Ganhos no mês selecionado</div>
+
+    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <span class="text-xs font-bold uppercase tracking-wider text-rose-600">
+        Despesas ({@summary_month})
+      </span>
+      <div class="text-2xl font-black text-rose-600 mt-2">
+        {format_currency(@monthly_expenses)}
       </div>
+      <div class="text-xs text-slate-400 mt-1">Saídas do mês</div>
     </div>
-    
-<!-- Card de Despesas -->
-    <div class="stats shadow bg-base-100 border border-base-300">
-      <div class="stat">
-        <div class="stat-title text-error flex items-center gap-1">
-          Despesas ({@summary_month})
-        </div>
-        <div class="stat-value text-error font-black text-2xl">
-          {format_currency(@monthly_expenses)}
-        </div>
-        <div class="stat-desc">Gastos no mês selecionado</div>
+
+    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-500">
+        Balanço ({@summary_month})
+      </span>
+      <div class={[
+        "text-2xl font-black mt-2",
+        if(Decimal.negative?(@monthly_balance), do: "text-rose-600", else: "text-emerald-600")
+      ]}>
+        {format_currency(@monthly_balance)}
       </div>
-    </div>
-    
-<!-- Card de Balanço -->
-    <div class="stats shadow bg-base-100 border border-base-300">
-      <div class="stat">
-        <div class="stat-title flex items-center gap-1">
-          Balanço ({@summary_month}) <.live_data_badge :if={@has_live_balance?} />
-        </div>
-        <div class={[
-          "stat-value font-black text-2xl",
-          if(Decimal.gt?(@monthly_balance, 0), do: "text-success", else: "text-error")
-        ]}>
-          {format_currency(@monthly_balance)}
-        </div>
-        <div class="stat-desc">Resultado no mês</div>
-      </div>
+      <div class="text-xs text-slate-400 mt-1">Resultado líquido do mês</div>
     </div>
   </div>
   
-<!-- Evolução Financeira (Gráfico) -->
-  <div class="card bg-base-100 shadow-sm border border-base-300">
-    <div class="card-body p-6">
-      <h2 class="card-title text-base-content mb-4 uppercase text-xs opacity-50 font-black">
-        Evolução Financeira Consolidada
-      </h2>
-      <div class="w-full h-80">
+<!-- Evolução Financeira + Minhas Contas -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+    <div class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xs font-black uppercase tracking-wider text-slate-500">
+            Evolução Financeira Consolidada
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Histórico real, sem projeções</p>
+        </div>
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600">
+          Últimos 12 meses
+        </span>
+      </div>
+      <div class="w-full h-80 pt-2">
         <canvas id="balanceChart" data-history={@chart_data}></canvas>
       </div>
     </div>
-  </div>
-  
-<!-- Monthly History -->
-  <div class="card bg-base-100 shadow-sm border border-base-300">
-    <div class="card-body p-6">
-      <h2 class="card-title text-base-content mb-4 uppercase text-xs opacity-50 font-black">
-        Histórico Mensal
-      </h2>
-      <div class="grid grid-cols-3 gap-3 mb-4">
-        <div class="rounded-lg border border-base-300 px-3 py-2">
-          <div class="text-xs uppercase opacity-50 font-black">Balanço 3 meses</div>
-          <div class={[
-            "font-black text-lg",
-            if(@trailing_balance_3m >= 0, do: "text-success", else: "text-error")
-          ]}>
-            {format_currency(@trailing_balance_3m)}
-          </div>
-        </div>
-        <div class="rounded-lg border border-base-300 px-3 py-2">
-          <div class="text-xs uppercase opacity-50 font-black">Balanço 6 meses</div>
-          <div class={[
-            "font-black text-lg",
-            if(@trailing_balance_6m >= 0, do: "text-success", else: "text-error")
-          ]}>
-            {format_currency(@trailing_balance_6m)}
-          </div>
-        </div>
-        <div class="rounded-lg border border-base-300 px-3 py-2">
-          <div class="text-xs uppercase opacity-50 font-black">Balanço 12 meses</div>
-          <div class={[
-            "font-black text-lg",
-            if(@trailing_balance_12m >= 0, do: "text-success", else: "text-error")
-          ]}>
-            {format_currency(@trailing_balance_12m)}
-          </div>
-        </div>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="table table-xs w-full">
-          <thead>
-            <tr>
-              <th>Mês</th>
-              <th class="text-right">Receitas</th>
-              <th class="text-right">Despesas</th>
-              <th class="text-right">Balanço</th>
-            </tr>
-          </thead>
-          <tbody>
-            <%= for item <- @historical |> Enum.reject(& &1.is_projection) |> Enum.reverse() do %>
-              <tr class="hover">
-                <td class="font-medium">
-                  <.link
-                    navigate={~p"/months/#{item.year}/#{item.month}"}
-                    class="hover:underline font-bold"
-                  >
-                    {month_label(item.month)} {item.year}
-                  </.link>
-                </td>
-                <td class="text-right text-success">{format_currency(item.income)}</td>
-                <td class="text-right text-error">{format_currency(item.expenses)}</td>
-                <td class={[
-                  "text-right font-black",
-                  if(item.balance >= 0, do: "text-success", else: "text-error")
-                ]}>
-                  {format_currency(item.balance)}
-                </td>
-              </tr>
-            <% end %>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    <!-- Gastos Fixos (Gráfico) -->
-    <div class="card bg-base-100 shadow-sm border border-base-300">
-      <div class="card-body p-6">
-        <h2 class="card-title text-base-content uppercase text-xs opacity-50 font-black">
-          Custo de Vida (Gastos Fixos)
-        </h2>
-        <div class="w-full h-80">
-          <canvas id="fixedChart" data-categories={@fixed_data}></canvas>
+    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-slate-900 tracking-tight">Minhas Contas</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Saldo por instituição</p>
         </div>
+        <.link navigate={~p"/accounts"} class="text-xs font-bold text-blue-600 hover:underline">
+          Ver todas
+        </.link>
       </div>
-    </div>
-    
-<!-- Gastos Variáveis (Gráfico) -->
-    <div class="card bg-base-100 shadow-sm border border-base-300">
-      <div class="card-body p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="card-title text-base-content uppercase text-xs opacity-50 font-black">
-            Estilo de Vida (Gastos Variáveis)
-          </h2>
-          <a
-            href="/transactions?category_id=nil"
-            class="text-[10px] link link-primary no-underline font-bold uppercase"
-          >
-            Ver Pendentes
-          </a>
-        </div>
-        <div class="w-full h-80">
-          <canvas id="variableChart" data-categories={@variable_data}></canvas>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <div class="grid grid-cols-1 gap-8">
-    <!-- Seção de Contas -->
-    <div class="card bg-base-100 shadow-sm border border-base-300">
-      <div class="card-body p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="card-title text-base-content">Minhas Contas</h2>
-          <a href="/accounts" class="link link-primary text-sm no-underline hover:underline">
-            Ver todas
-          </a>
-        </div>
-        <div class="space-y-3">
-          <%= for account <- @accounts do %>
-            <.link
-              navigate={~p"/transactions?account_id=#{account.id}&return_to=dashboard"}
-              class={[
-                "flex items-center justify-between p-3 hover:bg-base-200 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-base-300 gap-4",
-                account.is_closed && "opacity-60"
-              ]}
-            >
-              <div class="flex items-center gap-4 min-w-0">
-                <div class="avatar flex-shrink-0">
-                  <div class={"w-10 rounded-full bg-base-300 overflow-hidden flex items-center justify-center #{unless account.icon, do: "placeholder"}"}>
-                    <%= if account.icon && account.icon != "" do %>
-                      <img
-                        src={account.icon}
-                        alt={account.name}
-                        class="w-full h-full object-cover"
-                      />
-                    <% else %>
-                      <div class={"flex items-center justify-center h-full w-full #{if account.color, do: "bg-[#{account.color}]", else: "bg-primary"} text-primary-content font-bold"}>
-                        {String.slice(account.bank || account.name, 0..1)}
-                      </div>
-                    <% end %>
-                  </div>
-                </div>
-                <div class="min-w-0">
-                  <div class="flex items-center gap-1.5 min-w-0">
-                    <p class="font-bold truncate">{account.name}</p>
-                    <span
-                      :if={account.is_closed}
-                      class="badge badge-sm badge-ghost text-[8px] font-black uppercase opacity-60 flex-shrink-0"
-                    >
-                      Encerrada
-                    </span>
-                  </div>
-                  <p class="text-xs opacity-60 truncate">{account.bank}</p>
-                </div>
+      <div class="space-y-3">
+        <.link
+          :for={account <- @accounts}
+          navigate={~p"/transactions?account_id=#{account.id}&return_to=dashboard"}
+          class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50/70 border border-slate-200 hover:bg-slate-100 transition gap-3"
+        >
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 shadow-sm">
+              <img
+                :if={account.icon && account.icon != ""}
+                src={account.icon}
+                alt={account.name}
+                class="w-full h-full object-cover"
+              />
+              <div
+                :if={!(account.icon && account.icon != "")}
+                class={[
+                  "flex items-center justify-center h-full w-full font-bold text-white text-sm",
+                  if(account.color, do: "bg-[#{account.color}]", else: "bg-blue-600")
+                ]}
+              >
+                {String.slice(account.bank || account.name, 0..1)}
               </div>
-              <div class="flex-1"></div>
-              <!-- Espaçador para empurrar o saldo -->
-              <p class="font-black whitespace-nowrap text-right">
-                {format_currency(account.display_balance)}
-              </p>
-            </.link>
-          <% end %>
-          <div :if={Enum.empty?(@accounts)} class="text-center py-4 opacity-50 italic text-sm">
-            Nenhuma conta cadastrada.
+            </div>
+            <div class="min-w-0">
+              <p class="font-bold text-sm text-slate-900 truncate">{account.name}</p>
+              <p class="text-xs text-slate-500 truncate">{account.bank}</p>
+            </div>
           </div>
+          <p class="font-extrabold text-sm text-slate-900 whitespace-nowrap text-right">
+            {format_currency(account.display_balance)}
+          </p>
+        </.link>
+
+        <div
+          :if={Enum.empty?(@accounts)}
+          class="text-center py-4 text-slate-400 italic text-sm"
+        >
+          Nenhuma conta cadastrada.
         </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+        <span>Total em Contas</span>
+        <span class="font-black text-slate-900 text-sm">{format_currency(@total_balance)}</span>
       </div>
     </div>
   </div>
