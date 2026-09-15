@@ -21,7 +21,9 @@ defmodule CashLensWeb.Router do
     get "/.well-known/appspecific/com.chrome.devtools.json", PageController, :chrome_devtools
     get "/credit_card_links", RedirectController, :statements
 
-    live_session :default, layout: {CashLensWeb.Layouts, :app} do
+    live_session :default,
+      layout: {CashLensWeb.Layouts, :app},
+      on_mount: CashLensWeb.ActivePath do
       live "/accounts", AccountLive.Index, :index
       live "/accounts/new", AccountLive.Form, :new
       live "/accounts/:id", AccountLive.Show, :show

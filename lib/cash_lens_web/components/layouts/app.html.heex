@@ -1,437 +1,231 @@
-<div id="app-drawer" class="drawer lg:drawer-open">
+<% current_path = current_path(assigns) %>
+<% today = Date.utc_today() %>
+<% breadcrumb = nav_breadcrumb(current_path, today) %>
+<div id="app-drawer" class="drawer lg:drawer-open bg-[#f8fafc]">
   <input id="my-drawer" type="checkbox" class="drawer-toggle" />
 
-  <div class="drawer-content flex flex-col min-h-screen bg-base-200">
-    <!-- Navbar -->
-    <div class="w-full navbar bg-base-100 border-b border-base-300 shadow-sm sticky top-0 z-30 px-4">
-      <div class="flex-none lg:hidden">
-        <label for="my-drawer" aria-label="open sidebar" class="btn btn-square btn-ghost">
-          <.icon name="hero-bars-3" class="size-6" />
+  <div class="drawer-content flex flex-col min-h-screen min-w-0 bg-[#f8fafc] text-slate-800">
+    <!-- Topbar global -->
+    <header class="h-16 bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-8 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <label
+          for="my-drawer"
+          aria-label="Abrir menu"
+          class="lg:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition cursor-pointer"
+        >
+          <.icon name="hero-bars-3" class="size-5" />
         </label>
-      </div>
-      
-<!-- Mobile Logo -->
-      <div class="flex-1 lg:hidden">
-        <a href="/" class="flex items-center gap-2 pl-2">
-          <span class="text-xl font-black tracking-tight text-primary">CashLens</span>
-        </a>
-      </div>
-      
-<!-- Desktop Breadcrumbs / Spacer -->
-      <div class="flex-1 hidden lg:block">
-        <span class="text-sm font-semibold opacity-60">Controle Financeiro Inteligente</span>
-      </div>
-      
-<!-- Theme Toggle and User Icon -->
-      <div class="flex-none gap-4">
-        <.theme_toggle />
 
-        <div class="avatar placeholder">
-          <div class="bg-neutral text-neutral-content rounded-full w-8">
-            <span class="text-xs">U</span>
-          </div>
+        <div class="flex items-center gap-2 text-xs font-semibold text-slate-500 min-w-0">
+          <%= if breadcrumb do %>
+            <% {group_title, screen_title} = breadcrumb %>
+            <span class="hidden sm:inline truncate">{group_title}</span>
+            <.icon
+              name="hero-chevron-right"
+              class="hidden sm:inline-block size-3.5 text-slate-300"
+            />
+            <span class="text-slate-900 font-bold truncate">{screen_title}</span>
+          <% else %>
+            <span class="text-slate-900 font-bold truncate">CashLens</span>
+          <% end %>
         </div>
       </div>
-    </div>
-    
-<!-- Main Content -->
-    <main class="p-4 sm:p-8 flex-grow">
-      <div class="mx-auto max-w-6xl">
-        <.flash_group flash={@flash} />
-        <%= if assigns[:inner_content] do %>
-          {@inner_content}
-        <% else %>
-          {render_slot(@inner_block)}
-        <% end %>
+
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-xl text-xs font-bold text-slate-700">
+          <.icon name="hero-calendar-days" class="size-3.5 text-slate-500" />
+          {month_name(today.month)} / {today.year}
+        </div>
+
+        <.link
+          navigate={~p"/transactions/new"}
+          class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs transition flex items-center gap-1.5"
+          title="Nova Transação"
+        >
+          <.icon name="hero-plus" class="size-3.5" />
+          <span class="hidden sm:inline">Nova Transação</span>
+        </.link>
+
+        <.link
+          navigate={~p"/transactions?open_import=true"}
+          class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow-sm flex items-center gap-1.5"
+          title="Importar Extratos"
+        >
+          <.icon name="hero-arrow-up-tray" class="size-3.5" />
+          <span class="hidden sm:inline">Importar Extratos</span>
+        </.link>
       </div>
-    </main>
+    </header>
     
-<!-- Footer -->
-    <footer class="footer footer-center p-4 bg-base-100 text-base-content border-t border-base-300 opacity-50 text-xs">
-      <aside>
-        <p>CashLens Finance © 2026 - Controle Financeiro Inteligente</p>
-      </aside>
+<!-- Conteúdo da tela -->
+    <main class="p-4 sm:p-8 flex-1 w-full max-w-7xl mx-auto">
+      <.flash_group flash={@flash} />
+      <%= if assigns[:inner_content] do %>
+        {@inner_content}
+      <% else %>
+        {render_slot(@inner_block)}
+      <% end %>
+    </main>
+
+    <footer class="px-8 py-4 text-[11px] text-slate-400 border-t border-slate-200 bg-white">
+      CashLens © {today.year} — Controle Financeiro Inteligente
     </footer>
   </div>
   
-<!-- Sidebar -->
+<!-- Barra lateral -->
   <div class="drawer-side z-40">
-    <label for="my-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-    <div class="flex flex-col w-72 min-h-full bg-base-100 text-base-content border-r border-base-300 sidebar-container">
-      
-<!-- Sidebar Header / Logo -->
-      <div class="flex items-center justify-between px-6 py-5 border-b border-base-300 header-container">
-        <a href="/" class="flex items-center gap-2 logo-text">
-          <span class="text-2xl font-black tracking-tight text-primary">CashLens</span>
-        </a>
-        <a href="/" class="hidden logo-icon flex items-center justify-center">
-          <span class="text-2xl font-black text-primary">C</span>
-        </a>
-        <button
-          id="sidebar-toggle"
-          class="btn btn-sm btn-circle btn-ghost hidden lg:flex items-center justify-center"
-          type="button"
-          aria-label="Recolher menu"
-        >
-          <.icon name="hero-chevron-double-left" class="size-4" />
-        </button>
-      </div>
-      
-<!-- Navigation Menu -->
-      <ul class="menu p-4 gap-2 flex-grow overflow-y-auto">
-        <!-- Visão Geral -->
-        <li>
-          <details open>
-            <summary class="text-xs font-black uppercase tracking-wider opacity-60 hover:bg-base-200 py-2 px-3 rounded-lg flex items-center justify-between">
-              Visão Geral
-            </summary>
-            <ul class="mt-1 gap-1 pl-2">
-              <li>
-                <a
-                  href="/"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-home" class="size-5" />
-                  <span class="menu-text">Painel</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/balances"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-banknotes" class="size-5" />
-                  <span class="menu-text">Saldos</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/forecast"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-chart-bar" class="size-5" />
-                  <span class="menu-text">Previsão</span>
-                </a>
-              </li>
-            </ul>
-          </details>
-        </li>
-        
-<!-- Operações -->
-        <li>
-          <details open>
-            <summary class="text-xs font-black uppercase tracking-wider opacity-60 hover:bg-base-200 py-2 px-3 rounded-lg flex items-center justify-between">
-              Operações
-            </summary>
-            <ul class="mt-1 gap-1 pl-2">
-              <li>
-                <a
-                  href="/transactions"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-arrows-right-left" class="size-5" />
-                  <span class="menu-text">Transações</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/installments"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-rectangle-group" class="size-5" />
-                  <span class="menu-text">Parcelamentos</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/reimbursements"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-sparkles" class="size-5" />
-                  <span class="menu-text">Reembolsos</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/transfers"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-arrow-path" class="size-5" />
-                  <span class="menu-text">Transferências</span>
-                </a>
-              </li>
-            </ul>
-          </details>
-        </li>
-        
-<!-- Cadastros -->
-        <li>
-          <details open>
-            <summary class="text-xs font-black uppercase tracking-wider opacity-60 hover:bg-base-200 py-2 px-3 rounded-lg flex items-center justify-between">
-              Cadastros
-            </summary>
-            <ul class="mt-1 gap-1 pl-2">
-              <li>
-                <a
-                  href="/accounts"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-credit-card" class="size-5" />
-                  <span class="menu-text">Contas</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/categories"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-tag" class="size-5" />
-                  <span class="menu-text">Categorias</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/statements"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-link" class="size-5" />
-                  <span class="menu-text">Cartão de Crédito</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/pluggy"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-building-library" class="size-5" />
-                  <span class="menu-text">Pluggy</span>
-                </a>
-              </li>
-            </ul>
-          </details>
-        </li>
-        
-<!-- Administração -->
-        <li>
-          <details open>
-            <summary class="text-xs font-black uppercase tracking-wider opacity-60 hover:bg-base-200 py-2 px-3 rounded-lg flex items-center justify-between">
-              Administração
-            </summary>
-            <ul class="mt-1 gap-1 pl-2">
-              <li>
-                <a
-                  href="/admin/exclusion_rules"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-x-circle" class="size-5" />
-                  <span class="menu-text">Regras de Exclusão</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/admin/transfer_rules"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-adjustments-horizontal" class="size-5" />
-                  <span class="menu-text">Regras de Transferência</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/admin/db"
-                  class="font-bold rounded-lg hover:bg-base-200 transition-all py-2.5 px-3 flex items-center gap-3"
-                >
-                  <.icon name="hero-circle-stack" class="size-5" />
-                  <span class="menu-text">Banco de Dados</span>
-                </a>
-              </li>
-            </ul>
-          </details>
-        </li>
-      </ul>
-      
-<!-- Sidebar Footer -->
-      <div class="p-4 border-t border-base-300 flex items-center justify-between gap-4 bg-base-100/50 user-avatar-container">
-        <div class="flex items-center gap-3 min-w-0">
-          <div class="avatar placeholder flex-shrink-0">
-            <div class="bg-neutral text-neutral-content rounded-full w-10">
-              <span class="text-sm font-bold">U</span>
-            </div>
+    <label for="my-drawer" aria-label="Fechar menu" class="drawer-overlay"></label>
+
+    <aside class="sidebar-container flex flex-col justify-between w-64 min-h-full h-screen bg-white border-r border-slate-200">
+      <div class="min-h-0 flex flex-col">
+        <div class="sidebar-header h-16 px-4 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0">
+          <a href="/" class="flex items-center gap-2.5 min-w-0" title="CashLens">
+            <span class="w-8 h-8 shrink-0 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-base">
+              C
+            </span>
+            <span class="menu-label text-xl font-black text-slate-900 tracking-tight">
+              CashLens
+            </span>
+          </a>
+          <button
+            id="sidebar-toggle"
+            type="button"
+            title="Recolher menu"
+            aria-label="Recolher menu"
+            aria-expanded="true"
+            class="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+          >
+            <.icon name="hero-chevron-double-left" class="size-4" />
+          </button>
+        </div>
+
+        <nav class="p-3 space-y-6 overflow-y-auto text-xs font-semibold">
+          <div :for={group <- nav_groups(today)} class="space-y-1">
+            <span class="section-title px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+              {group.title}
+            </span>
+            <a
+              :for={item <- group.items}
+              href={item.path}
+              title={item.label}
+              class={[
+                "sidebar-link flex items-center gap-3 px-3 py-2 rounded-xl transition",
+                if(nav_active?(item, current_path),
+                  do: "bg-blue-50 text-blue-600 font-bold",
+                  else: "text-slate-600 hover:text-blue-600 hover:bg-slate-50"
+                )
+              ]}
+            >
+              <.icon
+                name={item.icon}
+                class={[
+                  "size-4 shrink-0",
+                  if(nav_active?(item, current_path), do: "text-blue-600", else: "text-slate-400")
+                ]}
+              />
+              <span class="menu-label truncate">{item.label}</span>
+            </a>
           </div>
-          <div class="min-w-0 user-details">
-            <p class="font-bold text-sm truncate">Usuário Padrão</p>
-            <p class="text-xs opacity-60 truncate">user@cashlens.com</p>
+        </nav>
+      </div>
+
+      <div class="p-3 border-t border-slate-200 shrink-0">
+        <div class="sidebar-user flex items-center gap-3 p-2 rounded-xl bg-slate-50 border border-slate-200/60">
+          <span class="w-8 h-8 shrink-0 rounded-lg bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">
+            HP
+          </span>
+          <div class="menu-label flex-1 min-w-0">
+            <span class="text-xs font-bold text-slate-900 truncate block">Heitor Polidoro</span>
+            <span class="text-[10px] text-emerald-600 font-extrabold flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Banco Local Conectado
+            </span>
           </div>
         </div>
       </div>
-    </div>
+    </aside>
   </div>
 </div>
 
 <style>
-  /* Base transition for smooth collapsing */
   .sidebar-container {
     transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Collapsed sidebar states */
-  .sidebar-collapsed .logo-text,
-  .sidebar-collapsed .menu li details summary,
-  .sidebar-collapsed .menu li > span,
-  .sidebar-collapsed .menu-text,
-  .sidebar-collapsed .user-details {
+  /* Compact mode: icons only. Applied on the drawer root so both the
+     sidebar and its contents react to a single class. */
+  .sidebar-collapsed .sidebar-container {
+    width: 5rem;
+  }
+
+  .sidebar-collapsed .menu-label,
+  .sidebar-collapsed .section-title {
     display: none !important;
   }
 
-  .sidebar-collapsed .logo-icon {
-    display: flex !important;
-    margin: 0 auto;
+  .sidebar-collapsed .sidebar-header > a {
+    display: none;
   }
 
-  .sidebar-collapsed .header-container {
-    justify-content: center !important;
-    padding: 1.25rem 0 !important;
+  .sidebar-collapsed #sidebar-toggle {
+    transform: rotate(180deg);
   }
 
-  .sidebar-collapsed .sidebar-container {
-    width: 5rem !important; /* 80px */
+  .sidebar-collapsed .sidebar-header,
+  .sidebar-collapsed .sidebar-user,
+  .sidebar-collapsed .sidebar-link {
+    justify-content: center;
   }
 
-  .sidebar-collapsed .menu {
-    padding: 1rem 0.5rem !important;
-  }
-
-  .sidebar-collapsed .menu li {
-    align-items: center;
-  }
-
-  .sidebar-collapsed .menu li details {
-    width: 100%;
-  }
-
-  .sidebar-collapsed .menu li details[open] > summary::after {
-    display: none !important; /* Hide details chevron */
-  }
-
-  .sidebar-collapsed .menu li details > ul {
-    padding-left: 0 !important;
-    margin-left: 0 !important;
-    border-left: none !important;
-  }
-
-  .sidebar-collapsed .menu a {
-    justify-content: center !important;
-    padding: 0.75rem 0 !important;
-    width: 3.5rem;
-    height: 3.5rem;
-    border-radius: 9999px !important;
-  }
-
-  .sidebar-collapsed .menu a .size-5 {
-    margin: 0 !important;
-    width: 1.5rem;
-    height: 1.5rem;
-  }
-
-  .sidebar-collapsed .user-avatar-container {
-    justify-content: center !important;
-    padding: 1rem 0 !important;
+  .sidebar-collapsed nav > div + div {
+    border-top: 1px solid var(--color-slate-200, #e2e8f0);
+    padding-top: 0.75rem;
   }
 </style>
 
 <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const drawer = document.getElementById("app-drawer");
-    const toggleBtn = document.getElementById("sidebar-toggle");
-    const toggleIcon = document.querySelector("#sidebar-toggle span");
+  (() => {
+    const STORAGE_KEY = "sidebar-collapsed";
 
-    // Load initial state from localStorage
-    const isCollapsed = localStorage.getItem("sidebar-collapsed") === "true";
-    if (isCollapsed && drawer) {
-      drawer.classList.add("sidebar-collapsed");
-      if (toggleIcon) {
-        toggleIcon.classList.remove("hero-chevron-double-left");
-        toggleIcon.classList.add("hero-chevron-double-right");
-      }
-    }
+    const isCollapsed = () => localStorage.getItem(STORAGE_KEY) === "true";
 
-    const toggleSidebar = () => {
+    const applyState = () => {
+      const drawer = document.getElementById("app-drawer");
       if (!drawer) return;
-      const collapsed = drawer.classList.toggle("sidebar-collapsed");
-      localStorage.setItem("sidebar-collapsed", collapsed ? "true" : "false");
-      
-      if (toggleIcon) {
-        if (collapsed) {
-          toggleIcon.classList.remove("hero-chevron-double-left");
-          toggleIcon.classList.add("hero-chevron-double-right");
-        } else {
-          toggleIcon.classList.remove("hero-chevron-double-right");
-          toggleIcon.classList.add("hero-chevron-double-left");
-        }
-      }
+
+      const collapsed = isCollapsed();
+      drawer.classList.toggle("sidebar-collapsed", collapsed);
+
+      const button = document.getElementById("sidebar-toggle");
+      if (!button) return;
+
+      const label = collapsed ? "Expandir menu" : "Recolher menu";
+      button.setAttribute("title", label);
+      button.setAttribute("aria-label", label);
+      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
     };
 
-    if (toggleBtn) {
-      toggleBtn.addEventListener("click", toggleSidebar);
-    }
+    // The click handler is delegated from the document and registered once per
+    // page load. Attaching it to the button itself is not safe here: LiveView
+    // patches the layout DOM, which drops any inline guard such as a dataset
+    // flag and leads to the handler being bound more than once.
+    if (!window.sidebarToggleBound) {
+      window.sidebarToggleBound = true;
 
-    const updateActiveLink = () => {
-      const path = window.location.pathname;
-      document.querySelectorAll(".drawer-side .menu a").forEach(link => {
-        const href = link.getAttribute("href");
-        // Exact match for home page, prefix match for other paths
-        if (href === path || (href !== "/" && path.startsWith(href))) {
-          link.classList.add("bg-primary/10", "text-primary");
-          link.classList.remove("hover:bg-base-200");
-          
-          // Auto-expand the parent <details> tag if collapsed
-          const details = link.closest("details");
-          if (details) {
-            details.setAttribute("open", "");
-          }
-        } else {
-          link.classList.remove("bg-primary/10", "text-primary");
-          link.classList.add("hover:bg-base-200");
-        }
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element) || !target.closest("#sidebar-toggle")) return;
+
+        localStorage.setItem(STORAGE_KEY, isCollapsed() ? "false" : "true");
+        applyState();
       });
-    };
-    
-    updateActiveLink();
 
-    // Listen to Phoenix LiveView navigation hooks
-    window.addEventListener("phx:page-loading-stop", () => {
-      // Re-query toggle and bind event because LiveView might re-render parts of layout
-      const currentToggleBtn = document.getElementById("sidebar-toggle");
-      if (currentToggleBtn && !currentToggleBtn.dataset.hasListener) {
-        currentToggleBtn.addEventListener("click", toggleSidebar);
-        currentToggleBtn.dataset.hasListener = "true";
-      }
-      
-      // Keep state in sync after LiveView render
-      const currentDrawer = document.getElementById("app-drawer");
-      const currentToggleIcon = document.querySelector("#sidebar-toggle span");
-      const currentIsCollapsed = localStorage.getItem("sidebar-collapsed") === "true";
-      if (currentDrawer) {
-        if (currentIsCollapsed) {
-          currentDrawer.classList.add("sidebar-collapsed");
-          if (currentToggleIcon) {
-            currentToggleIcon.classList.remove("hero-chevron-double-left");
-            currentToggleIcon.classList.add("hero-chevron-double-right");
-          }
-        } else {
-          currentDrawer.classList.remove("sidebar-collapsed");
-          if (currentToggleIcon) {
-            currentToggleIcon.classList.remove("hero-chevron-double-right");
-            currentToggleIcon.classList.add("hero-chevron-double-left");
-          }
-        }
-      }
-      
-      updateActiveLink();
-    });
-    
-    if (toggleBtn) {
-      toggleBtn.dataset.hasListener = "true";
+      window.addEventListener("phx:page-loading-stop", applyState);
     }
-  });
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", applyState);
+    } else {
+      applyState();
+    }
+  })();
 </script>

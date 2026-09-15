@@ -131,3 +131,13 @@
 - `scan_statement/1` routes through `list_transactions/3`, which runs `CategorySuggester.annotate/1` (full scan) on every debounced keystroke, for data the modal never shows.
 - `Transactions.list_linked_reimbursement_pairs/0` is now dead public API; `save_reimbursement_details` should pattern-match `tx_id` in the clause head.
 - **PRE-EXISTING FINANCIAL-ACCURACY DEFECT, worth its own task.** Confirmed by QA against real data: linking a partial reimbursement marks the expense fully `paid` with no residual record. Example observed: expense -1.000,00 linked to a +400,00 credit leaves both rows `paid` under one link key, and the uncovered R$ 600,00 disappears from every KPI. Lives in the pre-existing `link_reimbursement_group/3`, so outside CL-12's scope, but it silently understates money still owed to the user.
+
+## [CL-19] Modernizar Layout Global e Menu Lateral — 2026-09-15
+- `lib/cash_lens_web/live/hooks/active_path.ex` defines `CashLensWeb.ActivePath`, not `CashLensWeb.Live.Hooks.ActivePath` — module name doesn't mirror the file path.
+- The collapse toggle's `title`/`aria-label` stays "Recolher menu" when already collapsed, and there is no `aria-expanded`.
+- `applyState()` runs on `DOMContentLoaded`, so compact-mode users see a brief flash of the expanded sidebar on cold load.
+- The inline `<script>`/`<style>` (inherited from the old layout) would be better in `assets/js/app.js` / `assets/css/app.css`, as the spec suggested.
+- `nav_active?/2` is evaluated twice per item (anchor class and icon class).
+- (round 2) The toggle regression test asserts markup only and would still pass against the double-binding bug; add a structural assertion on the emitted script (`window.sidebarToggleBound`, `closest("#sidebar-toggle")`) plus a `refute` on `dataset.bound`. The behaviour is inline JS that ExUnit cannot execute and the project has no JS unit-test runner.
+- Collapsed state is applied on `DOMContentLoaded`, so a previously-collapsed sidebar renders expanded then animates closed on every full page load; fix by setting the class on `documentElement` from a blocking head script.
+- `#app-drawer`'s class list is static in the template, so a future patch of that attribute would strip the runtime `sidebar-collapsed` class; hanging state on `<html>` is structurally immune.

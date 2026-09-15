@@ -39,7 +39,7 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       assert {:ok, form_live, html} =
                index_live
-               |> element("a[href='/transactions/new']")
+               |> element("main a[href='/transactions/new']")
                |> render_click()
                |> follow_redirect(conn, ~p"/transactions/new")
 
