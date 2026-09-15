@@ -473,4 +473,248 @@ defmodule CashLens.InstallmentsTest do
       assert Decimal.equal?(total, Decimal.new("0"))
     end
   end
+
+  describe "commitment types" do
+    test "defaults to credit_card so pre-existing groups keep behaving as card purchases" do
+      g = group(%{description_pattern: "LEGADO"})
+      assert g.commitment_type == "credit_card"
+    end
+
+    test "accepts financing and consorcio specific fields" do
+      fin =
+        group(%{
+          description_pattern: "FINANC CAIXA",
+          commitment_type: "financing",
+          institution: "Caixa",
+          interest_rate: "8.5",
+          installments: 360,
+          start_date: ~D[2026-01-10],
+          total_amount: "280000.00"
+        })
+
+      assert fin.commitment_type == "financing"
+      assert fin.institution == "Caixa"
+      assert Decimal.equal?(fin.interest_rate, Decimal.new("8.5"))
+
+      cons =
+        group(%{
+          description_pattern: "CONSORCIO PORTO",
+          commitment_type: "consorcio",
+          credit_letter_amount: "80000.00",
+          is_contemplated: true,
+          contemplated_at: ~D[2026-03-01],
+          installments: 120,
+          start_date: ~D[2026-01-20],
+          total_amount: "102000.00"
+        })
+
+      assert cons.commitment_type == "consorcio"
+      assert cons.is_contemplated
+      assert Decimal.equal?(cons.credit_letter_amount, Decimal.new("80000.00"))
+    end
+
+    test "rejects an unknown commitment type" do
+      {:error, changeset} =
+        Installments.create_installment_group(%{
+          description_pattern: "X",
+          installments: 3,
+          start_date: Date.utc_today(),
+          commitment_type: "leasing"
+        })
+
+      assert "is invalid" in errors_on(changeset).commitment_type
+    end
+
+    test "commitment_type/1 falls back to credit_card when the column is null" do
+      assert Installments.commitment_type(%{commitment_type: nil}) == "credit_card"
+    end
+
+    test "commitment_types/0 lists the supported modalities" do
+      assert Installments.commitment_types() == ["credit_card", "financing", "consorcio"]
+    end
+  end
+
+  describe "global commitment metrics" do
+    setup do
+      today = Date.utc_today()
+      m0 = Date.new!(today.year, today.month, 1)
+
+      card_a =
+        group(%{
+          description_pattern: "CARTAO A",
+          installments: 3,
+          start_date: m0,
+          total_amount: "300.00"
+        })
+
+      card_b =
+        group(%{
+          description_pattern: "CARTAO B",
+          installments: 2,
+          start_date: m0,
+          total_amount: "200.00"
+        })
+
+      fin =
+        group(%{
+          description_pattern: "FINANCIAMENTO X",
+          commitment_type: "financing",
+          installments: 10,
+          start_date: m0,
+          total_amount: "10000.00"
+        })
+
+      cons =
+        group(%{
+          description_pattern: "CONSORCIO Y",
+          commitment_type: "consorcio",
+          installments: 5,
+          start_date: m0,
+          total_amount: "5000.00"
+        })
+
+      %{m0: m0, card_a: card_a, card_b: card_b, fin: fin, cons: cons}
+    end
+
+    test "monthly_commitment/1 breaks the current month down by type with counts", %{m0: m0} do
+      metrics = Installments.monthly_commitment(m0)
+
+      assert Decimal.equal?(metrics.total, Decimal.new("2200.00"))
+      assert Decimal.equal?(metrics.by_type["credit_card"].amount, Decimal.new("200.00"))
+      assert metrics.by_type["credit_card"].count == 2
+      assert Decimal.equal?(metrics.by_type["financing"].amount, Decimal.new("1000.00"))
+      assert metrics.by_type["financing"].count == 1
+      assert Decimal.equal?(metrics.by_type["consorcio"].amount, Decimal.new("1000.00"))
+      assert metrics.by_type["consorcio"].count == 1
+    end
+
+    test "monthly_commitment/1 sums its own breakdown", %{m0: m0} do
+      metrics = Installments.monthly_commitment(m0)
+
+      sum =
+        metrics.by_type
+        |> Map.values()
+        |> Enum.reduce(Decimal.new("0"), fn %{amount: a}, acc -> Decimal.add(acc, a) end)
+
+      assert Decimal.equal?(sum, metrics.total)
+    end
+
+    test "outstanding_balance/1 consolidates the remaining debt per type", %{m0: m0} do
+      balance = Installments.outstanding_balance(m0)
+
+      assert Decimal.equal?(balance.by_type["credit_card"], Decimal.new("500.00"))
+      assert Decimal.equal?(balance.by_type["financing"], Decimal.new("10000.00"))
+      assert Decimal.equal?(balance.by_type["consorcio"], Decimal.new("5000.00"))
+      assert Decimal.equal?(balance.total, Decimal.new("15500.00"))
+    end
+
+    test "outstanding_balance/1 shrinks as months pass", %{m0: m0} do
+      later = Installments.add_months(m0, 2)
+      balance = Installments.outstanding_balance(later)
+
+      # CARTAO A has only its last parcel left, CARTAO B is over.
+      assert Decimal.equal?(balance.by_type["credit_card"], Decimal.new("100.00"))
+    end
+
+    test "cash_flow_relief/1 lists the card purchases ending within 90 days", %{m0: m0} do
+      relief = Installments.cash_flow_relief(m0)
+
+      assert Decimal.equal?(relief.total, Decimal.new("200.00"))
+      assert length(relief.items) == 2
+
+      assert Enum.map(relief.items, & &1.description) == ["CARTAO B", "CARTAO A"]
+
+      assert Enum.map(relief.items, & &1.date) == [
+               Installments.add_months(m0, 1),
+               Installments.add_months(m0, 2)
+             ]
+
+      assert relief.total ==
+               Enum.reduce(relief.items, Decimal.new("0"), fn i, acc ->
+                 Decimal.add(acc, i.amount)
+               end)
+               |> Decimal.round(2)
+    end
+
+    test "monthly_projection/2 stacks each month by type and the parts add up", %{m0: m0} do
+      projection = Installments.monthly_projection(m0, 4)
+
+      assert length(projection) == 4
+      assert Enum.map(projection, & &1.date) == Enum.map(0..3, &Installments.add_months(m0, &1))
+      assert [%{current?: true} | rest] = projection
+      assert Enum.all?(rest, &(not &1.current?))
+
+      for month <- projection do
+        parts =
+          Decimal.add(month.credit_card, month.financing) |> Decimal.add(month.consorcio)
+
+        assert Decimal.equal?(parts, month.total),
+               "stacked parts #{parts} must equal total #{month.total} for #{month.date}"
+      end
+
+      totals = Enum.map(projection, &Decimal.to_string(&1.total, :normal))
+      assert totals == ["2200.00", "2200.00", "2100.00", "2000.00"]
+
+      cards = Enum.map(projection, &Decimal.to_string(&1.credit_card, :normal))
+      assert cards == ["200.00", "200.00", "100.00", "0"]
+    end
+
+    test "monthly_projection/2 month 0 matches monthly_commitment/1", %{m0: m0} do
+      [first | _] = Installments.monthly_projection(m0, 4)
+      assert Decimal.equal?(first.total, Installments.monthly_commitment(m0).total)
+    end
+
+    test "the projection from now on adds up to the outstanding balance", %{m0: m0} do
+      sum =
+        m0
+        |> Installments.monthly_projection(24)
+        |> Enum.reduce(Decimal.new("0"), fn m, acc -> Decimal.add(acc, m.total) end)
+
+      assert Decimal.equal?(sum, Installments.outstanding_balance(m0).total)
+    end
+  end
+
+  describe "suggest_commitment_patterns/1" do
+    test "surfaces recurring unlinked debits from the statement" do
+      acc = account_fixture()
+
+      for date <- [~D[2026-05-10], ~D[2026-06-10], ~D[2026-07-10]] do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-850.00",
+          description: "CONSORCIO PORTO SEGURO",
+          date: date
+        })
+      end
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-12.00",
+        description: "PADARIA",
+        date: ~D[2026-05-11]
+      })
+
+      assert [suggestion] = Installments.suggest_commitment_patterns()
+      assert suggestion.description == "CONSORCIO PORTO SEGURO"
+      assert suggestion.occurrences == 3
+      assert Decimal.equal?(suggestion.amount, Decimal.new("850.00"))
+    end
+
+    test "ignores transactions already linked to a group" do
+      acc = account_fixture()
+      g = group(%{description_pattern: "JA AGRUPADO"})
+
+      for date <- [~D[2026-05-10], ~D[2026-06-10], ~D[2026-07-10]] do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-100.00",
+          description: "JA AGRUPADO",
+          date: date,
+          installment_group_id: g.id
+        })
+      end
+
+      assert Installments.suggest_commitment_patterns() == []
+    end
+  end
 end

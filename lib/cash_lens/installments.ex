@@ -540,4 +540,210 @@ defmodule CashLens.Installments do
         group
     end
   end
+
+  @relief_window_months 3
+  @suggestion_min_occurrences 3
+
+  @doc """
+  The supported commitment modalities, in display order.
+  """
+  def commitment_types, do: InstallmentGroup.commitment_types()
+
+  @doc """
+  First day of the month currently in course (UTC).
+  """
+  def current_month do
+    today = Date.utc_today()
+    Date.new!(today.year, today.month, 1)
+  end
+
+  @doc """
+  What the user owes in `month`, broken down by commitment type.
+
+  Returns `%{total: Decimal.t(), by_type: %{type => %{amount: Decimal.t(), count: non_neg_integer}}}`
+  where `count` is how many commitments of that type have a parcel due in the
+  month. The breakdown always sums back to `:total`.
+  """
+  def monthly_commitment(month \\ current_month()) do
+    groups = list_installment_groups()
+
+    by_type =
+      Map.new(commitment_types(), fn type ->
+        due = groups_of_type_due_in(groups, type, month)
+        {type, %{amount: sum_parcels(due), count: length(due)}}
+      end)
+
+    total =
+      by_type
+      |> Map.values()
+      |> Enum.reduce(Decimal.new("0"), fn %{amount: amount}, acc -> Decimal.add(acc, amount) end)
+
+    %{total: total, by_type: by_type}
+  end
+
+  @doc """
+  Consolidated outstanding debt as of `month`, broken down by commitment type.
+
+  A commitment's remaining debt is its parcel value times the number of parcels
+  still to be billed, counting `month` itself as still due. Summing
+  `monthly_projection/2` from `month` to the end of every plan therefore yields
+  exactly this total.
+  """
+  def outstanding_balance(month \\ current_month()) do
+    groups = list_installment_groups()
+
+    by_type =
+      Map.new(commitment_types(), fn type ->
+        amount =
+          groups
+          |> Enum.filter(&(commitment_type(&1) == type))
+          |> Enum.reduce(Decimal.new("0"), fn g, acc ->
+            Decimal.add(acc, remaining_debt(g, month))
+          end)
+
+        {type, amount}
+      end)
+
+    total =
+      by_type
+      |> Map.values()
+      |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1))
+
+    %{total: total, by_type: by_type}
+  end
+
+  @doc """
+  How much monthly commitment frees up over the next `window` months (90 days by
+  default), because the plans listed bill their last parcel inside that window.
+
+  Returns `%{total: Decimal.t(), items: [...]}` ordered by the month the plan
+  ends. Commitments *starting* inside the window are not netted out: this metric
+  answers "how much breathing room is coming", not "what the net balance will be".
+  """
+  def cash_flow_relief(month \\ current_month(), window \\ @relief_window_months) do
+    last_month = add_months(month, window - 1)
+
+    items =
+      list_installment_groups()
+      |> Enum.filter(&ends_between?(&1, month, last_month))
+      |> Enum.map(fn g ->
+        %{
+          date: month_start(last_installment_date(g)),
+          description: g.description_pattern,
+          commitment_type: commitment_type(g),
+          amount: parcel_value(g)
+        }
+      end)
+      |> Enum.sort_by(& &1.date, Date)
+
+    total = Enum.reduce(items, Decimal.new("0"), fn i, acc -> Decimal.add(acc, i.amount) end)
+
+    %{total: total, items: items}
+  end
+
+  @doc """
+  Projects the monthly commitment for `months` months starting at `month`,
+  split by commitment type so the UI can stack one proportional bar per month.
+
+  Each entry is `%{date:, total:, credit_card:, financing:, consorcio:, current?:}`
+  and the three type amounts always add up to `:total`.
+  """
+  def monthly_projection(month \\ current_month(), months \\ 10) do
+    groups = list_installment_groups()
+    current = current_month()
+
+    Enum.map(0..(months - 1), fn offset ->
+      projected_month(groups, add_months(month, offset), current)
+    end)
+  end
+
+  defp projected_month(groups, month, current) do
+    by_type =
+      Map.new(commitment_types(), fn type ->
+        {type, groups |> groups_of_type_due_in(type, month) |> sum_parcels()}
+      end)
+
+    total =
+      by_type
+      |> Map.values()
+      |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1))
+
+    %{
+      date: month,
+      total: total,
+      credit_card: by_type["credit_card"],
+      financing: by_type["financing"],
+      consorcio: by_type["consorcio"],
+      current?: Date.compare(month, current) == :eq
+    }
+  end
+
+  @doc """
+  Recurring debits in the statement that are not linked to any commitment yet,
+  used by the "new commitment" modal to auto-fill description and amount.
+
+  Only descriptions seen at least #{@suggestion_min_occurrences} times are
+  returned, most frequent first; `amount` is the average absolute value.
+  """
+  def suggest_commitment_patterns(limit \\ 20) do
+    from(t in Transaction,
+      where: is_nil(t.installment_group_id) and t.amount < 0,
+      group_by: t.description,
+      having: count(t.id) >= @suggestion_min_occurrences,
+      order_by: [desc: count(t.id), asc: t.description],
+      limit: ^limit,
+      select: %{description: t.description, occurrences: count(t.id), amount: avg(t.amount)}
+    )
+    |> Repo.all()
+    |> Enum.map(fn s -> %{s | amount: s.amount |> Decimal.abs() |> Decimal.round(2)} end)
+  end
+
+  @doc """
+  The commitment type of a group, defaulting to `"credit_card"` for rows that
+  predate the commitment-type column.
+  """
+  def commitment_type(%{commitment_type: type}) when is_binary(type), do: type
+  def commitment_type(_group), do: "credit_card"
+
+  @doc """
+  Remaining debt of a single commitment as of `month` (inclusive).
+  """
+  def remaining_debt(group, month \\ current_month()) do
+    Decimal.mult(parcel_value(group), remaining_parcels(group, month))
+  end
+
+  @doc """
+  How many parcels of `group` are still to be billed from `month` on (inclusive).
+  """
+  def remaining_parcels(group, month \\ current_month())
+
+  # coveralls-ignore-next-line — defensive: start_date is required, so nil never occurs in practice.
+  def remaining_parcels(%{start_date: nil}, _month), do: 0
+
+  def remaining_parcels(%{start_date: start_date, installments: n}, month) do
+    elapsed = month_diff(month_start(start_date), month)
+    n |> Kernel.-(elapsed) |> min(n) |> max(0)
+  end
+
+  defp groups_of_type_due_in(groups, type, month) do
+    Enum.filter(groups, &(commitment_type(&1) == type and parcel_due_in_month?(&1, month)))
+  end
+
+  defp sum_parcels(groups) do
+    Enum.reduce(groups, Decimal.new("0"), fn g, acc -> Decimal.add(acc, parcel_value(g)) end)
+  end
+
+  defp ends_between?(group, from_month, to_month) do
+    case last_installment_date(group) do
+      %Date{} = date ->
+        month = month_start(date)
+        Date.compare(month, from_month) != :lt and Date.compare(month, to_month) != :gt
+
+      # coveralls-ignore-next-line — defensive: start_date is required, so nil never occurs in practice.
+      _ ->
+        false
+    end
+  end
+
+  defp month_start(%Date{year: y, month: m}), do: Date.new!(y, m, 1)
 end

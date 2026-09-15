@@ -28,4 +28,23 @@ defmodule CashLensWeb.AdminDatabaseLiveTest do
 
     assert html =~ "0 records"
   end
+
+  test "runs the batch installment scan delegated from the installments screen", %{conn: conn} do
+    acc = CashLens.AccountsFixtures.account_fixture(%{name: "ScanAccount"})
+
+    for n <- 1..2 do
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-50.00",
+        description: "EC LOJA PARC 0#{n}/02 BR",
+        date: ~D[2026-01-10]
+      })
+    end
+
+    {:ok, live, html} = live(conn, ~p"/admin/db")
+    assert html =~ "Detectar Parcelamentos"
+
+    html = render_click(live, "detect_installments", %{})
+    assert html =~ "detectada(s)"
+  end
 end

@@ -1,48 +1,131 @@
 defmodule CashLensWeb.InstallmentLive.Index do
+  @moduledoc """
+  Consolidated view of every long-term commitment: credit-card instalment
+  purchases, financings and consórcios.
+
+  The screen is read-only over the domain: all aggregation (monthly commitment,
+  consolidated outstanding balance, 90-day cash-flow relief and the stacked
+  monthly projection) lives in `CashLens.Installments`. The heavy statement-wide
+  installment scan is deliberately NOT offered here — it runs automatically in
+  the import pipeline and can be triggered manually from `/admin/db`.
+  """
   use CashLensWeb, :live_view
 
   alias CashLens.Installments
+  alias CashLens.Installments.InstallmentGroup
+
+  @projection_months 10
 
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
      socket
      |> assign(:show_modal, false)
-     |> assign(:filters, default_filters())
      |> assign(:expanded_ids, MapSet.new())
-     |> assign(
-       :form,
-       to_form(Installments.change_installment_group(%Installments.InstallmentGroup{}))
-     )
-     |> load_data()}
-  end
-
-  defp load_data(socket) do
-    socket
-    |> assign(:groups, list_groups(socket.assigns.filters))
-    |> assign(:filters_active?, filters_active?(socket.assigns.filters))
-    |> assign(:upcoming, Installments.upcoming_installments())
+     |> assign(:commitment, %InstallmentGroup{})
+     |> assign(:commitment_params, %{})
+     |> assign(:suggestions, [])
+     |> assign(:commitment_types, Installments.commitment_types())
+     |> assign_form()}
   end
 
   @impl true
-  def handle_event("detect_installments", _params, socket) do
-    count = Installments.scan_and_apply_all()
-
+  def handle_params(params, _uri, socket) do
     {:noreply,
      socket
-     |> load_data()
-     |> put_flash(:success, "#{count} transação(ões) parcelada(s) detectada(s) e agrupada(s).")}
+     |> assign(:type_filter, filter_value(params["type"], known_types(), "all"))
+     |> assign(:status_filter, filter_value(params["status"], ~w(active completed all), "active"))
+     |> assign(:query, params["q"] || "")
+     |> load_data()}
   end
+
+  defp known_types, do: ["all" | Installments.commitment_types()]
+
+  defp filter_value(value, allowed, default) do
+    if value in allowed, do: value, else: default
+  end
+
+  defp load_data(socket) do
+    reference = Installments.current_month()
+    groups = Enum.map(Installments.list_installment_groups(), &decorate/1)
+
+    socket
+    |> assign(:commitments, filter_commitments(groups, socket.assigns))
+    |> assign(:counts, active_counts(groups))
+    |> assign(:active_count, Enum.count(groups, &(not &1.is_finished)))
+    |> assign(:month_metrics, Installments.monthly_commitment(reference))
+    |> assign(:balance, Installments.outstanding_balance(reference))
+    |> assign(:relief, Installments.cash_flow_relief(reference))
+    |> assign(:projection, Installments.monthly_projection(reference, @projection_months))
+    |> assign(:reference_month, reference)
+  end
+
+  defp decorate(group) do
+    group.id
+    |> Installments.get_group_with_progress()
+    |> then(fn g ->
+      g
+      |> Map.put(:last_installment_date, Installments.last_installment_date(g))
+      |> Map.put(:commitment_type, Installments.commitment_type(g))
+      |> Map.put(:outstanding, Installments.remaining_debt(g))
+      |> Map.put(:elapsed_count, g.installments - Installments.remaining_parcels(g))
+    end)
+  end
+
+  defp filter_commitments(groups, assigns) do
+    groups
+    |> Enum.filter(fn group ->
+      type_match?(group, assigns.type_filter) and
+        status_match?(group, assigns.status_filter) and
+        query_match?(group, assigns.query)
+    end)
+    |> Enum.sort_by(&sort_key/1)
+  end
+
+  defp type_match?(_group, "all"), do: true
+  defp type_match?(group, type), do: group.commitment_type == type
+
+  defp status_match?(_group, "all"), do: true
+  defp status_match?(group, "completed"), do: group.is_finished
+  defp status_match?(group, _active), do: not group.is_finished
+
+  defp query_match?(_group, blank) when blank in [nil, ""], do: true
+
+  defp query_match?(group, needle) do
+    needle = String.downcase(needle)
+
+    [group.description_pattern, group.institution]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.any?(&String.contains?(String.downcase(&1), needle))
+  end
+
+  defp sort_key(group) do
+    case group.last_installment_date do
+      %Date{} = date -> {date.year, date.month}
+      # coveralls-ignore-next-line — defensive: start_date is required in practice.
+      _ -> {9999, 12}
+    end
+  end
+
+  defp active_counts(groups) do
+    active = Enum.reject(groups, & &1.is_finished)
+
+    Map.new(Installments.commitment_types(), fn type ->
+      {type, Enum.count(active, &(&1.commitment_type == type))}
+    end)
+  end
+
+  # ── Events ────────────────────────────────────────────────────────────────
 
   @impl true
   def handle_event("open_modal", _params, socket) do
     {:noreply,
      socket
      |> assign(:show_modal, true)
-     |> assign(
-       :form,
-       to_form(Installments.change_installment_group(%Installments.InstallmentGroup{}))
-     )}
+     |> assign(:commitment, %InstallmentGroup{})
+     |> assign(:commitment_params, %{"commitment_type" => "credit_card"})
+     |> assign(:suggestions, Installments.suggest_commitment_patterns())
+     |> assign_form()}
   end
 
   @impl true
@@ -57,40 +140,52 @@ defmodule CashLensWeb.InstallmentLive.Index do
     {:noreply,
      socket
      |> assign(:show_modal, true)
-     |> assign(:form, to_form(Installments.change_installment_group(group)))}
+     |> assign(:commitment, group)
+     |> assign(:commitment_params, %{"commitment_type" => Installments.commitment_type(group)})
+     |> assign(:suggestions, Installments.suggest_commitment_patterns())
+     |> assign_form()}
+  end
+
+  @impl true
+  def handle_event("validate", %{"installment_group" => params}, socket) do
+    {:noreply, socket |> assign(:commitment_params, params) |> assign_form()}
+  end
+
+  @impl true
+  def handle_event("select_commitment_type", %{"type" => type}, socket) do
+    params = Map.put(socket.assigns.commitment_params, "commitment_type", type)
+    {:noreply, socket |> assign(:commitment_params, params) |> assign_form()}
+  end
+
+  @impl true
+  def handle_event("apply_suggestion", %{"suggestion" => %{"description" => ""}}, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("apply_suggestion", %{"suggestion" => %{"description" => description}}, socket) do
+    case Enum.find(socket.assigns.suggestions, &(&1.description == description)) do
+      nil ->
+        {:noreply, socket}
+
+      suggestion ->
+        params =
+          socket.assigns.commitment_params
+          |> Map.put("description_pattern", suggestion.description)
+          |> Map.put("installment_amount", Decimal.to_string(suggestion.amount, :normal))
+
+        {:noreply, socket |> assign(:commitment_params, params) |> assign_form()}
+    end
   end
 
   @impl true
   def handle_event("save", %{"installment_group" => params}, socket) do
-    group = socket.assigns.form.data
+    save_commitment(socket, socket.assigns.commitment, params)
+  end
 
-    case group.id do
-      nil ->
-        case Installments.create_installment_group(params) do
-          {:ok, _group} ->
-            {:noreply,
-             socket
-             |> assign(:show_modal, false)
-             |> load_data()
-             |> put_flash(:success, "Grupo de parcelamento criado!")}
-
-          {:error, changeset} ->
-            {:noreply, assign(socket, :form, to_form(changeset))}
-        end
-
-      _id ->
-        case Installments.update_installment_group(group, params) do
-          {:ok, _group} ->
-            {:noreply,
-             socket
-             |> assign(:show_modal, false)
-             |> load_data()
-             |> put_flash(:success, "Grupo de parcelamento atualizado!")}
-
-          {:error, changeset} ->
-            {:noreply, assign(socket, :form, to_form(changeset))}
-        end
-    end
+  @impl true
+  def handle_event("search", %{"search" => %{"q" => query}}, socket) do
+    {:noreply, push_patch(socket, to: filter_path(socket.assigns, q: query))}
   end
 
   @impl true
@@ -98,17 +193,6 @@ defmodule CashLensWeb.InstallmentLive.Index do
     group = Installments.get_installment_group!(id)
     {:ok, _} = Installments.delete_installment_group(group)
     {:noreply, load_data(socket)}
-  end
-
-  @impl true
-  def handle_event("filter", %{"filters" => params}, socket) do
-    filters = Map.merge(socket.assigns.filters, params)
-    {:noreply, socket |> assign(:filters, filters) |> load_data()}
-  end
-
-  @impl true
-  def handle_event("clear_filters", _params, socket) do
-    {:noreply, socket |> assign(:filters, default_filters()) |> load_data()}
   end
 
   @impl true
@@ -121,419 +205,155 @@ defmodule CashLensWeb.InstallmentLive.Index do
     {:noreply, assign(socket, :expanded_ids, expanded)}
   end
 
-  defp list_groups(filters) do
-    Installments.list_installment_groups()
-    |> Enum.map(fn g ->
-      g = Installments.get_group_with_progress(g.id)
-      Map.put(g, :last_installment_date, Installments.last_installment_date(g))
-    end)
-    |> Enum.reject(& &1.is_finished)
-    |> Enum.filter(&matches_filters?(&1, filters))
-    |> Enum.sort_by(fn g ->
-      case g.last_installment_date do
-        %Date{} = d -> {d.year, d.month}
-        _ -> {9999, 12}
-      end
-    end)
-    |> zebra_by_last_month()
-  end
-
-  defp default_filters do
-    %{
-      "name" => "",
-      "total_amount" => "",
-      "installment_amount" => "",
-      "start_from" => "",
-      "start_to" => ""
-    }
-  end
-
-  defp filters_active?(filters), do: Enum.any?(filters, fn {_k, v} -> v not in [nil, ""] end)
-
-  defp matches_filters?(group, filters) do
-    name_match?(group, filters["name"]) and
-      amount_match?(group.total_amount, filters["total_amount"]) and
-      amount_match?(installment_value(group), filters["installment_amount"]) and
-      start_from_match?(group, filters["start_from"]) and
-      start_to_match?(group, filters["start_to"])
-  end
-
-  defp name_match?(_group, blank) when blank in [nil, ""], do: true
-
-  defp name_match?(group, needle),
-    do:
-      String.contains?(String.downcase(group.description_pattern || ""), String.downcase(needle))
-
-  defp amount_match?(_value, blank) when blank in [nil, ""], do: true
-  defp amount_match?(nil, _needle), do: false
-
-  defp amount_match?(%Decimal{} = value, needle),
-    do: String.contains?(Decimal.to_string(value), String.trim(needle))
-
-  defp installment_value(%{total_amount: %Decimal{} = total, installments: n})
-       when is_integer(n) and n > 0,
-       do: Decimal.round(Decimal.div(total, n), 2)
-
-  defp installment_value(_), do: nil
-
-  defp start_from_match?(_group, blank) when blank in [nil, ""], do: true
-  defp start_from_match?(%{start_date: nil}, _needle), do: false
-
-  defp start_from_match?(group, date_str) do
-    case Date.from_iso8601(date_str) do
-      {:ok, d} -> Date.compare(group.start_date, d) != :lt
-      _ -> true
+  defp save_commitment(socket, %InstallmentGroup{id: nil}, params) do
+    case Installments.create_installment_group(params) do
+      {:ok, _group} -> {:noreply, close_and_reload(socket, "Compromisso criado com sucesso!")}
+      {:error, changeset} -> {:noreply, assign(socket, :form, to_form(changeset))}
     end
   end
 
-  defp start_to_match?(_group, blank) when blank in [nil, ""], do: true
-  defp start_to_match?(%{start_date: nil}, _needle), do: false
-
-  defp start_to_match?(group, date_str) do
-    case Date.from_iso8601(date_str) do
-      {:ok, d} -> Date.compare(group.start_date, d) != :gt
-      _ -> true
+  defp save_commitment(socket, group, params) do
+    case Installments.update_installment_group(group, params) do
+      {:ok, _group} -> {:noreply, close_and_reload(socket, "Compromisso atualizado!")}
+      {:error, changeset} -> {:noreply, assign(socket, :form, to_form(changeset))}
     end
   end
 
-  # Adds a :band (0/1) that flips whenever the {year, month} of the last installment
-  # changes, so the table is striped by "mês da última parcela".
-  defp zebra_by_last_month(groups) do
-    {rows, _prev, _band} =
-      Enum.reduce(groups, {[], nil, 0}, fn g, {acc, prev, band} ->
-        month_key =
-          case g.last_installment_date do
-            %Date{} = d -> {d.year, d.month}
-            _ -> nil
-          end
-
-        band = if prev != nil and month_key != prev, do: 1 - band, else: band
-        {[Map.put(g, :band, band) | acc], month_key, band}
-      end)
-
-    Enum.reverse(rows)
+  defp close_and_reload(socket, message) do
+    socket
+    |> assign(:show_modal, false)
+    |> load_data()
+    |> put_flash(:success, message)
   end
 
-  defp parcel_status(%{date: %Date{} = d}) do
-    if Date.compare(d, Date.utc_today()) == :gt, do: "a vencer", else: "paga"
+  defp assign_form(socket) do
+    changeset =
+      Installments.change_installment_group(
+        socket.assigns.commitment,
+        socket.assigns.commitment_params
+      )
+
+    socket
+    |> assign(:form, to_form(changeset))
+    |> assign(:modal_type, Ecto.Changeset.get_field(changeset, :commitment_type) || "credit_card")
   end
 
-  defp parcel_status(_), do: "—"
+  defp filter_path(assigns, overrides) do
+    params =
+      %{
+        "type" => assigns.type_filter,
+        "status" => assigns.status_filter,
+        "q" => assigns.query
+      }
+      |> Map.merge(Map.new(overrides, fn {k, v} -> {to_string(k), v} end))
+      |> Enum.reject(fn {_k, v} -> v in [nil, ""] end)
+      |> Map.new()
+
+    ~p"/installments?#{params}"
+  end
+
+  # ── View helpers ──────────────────────────────────────────────────────────
+
+  defp type_label("financing"), do: "Financiamento"
+  defp type_label("consorcio"), do: "Consórcio"
+  defp type_label(_credit_card), do: "Cartão"
+
+  defp type_icon("financing"), do: "🏠"
+  defp type_icon("consorcio"), do: "🤝"
+  defp type_icon(_credit_card), do: "💳"
+
+  defp type_tab_label("all"), do: "🌐 Todos"
+  defp type_tab_label("financing"), do: "🏠 Financiamentos"
+  defp type_tab_label("consorcio"), do: "🤝 Consórcios"
+  defp type_tab_label(_credit_card), do: "💳 Cartão de Crédito"
+
+  defp breakdown_caption(type, count) do
+    "#{breakdown_label(type)} (#{count} #{unit_label(type, count)})"
+  end
+
+  defp breakdown_label("financing"), do: "Financiamentos"
+  defp breakdown_label("consorcio"), do: "Consórcios"
+  defp breakdown_label(_credit_card), do: "Parcelamentos Cartão"
+
+  defp unit_label("financing", 1), do: "contrato"
+  defp unit_label("financing", _n), do: "contratos"
+  defp unit_label("consorcio", 1), do: "cota"
+  defp unit_label("consorcio", _n), do: "cotas"
+  defp unit_label(_credit_card, 1), do: "compra"
+  defp unit_label(_credit_card, _n), do: "compras"
+
+  defp tab_count(_counts, active_count, "all"), do: active_count
+  defp tab_count(counts, _active_count, type), do: Map.get(counts, type, 0)
+
+  defp projected_amount(month, "financing"), do: month.financing
+  defp projected_amount(month, "consorcio"), do: month.consorcio
+  defp projected_amount(month, _credit_card), do: month.credit_card
+
+  defp dot_class("financing"), do: "bg-indigo-500"
+  defp dot_class("consorcio"), do: "bg-amber-500"
+  defp dot_class(_credit_card), do: "bg-blue-500"
+
+  defp badge_class("financing"), do: "bg-indigo-500/10 text-indigo-600 border-indigo-500/30"
+  defp badge_class("consorcio"), do: "bg-amber-500/10 text-amber-600 border-amber-500/30"
+  defp badge_class(_credit_card), do: "bg-blue-500/10 text-blue-600 border-blue-500/30"
+
+  defp progress_class("financing"), do: "bg-indigo-500"
+  defp progress_class("consorcio"), do: "bg-amber-500"
+  defp progress_class(_credit_card), do: "bg-blue-500"
+
+  # Percentage of each commitment type within a projected month, in the stacking
+  # order used by the ribbon (financing at the base, card on top). The three
+  # shares always describe the same total the cell displays.
+  defp stack_shares(month) do
+    [
+      {"financing", share(month.financing, month.total)},
+      {"consorcio", share(month.consorcio, month.total)},
+      {"credit_card", share(month.credit_card, month.total)}
+    ]
+  end
+
+  defp share(amount, total) do
+    if Decimal.eq?(total, 0) do
+      0.0
+    else
+      amount |> Decimal.div(total) |> Decimal.mult(100) |> Decimal.to_float() |> Float.round(2)
+    end
+  end
+
+  defp month_chip(%Date{} = date) do
+    yy = date.year |> Integer.to_string() |> String.slice(-2, 2)
+    "#{month_label(date.month)}/#{yy}"
+  end
 
   defp last_parcel_label(group) do
-    case Installments.last_installment_date(group) do
-      %Date{} = d ->
-        yy = d.year |> Integer.to_string() |> String.slice(-2, 2)
-        "#{String.downcase(month_label(d.month))}/#{yy}"
-
-      _ ->
-        "---"
+    case group.last_installment_date do
+      %Date{} = date -> String.downcase(month_chip(date))
+      # coveralls-ignore-next-line — defensive: start_date is required in practice.
+      _ -> "---"
     end
   end
 
-  @impl true
-  def render(assigns) do
-    ~H"""
-    <div class="py-6 space-y-8">
-      <div class="flex items-center justify-between">
-        <h1 class="text-3xl font-bold text-base-content uppercase tracking-tighter">
-          Grupos de Parcelamento
-        </h1>
-        <div class="flex items-center gap-2">
-          <button
-            phx-click="detect_installments"
-            phx-disable-with="Detectando..."
-            class="btn btn-ghost btn-sm rounded-xl"
-          >
-            <.icon name="hero-sparkles" class="size-4 mr-1" /> Detectar Parcelamentos
-          </button>
-          <button phx-click="open_modal" class="btn btn-primary btn-sm rounded-xl">
-            <.icon name="hero-plus" class="size-4 mr-1" /> Novo Grupo
-          </button>
-        </div>
-      </div>
+  defp progress_count(%{commitment_type: "credit_card"} = group), do: group.paid_count
+  defp progress_count(group), do: group.elapsed_count
 
-      <%!-- Projeção de gastos com parcelas nos próximos meses --%>
-      <div :if={@upcoming != []} class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-5">
-        <h2 class="text-[11px] font-black uppercase tracking-widest opacity-50 mb-3">
-          Parcelas nos próximos meses
-        </h2>
-        <div class="flex gap-3 overflow-x-auto pb-1">
-          <div
-            :for={m <- @upcoming}
-            class={[
-              "shrink-0 min-w-[120px] rounded-xl border px-4 py-3",
-              if(m.pending,
-                do: "border-warning/40 bg-warning/10",
-                else: "border-base-300 bg-base-200/40"
-              )
-            ]}
-          >
-            <div class="text-[10px] font-bold uppercase opacity-50">
-              {month_name(m.date.month)}/{m.date.year}
-            </div>
-            <div class={[
-              "text-lg font-black",
-              if(m.pending, do: "text-warning", else: "text-primary")
-            ]}>
-              {format_currency(m.total)}
-            </div>
-            <div
-              :if={m.pending}
-              class="text-[9px] font-bold uppercase text-warning flex items-center gap-1 mt-0.5"
-            >
-              <.icon name="hero-exclamation-triangle-micro" class="size-3" /> Falta importar
-            </div>
-          </div>
-        </div>
-      </div>
+  defp progress_pct(group) do
+    count = progress_count(group)
 
-      <%!-- Filtros --%>
-      <form
-        phx-change="filter"
-        class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-4 flex flex-wrap items-end gap-3"
-      >
-        <label class="form-control">
-          <span class="label-text text-[10px] uppercase opacity-50">Nome</span>
-          <input
-            type="text"
-            name="filters[name]"
-            value={@filters["name"]}
-            placeholder="Buscar..."
-            class="input input-bordered input-sm rounded-xl"
-          />
-        </label>
-        <label class="form-control">
-          <span class="label-text text-[10px] uppercase opacity-50">Valor Total</span>
-          <input
-            type="text"
-            name="filters[total_amount]"
-            value={@filters["total_amount"]}
-            class="input input-bordered input-sm rounded-xl w-28"
-          />
-        </label>
-        <label class="form-control">
-          <span class="label-text text-[10px] uppercase opacity-50">Valor da Parcela</span>
-          <input
-            type="text"
-            name="filters[installment_amount]"
-            value={@filters["installment_amount"]}
-            class="input input-bordered input-sm rounded-xl w-28"
-          />
-        </label>
-        <label class="form-control">
-          <span class="label-text text-[10px] uppercase opacity-50">Início (de)</span>
-          <input
-            type="date"
-            name="filters[start_from]"
-            value={@filters["start_from"]}
-            class="input input-bordered input-sm rounded-xl"
-          />
-        </label>
-        <label class="form-control">
-          <span class="label-text text-[10px] uppercase opacity-50">Início (até)</span>
-          <input
-            type="date"
-            name="filters[start_to]"
-            value={@filters["start_to"]}
-            class="input input-bordered input-sm rounded-xl"
-          />
-        </label>
-        <button
-          :if={@filters_active?}
-          type="button"
-          phx-click="clear_filters"
-          class="btn btn-ghost btn-sm rounded-xl"
-        >
-          <.icon name="hero-x-mark" class="size-4 mr-1" /> Limpar
-        </button>
-      </form>
+    if group.installments > 0,
+      do: round(count / group.installments * 100),
+      # coveralls-ignore-next-line — defensive: installments is validated > 1.
+      else: 0
+  end
 
-      <%!-- Lista de grupos de parcelamento --%>
-      <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden">
-        <div :if={@groups == []} class="px-6 py-12 text-center opacity-40 text-sm">
-          Nenhum parcelamento ativo.
-        </div>
+  defp parcel_status(%{date: %Date{} = date}) do
+    if Date.compare(date, Date.utc_today()) == :gt, do: "a vencer", else: "paga"
+  end
 
-        <table :if={@groups != []} class="table table-sm w-full">
-          <thead class="bg-base-200/50 text-[10px] uppercase tracking-wider">
-            <tr>
-              <th>Descrição</th>
-              <th class="text-right">Valor Total</th>
-              <th class="text-right">Parcela</th>
-              <th class="text-center w-40">Progresso</th>
-              <th class="text-right">Início</th>
-              <th class="text-right">Última Parcela</th>
-              <th class="w-10"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <%= for group <- @groups do %>
-              <tr class={["hover", if(group.band == 0, do: "bg-base-100", else: "bg-base-300")]}>
-                <td class="font-bold text-xs">
-                  <button
-                    type="button"
-                    phx-click="toggle_expand"
-                    phx-value-id={group.id}
-                    class="flex items-center gap-2 text-left w-full"
-                  >
-                    <.icon
-                      name="hero-chevron-right"
-                      class={[
-                        "size-3 transition-transform",
-                        MapSet.member?(@expanded_ids, group.id) && "rotate-90"
-                      ]}
-                    />
-                    {group.description_pattern}
-                  </button>
-                </td>
-                <td class="text-right font-mono">
-                  {if group.total_amount, do: format_currency(group.total_amount), else: "---"}
-                </td>
-                <td class="text-right font-mono text-xs opacity-70">
-                  {if group.total_amount && group.installments > 0,
-                    do:
-                      format_currency(
-                        Decimal.round(Decimal.div(group.total_amount, group.installments), 2)
-                      ),
-                    else: "---"}
-                </td>
-                <td>
-                  <div class="flex flex-col gap-1">
-                    <span class="text-[10px] font-bold text-center">
-                      {group.paid_count} / {group.installments}
-                    </span>
-                    <progress
-                      class="progress progress-primary w-full h-1.5"
-                      value={group.paid_count}
-                      max={group.installments}
-                    >
-                    </progress>
-                  </div>
-                </td>
-                <td class="text-right text-xs opacity-60 whitespace-nowrap">
-                  {format_date(group.start_date)}
-                </td>
-                <td class="text-right text-xs opacity-60 whitespace-nowrap">
-                  {last_parcel_label(group)}
-                </td>
-                <td class="text-right">
-                  <div class="flex justify-end gap-1.5">
-                    <button
-                      phx-click="edit"
-                      phx-value-id={group.id}
-                      class="btn btn-ghost btn-xs text-info p-0"
-                    >
-                      <.icon name="hero-pencil" class="size-4" />
-                    </button>
-                    <button
-                      phx-click="delete"
-                      phx-value-id={group.id}
-                      class="btn btn-ghost btn-xs text-error p-0"
-                    >
-                      <.icon name="hero-trash" class="size-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              <tr :if={MapSet.member?(@expanded_ids, group.id)} class="bg-base-200/40">
-                <td colspan="7" class="p-0">
-                  <div class="px-6 py-3">
-                    <% parcels = Installments.list_group_transactions(group.id) %>
-                    <div :if={parcels == []} class="text-xs opacity-40 py-2">
-                      Nenhuma parcela importada ainda.
-                    </div>
-                    <table :if={parcels != []} class="table table-xs w-full">
-                      <thead class="text-[9px] uppercase tracking-wider opacity-50">
-                        <tr>
-                          <th class="w-12">Parc.</th>
-                          <th>Descrição</th>
-                          <th class="text-right">Data</th>
-                          <th class="text-right">Valor</th>
-                          <th class="text-right">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr :for={p <- parcels}>
-                          <td class="font-mono text-[11px]">{p.installment_number || "—"}</td>
-                          <td class="text-xs">{p.description}</td>
-                          <td class="text-right text-xs opacity-60 whitespace-nowrap">
-                            {format_date(p.date)}
-                          </td>
-                          <td class="text-right font-mono text-xs">{format_currency(p.amount)}</td>
-                          <td class="text-right text-[10px] uppercase opacity-60">
-                            {parcel_status(p)}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </td>
-              </tr>
-            <% end %>
-          </tbody>
-        </table>
-      </div>
+  # coveralls-ignore-next-line — defensive: a transaction always carries a date.
+  defp parcel_status(_parcel), do: "—"
 
-      <.modal :if={@show_modal} id="group-modal" show on_cancel={JS.push("close_modal")}>
-        <div class="p-2">
-          <div class="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-6">
-            <.icon name="hero-rectangle-group" class="size-8" />
-          </div>
-          <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">
-            {if @form.data.id, do: "Editar Grupo de Parcelamento", else: "Novo Grupo de Parcelamento"}
-          </h2>
-          <p class="text-sm opacity-70 mb-8">
-            {if @form.data.id,
-              do: "Edite as configurações do grupo de parcelamento.",
-              else: "Crie um grupo para acompanhar uma dívida de longo prazo e suas parcelas."}
-          </p>
-
-          <.form for={@form} phx-submit="save" class="space-y-4">
-            <.input
-              field={@form[:description_pattern]}
-              label="Padrão de Descrição (corresponde às importações do banco)"
-              placeholder="Ex: NUBANK, ALUGUEL..."
-              required
-            />
-            <div class="grid grid-cols-2 gap-4">
-              <.input
-                field={@form[:total_amount]}
-                type="number"
-                step="0.01"
-                label="Valor Total (opcional)"
-              />
-              <.input
-                field={@form[:installment_amount]}
-                type="number"
-                step="0.01"
-                label="Valor da Parcela (opcional)"
-              />
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <.input field={@form[:installments]} type="number" label="Total de Parcelas" required />
-              <.input field={@form[:start_date]} type="date" label="Data de Início" required />
-            </div>
-
-            <div class="flex flex-col sm:flex-row gap-3 pt-4">
-              <button
-                type="submit"
-                class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
-              >
-                {if @form.data.id, do: "Salvar Alterações", else: "Criar Grupo"}
-              </button>
-              <button
-                type="button"
-                phx-click="close_modal"
-                class="btn btn-ghost btn-lg flex-1 rounded-2xl"
-              >
-                Cancelar
-              </button>
-            </div>
-          </.form>
-        </div>
-      </.modal>
-    </div>
-    """
+  defp suggestion_label(suggestion) do
+    "#{suggestion.description} (#{format_currency(suggestion.amount)}/mês · " <>
+      "#{suggestion.occurrences} lançamentos)"
   end
 end

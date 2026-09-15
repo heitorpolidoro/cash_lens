@@ -107,3 +107,11 @@
 - `total_of/1` in `month_live/show.ex:250` is a generic name for "sum the `:total` field of breakdown rows"; `breakdown_total/1` would read better.
 - Crafted `phx-value-scope`/`dir`/`year` params crash the LiveView (MatchError in `move/3` when `comparison` is nil, CaseClauseError on unknown scope, `String.to_integer` on non-numeric input). The chronological guard itself is sound and cannot be bypassed; this is robustness, not an authorization hole.
 - `positive?/1` (`month_panel.ex:572`) treats a net of exactly zero as a green "Superávit".
+
+## [CL-11] Redesenhar tela de Parcelamentos (/installments) com suporte a Financiamentos e Consórcios — 2026-09-15
+- The consolidated debt card is labelled "Capital total restante a pagar / amortizar", but for a financing `remaining_debt/2` is the remaining payment stream (principal + interest), not capital — `installment_live/index.html.heex:73`.
+- `Installments.list_group_transactions(group.id)` is called inside the template for each expanded row (DB query during render), `index.html.heex:389`; `decorate/1` calls `get_group_with_progress/1` once per group (N+1). Both pre-existing.
+- New numeric fields (`interest_rate`, `credit_letter_amount`) have no range validation; `contemplated_at` can be set while `is_contemplated` is false.
+- `assert html =~ "detectada(s)"` in the admin test passes even for a zero-count scan — assert the count instead.
+- `current_month/0` now exists but `upcoming_installments/1` and `first_incomplete_month/0` still compute it inline.
+- The new `commitment_type` index is unused (type filtering happens in memory).

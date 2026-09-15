@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CashLens — Gestão de Parcelamentos, Financiamentos & Consórcios</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen flex flex-col antialiased">
+
+  <!-- Header Oficial do CashLens -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-8">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-sm">
+            CL
+          </div>
+          <span class="font-extrabold text-xl tracking-tight text-slate-900">Cash<span class="text-blue-600">Lens</span></span>
+        </div>
+
+        <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Dashboard</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Extrato</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Saldos</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Fechamento</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Importação</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-blue-600 bg-blue-50 font-bold">Compromissos a Prazo</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Reembolsos</a>
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+          Ref: Setembro 2026
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Conteúdo Principal -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+    <!-- Topo: Título da Tela + Ações Globais -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <h1 class="text-2xl font-black text-slate-900 tracking-tight">Compromissos a Prazo & Dívidas</h1>
+          <span id="active-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200/60">
+            8 ativos consolidados
+          </span>
+        </div>
+        <p class="text-xs text-slate-500 mt-1">
+          Visão global de compras parceladas no cartão, financiamentos de longo prazo e parcelas de consórcios.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button onclick="openGroupModal('new')" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition active:scale-95">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          <span>Novo Compromisso</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= 3 CARDS DE MÉTRICAS GLOBAIS CONSOLIDADAS ================= -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      
+      <!-- Card 1: Comprometimento Total do Mês -->
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Comprometimento no Mês</span>
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700">Set/2026</span>
+          </div>
+          <div class="text-2xl font-black text-rose-600 font-mono" id="metric-month-total">R$ 4.799,80</div>
+          <span class="text-[11px] text-slate-400 mt-0.5 block">Total debitado ou cobrado em fatura neste mês</span>
+        </div>
+        
+        <!-- Discriminado por categoria (com quantidade de compras/contratos) -->
+        <div class="mt-3 pt-2.5 border-t border-slate-100 space-y-1.5 text-[11px]">
+          <div class="flex items-center justify-between text-slate-500">
+            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Parcelamentos Cartão (5 compras)</span>
+            <span class="font-mono font-semibold text-slate-800">R$ 1.149,80</span>
+          </div>
+          <div class="flex items-center justify-between text-slate-500">
+            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-indigo-500"></span> Financiamentos (2 contratos)</span>
+            <span class="font-mono font-semibold text-slate-800">R$ 2.800,00</span>
+          </div>
+          <div class="flex items-center justify-between text-slate-500">
+            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Consórcios (1 cota)</span>
+            <span class="font-mono font-semibold text-slate-800">R$ 850,00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: Saldo Devedor Futuro Total -->
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        <div>
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Saldo Devedor Futuro</span>
+          <div class="text-2xl font-black text-slate-900 font-mono" id="metric-remaining-total">R$ 284.649,20</div>
+          <span class="text-[11px] text-slate-400 mt-0.5 block">Capital total restante a pagar / amortizar</span>
+        </div>
+
+        <div class="mt-3 pt-2.5 border-t border-slate-100 space-y-1.5 text-[11px]">
+          <div class="flex items-center justify-between text-slate-500">
+            <span>Parcelamentos (Cartão):</span>
+            <span class="font-mono font-semibold text-slate-700">R$ 5.849,20</span>
+          </div>
+          <div class="flex items-center justify-between text-slate-500">
+            <span>Financiamentos:</span>
+            <span class="font-mono font-semibold text-slate-700">R$ 242.000,00</span>
+          </div>
+          <div class="flex items-center justify-between text-slate-500">
+            <span>Consórcios:</span>
+            <span class="font-mono font-semibold text-slate-700">R$ 36.800,00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Alívio nos Próximos Meses (Descompressão do Fluxo de Caixa) -->
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Alívio no Fluxo de Caixa</span>
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Próximos 90 dias</span>
+          </div>
+          <div class="text-2xl font-black text-emerald-600 font-mono">+R$ 520,00<span class="text-xs font-semibold text-slate-500">/mês livre</span></div>
+          <span class="text-[11px] text-slate-400 mt-0.5 block">Economia mensal conforme parcelas encerram</span>
+        </div>
+
+        <div class="mt-3 pt-2.5 border-t border-slate-100 space-y-1.5 text-[11px]">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600 truncate">Em Set/26: Encerra <b>Curso Alura</b></span>
+            <span class="font-mono text-emerald-600 font-bold shrink-0">+R$ 120,00</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600 truncate">Em Out/26: Encerra <b>Geladeira</b></span>
+            <span class="font-mono text-emerald-600 font-bold shrink-0">+R$ 400,00</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600 truncate">Em Nov/26: Encerram <b>Passagens TAP + Pneus</b></span>
+            <span class="font-mono text-emerald-600 font-bold shrink-0">+R$ 780,00</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================= PROJEÇÃO MENSAL COM COMPOSIÇÃO POR TIPO ================= -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h2 class="text-xs font-black uppercase tracking-wider text-slate-700">Fluxo Projetado de Compromissos nos Próximos 10 Meses</h2>
+          <p class="text-[11px] text-slate-400">Veja o alívio imediato no fluxo de caixa conforme as compras de cartão são quitadas</p>
+        </div>
+        
+        <div class="flex items-center gap-3 text-[11px] font-semibold text-slate-600">
+          <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-blue-500"></span> Cartão</span>
+          <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-indigo-600"></span> Financiamento</span>
+          <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500"></span> Consórcio</span>
+        </div>
+      </div>
+
+      <!-- Fita de Meses com Rolagem Suave e Barras Empilhadas -->
+      <div class="flex items-center gap-2.5 overflow-x-auto pb-1 pt-1 no-scrollbar" id="monthly-projection-ribbon">
+        <!-- Renderizado dinamicamente via JS -->
+      </div>
+    </div>
+
+    <!-- ================= BARRA DE CONTROLE E SEGMENTAÇÃO POR TIPO ================= -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      
+      <!-- Abas de Tipo de Compromisso -->
+      <div class="flex items-center flex-wrap gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+        <button onclick="setTypeFilter('all')" id="type-tab-all" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-xs transition flex items-center gap-1.5">
+          <span>🌐 Todos</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-700" id="badge-count-all">8</span>
+        </button>
+        <button onclick="setTypeFilter('credit_card')" id="type-tab-credit_card" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5">
+          <span>💳 Cartão de Crédito</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-100 text-blue-700" id="badge-count-card">5</span>
+        </button>
+        <button onclick="setTypeFilter('financing')" id="type-tab-financing" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5">
+          <span>🏠 Financiamentos</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-100 text-indigo-700" id="badge-count-financing">2</span>
+        </button>
+        <button onclick="setTypeFilter('consortium')" id="type-tab-consortium" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5">
+          <span>🤝 Consórcios</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-800" id="badge-count-consortium">1</span>
+        </button>
+      </div>
+
+      <!-- Filtros Complementares: Status e Busca -->
+      <div class="flex items-center gap-2 flex-1 lg:max-w-md justify-end">
+        <!-- Status (Ativos vs Concluídos) -->
+        <select id="status-filter" onchange="onStatusChange(this.value)" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+          <option value="active">Ativos</option>
+          <option value="completed">Concluídos</option>
+          <option value="all">Todos os Status</option>
+        </select>
+
+        <!-- Campo de Busca -->
+        <div class="relative flex-1">
+          <input 
+            type="text" 
+            id="search-input" 
+            oninput="onSearch(this.value)" 
+            placeholder="Buscar por descrição, banco ou loja..." 
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+          >
+          <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <button onclick="clearSearch()" id="btn-clear-search" class="hidden absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+
+        <button onclick="toggleAllExpand()" id="btn-toggle-all" class="shrink-0 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-semibold transition" title="Expandir ou recolher todos os grupos">
+          Expandir Todos
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= TABELA DE COMPROMISSOS COM SEPARAÇÃO E VÍNCULOS ================= -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-600">
+          <thead class="bg-slate-50/80 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+            <tr>
+              <th class="py-3 px-4 w-8"></th>
+              <th class="py-3 px-4">Compromisso / Descrição</th>
+              <th class="py-3 px-4">Tipo & Vínculo</th>
+              <th class="py-3 px-4 text-right">Valor Total</th>
+              <th class="py-3 px-4 text-right">Parcela Atual</th>
+              <th class="py-3 px-4 text-center min-w-[160px]">Progresso</th>
+              <th class="py-3 px-4 text-right">Saldo Devedor</th>
+              <th class="py-3 px-4 text-right">Quitação</th>
+              <th class="py-3 px-4 text-center w-20">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="groups-tbody" class="divide-y divide-slate-100">
+            <!-- Renderizado dinamicamente via JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Estado Vazio -->
+      <div id="empty-state" class="hidden py-12 px-4 text-center">
+        <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        </div>
+        <h3 class="text-sm font-bold text-slate-800">Nenhum compromisso encontrado neste filtro</h3>
+        <p class="text-xs text-slate-400 max-w-sm mx-auto mt-1">Alterne entre as abas ou clique em "Novo Compromisso" para registrar um financiamento, consórcio ou parcelamento.</p>
+      </div>
+    </div>
+
+    <!-- ================= MODAL DE CRIAÇÃO / EDIÇÃO INTELIGENTE ================= -->
+    <div id="group-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeGroupModal()"></div>
+
+      <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden z-10 animate-in zoom-in-95 duration-200">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div id="modal-icon-container" class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            </div>
+            <div>
+              <h3 id="modal-group-title" class="text-sm font-bold text-slate-900">Novo Compromisso Financeiro</h3>
+              <p class="text-[11px] text-slate-400">Cartão de Crédito, Financiamento ou Consórcio</p>
+            </div>
+          </div>
+          <button onclick="closeGroupModal()" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition">
+            ✕
+          </button>
+        </div>
+
+        <form onsubmit="saveGroupForm(event)" class="p-6 space-y-4 text-xs">
+          
+          <!-- Seletor de Tipo de Compromisso -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1.5">Tipo de Compromisso</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button type="button" onclick="selectModalType('credit_card')" id="btn-modal-type-credit_card" class="py-2 px-2.5 rounded-xl border text-center font-bold text-xs transition border-blue-500 bg-blue-50 text-blue-700">
+                💳 Cartão
+              </button>
+              <button type="button" onclick="selectModalType('financing')" id="btn-modal-type-financing" class="py-2 px-2.5 rounded-xl border text-center font-bold text-xs transition border-slate-200 text-slate-600 hover:bg-slate-50">
+                🏠 Financiamento
+              </button>
+              <button type="button" onclick="selectModalType('consortium')" id="btn-modal-type-consortium" class="py-2 px-2.5 rounded-xl border text-center font-bold text-xs transition border-slate-200 text-slate-600 hover:bg-slate-50">
+                🤝 Consórcio
+              </button>
+            </div>
+          </div>
+
+          <!-- Assistente de Detecção Inteligente a partir do Extrato -->
+          <div class="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold text-blue-900 flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                <span>Vincular por Histórico do Extrato</span>
+              </span>
+              <span class="text-[10px] text-blue-600 font-semibold">Preenchimento automático</span>
+            </div>
+            
+            <select id="quick-fill-select" onchange="applyQuickFill(this.value)" class="w-full bg-white border border-blue-200 rounded-lg py-1.5 px-2.5 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+              <option value="">Selecione um padrão identificado no seu extrato...</option>
+              <option value="caixa">DEB FINANC HAB CAIXA (R$ 2.100,00/mês · 48 débitos encontrados)</option>
+              <option value="santander">FINANC SANTANDER AUTO (R$ 700,00/mês · 28 débitos encontrados)</option>
+              <option value="porto">CONSORCIO PORTO SEGURO (R$ 850,00/mês · 44 boletos encontrados)</option>
+              <option value="apple">APPLE.COM/BILL 03/12 (R$ 1.200,00/mês · Nubank)</option>
+              <option value="magalu">MAGAZINE LUIZA 07/08 (R$ 400,00/mês · Nubank)</option>
+            </select>
+          </div>
+
+          <!-- Nome / Descrição Principal -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1" id="label-name-field">
+              Nome do Compromisso / Descrição
+            </label>
+            <input 
+              type="text" 
+              id="form-name" 
+              required 
+              placeholder="Ex: Financiamento Apê Caixa, MacBook Pro M3, Consórcio Imóvel..." 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+          </div>
+
+          <!-- Linha Específica para Cartão: Padrão na Fatura e Cartão -->
+          <div id="fields-credit-card" class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">Padrão na Fatura (Regex/Texto)</label>
+                <input 
+                  type="text" 
+                  id="form-pattern" 
+                  placeholder="Ex: APPLE.COM/BILL" 
+                  class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">Cartão Vinculado</label>
+                <select id="form-card-account" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                  <option value="Nubank Ultravioleta">Nubank Ultravioleta</option>
+                  <option value="Itaú Mastercard Black">Itaú Mastercard Black</option>
+                  <option value="BB Ourocard Visa">BB Ourocard Visa</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Linha Específica para Financiamento / Consórcio: Instituição e Conta de Débito -->
+          <div id="fields-longterm" class="hidden space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">Instituição / Administradora</label>
+                <input 
+                  type="text" 
+                  id="form-institution" 
+                  placeholder="Ex: Caixa Econômica, Porto Seguro..." 
+                  class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">Conta de Débito / Boleto</label>
+                <select id="form-bank-account" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                  <option value="Itaú Corrente">Itaú (Conta Corrente)</option>
+                  <option value="Caixa Corrente">Caixa Econômica</option>
+                  <option value="Boleto Bancário">Boleto Bancário Mensal</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="field-consortium-status" class="hidden">
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Status de Contemplação</label>
+              <select id="form-consortium-status" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                <option value="Aguardando Contemplação">Aguardando Contemplação (Sorteio/Lance)</option>
+                <option value="Contemplado por Sorteio">Contemplado por Sorteio</option>
+                <option value="Contemplado por Lance">Contemplado por Lance</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Valores Financeiros: Total / Saldo e Parcela -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1" id="label-total-amount">Valor Total / Bem (R$)</label>
+              <input 
+                type="text" 
+                id="form-total-amount" 
+                oninput="calcInstallmentFromTotal()"
+                placeholder="Ex: 3600,00" 
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Valor da Parcela Mensal (R$)</label>
+              <input 
+                type="text" 
+                id="form-installment-amount" 
+                placeholder="Ex: 300,00" 
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+            </div>
+          </div>
+
+          <!-- Prazos e Datas -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Total de Meses / Parcelas</label>
+              <input 
+                type="number" 
+                id="form-installments" 
+                required 
+                min="2" 
+                max="420" 
+                oninput="calcInstallmentFromTotal()"
+                placeholder="Ex: 12 (ou 360)" 
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Data da 1ª Parcela</label>
+              <input 
+                type="date" 
+                id="form-start-date" 
+                required 
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+            </div>
+          </div>
+
+          <!-- Botões de Ação do Modal -->
+          <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button type="button" onclick="closeGroupModal()" class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 transition">
+              Cancelar
+            </button>
+            <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition shadow-sm active:scale-95">
+              Salvar Compromisso
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ================= MODAL DE EXCLUSÃO ================= -->
+    <div id="delete-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeDeleteModal()"></div>
+
+      <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden z-10 p-6 text-center animate-in zoom-in-95 duration-200">
+        <div class="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </div>
+
+        <h3 class="text-base font-bold text-slate-900 mb-1">Excluir Compromisso?</h3>
+        <p class="text-xs text-slate-500 mb-4">
+          As transações já lançadas no extrato bancário serão mantidas, mas o rastreamento do grupo e projeção futura serão encerrados.
+        </p>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs mb-5 text-left">
+          <div id="delete-group-name" class="font-bold text-slate-800 truncate">Financiamento Apê Caixa</div>
+          <div class="flex items-center justify-between text-[11px] text-slate-500 mt-1">
+            <span id="delete-group-installments">360 parcelas</span>
+            <span id="delete-group-total" class="font-mono font-bold text-rose-600">R$ 280.000,00</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="closeDeleteModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 text-xs transition">
+            Cancelar
+          </button>
+          <button type="button" onclick="executeDeleteGroup()" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition shadow-sm active:scale-95">
+            Sim, Excluir
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // ================= DADOS MOCKADOS (CARTÃO, FINANCIAMENTOS E CONSÓRCIOS) =================
+    const ALL_GROUPS = [
+      // 1. FINANCIAMENTO IMOBILIÁRIO
+      {
+        id: 101,
+        type: "financing",
+        typeName: "Financiamento Imobiliário",
+        name: "Financiamento Apê Jardim (Caixa)",
+        institution: "Caixa Econômica Federal",
+        accountOrCard: "Conta Corrente Caixa",
+        pattern: "DEB FINANC HAB",
+        totalAmount: 280000.00,
+        installmentAmount: 2100.00,
+        totalInstallments: 360,
+        paidInstallments: 48,
+        startDate: "2022-09-10",
+        lastDate: "2052-08-10",
+        status: "active",
+        details: { amortized: 62000.00, remainingDebt: 218000.00, rate: "8.5% a.a. + TR" },
+        parcels: [
+          { number: 47, date: "10/08/2026", monthRef: "Ago/2026", amount: 2100.00, status: "paid" },
+          { number: 48, date: "10/09/2026", monthRef: "Set/2026", amount: 2100.00, status: "current" },
+          { number: 49, date: "10/10/2026", monthRef: "Out/2026", amount: 2100.00, status: "pending" }
+        ]
+      },
+      // 2. FINANCIAMENTO VEÍCULO
+      {
+        id: 102,
+        type: "financing",
+        typeName: "Financiamento Veículo",
+        name: "Financiamento Honda HR-V (Santander)",
+        institution: "Santander Financiamentos",
+        accountOrCard: "Itaú (Débito Automático)",
+        pattern: "FINANC SANTANDER AUTO",
+        totalAmount: 38000.00,
+        installmentAmount: 700.00,
+        totalInstallments: 48,
+        paidInstallments: 28,
+        startDate: "2024-05-15",
+        lastDate: "2028-04-15",
+        status: "active",
+        details: { amortized: 14000.00, remainingDebt: 24000.00, rate: "1.29% a.m." },
+        parcels: [
+          { number: 27, date: "15/08/2026", monthRef: "Ago/2026", amount: 700.00, status: "paid" },
+          { number: 28, date: "15/09/2026", monthRef: "Set/2026", amount: 700.00, status: "current" },
+          { number: 29, date: "15/10/2026", monthRef: "Out/2026", amount: 700.00, status: "pending" }
+        ]
+      },
+      // 3. CONSÓRCIO IMOBILIÁRIO
+      {
+        id: 201,
+        type: "consortium",
+        typeName: "Consórcio Imobiliário",
+        name: "Consórcio Carta R$ 80k (Porto Seguro)",
+        institution: "Porto Seguro Administradora",
+        accountOrCard: "Boleto Bancário / DDA",
+        pattern: "CONSORCIO PORTO SEGURO",
+        totalAmount: 80000.00,
+        installmentAmount: 850.00,
+        totalInstallments: 120,
+        paidInstallments: 44,
+        startDate: "2023-01-20",
+        lastDate: "2032-12-20",
+        status: "active",
+        details: { contemplation: "Aguardando Sorteio / Lance Livre", letterValue: 80000.00, remainingDebt: 36800.00 },
+        parcels: [
+          { number: 43, date: "20/08/2026", monthRef: "Ago/2026", amount: 850.00, status: "paid" },
+          { number: 44, date: "20/09/2026", monthRef: "Set/2026", amount: 850.00, status: "current" },
+          { number: 45, date: "20/10/2026", monthRef: "Out/2026", amount: 850.00, status: "pending" }
+        ]
+      },
+      // 4. COMPRAS PARCELADAS NO CARTÃO (CONSUMO)
+      {
+        id: 1,
+        type: "credit_card",
+        typeName: "Cartão de Crédito",
+        name: "MacBook Pro M3 Apple Store",
+        institution: "Nubank",
+        accountOrCard: "Nubank Ultravioleta",
+        pattern: "APPLE.COM/BILL",
+        totalAmount: 14400.00,
+        installmentAmount: 1200.00,
+        totalInstallments: 12,
+        paidInstallments: 3,
+        startDate: "2026-07-15",
+        lastDate: "2027-06-15",
+        status: "active",
+        details: { remainingDebt: 10800.00 },
+        parcels: [
+          { number: 1, date: "15/07/2026", monthRef: "Jul/2026", amount: 1200.00, status: "paid" },
+          { number: 2, date: "15/08/2026", monthRef: "Ago/2026", amount: 1200.00, status: "paid" },
+          { number: 3, date: "15/09/2026", monthRef: "Set/2026", amount: 1200.00, status: "current" },
+          { number: 4, date: "15/10/2026", monthRef: "Out/2026", amount: 1200.00, status: "pending" },
+          { number: 5, date: "15/11/2026", monthRef: "Nov/2026", amount: 1200.00, status: "pending" },
+          { number: 6, date: "15/12/2026", monthRef: "Dez/2026", amount: 1200.00, status: "pending" }
+        ]
+      },
+      {
+        id: 2,
+        type: "credit_card",
+        typeName: "Cartão de Crédito",
+        name: "Passagens Férias Europa (TAP)",
+        institution: "Itaú",
+        accountOrCard: "Itaú Mastercard Black",
+        pattern: "TAP AIR PORTUGAL",
+        totalAmount: 4800.00,
+        installmentAmount: 480.00,
+        totalInstallments: 10,
+        paidInstallments: 8,
+        startDate: "2026-02-10",
+        lastDate: "2026-11-10",
+        status: "active",
+        details: { remainingDebt: 960.00 },
+        parcels: [
+          { number: 7, date: "10/08/2026", monthRef: "Ago/2026", amount: 480.00, status: "paid" },
+          { number: 8, date: "10/09/2026", monthRef: "Set/2026", amount: 480.00, status: "current" },
+          { number: 9, date: "10/10/2026", monthRef: "Out/2026", amount: 480.00, status: "pending" },
+          { number: 10, date: "10/11/2026", monthRef: "Nov/2026", amount: 480.00, status: "pending" }
+        ]
+      },
+      {
+        id: 3,
+        type: "credit_card",
+        typeName: "Cartão de Crédito",
+        name: "Geladeira Brastemp Frost Free",
+        institution: "Nubank",
+        accountOrCard: "Nubank Ultravioleta",
+        pattern: "MAGAZINE LUIZA",
+        totalAmount: 3200.00,
+        installmentAmount: 400.00,
+        totalInstallments: 8,
+        paidInstallments: 7,
+        startDate: "2026-03-05",
+        lastDate: "2026-10-05",
+        status: "active",
+        details: { remainingDebt: 400.00 },
+        parcels: [
+          { number: 7, date: "05/09/2026", monthRef: "Set/2026", amount: 400.00, status: "current" },
+          { number: 8, date: "05/10/2026", monthRef: "Out/2026", amount: 400.00, status: "pending" }
+        ]
+      },
+      {
+        id: 4,
+        type: "credit_card",
+        typeName: "Cartão de Crédito",
+        name: "Pneus Michelin Carro",
+        institution: "Itaú",
+        accountOrCard: "Itaú Mastercard Black",
+        pattern: "DPASCHOAL PNEUS",
+        totalAmount: 1800.00,
+        installmentAmount: 300.00,
+        totalInstallments: 6,
+        paidInstallments: 4,
+        startDate: "2026-06-20",
+        lastDate: "2026-11-20",
+        status: "active",
+        details: { remainingDebt: 600.00 },
+        parcels: [
+          { number: 4, date: "20/09/2026", monthRef: "Set/2026", amount: 300.00, status: "current" },
+          { number: 5, date: "20/10/2026", monthRef: "Out/2026", amount: 300.00, status: "pending" },
+          { number: 6, date: "20/11/2026", monthRef: "Nov/2026", amount: 300.00, status: "pending" }
+        ]
+      },
+      {
+        id: 5,
+        type: "credit_card",
+        typeName: "Cartão de Crédito",
+        name: "Curso Inglês Anual Alura",
+        institution: "Nubank",
+        accountOrCard: "Nubank Ultravioleta",
+        pattern: "ALURA LINGUA",
+        totalAmount: 1440.00,
+        installmentAmount: 120.00,
+        totalInstallments: 12,
+        paidInstallments: 11,
+        startDate: "2025-10-12",
+        lastDate: "2026-09-12",
+        status: "active",
+        details: { remainingDebt: 120.00 },
+        parcels: [
+          { number: 12, date: "12/09/2026", monthRef: "Set/2026", amount: 120.00, status: "current" }
+        ]
+      },
+      // CONCLUÍDOS
+      {
+        id: 6,
+        type: "credit_card",
+        typeName: "Cartão de Crédito",
+        name: "Smartphone Samsung Galaxy S24",
+        institution: "Nubank",
+        accountOrCard: "Nubank Ultravioleta",
+        pattern: "SAMSUNG ELETRONICOS",
+        totalAmount: 4500.00,
+        installmentAmount: 450.00,
+        totalInstallments: 10,
+        paidInstallments: 10,
+        startDate: "2025-09-10",
+        lastDate: "2026-06-10",
+        status: "completed",
+        details: { remainingDebt: 0 },
+        parcels: []
+      }
+    ];
+
+    // Projeção dos próximos 10 meses discriminada por tipo (Cartão, Financiamento, Consórcio)
+    const PROJECTION_DATA = [
+      { label: "Set/26", card: 1149.80, financing: 2800.00, consortium: 850.00, current: true },
+      { label: "Out/26", card: 1029.80, financing: 2800.00, consortium: 850.00, current: false },
+      { label: "Nov/26", card: 629.80,  financing: 2800.00, consortium: 850.00, current: false },
+      { label: "Dez/26", card: 400.00,  financing: 2800.00, consortium: 850.00, current: false },
+      { label: "Jan/27", card: 400.00,  financing: 2800.00, consortium: 850.00, current: false },
+      { label: "Fev/27", card: 400.00,  financing: 2800.00, consortium: 850.00, current: false },
+      { label: "Mar/27", card: 400.00,  financing: 2800.00, consortium: 850.00, current: false },
+      { label: "Abr/27", card: 400.00,  financing: 2800.00, consortium: 850.00, current: false },
+      { label: "Mai/27", card: 400.00,  financing: 2800.00, consortium: 850.00, current: false },
+      { label: "Jun/27", card: 400.00,  financing: 2800.00, consortium: 850.00, current: false }
+    ];
+
+    let currentTypeFilter = 'all'; // 'all', 'credit_card', 'financing', 'consortium'
+    let currentStatusFilter = 'active'; // 'active', 'completed', 'all'
+    let currentSearch = '';
+    let expandedGroupIds = new Set([101, 1]); // Financiamento Caixa e MacBook começam expandidos para demonstração
+
+    function formatBRL(val) {
+      return 'R$ ' + (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderProjectionRibbon() {
+      const ribbon = document.getElementById('monthly-projection-ribbon');
+      const totals = PROJECTION_DATA.map(m => m.card + m.financing + m.consortium);
+      const maxTotal = Math.max(...totals);
+
+      ribbon.innerHTML = PROJECTION_DATA.map(m => {
+        const total = m.card + m.financing + m.consortium;
+        const isCurrent = m.current;
+        const cardPct = (m.card / total) * 100;
+        const finPct = (m.financing / total) * 100;
+        const consPct = (m.consortium / total) * 100;
+
+        return `
+          <div class="shrink-0 flex-1 min-w-[110px] rounded-xl border p-3 flex flex-col justify-between transition hover:border-slate-300 ${isCurrent ? 'bg-blue-50/50 border-blue-200 ring-1 ring-blue-200' : 'bg-slate-50/60 border-slate-200'}">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-bold uppercase tracking-wider ${isCurrent ? 'text-blue-700' : 'text-slate-500'}">
+                ${m.label}
+              </span>
+              ${isCurrent ? '<span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>' : ''}
+            </div>
+
+            <div class="mt-2">
+              <span class="text-xs font-black font-mono block ${isCurrent ? 'text-blue-700' : 'text-slate-900'}">
+                ${formatBRL(total)}
+              </span>
+              <div class="flex items-center justify-between text-[9px] text-slate-400 mt-1 font-mono">
+                <span title="Cartão: ${formatBRL(m.card)}" class="text-blue-600 font-bold">${formatBRL(m.card)}</span>
+                <span title="Fixo (Financ+Cons): ${formatBRL(m.financing + m.consortium)}" class="text-indigo-600 font-semibold">${formatBRL(m.financing + m.consortium)}</span>
+              </div>
+            </div>
+
+            <!-- Mini Barra Empilhada Proporcional -->
+            <div class="w-full bg-slate-200/80 rounded-full h-1.5 mt-2 overflow-hidden flex">
+              <div class="bg-indigo-600 h-full" style="width: ${finPct}%;" title="Financiamento"></div>
+              <div class="bg-amber-500 h-full" style="width: ${consPct}%;" title="Consórcio"></div>
+              <div class="bg-blue-500 h-full" style="width: ${cardPct}%;" title="Cartão de Crédito"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('groups-tbody');
+      const emptyState = document.getElementById('empty-state');
+
+      let filtered = ALL_GROUPS.filter(g => {
+        if (currentTypeFilter !== 'all' && g.type !== currentTypeFilter) return false;
+        if (currentStatusFilter !== 'all' && g.status !== currentStatusFilter) return false;
+        if (currentSearch) {
+          const needle = currentSearch.toLowerCase();
+          const matchName = g.name.toLowerCase().includes(needle);
+          const matchInst = g.institution.toLowerCase().includes(needle);
+          const matchAcc = g.accountOrCard.toLowerCase().includes(needle);
+          const matchPattern = g.pattern.toLowerCase().includes(needle);
+          if (!matchName && !matchInst && !matchAcc && !matchPattern) return false;
+        }
+        return true;
+      });
+
+      // Atualiza badges de contagem
+      document.getElementById('badge-count-all').textContent = ALL_GROUPS.filter(g => g.status === 'active').length;
+      document.getElementById('badge-count-card').textContent = ALL_GROUPS.filter(g => g.type === 'credit_card' && g.status === 'active').length;
+      document.getElementById('badge-count-financing').textContent = ALL_GROUPS.filter(g => g.type === 'financing' && g.status === 'active').length;
+      document.getElementById('badge-count-consortium').textContent = ALL_GROUPS.filter(g => g.type === 'consortium' && g.status === 'active').length;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      tbody.innerHTML = filtered.map(g => {
+        const isExpanded = expandedGroupIds.has(g.id);
+        const remainingInstallments = g.totalInstallments - g.paidInstallments;
+        const progressPct = Math.round((g.paidInstallments / g.totalInstallments) * 100);
+        const isCompleted = g.status === 'completed' || remainingInstallments <= 0;
+
+        // Badge de tipo visual
+        let typeBadge = '';
+        if (g.type === 'financing') {
+          typeBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">🏠 Financiamento</span>`;
+        } else if (g.type === 'consortium') {
+          typeBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">🤝 Consórcio</span>`;
+        } else {
+          typeBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">💳 Cartão</span>`;
+        }
+
+        // Saldo devedor
+        const saldoDevedor = g.details && g.details.remainingDebt ? g.details.remainingDebt : (remainingInstallments * g.installmentAmount);
+
+        return `
+          <!-- Linha Principal -->
+          <tr class="hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-blue-50/20' : ''}">
+            <td class="py-3.5 px-4 text-center">
+              <button onclick="toggleExpand(${g.id})" class="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 rounded-lg transition" title="Ver parcelas e detalhes">
+                <svg class="w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-90 text-blue-600' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              </button>
+            </td>
+
+            <td class="py-3.5 px-4 cursor-pointer" onclick="toggleExpand(${g.id})">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-slate-900">${g.name}</span>
+                ${isCompleted ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Quitado</span>' : ''}
+              </div>
+              <div class="flex items-center gap-2 text-[11px] text-slate-400 font-mono mt-0.5">
+                <span>Padrão/Identificador: <b class="text-slate-600 font-sans">${g.pattern}</b></span>
+              </div>
+            </td>
+
+            <td class="py-3.5 px-4">
+              <div class="space-y-1">
+                ${typeBadge}
+                <span class="text-[11px] text-slate-500 block font-medium">${g.accountOrCard}</span>
+              </div>
+            </td>
+
+            <td class="py-3.5 px-4 text-right font-mono font-bold text-slate-800">
+              ${formatBRL(g.totalAmount)}
+            </td>
+
+            <td class="py-3.5 px-4 text-right font-mono font-semibold text-rose-600">
+              ${formatBRL(g.installmentAmount)}
+            </td>
+
+            <td class="py-3.5 px-4">
+              <div class="flex flex-col gap-1 max-w-[140px] mx-auto">
+                <div class="flex items-center justify-between text-[11px]">
+                  <span class="font-bold ${isCompleted ? 'text-emerald-600' : 'text-slate-700'}">${g.paidInstallments} de ${g.totalInstallments}</span>
+                  <span class="font-mono text-slate-400">${progressPct}%</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div class="${isCompleted ? 'bg-emerald-500' : (g.type === 'financing' ? 'bg-indigo-600' : (g.type === 'consortium' ? 'bg-amber-500' : 'bg-blue-600'))} rounded-full transition-all duration-300" style="width: ${progressPct}%; height: 100%;"></div>
+                </div>
+              </div>
+            </td>
+
+            <td class="py-3.5 px-4 text-right font-mono font-bold ${saldoDevedor > 0 ? 'text-slate-800' : 'text-slate-400'}">
+              ${saldoDevedor > 0 ? formatBRL(saldoDevedor) : 'R$ 0,00'}
+            </td>
+
+            <td class="py-3.5 px-4 text-right text-slate-500 font-mono text-[11px] whitespace-nowrap">
+              ${formatDate(g.lastDate)}
+            </td>
+
+            <td class="py-3.5 px-4 text-center whitespace-nowrap">
+              <div class="flex items-center justify-center gap-1 text-slate-400">
+                <button onclick="openGroupModal('edit', ${g.id})" class="p-1 hover:text-blue-600 transition" title="Editar">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                </button>
+                <button onclick="openDeleteModal(${g.id})" class="p-1 hover:text-rose-500 transition" title="Excluir">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Linha Expandida: Detalhes Estruturados Conforme o Tipo -->
+          ${isExpanded ? `
+            <tr class="bg-slate-50/70 border-b border-slate-200/80">
+              <td colspan="9" class="p-0">
+                <div class="px-8 py-4 space-y-3">
+                  ${renderExpandedSection(g)}
+                </div>
+              </td>
+            </tr>
+          ` : ''}
+        `;
+      }).join('');
+    }
+
+    function renderExpandedSection(group) {
+      if (group.type === 'financing') {
+        return `
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-bold text-indigo-900">Detalhes do Financiamento (${group.institution})</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">Taxa: ${group.details.rate || 'TR'}</span>
+            </div>
+            <div class="flex items-center gap-4 text-xs">
+              <span class="text-slate-500">Amortizado: <b class="font-mono text-emerald-600">${formatBRL(group.details.amortized)}</b></span>
+              <span class="text-slate-500">Saldo Devedor Atual: <b class="font-mono text-slate-800">${formatBRL(group.details.remainingDebt)}</b></span>
+              <a href="#" class="text-blue-600 hover:underline font-semibold text-[11px]">Ver extrato do débito →</a>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+            ${renderParcelsList(group)}
+          </div>
+        `;
+      }
+
+      if (group.type === 'consortium') {
+        return `
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-bold text-amber-900">Detalhes do Consórcio (${group.institution})</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">${group.details.contemplation}</span>
+            </div>
+            <div class="flex items-center gap-4 text-xs">
+              <span class="text-slate-500">Carta de Crédito: <b class="font-mono text-slate-900">${formatBRL(group.details.letterValue)}</b></span>
+              <span class="text-slate-500">Saldo a Pagar: <b class="font-mono text-slate-800">${formatBRL(group.details.remainingDebt)}</b></span>
+              <a href="#" class="text-blue-600 hover:underline font-semibold text-[11px]">Ver histórico de pagamentos →</a>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+            ${renderParcelsList(group)}
+          </div>
+        `;
+      }
+
+      // Cartão de crédito padrão
+      return `
+        <div class="flex items-center justify-between text-xs font-bold text-slate-700 border-b border-slate-200/60 pb-2.5">
+          <span class="flex items-center gap-2">
+            <span>Parcelas na Fatura do Cartão (${group.accountOrCard})</span>
+            <span class="text-[10px] font-normal text-slate-400">Rastreamento de fatura em fatura</span>
+          </span>
+          <a href="#" class="text-blue-600 hover:underline font-semibold text-[11px] flex items-center gap-1">
+            Filtrar no Extrato de Transações →
+          </a>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+          ${renderParcelsList(group)}
+        </div>
+      `;
+    }
+
+    function renderParcelsList(group) {
+      if (!group.parcels || group.parcels.length === 0) {
+        return `
+          <div class="col-span-full py-3 text-center text-slate-400 text-xs italic">
+            Nenhuma parcela registrada individualmente.
+          </div>
+        `;
+      }
+
+      return group.parcels.map(p => {
+        let badgeColor = "bg-slate-100 text-slate-600 border-slate-200";
+        let statusText = "Paga";
+        let isCurrent = p.status === 'current';
+        let isPending = p.status === 'pending';
+
+        if (isCurrent) {
+          badgeColor = "bg-blue-50 text-blue-700 border-blue-200 font-bold";
+          statusText = "Mês Atual";
+        } else if (isPending) {
+          badgeColor = "bg-amber-50/80 text-amber-700 border-amber-200";
+          statusText = "Prevista";
+        }
+
+        return `
+          <div class="bg-white rounded-xl border ${isCurrent ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200'} p-2.5 shadow-2xs flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <div class="w-7 h-7 rounded-lg ${isCurrent ? 'bg-blue-600 text-white' : (isPending ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-700')} flex items-center justify-center font-mono font-bold text-xs">
+                ${p.number}
+              </div>
+              <div>
+                <span class="text-xs font-bold text-slate-800 block">${p.monthRef}</span>
+                <span class="text-[10px] text-slate-400 block">${p.date}</span>
+              </div>
+            </div>
+
+            <div class="text-right">
+              <span class="text-xs font-mono font-bold text-slate-900 block">${formatBRL(p.amount)}</span>
+              <span class="px-1.5 py-0.5 rounded text-[9px] border inline-block mt-0.5 ${badgeColor}">
+                ${statusText}
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function formatDate(isoStr) {
+      if (!isoStr) return '—';
+      const [y, m, d] = isoStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+
+    function toggleExpand(id) {
+      if (expandedGroupIds.has(id)) {
+        expandedGroupIds.delete(id);
+      } else {
+        expandedGroupIds.add(id);
+      }
+      renderTable();
+    }
+
+    function toggleAllExpand() {
+      const btn = document.getElementById('btn-toggle-all');
+      if (expandedGroupIds.size > 0) {
+        expandedGroupIds.clear();
+        btn.textContent = "Expandir Todos";
+      } else {
+        ALL_GROUPS.forEach(g => expandedGroupIds.add(g.id));
+        btn.textContent = "Recolher Todos";
+      }
+      renderTable();
+    }
+
+    function setTypeFilter(type) {
+      currentTypeFilter = type;
+      ['all', 'credit_card', 'financing', 'consortium'].forEach(t => {
+        const tab = document.getElementById(`type-tab-${t}`);
+        if (t === type) {
+          tab.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-xs transition flex items-center gap-1.5";
+        } else {
+          tab.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5";
+        }
+      });
+      renderTable();
+    }
+
+    function onStatusChange(val) {
+      currentStatusFilter = val;
+      renderTable();
+    }
+
+    function onSearch(val) {
+      currentSearch = val.trim();
+      document.getElementById('btn-clear-search').classList.toggle('hidden', !currentSearch);
+      renderTable();
+    }
+
+    function clearSearch() {
+      document.getElementById('search-input').value = '';
+      currentSearch = '';
+      document.getElementById('btn-clear-search').classList.add('hidden');
+      renderTable();
+    }
+
+    function simulateScan() {
+      const btn = document.getElementById('btn-scan');
+      const toast = document.getElementById('scan-toast');
+      btn.innerHTML = `<span class="inline-block animate-spin mr-1">↻</span> Analisando faturas...`;
+      btn.disabled = true;
+
+      setTimeout(() => {
+        btn.innerHTML = `
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <span>Detectar no Extrato</span>
+        `;
+        btn.disabled = false;
+        toast.classList.remove('hidden');
+        renderTable();
+      }, 700);
+    }
+
+    // ================= MODAL INTELIGENTE (ADAPTÁVEL POR TIPO) =================
+    let currentModalMode = 'new';
+    let editingGroupId = null;
+    let selectedModalType = 'credit_card';
+
+    function selectModalType(type) {
+      selectedModalType = type;
+      ['credit_card', 'financing', 'consortium'].forEach(t => {
+        const btn = document.getElementById(`btn-modal-type-${t}`);
+        if (t === type) {
+          btn.className = "py-2 px-2.5 rounded-xl border text-center font-bold text-xs transition border-blue-500 bg-blue-50 text-blue-700";
+        } else {
+          btn.className = "py-2 px-2.5 rounded-xl border text-center font-bold text-xs transition border-slate-200 text-slate-600 hover:bg-slate-50";
+        }
+      });
+
+      const fieldsCreditCard = document.getElementById('fields-credit-card');
+      const fieldsLongterm = document.getElementById('fields-longterm');
+      const consortiumStatus = document.getElementById('field-consortium-status');
+      const labelName = document.getElementById('label-name-field');
+      const labelTotal = document.getElementById('label-total-amount');
+
+      if (type === 'credit_card') {
+        fieldsCreditCard.classList.remove('hidden');
+        fieldsLongterm.classList.add('hidden');
+        consortiumStatus.classList.add('hidden');
+        labelName.textContent = "Nome da Compra (ex: MacBook Pro, Geladeira...)";
+        labelTotal.textContent = "Valor Total da Compra (R$)";
+      } else if (type === 'financing') {
+        fieldsCreditCard.classList.add('hidden');
+        fieldsLongterm.classList.remove('hidden');
+        consortiumStatus.classList.add('hidden');
+        labelName.textContent = "Identificação do Financiamento (ex: Apê Jardim, Honda HR-V)";
+        labelTotal.textContent = "Valor Total Financiado (R$)";
+      } else if (type === 'consortium') {
+        fieldsCreditCard.classList.add('hidden');
+        fieldsLongterm.classList.remove('hidden');
+        consortiumStatus.classList.remove('hidden');
+        labelName.textContent = "Identificação do Consórcio (ex: Carta Imóvel 80k)";
+        labelTotal.textContent = "Valor da Carta de Crédito (R$)";
+      }
+    }
+
+    function applyQuickFill(key) {
+      if (!key) return;
+
+      if (key === 'caixa') {
+        selectModalType('financing');
+        document.getElementById('form-name').value = 'Financiamento Apê Jardim (Caixa)';
+        document.getElementById('form-pattern').value = 'DEB FINANC HAB';
+        document.getElementById('form-institution').value = 'Caixa Econômica Federal';
+        document.getElementById('form-bank-account').value = 'Caixa Corrente';
+        document.getElementById('form-total-amount').value = '280.000,00';
+        document.getElementById('form-installment-amount').value = '2.100,00';
+        document.getElementById('form-installments').value = '360';
+        document.getElementById('form-start-date').value = '2022-09-10';
+      } else if (key === 'santander') {
+        selectModalType('financing');
+        document.getElementById('form-name').value = 'Financiamento Honda HR-V (Santander)';
+        document.getElementById('form-pattern').value = 'FINANC SANTANDER AUTO';
+        document.getElementById('form-institution').value = 'Santander Financiamentos';
+        document.getElementById('form-bank-account').value = 'Itaú Corrente';
+        document.getElementById('form-total-amount').value = '38.000,00';
+        document.getElementById('form-installment-amount').value = '700,00';
+        document.getElementById('form-installments').value = '48';
+        document.getElementById('form-start-date').value = '2024-05-15';
+      } else if (key === 'porto') {
+        selectModalType('consortium');
+        document.getElementById('form-name').value = 'Consórcio Carta R$ 80k (Porto Seguro)';
+        document.getElementById('form-pattern').value = 'CONSORCIO PORTO SEGURO';
+        document.getElementById('form-institution').value = 'Porto Seguro Administradora';
+        document.getElementById('form-bank-account').value = 'Boleto Bancário';
+        document.getElementById('form-total-amount').value = '80.000,00';
+        document.getElementById('form-installment-amount').value = '850,00';
+        document.getElementById('form-installments').value = '120';
+        document.getElementById('form-start-date').value = '2023-01-20';
+      } else if (key === 'apple') {
+        selectModalType('credit_card');
+        document.getElementById('form-name').value = 'MacBook Pro M3 Apple Store';
+        document.getElementById('form-pattern').value = 'APPLE.COM/BILL';
+        document.getElementById('form-card-account').value = 'Nubank Ultravioleta';
+        document.getElementById('form-total-amount').value = '14.400,00';
+        document.getElementById('form-installment-amount').value = '1.200,00';
+        document.getElementById('form-installments').value = '12';
+        document.getElementById('form-start-date').value = '2026-07-15';
+      } else if (key === 'magalu') {
+        selectModalType('credit_card');
+        document.getElementById('form-name').value = 'Geladeira Brastemp Frost Free';
+        document.getElementById('form-pattern').value = 'MAGAZINE LUIZA';
+        document.getElementById('form-card-account').value = 'Nubank Ultravioleta';
+        document.getElementById('form-total-amount').value = '3.200,00';
+        document.getElementById('form-installment-amount').value = '400,00';
+        document.getElementById('form-installments').value = '8';
+        document.getElementById('form-start-date').value = '2026-03-05';
+      }
+    }
+
+    function openGroupModal(mode = 'new', id = null) {
+      currentModalMode = mode;
+      editingGroupId = id;
+
+      const modal = document.getElementById('group-modal');
+      const title = document.getElementById('modal-group-title');
+      const quickFill = document.getElementById('quick-fill-select');
+      if (quickFill) quickFill.value = '';
+
+      if (mode === 'new') {
+        title.textContent = "Novo Compromisso Financeiro";
+        selectModalType('credit_card');
+        document.getElementById('form-name').value = '';
+        document.getElementById('form-pattern').value = '';
+        document.getElementById('form-institution').value = '';
+        document.getElementById('form-total-amount').value = '';
+        document.getElementById('form-installment-amount').value = '';
+        document.getElementById('form-installments').value = '';
+        document.getElementById('form-start-date').value = new Date().toISOString().slice(0, 10);
+      } else {
+        const g = ALL_GROUPS.find(item => item.id === id);
+        if (!g) return;
+        title.textContent = `Editar: ${g.name}`;
+        selectModalType(g.type);
+        document.getElementById('form-name').value = g.name;
+        document.getElementById('form-pattern').value = g.pattern;
+        document.getElementById('form-institution').value = g.institution || '';
+        document.getElementById('form-total-amount').value = g.totalAmount.toFixed(2).replace('.', ',');
+        document.getElementById('form-installment-amount').value = g.installmentAmount.toFixed(2).replace('.', ',');
+        document.getElementById('form-installments').value = g.totalInstallments;
+        document.getElementById('form-start-date').value = g.startDate;
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeGroupModal() {
+      document.getElementById('group-modal').classList.add('hidden');
+    }
+
+    function calcInstallmentFromTotal() {
+      const totalStr = document.getElementById('form-total-amount').value.replace(/\./g, '').replace(',', '.');
+      const instStr = document.getElementById('form-installments').value;
+      const total = parseFloat(totalStr);
+      const inst = parseInt(instStr, 10);
+
+      if (!isNaN(total) && !isNaN(inst) && inst > 0) {
+        const val = total / inst;
+        document.getElementById('form-installment-amount').value = val.toFixed(2).replace('.', ',');
+      }
+    }
+
+    function saveGroupForm(e) {
+      e.preventDefault();
+      const name = document.getElementById('form-name').value.trim();
+      const pattern = document.getElementById('form-pattern').value.trim() || name;
+      const institution = document.getElementById('form-institution').value.trim();
+      const total = parseFloat(document.getElementById('form-total-amount').value.replace(/\./g, '').replace(',', '.')) || 0;
+      const installmentVal = parseFloat(document.getElementById('form-installment-amount').value.replace(/\./g, '').replace(',', '.')) || 0;
+      const installmentsCount = parseInt(document.getElementById('form-installments').value, 10) || 1;
+      const startDate = document.getElementById('form-start-date').value;
+
+      if (currentModalMode === 'new') {
+        const newGroup = {
+          id: Date.now(),
+          type: selectedModalType,
+          typeName: selectedModalType === 'financing' ? 'Financiamento' : (selectedModalType === 'consortium' ? 'Consórcio' : 'Cartão de Crédito'),
+          name: name,
+          institution: institution || 'Banco',
+          accountOrCard: selectedModalType === 'credit_card' ? document.getElementById('form-card-account').value : document.getElementById('form-bank-account').value,
+          pattern: pattern,
+          totalAmount: total,
+          installmentAmount: installmentVal,
+          totalInstallments: installmentsCount,
+          paidInstallments: 0,
+          startDate: startDate,
+          lastDate: startDate,
+          status: "active",
+          details: { remainingDebt: total },
+          parcels: []
+        };
+        ALL_GROUPS.unshift(newGroup);
+        expandedGroupIds.add(newGroup.id);
+      } else {
+        const g = ALL_GROUPS.find(item => item.id === editingGroupId);
+        if (g) {
+          g.name = name;
+          g.pattern = pattern;
+          g.totalAmount = total;
+          g.installmentAmount = installmentVal;
+          g.totalInstallments = installmentsCount;
+          g.startDate = startDate;
+        }
+      }
+
+      closeGroupModal();
+      renderTable();
+    }
+
+    // ================= MODAL DE EXCLUSÃO =================
+    let deletingGroupId = null;
+
+    function openDeleteModal(id) {
+      const g = ALL_GROUPS.find(item => item.id === id);
+      if (!g) return;
+      deletingGroupId = id;
+
+      document.getElementById('delete-group-name').textContent = g.name;
+      document.getElementById('delete-group-installments').textContent = `${g.totalInstallments} parcelas (${g.paidInstallments} pagas)`;
+      document.getElementById('delete-group-total').textContent = formatBRL(g.totalAmount);
+
+      document.getElementById('delete-modal').classList.remove('hidden');
+    }
+
+    function closeDeleteModal() {
+      deletingGroupId = null;
+      document.getElementById('delete-modal').classList.add('hidden');
+    }
+
+    function executeDeleteGroup() {
+      if (!deletingGroupId) return;
+      const idx = ALL_GROUPS.findIndex(item => item.id === deletingGroupId);
+      if (idx !== -1) {
+        ALL_GROUPS.splice(idx, 1);
+        expandedGroupIds.delete(deletingGroupId);
+      }
+      closeDeleteModal();
+      renderTable();
+    }
+
+    // Inicialização
+    renderProjectionRibbon();
+    renderTable();
+  </script>
+</body>
+</html>

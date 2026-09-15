@@ -11,6 +11,26 @@ defmodule CashLensWeb.AdminDatabaseLive do
         <:subtitle>Direct visualization and filtering of tables.</:subtitle>
       </.header>
 
+      <%!-- Batch maintenance jobs that are too heavy to run from a feature screen. --%>
+      <div class="card bg-base-100 shadow-sm border border-base-300">
+        <div class="card-body p-4 flex-row items-center justify-between gap-4">
+          <div>
+            <h2 class="text-xs uppercase opacity-50 font-black">Manutenção em Lote</h2>
+            <p class="text-xs opacity-60">
+              Varre todo o extrato em busca de compras parceladas ("PARC x/y") e as agrupa.
+              Também roda automaticamente no pipeline de importação.
+            </p>
+          </div>
+          <button
+            phx-click="detect_installments"
+            phx-disable-with="Detectando..."
+            class="btn btn-primary btn-sm rounded-xl shrink-0"
+          >
+            <.icon name="hero-sparkles" class="size-4 mr-1" /> Detectar Parcelamentos
+          </button>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <!-- Sidebar: Tables List -->
         <div class="lg:col-span-1 space-y-4">
@@ -127,6 +147,18 @@ defmodule CashLensWeb.AdminDatabaseLive do
 
   @impl true
   def handle_params(_params, _uri, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_event("detect_installments", _params, socket) do
+    count = CashLens.Installments.scan_and_apply_all()
+
+    {:noreply,
+     put_flash(
+       socket,
+       :success,
+       "#{count} transação(ões) parcelada(s) detectada(s) e agrupada(s)."
+     )}
+  end
 
   @impl true
   def handle_event("filter", %{"filters" => filter_params}, socket) do

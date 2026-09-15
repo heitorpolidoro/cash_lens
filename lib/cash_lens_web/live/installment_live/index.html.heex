@@ -1,0 +1,578 @@
+<div class="py-6 space-y-6">
+  <%!-- Cabeçalho --%>
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2.5">
+        <h1 class="text-2xl font-black text-base-content tracking-tighter uppercase">
+          Compromissos a Prazo & Dívidas
+        </h1>
+        <span
+          id="active-badge"
+          class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20"
+        >
+          {@active_count} ativos consolidados
+        </span>
+      </div>
+      <p class="text-xs opacity-50 mt-1">
+        Visão global de compras parceladas no cartão, financiamentos de longo prazo e parcelas de consórcios.
+      </p>
+    </div>
+
+    <button phx-click="open_modal" class="btn btn-primary btn-sm rounded-xl">
+      <.icon name="hero-plus" class="size-4 mr-1" /> Novo Compromisso
+    </button>
+  </div>
+
+  <%!-- 3 cards de métricas globais --%>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-4 flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[11px] font-bold uppercase tracking-wider opacity-50">
+            Comprometimento no Mês
+          </span>
+          <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-error/10 text-error">
+            {month_chip(@reference_month)}
+          </span>
+        </div>
+        <div id="metric-month-total" class="text-2xl font-black text-error font-mono">
+          {format_currency(@month_metrics.total)}
+        </div>
+        <span class="text-[11px] opacity-40 mt-0.5 block">
+          Total debitado ou cobrado em fatura neste mês
+        </span>
+      </div>
+
+      <div
+        id="metric-month-breakdown"
+        class="mt-3 pt-2.5 border-t border-base-300 space-y-1.5 text-[11px]"
+      >
+        <div
+          :for={type <- @commitment_types}
+          class="flex items-center justify-between opacity-70"
+        >
+          <span class="flex items-center gap-1.5">
+            <span class={["w-2 h-2 rounded-full", dot_class(type)]}></span>
+            {breakdown_caption(type, @month_metrics.by_type[type].count)}
+          </span>
+          <span class="font-mono font-semibold">
+            {format_currency(@month_metrics.by_type[type].amount)}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-4 flex flex-col justify-between">
+      <div>
+        <span class="text-[11px] font-bold uppercase tracking-wider opacity-50 block mb-1">
+          Saldo Devedor Consolidado
+        </span>
+        <div id="metric-remaining-total" class="text-2xl font-black font-mono">
+          {format_currency(@balance.total)}
+        </div>
+        <span class="text-[11px] opacity-40 mt-0.5 block">
+          Capital total restante a pagar / amortizar
+        </span>
+      </div>
+
+      <div
+        id="metric-remaining-breakdown"
+        class="mt-3 pt-2.5 border-t border-base-300 space-y-1.5 text-[11px]"
+      >
+        <div :for={type <- @commitment_types} class="flex items-center justify-between opacity-70">
+          <span>{breakdown_label(type)}:</span>
+          <span class="font-mono font-semibold">{format_currency(@balance.by_type[type])}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-4 flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[11px] font-bold uppercase tracking-wider opacity-50">
+            Alívio no Fluxo de Caixa
+          </span>
+          <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-success/10 text-success">
+            Próximos 90 dias
+          </span>
+        </div>
+        <div id="metric-relief-total" class="text-2xl font-black text-success font-mono">
+          +{format_currency(@relief.total)}<span class="text-xs font-semibold opacity-50">/mês livre</span>
+        </div>
+        <span class="text-[11px] opacity-40 mt-0.5 block">
+          Economia mensal conforme parcelas encerram
+        </span>
+      </div>
+
+      <div
+        id="metric-relief-breakdown"
+        class="mt-3 pt-2.5 border-t border-base-300 space-y-1.5 text-[11px]"
+      >
+        <div :if={@relief.items == []} class="opacity-40">
+          Nenhum compromisso se encerra nos próximos 90 dias.
+        </div>
+        <div :for={item <- @relief.items} class="flex items-center justify-between gap-2">
+          <span class="truncate opacity-70">
+            Em {month_chip(item.date)}: encerra <b>{item.description}</b>
+          </span>
+          <span class="font-mono text-success font-bold shrink-0">
+            +{format_currency(item.amount)}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%!-- Fita de projeção mensal empilhada --%>
+  <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-5 space-y-3">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div>
+        <h2 class="text-xs font-black uppercase tracking-wider">
+          Fluxo Projetado de Compromissos nos Próximos {length(@projection)} Meses
+        </h2>
+        <p class="text-[11px] opacity-40">
+          Veja o alívio no fluxo de caixa conforme as compras de cartão são quitadas
+        </p>
+      </div>
+
+      <div class="flex items-center gap-3 text-[11px] font-semibold opacity-70">
+        <span :for={type <- @commitment_types} class="inline-flex items-center gap-1.5">
+          <span class={["w-2.5 h-2.5 rounded-sm", dot_class(type)]}></span>
+          {type_label(type)}
+        </span>
+      </div>
+    </div>
+
+    <div
+      class="flex items-stretch gap-2.5 overflow-x-auto pb-1 pt-1"
+      id="monthly-projection-ribbon"
+    >
+      <div
+        :for={month <- @projection}
+        id={"projection-#{Date.to_iso8601(month.date)}"}
+        class={[
+          "shrink-0 flex-1 min-w-[130px] rounded-xl border p-3 flex flex-col justify-between",
+          if(month.current?,
+            do: "bg-primary/5 border-primary/30 ring-1 ring-primary/20",
+            else: "bg-base-200/40 border-base-300"
+          )
+        ]}
+      >
+        <div class="flex items-center justify-between">
+          <span class={[
+            "text-[10px] font-bold uppercase tracking-wider",
+            if(month.current?, do: "text-primary", else: "opacity-50")
+          ]}>
+            {month_chip(month.date)}
+          </span>
+          <span :if={month.current?} class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+        </div>
+
+        <div class="mt-2">
+          <span class={[
+            "text-xs font-black font-mono block",
+            month.current? && "text-primary"
+          ]}>
+            {format_currency(month.total)}
+          </span>
+          <div class="mt-1 space-y-0.5 text-[9px] font-mono opacity-60">
+            <div :for={type <- @commitment_types} class="flex items-center justify-between gap-2">
+              <span class="flex items-center gap-1">
+                <span class={["w-1.5 h-1.5 rounded-full", dot_class(type)]}></span>
+                {type_label(type)}
+              </span>
+              <span>{format_currency(projected_amount(month, type))}</span>
+            </div>
+          </div>
+        </div>
+
+        <%!-- Barra empilhada proporcional: financiamento na base, cartão no topo --%>
+        <div class="w-full bg-base-300 rounded-full h-1.5 mt-2 overflow-hidden flex">
+          <div
+            :for={{type, pct} <- stack_shares(month)}
+            class={["h-full", dot_class(type)]}
+            style={"width: #{pct}%;"}
+            title={type_label(type)}
+          >
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%!-- Abas de tipo, status e busca --%>
+  <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+    <div class="flex items-center flex-wrap gap-1 bg-base-200 p-1 rounded-xl w-fit">
+      <.link
+        :for={type <- known_types()}
+        id={"type-tab-#{type}"}
+        patch={filter_path(assigns, type: type)}
+        class={[
+          "px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5",
+          if(@type_filter == type,
+            do: "bg-base-100 shadow-sm",
+            else: "opacity-60 hover:opacity-100"
+          )
+        ]}
+      >
+        <span>{type_tab_label(type)}</span>
+        <span
+          id={"badge-count-#{type}"}
+          class="px-1.5 rounded-full text-[10px] bg-base-300 font-mono"
+        >
+          {tab_count(@counts, @active_count, type)}
+        </span>
+      </.link>
+    </div>
+
+    <div class="flex items-center flex-wrap gap-2 flex-1 lg:max-w-lg justify-end">
+      <div class="flex items-center gap-1 bg-base-200 p-1 rounded-xl">
+        <.link
+          :for={
+            {status, label} <- [
+              {"active", "Ativos"},
+              {"completed", "Concluídos"},
+              {"all", "Todos"}
+            ]
+          }
+          id={"status-tab-#{status}"}
+          patch={filter_path(assigns, status: status)}
+          class={[
+            "px-3 py-1.5 rounded-lg text-xs font-bold transition",
+            if(@status_filter == status,
+              do: "bg-base-100 shadow-sm",
+              else: "opacity-60 hover:opacity-100"
+            )
+          ]}
+        >
+          {label}
+        </.link>
+      </div>
+
+      <form phx-change="search" class="flex-1 min-w-[180px]">
+        <input
+          type="text"
+          name="search[q]"
+          value={@query}
+          phx-debounce="300"
+          placeholder="Buscar por descrição ou instituição..."
+          class="input input-bordered input-sm rounded-xl w-full"
+        />
+      </form>
+    </div>
+  </div>
+
+  <%!-- Listagem de compromissos --%>
+  <div
+    id="commitments-table"
+    class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden"
+  >
+    <div :if={@commitments == []} class="px-6 py-12 text-center">
+      <h3 class="text-sm font-bold">Nenhum compromisso encontrado neste filtro</h3>
+      <p class="text-xs opacity-40 max-w-sm mx-auto mt-1">
+        Alterne entre as abas ou clique em "Novo Compromisso" para registrar um financiamento, consórcio ou parcelamento.
+      </p>
+    </div>
+
+    <table :if={@commitments != []} class="table table-sm w-full">
+      <thead class="bg-base-200/50 text-[10px] uppercase tracking-wider">
+        <tr>
+          <th>Compromisso / Descrição</th>
+          <th>Tipo & Vínculo</th>
+          <th class="text-right">Valor Total</th>
+          <th class="text-right">Parcela</th>
+          <th class="text-center w-40">Progresso</th>
+          <th class="text-right">Saldo Devedor</th>
+          <th class="text-right">Quitação</th>
+          <th class="w-10"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <%= for group <- @commitments do %>
+          <tr class="hover">
+            <td class="font-bold text-xs">
+              <button
+                type="button"
+                phx-click="toggle_expand"
+                phx-value-id={group.id}
+                class="flex items-center gap-2 text-left w-full"
+              >
+                <.icon
+                  name="hero-chevron-right"
+                  class={[
+                    "size-3 transition-transform",
+                    MapSet.member?(@expanded_ids, group.id) && "rotate-90"
+                  ]}
+                />
+                {group.description_pattern}
+                <span
+                  :if={group.is_finished}
+                  class="px-1.5 rounded text-[9px] font-bold bg-success/10 text-success border border-success/30"
+                >
+                  Quitado
+                </span>
+              </button>
+            </td>
+            <td>
+              <span class={[
+                "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                badge_class(group.commitment_type)
+              ]}>
+                {type_icon(group.commitment_type)} {type_label(group.commitment_type)}
+              </span>
+              <span :if={group.institution} class="text-[11px] opacity-50 block font-medium">
+                {group.institution}
+              </span>
+            </td>
+            <td class="text-right font-mono">
+              {if group.total_amount, do: format_currency(group.total_amount), else: "---"}
+            </td>
+            <td class="text-right font-mono text-xs opacity-70">
+              {if group.installment_amount,
+                do: format_currency(group.installment_amount),
+                else: "---"}
+            </td>
+            <td>
+              <div class="flex flex-col gap-1">
+                <span class="text-[10px] font-bold text-center">
+                  {progress_count(group)} / {group.installments} ({progress_pct(group)}%)
+                </span>
+                <div class="w-full bg-base-300 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    class={["h-full rounded-full", progress_class(group.commitment_type)]}
+                    style={"width: #{progress_pct(group)}%;"}
+                  >
+                  </div>
+                </div>
+              </div>
+            </td>
+            <td class="text-right font-mono text-xs">{format_currency(group.outstanding)}</td>
+            <td class="text-right text-xs opacity-60 whitespace-nowrap">
+              {last_parcel_label(group)}
+            </td>
+            <td class="text-right">
+              <div class="flex justify-end gap-1.5">
+                <button
+                  phx-click="edit"
+                  phx-value-id={group.id}
+                  class="btn btn-ghost btn-xs text-info p-0"
+                >
+                  <.icon name="hero-pencil" class="size-4" />
+                </button>
+                <button
+                  phx-click="delete"
+                  phx-value-id={group.id}
+                  class="btn btn-ghost btn-xs text-error p-0"
+                >
+                  <.icon name="hero-trash" class="size-4" />
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr :if={MapSet.member?(@expanded_ids, group.id)} class="bg-base-200/40">
+            <td colspan="8" class="p-0">
+              <div class="px-6 py-3 space-y-3">
+                <div class="flex flex-wrap gap-6 text-[11px]">
+                  <div :if={group.interest_rate}>
+                    <span class="opacity-50 uppercase font-bold">Taxa de juros</span>
+                    <div class="font-mono font-bold">{group.interest_rate}% a.a.</div>
+                  </div>
+                  <div :if={group.credit_letter_amount}>
+                    <span class="opacity-50 uppercase font-bold">Carta de crédito</span>
+                    <div class="font-mono font-bold">
+                      {format_currency(group.credit_letter_amount)}
+                    </div>
+                  </div>
+                  <div :if={group.commitment_type == "consorcio"}>
+                    <span class="opacity-50 uppercase font-bold">Contemplação</span>
+                    <div class="font-bold">
+                      {if group.is_contemplated,
+                        do: "Contemplado",
+                        else: "Aguardando contemplação"}
+                    </div>
+                  </div>
+                </div>
+
+                <% parcels = Installments.list_group_transactions(group.id) %>
+                <div :if={parcels == []} class="text-xs opacity-40 py-2">
+                  Nenhuma parcela importada ainda.
+                </div>
+                <table :if={parcels != []} class="table table-xs w-full">
+                  <thead class="text-[9px] uppercase tracking-wider opacity-50">
+                    <tr>
+                      <th class="w-12">Parc.</th>
+                      <th>Descrição</th>
+                      <th class="text-right">Data</th>
+                      <th class="text-right">Valor</th>
+                      <th class="text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr :for={parcel <- parcels}>
+                      <td class="font-mono text-[11px]">{parcel.installment_number || "—"}</td>
+                      <td class="text-xs">{parcel.description}</td>
+                      <td class="text-right text-xs opacity-60 whitespace-nowrap">
+                        {format_date(parcel.date)}
+                      </td>
+                      <td class="text-right font-mono text-xs">
+                        {format_currency(parcel.amount)}
+                      </td>
+                      <td class="text-right text-[10px] uppercase opacity-60">
+                        {parcel_status(parcel)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <%!-- Modal adaptável de novo compromisso --%>
+  <.modal :if={@show_modal} id="commitment-modal" show on_cancel={JS.push("close_modal")}>
+    <div class="p-2">
+      <h2 class="text-2xl font-black mb-1 uppercase tracking-tighter">
+        {if @form.data.id, do: "Editar Compromisso", else: "Novo Compromisso Financeiro"}
+      </h2>
+      <p class="text-sm opacity-60 mb-6">Cartão de Crédito, Financiamento ou Consórcio</p>
+
+      <div class="mb-4">
+        <label class="block text-[11px] font-bold mb-1.5">Tipo de Compromisso</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            :for={type <- @commitment_types}
+            type="button"
+            id={"modal-type-#{type}"}
+            phx-click="select_commitment_type"
+            phx-value-type={type}
+            class={[
+              "py-2 px-2.5 rounded-xl border text-center font-bold text-xs transition",
+              if(@modal_type == type,
+                do: "border-primary bg-primary/10 text-primary",
+                else: "border-base-300 opacity-70 hover:opacity-100"
+              )
+            ]}
+          >
+            {type_icon(type)} {type_label(type)}
+          </button>
+        </div>
+      </div>
+
+      <form
+        phx-change="apply_suggestion"
+        class="bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-1.5 mb-4"
+      >
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold flex items-center gap-1.5">
+            <.icon name="hero-bolt" class="size-3.5 text-primary" />
+            Vincular por Histórico do Extrato
+          </span>
+          <span class="text-[10px] text-primary font-semibold">Preenchimento automático</span>
+        </div>
+        <select
+          id="quick-fill-select"
+          name="suggestion[description]"
+          class="select select-bordered select-sm rounded-lg w-full text-xs"
+        >
+          <option value="">Selecione um padrão identificado no seu extrato...</option>
+          <option :for={suggestion <- @suggestions} value={suggestion.description}>
+            {suggestion_label(suggestion)}
+          </option>
+        </select>
+      </form>
+
+      <.form
+        for={@form}
+        id="commitment-form"
+        phx-change="validate"
+        phx-submit="save"
+        class="space-y-4"
+      >
+        <input type="hidden" name="installment_group[commitment_type]" value={@modal_type} />
+
+        <div :if={@modal_type == "credit_card"} id="fields-credit-card">
+          <.input
+            field={@form[:description_pattern]}
+            label="Padrão na Fatura (corresponde às importações do banco)"
+            placeholder="Ex: APPLE.COM/BILL"
+            required
+          />
+        </div>
+
+        <div :if={@modal_type != "credit_card"} id="fields-longterm" class="space-y-4">
+          <.input
+            field={@form[:description_pattern]}
+            label="Nome do Compromisso / Identificador no extrato"
+            placeholder="Ex: FINANC HAB CAIXA"
+            required
+          />
+          <.input
+            field={@form[:institution]}
+            label="Instituição / Administradora"
+            placeholder="Ex: Caixa Econômica, Porto Seguro..."
+          />
+          <div :if={@modal_type == "financing"} id="field-interest-rate">
+            <.input
+              field={@form[:interest_rate]}
+              type="number"
+              step="0.01"
+              label="Taxa de Juros (% a.a.)"
+            />
+          </div>
+          <div :if={@modal_type == "consorcio"} id="field-credit-letter">
+            <.input
+              field={@form[:credit_letter_amount]}
+              type="number"
+              step="0.01"
+              label="Valor da Carta de Crédito (R$)"
+            />
+          </div>
+          <div :if={@modal_type == "consorcio"} id="field-contemplation" class="space-y-2">
+            <.input field={@form[:is_contemplated]} type="checkbox" label="Cota contemplada" />
+            <.input field={@form[:contemplated_at]} type="date" label="Data da contemplação" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <.input
+            field={@form[:total_amount]}
+            type="number"
+            step="0.01"
+            label="Valor Total / Bem (R$)"
+          />
+          <.input
+            field={@form[:installment_amount]}
+            type="number"
+            step="0.01"
+            label="Valor da Parcela Mensal (R$)"
+          />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <.input
+            field={@form[:installments]}
+            type="number"
+            label="Total de Meses / Parcelas"
+            required
+          />
+          <.input field={@form[:start_date]} type="date" label="Data da 1ª Parcela" required />
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3 pt-4">
+          <button type="submit" class="btn btn-primary btn-lg flex-1 rounded-2xl">
+            {if @form.data.id, do: "Salvar Alterações", else: "Salvar Compromisso"}
+          </button>
+          <button
+            type="button"
+            phx-click="close_modal"
+            class="btn btn-ghost btn-lg flex-1 rounded-2xl"
+          >
+            Cancelar
+          </button>
+        </div>
+      </.form>
+    </div>
+  </.modal>
+</div>
