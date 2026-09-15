@@ -141,3 +141,9 @@
 - (round 2) The toggle regression test asserts markup only and would still pass against the double-binding bug; add a structural assertion on the emitted script (`window.sidebarToggleBound`, `closest("#sidebar-toggle")`) plus a `refute` on `dataset.bound`. The behaviour is inline JS that ExUnit cannot execute and the project has no JS unit-test runner.
 - Collapsed state is applied on `DOMContentLoaded`, so a previously-collapsed sidebar renders expanded then animates closed on every full page load; fix by setting the class on `documentElement` from a blocking head script.
 - `#app-drawer`'s class list is static in the template, so a future patch of that attribute would strip the runtime `sidebar-collapsed` class; hanging state on `<html>` is structurally immune.
+
+## [CL-9] Redesenhar Extrato de Transações (/transactions) — 2026-09-15
+- `CategorySuggester.history_by_normalized_description/0` (`category_suggester.ex:66`) reads every categorized transaction into memory on every page; pre-existing, but infinite scroll now runs it per scroll page.
+- `calculate_summary/1` (`transaction_live/index.ex:1284`) recomputes `statement_health/0` even when `filters_active?` hides the bar — four aggregates per search keystroke.
+- `#filter-summary-card` pairs `@filtered_count` (includes transfers) with `@summary` (excludes them), so the row count and the totals disagree on transfer-containing slices.
+- Pre-existing: `String.to_existing_atom(filters["sort_order"] || "desc")` (`transactions.ex:158`) raises on a crafted value, since `sort_order` is an accepted filter key.

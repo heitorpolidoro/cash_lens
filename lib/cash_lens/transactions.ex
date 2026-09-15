@@ -17,6 +17,15 @@ defmodule CashLens.Transactions do
   alias CashLens.Transactions.TransferRule
   alias CashLens.Transactions.TransferRuleApplier
 
+  @default_page_size 50
+
+  @doc """
+  Rows returned per page by `list_transactions/3`. Exposed so the transactions
+  LiveView can tell a full page (there may be more) from a short one (the
+  infinite scroll reached the end) without hardcoding the same number twice.
+  """
+  def default_page_size, do: @default_page_size
+
   @doc """
   Returns the list of all transfer rules, preloading source and destination accounts.
   """
@@ -147,7 +156,7 @@ defmodule CashLens.Transactions do
     |> Repo.aggregate(:count)
   end
 
-  def list_transactions(filters \\ %{}, page \\ 1, page_size \\ 50) do
+  def list_transactions(filters \\ %{}, page \\ 1, page_size \\ @default_page_size) do
     offset = (page - 1) * page_size
     sort_order = String.to_existing_atom(filters["sort_order"] || "desc")
 
@@ -1165,10 +1174,75 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
+  Returns `%{reimbursement_link_key => [transaction]}` for the given link keys,
+  so a row can name (and open) the transaction on the other side of its
+  reimbursement — the expense from the deposit credit and vice-versa.
+  """
+  def get_reimbursement_pairs([]), do: %{}
+
+  def get_reimbursement_pairs(link_keys) do
+    from(t in Transaction,
+      where: t.reimbursement_link_key in ^link_keys,
+      order_by: [asc: t.amount, asc: t.id],
+      preload: [:account]
+    )
+    |> Repo.all()
+    |> Enum.group_by(& &1.reimbursement_link_key)
+  end
+
+  @doc """
   Returns the count of transactions without a category.
   """
   def count_pending_transactions do
     Repo.aggregate(from(t in Transaction, where: is_nil(t.category_id)), :count)
+  end
+
+  @doc """
+  Returns the "statement health" metrics shown on the transactions screen when
+  no filter is active: how many rows still lack a category, how much money is
+  still expected back from reimbursable expenses, and how many transactions
+  categorized as transfers have no matching counterpart yet.
+
+  All three are single aggregate queries so the bar stays cheap to render on
+  every stream refresh.
+  """
+  def statement_health do
+    %{
+      uncategorized_count: count_pending_transactions(),
+      reimbursements_receivable_count: count_reimbursements_receivable(),
+      reimbursements_receivable_total: total_reimbursements_receivable(),
+      unmatched_transfers_count: count_unmatched_transfers()
+    }
+  end
+
+  defp reimbursements_receivable_query do
+    from(t in Transaction,
+      where: is_nil(t.reimbursement_link_key),
+      where: t.amount < 0,
+      where: t.reimbursement_status in ["pending", "requested"]
+    )
+  end
+
+  defp count_reimbursements_receivable do
+    Repo.aggregate(reimbursements_receivable_query(), :count)
+  end
+
+  defp total_reimbursements_receivable do
+    total =
+      reimbursements_receivable_query()
+      |> select([t], sum(fragment("ABS(?)", t.amount)))
+      |> Repo.one()
+
+    total || Decimal.new("0")
+  end
+
+  defp count_unmatched_transfers do
+    from(t in Transaction,
+      join: c in assoc(t, :category),
+      where: is_nil(t.transfer_key),
+      where: c.slug == "transfer"
+    )
+    |> Repo.aggregate(:count)
   end
 
   @doc """

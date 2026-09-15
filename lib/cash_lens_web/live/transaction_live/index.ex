@@ -49,6 +49,8 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:pluggy_error, nil)
      |> assign(:live_entries, [])
      |> assign(:transfer_pairs, %{})
+     |> assign(:reimbursement_pairs, %{})
+     |> assign(:reimbursement_pair_view, nil)
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, accounts)
      |> assign(:import_accounts, Enum.filter(accounts, & &1.accepts_import))
@@ -58,7 +60,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:end_of_list?, false)
      |> assign(:return_to, nil)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> assign(:unmatched_transfers_count, 0)
+     |> assign(:statement_health, Transactions.statement_health())
      |> assign(:installment_groups, CashLens.Installments.list_installment_groups())
      |> assign_transfer_category_id()}
   end
@@ -68,7 +70,11 @@ defmodule CashLensWeb.TransactionLive.Index do
     {return_to, params} = Map.pop(params, "return_to")
     {open_import, filters_param} = Map.pop(params, "open_import")
 
-    filters = Map.merge(socket.assigns.filters, filters_param || %{})
+    filters =
+      socket.assigns.filters
+      |> Map.merge(filters_param || %{})
+      # A month/year arriving in the URL must show up in the period select too.
+      |> sync_period()
 
     socket =
       socket
@@ -314,6 +320,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:ai_loading, false)
      |> assign(:confirm_modal, nil)
      |> assign(:transfer_pair_view, nil)
+     |> assign(:reimbursement_pair_view, nil)
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())}
   end
@@ -330,6 +337,21 @@ defmodule CashLensWeb.TransactionLive.Index do
       {:noreply, put_flash(socket, :error, "Par de transferência não encontrado.")}
     else
       {:noreply, assign(socket, :transfer_pair_view, pair)}
+    end
+  end
+
+  @impl true
+  def handle_event("open_reimbursement_pair", %{"key" => key}, socket) do
+    pair =
+      case Transactions.get_reimbursement_pairs([key]) do
+        %{^key => txs} -> txs
+        _ -> []
+      end
+
+    if pair == [] do
+      {:noreply, put_flash(socket, :error, "Vínculo de reembolso não encontrado.")}
+    else
+      {:noreply, assign(socket, :reimbursement_pair_view, pair)}
     end
   end
 
@@ -541,6 +563,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       socket.assigns.filters
       |> Map.put("month", "#{new_m}")
       |> Map.put("year", "#{new_y}")
+      |> sync_period()
 
     {:noreply,
      socket
@@ -568,6 +591,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       socket.assigns.filters
       |> Map.put("month", "#{new_m}")
       |> Map.put("year", "#{new_y}")
+      |> sync_period()
 
     {:noreply,
      socket
@@ -587,6 +611,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> Map.put("sort_order", if(enabling, do: "asc", else: "desc"))
       |> Map.put("month", "")
       |> Map.put("year", "")
+      |> sync_period()
 
     {:noreply,
      socket
@@ -621,11 +646,14 @@ defmodule CashLensWeb.TransactionLive.Index do
         Transactions.list_transactions(map_filters(socket.assigns.filters), next_page)
         |> annotate_pluggy_categories()
 
+      # A short page means the last row has been reached — stop before issuing
+      # an extra empty query when the sentinel scrolls into view again.
       {:noreply,
        socket
        |> assign(:page, next_page)
-       |> assign(:end_of_list?, Enum.empty?(items))
+       |> assign(:end_of_list?, length(items) < page_size())
        |> load_transfer_pairs(items)
+       |> load_reimbursement_pairs(items)
        |> stream_insert_many(:transactions, items)}
     end
   end
@@ -672,7 +700,11 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   defp apply_filter_change(params, valid_keys, socket) do
     safe_params = Map.take(params, valid_keys)
-    new_filters = Map.merge(socket.assigns.filters, safe_params)
+
+    new_filters =
+      socket.assigns.filters
+      |> Map.merge(safe_params)
+      |> normalize_period(safe_params)
 
     {:noreply,
      socket
@@ -1054,12 +1086,16 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     socket
     |> assign(:page, 1)
-    |> assign(:end_of_list?, false)
+    |> assign(:end_of_list?, length(db_transactions) < page_size())
     |> assign(:transfer_pairs, %{})
+    |> assign(:reimbursement_pairs, %{})
     |> assign(:pluggy_error, pluggy_error)
     |> assign(:live_entries, live_entries)
     |> recalculate_summary()
     |> load_transfer_pairs(db_transactions)
+    |> load_reimbursement_pairs(db_transactions)
+    # `reset: true` is what keeps a filter change from appending to the
+    # previous result set: page 1 replaces the stream wholesale.
     |> stream(:transactions, db_transactions, reset: true)
     |> insert_live_entries(live_entries)
   end
@@ -1245,23 +1281,45 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   defp calculate_summary(socket) do
     mapped = map_filters(socket.assigns.filters)
+    active? = filters_active?(socket.assigns.filters)
 
-    unmatched_count =
-      Transactions.list_transactions(%{"unmatched_transfers" => "true"}) |> length()
-
-    active_filter? =
-      mapped["type"] != "" or mapped["category_id"] == "nil" or
-        mapped["unmatched_transfers"] == "true"
-
-    filtered_count = if active_filter?, do: Transactions.count_transactions(mapped), else: nil
+    # The count only ever backs the filtered-summary card, so it is not worth
+    # a COUNT(*) over the whole table while the health bar is the one showing.
+    filtered_count = if active?, do: Transactions.count_transactions(mapped), else: nil
 
     summary = Transactions.get_filtered_summary(mapped)
 
     socket
-    |> assign(:unmatched_transfers_count, unmatched_count)
+    |> assign(:statement_health, Transactions.statement_health())
     |> assign(:filtered_count, filtered_count)
-    |> assign(:filters_active?, filters_active?(socket.assigns.filters))
+    |> assign(:filters_active?, active?)
     |> assign(:summary, summary)
+  end
+
+  defp load_reimbursement_pairs(socket, transactions) do
+    keys =
+      transactions
+      |> Enum.map(&Map.get(&1, :reimbursement_link_key))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    new_pairs = Transactions.get_reimbursement_pairs(keys)
+
+    assign(
+      socket,
+      :reimbursement_pairs,
+      Map.merge(socket.assigns.reimbursement_pairs, new_pairs)
+    )
+  end
+
+  # The counterpart of `tx` in its reimbursement pair — the deposit credit when
+  # `tx` is the expense, the expense when `tx` is the credit. `nil` when the
+  # row is unlinked or the other side isn't loaded.
+  defp reimbursement_counterpart(pairs, tx) do
+    case Map.get(pairs, Map.get(tx, :reimbursement_link_key)) do
+      nil -> nil
+      group -> Enum.find(group, &(&1.id != tx.id))
+    end
   end
 
   defp load_transfer_pairs(socket, transactions) do
@@ -1275,9 +1333,73 @@ defmodule CashLensWeb.TransactionLive.Index do
     assign(socket, :transfer_pairs, Map.merge(socket.assigns.transfer_pairs, new_pairs))
   end
 
+  # The period select is a friendly face over the month/year filters: picking
+  # "Todos os Períodos" (the default) clears both, so the statement opens as a
+  # continuous flow instead of locked to the current month.
+  defp normalize_period(filters, %{"period" => period}) do
+    case String.split(period || "", "-") do
+      [year, month] when byte_size(year) == 4 and byte_size(month) == 2 ->
+        filters |> Map.put("year", year) |> Map.put("month", month)
+
+      _ ->
+        filters |> Map.put("period", "") |> Map.put("year", "") |> Map.put("month", "")
+    end
+  end
+
+  defp normalize_period(filters, _params), do: filters
+
+  # Keeps the select in sync when month/year are changed by something other
+  # than the select itself (month arrows, "Pendentes", "Limpar filtros").
+  defp sync_period(filters) do
+    case {filters["year"], filters["month"]} do
+      {year, month} when year in [nil, ""] or month in [nil, ""] ->
+        Map.put(filters, "period", "")
+
+      {year, month} ->
+        Map.put(filters, "period", "#{year}-#{String.pad_leading(month, 2, "0")}")
+    end
+  end
+
+  # Last 12 months, newest first, as `{label, value}` pairs for the select.
+  # A period arriving from outside that window (a deep link from the month
+  # closing screen, say) is prepended so the select still shows what is
+  # actually being filtered instead of silently falling back.
+  defp period_options(current) do
+    today = Date.utc_today()
+
+    options =
+      Enum.map(0..11, fn offset ->
+        date = shift_months(today, -offset)
+        {"#{month_name(date.month)} #{date.year}", "#{date.year}-#{pad2(date.month)}"}
+      end)
+
+    cond do
+      current in [nil, ""] -> options
+      Enum.any?(options, fn {_label, value} -> value == current end) -> options
+      true -> [{period_label(current), current} | options]
+    end
+  end
+
+  defp period_label(period) do
+    case String.split(period, "-") do
+      [year, month] -> "#{month_name(String.to_integer(month))} #{year}"
+      _ -> period
+    end
+  end
+
+  defp shift_months(date, offset) do
+    total = date.year * 12 + (date.month - 1) + offset
+    Date.new!(div(total, 12), rem(total, 12) + 1, 1)
+  end
+
+  defp pad2(month), do: month |> Integer.to_string() |> String.pad_leading(2, "0")
+
+  defp page_size, do: Transactions.default_page_size()
+
   defp default_filters do
     %{
       "search" => "",
+      "period" => "",
       "account_id" => "",
       "category_id" => "",
       "date" => "",

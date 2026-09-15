@@ -28,7 +28,13 @@
     </:subtitle>
     <:actions>
       <div class="flex items-center gap-2">
+        <%!--
+          Kept alongside the health bar counter: the bar hides once a filter is
+          on, so this is the control that shows the "Pendentes" view is active
+          and switches back out of it.
+        --%>
         <button
+          id="toggle-pending-btn"
           type="button"
           phx-click="toggle_pending"
           class={[
@@ -145,41 +151,128 @@
     </span>
   </div>
 
-  <%!-- Summary cards --%>
-  <div class="grid grid-cols-3 gap-4">
-    <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
-      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Receitas</p>
-      <p :if={@filters_active?} class="text-2xl font-black text-success">
-        {format_currency(@summary.income)}
-      </p>
-      <p :if={!@filters_active?} class="text-2xl font-black opacity-20">—</p>
+  <%!--
+    Contextual bar: the statement health counters while the full flow is on
+    screen, swapping for the filtered slice's totals the moment any filter or
+    search narrows it down.
+  --%>
+  <div
+    :if={!@filters_active?}
+    id="statement-health-bar"
+    class="bg-base-100 rounded-2xl border border-warning/40 shadow-sm p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+  >
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0">
+        <.icon name="hero-check-circle" class="size-5" />
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold">Saúde do Extrato — Ações Pendentes</span>
+          <span class="badge badge-warning badge-sm font-black text-[10px] rounded-full">
+            Atenção
+          </span>
+        </div>
+        <span class="text-xs opacity-50 font-medium">
+          Itens do extrato que precisam de categorização ou conciliação
+        </span>
+      </div>
     </div>
-    <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1">
-      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Despesas</p>
-      <p :if={@filters_active?} class="text-2xl font-black text-error">
-        {format_currency(@summary.expenses)}
-      </p>
-      <p :if={!@filters_active?} class="text-2xl font-black opacity-20">—</p>
+
+    <div class="flex flex-wrap items-center gap-2 text-xs">
+      <button
+        type="button"
+        phx-click="toggle_pending"
+        class="flex items-center gap-2.5 hover:bg-base-200 p-2 rounded-xl transition group text-left"
+        title="Filtrar lançamentos sem categoria no extrato"
+      >
+        <span class="w-2 h-2 rounded-full bg-warning shrink-0"></span>
+        <span>
+          <span class="text-[10px] font-bold uppercase opacity-50 block">Sem Categoria</span>
+          <span class="font-black text-xs font-mono">
+            {@statement_health.uncategorized_count} pendentes
+          </span>
+        </span>
+      </button>
+
+      <.link
+        navigate={~p"/reimbursements"}
+        class="flex items-center gap-2.5 hover:bg-base-200 p-2 rounded-xl transition group text-left border-l border-base-200 pl-4"
+        title="Ir para a central de reembolsos"
+      >
+        <span class="w-2 h-2 rounded-full bg-info shrink-0"></span>
+        <span>
+          <span class="text-[10px] font-bold uppercase opacity-50 flex items-center gap-1">
+            Reembolsos a Receber
+            <.icon name="hero-arrow-top-right-on-square" class="size-3 opacity-60" />
+          </span>
+          <span class="font-black text-xs font-mono">
+            {format_currency(@statement_health.reimbursements_receivable_total)} ({@statement_health.reimbursements_receivable_count})
+          </span>
+        </span>
+      </.link>
+
+      <.link
+        navigate={~p"/transfers"}
+        class="flex items-center gap-2.5 hover:bg-base-200 p-2 rounded-xl transition group text-left border-l border-base-200 pl-4"
+        title="Ir para a central de transferências"
+      >
+        <span class="w-2 h-2 rounded-full bg-success shrink-0"></span>
+        <span>
+          <span class="text-[10px] font-bold uppercase opacity-50 flex items-center gap-1">
+            Transferências
+            <.icon name="hero-arrow-top-right-on-square" class="size-3 opacity-60" />
+          </span>
+          <span class={[
+            "font-black text-xs font-mono",
+            @statement_health.unmatched_transfers_count == 0 && "text-success"
+          ]}>
+            {if @statement_health.unmatched_transfers_count == 0,
+              do: "100% conciliadas",
+              else: "#{@statement_health.unmatched_transfers_count} sem par"}
+          </span>
+        </span>
+      </.link>
     </div>
-    <div class={[
-      "bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-1",
-      @filters_active? && Decimal.gte?(@summary.income, @summary.expenses) && "border-success/30",
-      @filters_active? && !Decimal.gte?(@summary.income, @summary.expenses) && "border-error/30"
-    ]}>
-      <p class="text-xs opacity-50 uppercase tracking-widest font-bold">Saldo</p>
-      <p
-        :if={@filters_active?}
-        class={[
-          "text-2xl font-black",
+  </div>
+
+  <div
+    :if={@filters_active?}
+    id="filter-summary-card"
+    class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+  >
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+        <.icon name="hero-clipboard-document-list" class="size-5" />
+      </div>
+      <div>
+        <span class="text-xs font-bold block">Resumo Financeiro do Filtro</span>
+        <span class="text-xs opacity-50 font-medium">
+          {@filtered_count || 0} transações no recorte selecionado
+        </span>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-6 font-mono text-xs">
+      <div>
+        <span class="text-[10px] font-bold uppercase opacity-50 block">Entradas</span>
+        <span class="font-black text-sm text-success">{format_currency(@summary.income)}</span>
+      </div>
+      <div class="border-l border-base-200 pl-6">
+        <span class="text-[10px] font-bold uppercase opacity-50 block">Saídas</span>
+        <span class="font-black text-sm text-error">{format_currency(@summary.expenses)}</span>
+      </div>
+      <div class="border-l border-base-200 pl-6">
+        <span class="text-[10px] font-bold uppercase opacity-50 block">Balanço Líquido</span>
+        <span class={[
+          "font-black text-sm",
           if(Decimal.gte?(@summary.income, @summary.expenses),
             do: "text-success",
             else: "text-error"
           )
-        ]}
-      >
-        {format_currency(Decimal.sub(@summary.income, @summary.expenses))}
-      </p>
-      <p :if={!@filters_active?} class="text-2xl font-black opacity-20">—</p>
+        ]}>
+          {format_currency(Decimal.sub(@summary.income, @summary.expenses))}
+        </span>
+      </div>
     </div>
   </div>
   
@@ -213,6 +306,23 @@
                       />
                     </button>
                   </div>
+                  <select
+                    id="filter-period"
+                    name="period"
+                    class="select select-bordered select-xs font-normal w-full"
+                    title="Período do extrato"
+                  >
+                    <option value="" selected={@filters["period"] in [nil, ""]}>
+                      Todos os Períodos
+                    </option>
+                    <option
+                      :for={{label, value} <- period_options(@filters["period"])}
+                      value={value}
+                      selected={@filters["period"] == value}
+                    >
+                      {label}
+                    </option>
+                  </select>
                   <div
                     id="date-range-picker"
                     phx-hook="DateRangePicker"
@@ -451,22 +561,40 @@
                         {transaction.installment_number} / {transaction.installment_group.installments}
                       </span>
                     </div>
-                    <div
-                      :if={transaction.reimbursement_status}
-                      class="flex items-center gap-1 mt-1"
-                    >
-                      <div class={[
-                        "badge badge-xs text-[8px] uppercase font-black",
-                        transaction.reimbursement_status == "paid" && "badge-success",
-                        transaction.reimbursement_status == "requested" && "badge-info",
-                        transaction.reimbursement_status == "pending" && "badge-warning"
-                      ]}>
-                        {CashLensWeb.Formatters.translate_reimbursement_status(
-                          transaction.reimbursement_status,
-                          transaction.amount
-                        )}
+                    <%= if transaction.reimbursement_status do %>
+                      <% counterpart =
+                        reimbursement_counterpart(@reimbursement_pairs, transaction) %>
+                      <div class="flex items-center gap-1 mt-1">
+                        <%= if counterpart do %>
+                          <button
+                            type="button"
+                            data-role="reimbursement-link"
+                            phx-click="open_reimbursement_pair"
+                            phx-value-key={transaction.reimbursement_link_key}
+                            title={"Vinculado a: #{counterpart.description} (#{format_date(counterpart.date)}) — clique para ver o par"}
+                            class="badge badge-sm badge-success badge-outline gap-1 text-[9px] uppercase font-black cursor-pointer hover:bg-success hover:text-success-content transition-colors"
+                          >
+                            <.icon name="hero-link" class="size-3" />
+                            {CashLensWeb.Formatters.translate_reimbursement_status(
+                              transaction.reimbursement_status,
+                              transaction.amount
+                            )}
+                          </button>
+                        <% else %>
+                          <div class={[
+                            "badge badge-sm gap-1 text-[9px] uppercase font-black",
+                            transaction.reimbursement_status == "paid" && "badge-success",
+                            transaction.reimbursement_status == "requested" && "badge-info",
+                            transaction.reimbursement_status == "pending" && "badge-warning"
+                          ]}>
+                            {CashLensWeb.Formatters.translate_reimbursement_status(
+                              transaction.reimbursement_status,
+                              transaction.amount
+                            )}
+                          </div>
+                        <% end %>
                       </div>
-                    </div>
+                    <% end %>
                   </div>
                 </td>
                 <td class={"w-32 px-4 text-right font-bold #{if Decimal.lt?(transaction.amount, 0), do: "text-error", else: "text-success"}"}>
@@ -574,9 +702,6 @@
                         <.icon name="hero-exclamation-triangle" class="size-3 text-warning" />
                       </span>
                     <% end %>
-                    <span :if={transaction.reimbursement_link_key} title="Reembolsado">
-                      <.icon name="hero-shield-check" class="size-3 text-success" />
-                    </span>
                   </div>
                 </td>
                 <td class="w-40 px-4 text-xs opacity-60 truncate">
@@ -734,7 +859,26 @@
           </tbody>
         </table>
       </form>
-      <div id="infinite-scroll-sentinel" phx-hook="InfiniteScroll" data-page={@page}></div>
+      <div class="py-6 border-t border-base-200 flex items-center justify-center gap-2 text-xs opacity-50">
+        <%= if @end_of_list? do %>
+          <span class="w-2 h-2 rounded-full bg-base-300"></span>
+          <span>Fim do extrato — nada mais para carregar</span>
+        <% else %>
+          <span class="loading loading-dots loading-xs"></span>
+          <span>Carregando transações anteriores...</span>
+        <% end %>
+      </div>
+      <%!--
+        The sentinel only exists while there is a next page: unmounting it at
+        the end of the list stops the observer from re-firing `load-more`.
+      --%>
+      <div
+        :if={!@end_of_list?}
+        id="infinite-scroll-sentinel"
+        phx-hook="InfiniteScroll"
+        data-page={@page}
+      >
+      </div>
     </div>
   </div>
 
@@ -890,6 +1034,57 @@
           Fechar
         </button>
       </div>
+    </div>
+  </.modal>
+
+  <.modal
+    :if={@reimbursement_pair_view}
+    id="reimbursement-pair-modal"
+    show
+    on_cancel={JS.push("close_modal")}
+  >
+    <div class="p-2">
+      <div class="w-16 h-16 bg-success/10 text-success rounded-full flex items-center justify-center mb-6">
+        <.icon name="hero-banknotes" class="size-8" />
+      </div>
+      <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Reembolso Vinculado</h2>
+      <p class="text-sm opacity-70 mb-4">
+        A despesa e o crédito de depósito abaixo estão vinculados como um mesmo reembolso.
+      </p>
+
+      <div class="space-y-3 mb-6">
+        <div
+          :for={tx <- @reimbursement_pair_view}
+          class="flex items-center justify-between gap-3 p-3 rounded-xl border border-base-300 bg-base-200/30"
+        >
+          <div class="min-w-0">
+            <div class="font-bold text-sm truncate">{tx.description}</div>
+            <div class="text-[10px] opacity-60 uppercase tracking-wider">
+              {if tx.account, do: account_label(tx.account), else: "—"} · {format_date(tx.date)} · {if Decimal.negative?(
+                                                                                                         tx.amount
+                                                                                                       ),
+                                                                                                       do:
+                                                                                                         "Despesa",
+                                                                                                       else:
+                                                                                                         "Crédito de depósito"}
+            </div>
+          </div>
+          <span class={[
+            "font-mono font-black whitespace-nowrap",
+            if(Decimal.lt?(tx.amount, 0), do: "text-error", else: "text-success")
+          ]}>
+            {format_currency(tx.amount)}
+          </span>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        phx-click="close_modal"
+        class="btn btn-ghost btn-lg w-full rounded-2xl"
+      >
+        Fechar
+      </button>
     </div>
   </.modal>
 

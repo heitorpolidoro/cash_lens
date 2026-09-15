@@ -1076,4 +1076,93 @@ defmodule CashLens.TransactionsTest do
       assert "Transporte" in category_names
     end
   end
+
+  describe "statement_health/0" do
+    test "counts uncategorized transactions, receivable reimbursements and unmatched transfers" do
+      account = AccountsFixtures.account_fixture()
+
+      transfer_cat =
+        CashLens.CategoriesFixtures.category_fixture(%{name: "Transfer", slug: "transfer"})
+
+      other_cat = CashLens.CategoriesFixtures.category_fixture(%{name: "Outra", slug: "outra"})
+
+      # Two uncategorized transactions.
+      transaction_fixture(%{account_id: account.id, description: "Sem categoria A"})
+      transaction_fixture(%{account_id: account.id, description: "Sem categoria B"})
+
+      # One categorized transaction (must not count as uncategorized).
+      transaction_fixture(%{account_id: account.id, category_id: other_cat.id})
+
+      # Two reimbursable expenses awaiting money back.
+      expense =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "-80.00",
+          category_id: other_cat.id
+        })
+
+      {:ok, _} = Transactions.update_transaction(expense, %{reimbursement_status: "pending"})
+
+      requested =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "-20.00",
+          category_id: other_cat.id
+        })
+
+      {:ok, _} = Transactions.update_transaction(requested, %{reimbursement_status: "requested"})
+
+      # An unmatched transfer (categorized as transfer, no transfer_key).
+      transaction_fixture(%{
+        account_id: account.id,
+        amount: "-10.00",
+        category_id: transfer_cat.id
+      })
+
+      health = Transactions.statement_health()
+
+      assert health.uncategorized_count == 2
+      assert health.reimbursements_receivable_count == 2
+      assert Decimal.equal?(health.reimbursements_receivable_total, Decimal.new("100.00"))
+      assert health.unmatched_transfers_count == 1
+    end
+
+    test "returns zeroed metrics when there is nothing pending" do
+      health = Transactions.statement_health()
+
+      assert health.uncategorized_count == 0
+      assert health.reimbursements_receivable_count == 0
+      assert Decimal.equal?(health.reimbursements_receivable_total, Decimal.new("0"))
+      assert health.unmatched_transfers_count == 0
+    end
+  end
+
+  describe "get_reimbursement_pairs/1" do
+    test "groups both sides of a reimbursement by its link key" do
+      account = AccountsFixtures.account_fixture()
+
+      expense =
+        transaction_fixture(%{account_id: account.id, amount: "-100.00", description: "Consulta"})
+
+      {:ok, expense} =
+        Transactions.update_transaction(expense, %{reimbursement_status: "pending"})
+
+      credit =
+        transaction_fixture(%{account_id: account.id, amount: "100.00", description: "Credito"})
+
+      {:ok, {expense, _credit}} = Transactions.link_reimbursement_pair(expense.id, credit.id)
+
+      pairs = Transactions.get_reimbursement_pairs([expense.reimbursement_link_key])
+
+      assert [%{amount: negative}, %{amount: positive}] =
+               pairs[expense.reimbursement_link_key]
+
+      assert Decimal.negative?(negative)
+      assert Decimal.positive?(positive)
+    end
+
+    test "returns an empty map for no keys" do
+      assert Transactions.get_reimbursement_pairs([]) == %{}
+    end
+  end
 end

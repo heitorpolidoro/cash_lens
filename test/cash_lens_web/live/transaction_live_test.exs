@@ -261,7 +261,9 @@ defmodule CashLensWeb.TransactionLiveTest do
 
     test "toggles pending transactions", %{conn: conn} do
       {:ok, live, _html} = live(conn, ~p"/transactions")
-      live |> element("button[phx-click='toggle_pending']") |> render_click()
+      # Two controls share this event (header toggle + health bar counter), so
+      # the header one is addressed by its id.
+      live |> element("#toggle-pending-btn") |> render_click()
       assert render(live) =~ "Pendentes"
     end
 
@@ -272,6 +274,337 @@ defmodule CashLensWeb.TransactionLiveTest do
       # Trigger infinite scroll event
       render_hook(live, "load-more", %{"page" => "1"})
       assert render(live) =~ "Pagination"
+    end
+  end
+
+  describe "CL-9 statement redesign" do
+    setup do
+      %{account: account_fixture()}
+    end
+
+    defp row_ids(html) do
+      Regex.scan(~r/id="transactions-([0-9a-f-]+)"/, html) |> Enum.map(&List.last/1)
+    end
+
+    test "lists transactions from newest to oldest by default", %{conn: conn, account: account} do
+      for {date, description} <- [
+            {~D[2026-01-05], "Oldest movement"},
+            {~D[2026-03-05], "Newest movement"},
+            {~D[2026-02-05], "Middle movement"}
+          ] do
+        transaction_fixture(%{account_id: account.id, date: date, description: description})
+      end
+
+      {:ok, _live, html} = live(conn, ~p"/transactions")
+
+      positions =
+        Enum.map(
+          ["Newest movement", "Middle movement", "Oldest movement"],
+          &:binary.match(html, &1)
+        )
+
+      assert positions == Enum.sort(positions)
+    end
+
+    test "does not lock the period to the current month by default", %{
+      conn: conn,
+      account: account
+    } do
+      old = Date.add(Date.utc_today(), -120)
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: old,
+        description: "Lancamento antigo"
+      })
+
+      {:ok, live, html} = live(conn, ~p"/transactions")
+
+      assert html =~ "Lancamento antigo"
+      assert has_element?(live, "#filter-period option[value=''][selected]")
+      assert html =~ "Todos os Períodos"
+    end
+
+    test "reflects a month/year deep link in the period select", %{conn: conn, account: account} do
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2020-03-15],
+        description: "Antiga de marco"
+      })
+
+      {:ok, live, html} = live(conn, ~p"/transactions?month=3&year=2020")
+
+      assert html =~ "Antiga de marco"
+      assert has_element?(live, "#filter-period option[value='2020-03'][selected]")
+    end
+
+    test "renders the statement health bar with clickable counters", %{
+      conn: conn,
+      account: account
+    } do
+      transaction_fixture(%{account_id: account.id, description: "Sem categoria"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      assert has_element?(live, "#statement-health-bar")
+      assert has_element?(live, "#statement-health-bar button[phx-click='toggle_pending']")
+      assert has_element?(live, "#statement-health-bar a[href='/reimbursements']")
+      assert has_element?(live, "#statement-health-bar a[href='/transfers']")
+      refute has_element?(live, "#filter-summary-card")
+    end
+
+    test "health bar's Sem Categoria counter filters the statement in place", %{
+      conn: conn,
+      account: account
+    } do
+      category = category_fixture(%{name: "Mercado", slug: "mercado"})
+
+      transaction_fixture(%{
+        account_id: account.id,
+        description: "Ja categorizada",
+        category_id: category.id
+      })
+
+      transaction_fixture(%{account_id: account.id, description: "Sem categoria ainda"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      html =
+        live
+        |> element("#statement-health-bar button[phx-click='toggle_pending']")
+        |> render_click()
+
+      assert html =~ "Sem categoria ainda"
+      refute html =~ "Ja categorizada"
+    end
+
+    test "period select narrows the statement to the chosen month", %{
+      conn: conn,
+      account: account
+    } do
+      today = Date.utc_today()
+      current_period = "#{today.year}-#{String.pad_leading("#{today.month}", 2, "0")}"
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: today,
+        description: "Deste mes"
+      })
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: Date.add(today, -200),
+        description: "De outro mes"
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      html =
+        live
+        |> form("#transaction-filters", %{"period" => current_period})
+        |> render_change()
+
+      assert html =~ "Deste mes"
+      refute html =~ "De outro mes"
+
+      # Back to the continuous flow.
+      html =
+        live
+        |> form("#transaction-filters", %{"period" => ""})
+        |> render_change()
+
+      assert html =~ "Deste mes"
+      assert html =~ "De outro mes"
+      assert has_element?(live, "#statement-health-bar")
+    end
+
+    test "swaps the health bar for the financial summary card when a filter is applied", %{
+      conn: conn,
+      account: account
+    } do
+      transaction_fixture(%{account_id: account.id, description: "Mercado", amount: "-30.00"})
+      transaction_fixture(%{account_id: account.id, description: "Mercado", amount: "90.00"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      html =
+        live
+        |> form("#transaction-filters", %{"search" => "Mercado"})
+        |> render_change()
+
+      assert has_element?(live, "#filter-summary-card")
+      refute has_element?(live, "#statement-health-bar")
+      assert html =~ "Entradas"
+      assert html =~ "Saídas"
+      assert html =~ "Balanço Líquido"
+    end
+
+    test "infinite scroll appends the next page without duplicating or skipping rows", %{
+      conn: conn,
+      account: account
+    } do
+      for i <- 1..60 do
+        transaction_fixture(%{
+          account_id: account.id,
+          date: Date.add(~D[2026-01-01], i),
+          description: "Scroll #{i}"
+        })
+      end
+
+      {:ok, live, html} = live(conn, ~p"/transactions")
+
+      first_page = row_ids(html)
+      assert length(first_page) == 50
+
+      full = row_ids(render_hook(live, "load-more", %{}))
+
+      assert length(full) == 60
+      assert length(Enum.uniq(full)) == 60
+      # The first page must keep its position; page 2 is appended after it.
+      assert Enum.take(full, 50) == first_page
+
+      dates =
+        Enum.map(full, fn id -> CashLens.Transactions.get_transaction!(id).date end)
+
+      assert dates == Enum.sort(dates, {:desc, Date})
+    end
+
+    test "paginates deterministically when every row shares the same date", %{
+      conn: conn,
+      account: account
+    } do
+      # Worst case for an offset-based page boundary: date, time and inserted_at
+      # all collide, so only the description/id tiebreakers keep the ordering
+      # stable. Without them a row could repeat or vanish between the pages.
+      for i <- 1..60 do
+        transaction_fixture(%{
+          account_id: account.id,
+          date: ~D[2026-04-10],
+          description: "Mesma data #{i}",
+          amount: "-10.00"
+        })
+      end
+
+      {:ok, live, html} = live(conn, ~p"/transactions")
+      full = row_ids(render_hook(live, "load-more", %{}))
+
+      assert length(row_ids(html)) == 50
+      assert length(full) == 60
+      assert length(Enum.uniq(full)) == 60
+
+      assert MapSet.new(full) ==
+               MapSet.new(Enum.map(CashLens.Transactions.list_all_transactions(), & &1.id))
+    end
+
+    test "applying a filter resets the stream instead of appending to it", %{
+      conn: conn,
+      account: account
+    } do
+      for i <- 1..60 do
+        transaction_fixture(%{
+          account_id: account.id,
+          date: Date.add(~D[2026-01-01], i),
+          description: "Scroll #{i}"
+        })
+      end
+
+      transaction_fixture(%{account_id: account.id, description: "AlvoUnico"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+      render_hook(live, "load-more", %{})
+
+      html =
+        live
+        |> form("#transaction-filters", %{"search" => "AlvoUnico"})
+        |> render_change()
+
+      assert length(row_ids(html)) == 1
+      assert html =~ "AlvoUnico"
+      refute html =~ "Scroll 1<"
+    end
+
+    test "approves a suggested category with a single click", %{conn: conn, account: account} do
+      category = category_fixture(%{name: "Streaming", slug: "streaming"})
+
+      transaction_fixture(%{
+        account_id: account.id,
+        description: "NETFLIX.COM",
+        category_id: category.id,
+        date: ~D[2026-01-01]
+      })
+
+      pending =
+        transaction_fixture(%{
+          account_id: account.id,
+          description: "NETFLIX.COM",
+          date: ~D[2026-02-01]
+        })
+
+      {:ok, live, html} = live(conn, ~p"/transactions")
+
+      assert html =~ "Sugestão: Streaming"
+
+      live
+      |> element("#transactions-#{pending.id} button[data-role='category-suggestion']")
+      |> render_click()
+
+      assert CashLens.Transactions.get_transaction!(pending.id).category_id == category.id
+    end
+
+    test "shows reimbursement badges linking the expense and its deposit credit", %{
+      conn: conn,
+      account: account
+    } do
+      expense =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "-100.00",
+          date: ~D[2026-02-01],
+          description: "Consulta medica"
+        })
+
+      {:ok, expense} =
+        CashLens.Transactions.update_transaction(expense, %{reimbursement_status: "pending"})
+
+      credit =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "100.00",
+          date: ~D[2026-02-10],
+          description: "Credito Unimed"
+        })
+
+      {:ok, {_expense, _credit}} =
+        CashLens.Transactions.link_reimbursement_pair(expense.id, credit.id)
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      assert has_element?(
+               live,
+               "#transactions-#{expense.id} [data-role='reimbursement-link']"
+             )
+
+      assert has_element?(
+               live,
+               "#transactions-#{credit.id} [data-role='reimbursement-link']"
+             )
+
+      # From the expense row, the badge reveals the credit side of the pair.
+      html =
+        live
+        |> element("#transactions-#{expense.id} [data-role='reimbursement-link']")
+        |> render_click()
+
+      assert html =~ "Credito Unimed"
+      assert html =~ "Consulta medica"
+
+      # And the link works in the other direction too.
+      html =
+        live
+        |> element("#transactions-#{credit.id} [data-role='reimbursement-link']")
+        |> render_click()
+
+      assert html =~ "Consulta medica"
     end
   end
 end
