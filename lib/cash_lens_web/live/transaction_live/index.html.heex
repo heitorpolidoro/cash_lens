@@ -88,7 +88,7 @@
             class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 mt-2 border border-base-200"
           >
             <li>
-              <.link navigate={~p"/transactions/new"}>
+              <.link patch={~p"/transactions/new"}>
                 <.icon name="hero-plus" class="size-4" /> Nova Transação
               </.link>
             </li>
@@ -765,7 +765,7 @@
                     <% end %>
                     <div class="tooltip tooltip-left" data-tip="Editar">
                       <.link
-                        navigate={~p"/transactions/#{transaction}/edit"}
+                        patch={~p"/transactions/#{transaction}/edit"}
                         class="btn btn-ghost btn-xs px-1"
                       >
                         <.icon name="hero-pencil" class="size-3" />
@@ -909,16 +909,117 @@
         <.icon name="hero-trash" class="size-10" />
       </div>
       <h2 class="text-2xl font-black mb-2 uppercase tracking-tighter">Excluir Transação?</h2>
-      <p class="text-base-content/60 mb-10">
+      <p class="text-base-content/60 mb-6">
         Deseja mesmo excluir esta transação? Esta ação não pode ser desfeita.
       </p>
+      <%!--
+        Deleting from a row of a long statement is easy to misfire, so the
+        modal restates exactly which lançamento is about to disappear before
+        the destructive button is reachable (CL-10).
+      --%>
+      <div
+        :if={@confirm_modal.transaction}
+        id="delete-transaction-summary"
+        class="bg-base-200/60 border border-base-300 rounded-2xl p-4 mb-6 text-left"
+      >
+        <div class="font-bold truncate">{@confirm_modal.transaction.description}</div>
+        <div class="flex items-center justify-between text-xs text-base-content/60 mt-1">
+          <span>{CashLensWeb.Formatters.format_date(@confirm_modal.transaction.date)}</span>
+          <span class="truncate px-2">
+            {@confirm_modal.transaction.account &&
+              CashLensWeb.Formatters.account_label(@confirm_modal.transaction.account)}
+          </span>
+          <span class={[
+            "font-mono font-bold",
+            Decimal.negative?(@confirm_modal.transaction.amount) && "text-error",
+            !Decimal.negative?(@confirm_modal.transaction.amount) && "text-success"
+          ]}>
+            {CashLensWeb.Formatters.format_currency(@confirm_modal.transaction.amount)}
+          </span>
+        </div>
+        <p class="text-xs text-warning mt-3">
+          O saldo da conta e os fechamentos do período serão recalculados.
+        </p>
+      </div>
       <div class="flex flex-col sm:flex-row gap-3">
-        <button phx-click={@confirm_modal.action} class="btn btn-error btn-lg flex-1 rounded-2xl">
+        <button
+          id="confirm-delete-transaction-btn"
+          phx-click={@confirm_modal.action}
+          class="btn btn-error btn-lg flex-1 rounded-2xl"
+        >
           Sim, Excluir
         </button>
         <button phx-click="close_modal" class="btn btn-ghost btn-lg flex-1 rounded-2xl">
           Cancelar
         </button>
+      </div>
+    </div>
+  </.modal>
+
+  <.live_component
+    :if={@form_action}
+    module={CashLensWeb.TransactionLive.FormComponent}
+    id="transaction-form-component"
+    action={@form_action}
+    transaction={@form_transaction}
+    accounts={@accounts}
+    categories={@categories}
+  />
+
+  <.modal
+    :if={@show_transaction}
+    id="transaction-show-modal"
+    show
+    on_cancel={JS.push("close_transaction_modal")}
+  >
+    <div class="space-y-4">
+      <div>
+        <h2 class="text-2xl font-black uppercase tracking-tighter">Detalhes da Transação</h2>
+        <p class="text-sm text-base-content/60">{@show_transaction.description}</p>
+      </div>
+
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+        <div>
+          <dt class="text-xs font-bold uppercase text-base-content/50">Data</dt>
+          <dd>{CashLensWeb.Formatters.format_date(@show_transaction.date)}</dd>
+        </div>
+        <div>
+          <dt class="text-xs font-bold uppercase text-base-content/50">Valor</dt>
+          <dd class={[
+            "font-mono font-bold",
+            Decimal.negative?(@show_transaction.amount) && "text-error",
+            !Decimal.negative?(@show_transaction.amount) && "text-success"
+          ]}>
+            {CashLensWeb.Formatters.format_currency(@show_transaction.amount)}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-bold uppercase text-base-content/50">Conta</dt>
+          <dd>
+            {@show_transaction.account &&
+              CashLensWeb.Formatters.account_label(@show_transaction.account)}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-bold uppercase text-base-content/50">Categoria</dt>
+          <dd>
+            {(@show_transaction.category &&
+                CashLens.Categories.Category.full_name(@show_transaction.category)) || "Pendente"}
+          </dd>
+        </div>
+        <div :if={@show_transaction.notes} class="sm:col-span-2">
+          <dt class="text-xs font-bold uppercase text-base-content/50">Observações</dt>
+          <dd class="whitespace-pre-wrap">{@show_transaction.notes}</dd>
+        </div>
+      </dl>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-base-200">
+        <button type="button" phx-click="close_transaction_modal" class="btn btn-ghost">
+          Fechar
+        </button>
+        <.link patch={~p"/transactions/#{@show_transaction}/edit"} class="btn btn-primary">
+          <.icon name="hero-pencil-square" class="size-4" /> Editar
+        </.link>
       </div>
     </div>
   </.modal>

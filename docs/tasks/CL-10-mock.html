@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CashLens — Extrato de Transações (/transactions)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+  <!-- Top Navbar -->
+  <header class="border-b border-slate-200 bg-white sticky top-0 z-50 px-6 py-4 shadow-sm">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-8">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl font-black tracking-tight text-blue-600">CashLens</span>
+        </div>
+
+        <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+          <a href="dashboard_preview.html" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Painel</a>
+          <a href="#" class="px-3 py-2 rounded-lg bg-blue-50 text-blue-600 font-bold">Transações</a>
+          <a href="balances_preview.html" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Saldos</a>
+          <a href="months_preview.html" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Fechamento do Mês</a>
+          <a href="import_preview.html" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Importação</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Contas</a>
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="import_preview.html" class="text-xs font-bold text-slate-700 hover:text-blue-600 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center gap-1.5 transition">
+          <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          Importar Extratos
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+
+    <!-- Top Bar com Ações Principais -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+      <div>
+        <h1 class="text-2xl font-black text-slate-900 tracking-tight">Extrato de Transações</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Consulta contínua, categorização ágil e saúde dos lançamentos</p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <!-- Botão Nova Transação Manual -->
+        <button onclick="openTxModal('new')" class="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm active:scale-95">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+          <span>Nova Transação</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 1. BARRA DE BUSCA E FILTROS LIMPA (FORA DA TABELA) -->
+    <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+        
+        <!-- Busca textual -->
+        <div class="lg:col-span-2 relative">
+          <input
+            id="filter-search"
+            type="text"
+            oninput="onSearchInput(this.value)"
+            placeholder="Buscar por descrição ou valor..."
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs py-2.5 pl-9 pr-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+          >
+          <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+        </div>
+
+        <!-- Filtro de Período -->
+        <div>
+          <select id="filter-period" onchange="onPeriodChange(this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs py-2.5 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+            <option value="all" selected>Todos os Períodos</option>
+            <option value="2026-09">Setembro 2026</option>
+            <option value="2026-08">Agosto 2026</option>
+            <option value="2026-07">Julho 2026</option>
+            <option value="2026-all">Ano Todo (2026)</option>
+          </select>
+        </div>
+
+        <!-- Filtro de Categoria -->
+        <div>
+          <select id="filter-category" onchange="onCategoryFilterChange(this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs py-2.5 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+            <option value="">Todas as Categorias</option>
+            <option value="pending">Apenas Pendentes</option>
+            <option value="Saúde">Saúde (Consultas/Exames)</option>
+            <option value="Supermercado">Supermercado</option>
+            <option value="Moradia">Moradia</option>
+            <option value="Transporte">Transporte</option>
+            <option value="Salário">Salário</option>
+          </select>
+        </div>
+
+        <!-- Filtro de Conta -->
+        <div>
+          <select id="filter-account" onchange="applyFilters()" class="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs py-2.5 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+            <option value="">Todas as Contas</option>
+            <option value="Nubank">Nubank (Cartão)</option>
+            <option value="Itaú">Itaú (Conta Corrente)</option>
+            <option value="BB">Banco do Brasil</option>
+          </select>
+        </div>
+
+        <!-- Filtro Tipo (Débito/Crédito) -->
+        <div class="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl">
+          <button id="btn-type-all" onclick="setTypeFilter('')" class="flex-1 py-2 text-[11px] font-bold rounded-lg bg-white shadow-xs text-slate-800 transition">Todos</button>
+          <button id="btn-type-debit" onclick="setTypeFilter('debit')" class="flex-1 py-2 text-[11px] font-bold rounded-lg text-slate-500 hover:text-slate-900 transition">Saídas</button>
+          <button id="btn-type-credit" onclick="setTypeFilter('credit')" class="flex-1 py-2 text-[11px] font-bold rounded-lg text-slate-500 hover:text-slate-900 transition">Entradas</button>
+        </div>
+
+      </div>
+
+      <!-- Rodapé da barra de filtros -->
+      <div class="flex items-center justify-between text-xs text-slate-400 border-t border-slate-100 pt-2.5">
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] text-slate-500">Combine período, categorias ou texto para análises pontuais</span>
+        </div>
+        
+        <button id="btn-clear-filters" onclick="resetFilters()" class="text-rose-500 font-bold hover:underline flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          Limpar Filtros
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. ÁREA DE RESUMO CONTEXTUAL / SAÚDE DO EXTRATO -->
+    
+    <!-- MODO OPÇÃO B (PADRÃO SEM FILTRO): BARRA DE SAÚDE / PENDÊNCIAS DO EXTRATO -->
+    <div id="pending-summary-bar" class="hidden bg-white border border-amber-200/80 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-900 block">Saúde do Extrato — Ações Pendentes</span>
+            <span class="inline-flex items-center px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">Atenção</span>
+          </div>
+          <span class="text-xs text-slate-500 font-medium">Itens no extrato que necessitam de categorização ou conciliação</span>
+        </div>
+      </div>
+
+      <!-- Métricas de Pendências com Ações Diretas -->
+      <div class="flex items-center gap-4 divide-x divide-slate-100 text-xs">
+        <button onclick="togglePendingFilter()" class="flex items-center gap-2.5 hover:bg-slate-50 p-2 rounded-xl transition group text-left" title="Filtrar lançamentos sem categoria no extrato">
+          <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+          <div>
+            <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans group-hover:text-amber-700">Sem Categoria</span>
+            <span class="font-bold text-xs text-slate-800 group-hover:text-amber-700 font-mono">2 pendentes</span>
+          </div>
+        </button>
+
+        <a href="reimbursements_preview.html" class="pl-4 flex items-center gap-2.5 hover:bg-blue-50/60 p-2 rounded-xl transition group text-left cursor-pointer" title="Ir para a Central de Gerenciamento de Reembolsos">
+          <span class="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+          <div>
+            <div class="flex items-center gap-1">
+              <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans group-hover:text-blue-700">Reembolsos a Receber</span>
+              <svg class="w-3 h-3 text-slate-300 group-hover:text-blue-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </div>
+            <span class="font-bold text-xs text-slate-800 group-hover:text-blue-700 font-mono">R$ 900 pendentes</span>
+          </div>
+        </a>
+
+        <a href="transfers_preview.html" class="pl-4 flex items-center gap-2.5 hover:bg-emerald-50/60 p-2 rounded-xl transition group text-left cursor-pointer" title="Ir para a Central de Transferências e Pareamento">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+          <div>
+            <div class="flex items-center gap-1">
+              <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans group-hover:text-emerald-700">Transferências</span>
+              <svg class="w-3 h-3 text-slate-300 group-hover:text-emerald-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </div>
+            <span class="font-bold text-xs text-emerald-700 font-mono">100% conciliadas</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- MODO OPÇÃO A & B (QUANDO HÁ FILTRO ATIVO): BARRA DE CÁLCULO FINANCEIRO DINÂMICO -->
+    <div id="contextual-summary" class="hidden bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all animate-in fade-in duration-300">
+      
+      <!-- Lado Esquerdo: Identificação do Escopo da Busca -->
+      <div class="flex items-center gap-3">
+        <div id="summary-icon-box" class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        </div>
+        <div>
+          <span id="summary-title" class="text-xs font-bold text-slate-800 block">Setembro 2026 — Visão Geral</span>
+          <span id="summary-count" class="text-xs text-slate-400 font-medium">10 transações no período selecionado</span>
+        </div>
+      </div>
+
+      <!-- Lado Direito: Valores Calculados (Adapta dinamicamente se houver reembolsos!) -->
+      <div id="summary-metrics" class="flex items-center gap-6 divide-x divide-slate-100 font-mono text-xs">
+        <div>
+          <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans">Entradas</span>
+          <span id="metric-income" class="font-black text-sm text-teal-600">+R$ 15.420,00</span>
+        </div>
+        <div class="pl-6">
+          <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans">Saídas</span>
+          <span id="metric-expense" class="font-black text-sm text-rose-500">-R$ 8.150,40</span>
+        </div>
+        <div class="pl-6">
+          <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans">Balanço Líquido</span>
+          <span id="metric-net" class="font-black text-sm text-blue-600">+R$ 7.269,60</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 3. TABELA DE TRANSAÇÕES REFINADA -->
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      
+      <!-- Barra de Ações em Lote (Aparece quando há seleção de checkboxes) -->
+      <div id="bulk-bar" class="hidden bg-slate-900 text-white px-6 py-3 flex items-center justify-between transition-all">
+        <div class="flex items-center gap-3">
+          <span id="bulk-count" class="text-xs font-bold">2 transações selecionadas</span>
+          <span class="text-slate-500">|</span>
+          <span id="bulk-sum" class="text-xs font-mono font-bold text-teal-400">Total: R$ 1.800,00</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button class="bg-slate-800 hover:bg-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg transition">
+            Atribuir Categoria
+          </button>
+          <button class="bg-slate-800 hover:bg-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg transition">
+            Marcar Reembolso
+          </button>
+          <button onclick="clearSelection()" class="text-xs text-slate-400 hover:text-white ml-2">
+            Cancelar
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-50/70 border-b border-slate-200/80 text-slate-500 font-bold text-[11px] select-none">
+            <tr>
+              <th class="py-3 px-4 w-10">
+                <input type="checkbox" onchange="toggleSelectAll(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+              </th>
+              <th class="py-3 px-4 w-32">Data</th>
+              <th class="py-3 px-4">Descrição</th>
+              <th class="py-3 px-4 w-36">Conta</th>
+              <th class="py-3 px-4 w-52">Categoria</th>
+              <th class="py-3 px-4 text-right w-36">Valor</th>
+              <th class="py-3 px-4 text-center w-24">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tx-tbody" class="divide-y divide-slate-100">
+            <!-- Renderizado via JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Sentinela de Scroll Infinito (simula o phx-hook="InfiniteScroll") -->
+      <div id="infinite-scroll-sentinel" class="py-6 border-t border-slate-100 flex flex-col items-center justify-center text-xs text-slate-400 gap-2">
+        <div id="loading-spinner" class="flex items-center gap-2 text-blue-600 font-semibold hidden">
+          <svg class="w-4 h-4 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>Carregando mais transações anteriores...</span>
+        </div>
+        <div id="end-of-list" class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-slate-300"></span>
+          <span id="scroll-count-info">Exibindo todas as transações</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================= MODAL / DRAWER DE TRANSAÇÃO (NOVO / EDITAR / DETALHES) ================= -->
+    <div id="tx-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <!-- Backdrop translúcido -->
+      <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeTxModal()"></div>
+
+      <!-- Caixa do Modal -->
+      <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden z-10 animate-in zoom-in-95 duration-200">
+        
+        <!-- Cabeçalho do Modal -->
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+          <div class="flex items-center gap-2.5">
+            <div id="modal-icon-badge" class="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-black">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+            </div>
+            <div>
+              <h3 id="modal-title" class="text-sm font-bold text-slate-900">Nova Transação Manual</h3>
+              <p id="modal-subtitle" class="text-[11px] text-slate-400">Preencha os dados do lançamento financeiro</p>
+            </div>
+          </div>
+
+          <button onclick="closeTxModal()" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 flex items-center justify-center transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- Formulário -->
+        <form onsubmit="saveTxForm(event)" class="p-6 space-y-4 text-xs">
+          
+          <!-- Linha 1: Valor Direto com Sinal e Data -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-[11px] font-bold text-slate-700">Valor (R$)</label>
+                <span id="form-amount-hint" class="text-[10px] font-bold text-rose-500 font-sans">Despesa (Débito)</span>
+              </div>
+              <div class="relative flex items-center">
+                <input 
+                  id="form-amount" 
+                  type="text" 
+                  required 
+                  oninput="onAmountInput(this.value)"
+                  placeholder="-150,00" 
+                  class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-rose-600 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+              </div>
+              <span class="text-[10px] text-slate-400 mt-1 block">Dica: Use <b>-</b> para despesa (ex: -80,00) ou sem sinal para receita (ex: 2500,00)</span>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Data</label>
+              <input id="form-date" type="date" required class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <!-- Linha 2: Descrição -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">Descrição</label>
+            <input id="form-description" type="text" required placeholder="Ex: Aluguel, Supermercado, Consulta..." class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <!-- Linha 3: Conta e Categoria -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Conta Bancária / Cartão</label>
+              <select id="form-account" required class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                <option value="Nubank">Nubank (Cartão)</option>
+                <option value="Itaú">Itaú (Conta Corrente)</option>
+                <option value="BB">Banco do Brasil</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Categoria</label>
+              <select id="form-category" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                <option value="">(Pendente de Categoria)</option>
+                <option value="Saúde">Saúde</option>
+                <option value="Alimentação">Alimentação</option>
+                <option value="Supermercado">Supermercado</option>
+                <option value="Moradia">Moradia</option>
+                <option value="Transporte">Transporte</option>
+                <option value="Salário">Salário</option>
+                <option value="Rendimento">Rendimento</option>
+                <option value="Lazer">Lazer</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Bloco Informativo de Conciliação / Vínculos (Visível apenas na edição se aplicável) -->
+          <div id="form-reconcile-info" class="hidden bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-[11px] text-slate-600 space-y-1.5">
+            <span class="font-bold text-slate-800 block uppercase tracking-wider text-[10px]">Conciliações & Rastreabilidade</span>
+            <div id="reconcile-detail-content" class="flex flex-col gap-1 text-slate-500">
+              <!-- Preenchido dinamicamente via JS -->
+            </div>
+          </div>
+
+          <!-- Observações / Notas -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">Observações / Recibos</label>
+            <textarea id="form-notes" rows="2" placeholder="Informações adicionais, número de protocolo..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          </div>
+
+          <!-- Botões de Ação do Modal -->
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <button type="button" onclick="closeTxModal()" class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 transition">
+              Cancelar
+            </button>
+            <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition shadow-sm active:scale-95">
+              Salvar Lançamento
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+
+    <!-- ================= MODAL DE CONFIRMAÇÃO DE EXCLUSÃO ================= -->
+    <div id="delete-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeDeleteModal()"></div>
+      
+      <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden z-10 p-6 text-center animate-in zoom-in-95 duration-200">
+        <div class="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </div>
+
+        <h3 class="text-base font-bold text-slate-900 mb-1">Excluir Transação?</h3>
+        <p class="text-xs text-slate-500 mb-4">
+          Você tem certeza que deseja remover este lançamento? Esta ação não pode ser desfeita.
+        </p>
+
+        <!-- Detalhes do item a ser excluído -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs mb-5 text-left font-mono">
+          <div id="delete-tx-desc" class="font-bold text-slate-800 font-sans truncate mb-0.5">Consulta Dr. Roberto</div>
+          <div class="flex items-center justify-between text-[11px] text-slate-500">
+            <span id="delete-tx-date">10/09/2026</span>
+            <span id="delete-tx-val" class="font-bold text-rose-600">-R$ 800,00</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="closeDeleteModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 text-xs transition">
+            Cancelar
+          </button>
+          <button type="button" onclick="executeDeleteTx()" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition shadow-sm active:scale-95">
+            Sim, Excluir
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // ================= DADOS MOCKADOS DE TRANSAÇÕES (ORDENADOS: MAIS RECENTE -> MAIS ANTIGO) =================
+    const ALL_TRANSACTIONS = [
+      {
+        id: 11,
+        date: '15/09/2026',
+        isoDate: '2026-09-15',
+        weekday: 'Ter',
+        description: 'DOC/TED Unimed Seguros Reembolso',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Saúde',
+        amount: 600.00,
+        reimbursement: { 
+          status: 'credit', 
+          text: 'Crédito de Reembolso', 
+          paidAmount: 600.00,
+          linkedTxId: 1,
+          linkedTxDesc: 'Consulta Dr. Roberto (Cardiologista)',
+          linkedTxDate: '10/09/2026'
+        },
+        notes: 'Depósito referente à consulta de 10/09'
+      },
+      {
+        id: 1,
+        date: '10/09/2026',
+        isoDate: '2026-09-10',
+        weekday: 'Qui',
+        description: 'Consulta Dr. Roberto (Cardiologista)',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Saúde',
+        amount: -800.00,
+        reimbursement: { 
+          status: 'paid', 
+          text: 'Reembolsado R$ 600', 
+          paidAmount: 600.00,
+          linkedTxId: 11,
+          linkedTxDesc: 'DOC/TED Unimed Seguros Reembolso',
+          linkedTxDate: '15/09/2026'
+        },
+        notes: 'Enviado recibo para Unimed'
+      },
+      {
+        id: 2,
+        date: '08/09/2026',
+        isoDate: '2026-09-08',
+        weekday: 'Ter',
+        description: 'Exames Laboratório Fleury',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Saúde',
+        amount: -1200.00,
+        reimbursement: { status: 'requested', text: 'Solicitado R$ 900', paidAmount: 0.00 },
+        notes: ''
+      },
+      {
+        id: 3,
+        date: '05/09/2026',
+        isoDate: '2026-09-05',
+        weekday: 'Sáb',
+        description: 'Farmácia Raia — Medicamentos',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Saúde',
+        amount: -400.00,
+        reimbursement: { status: 'pending', text: 'Pendente Pedido', paidAmount: 0.00 },
+        notes: ''
+      },
+      {
+        id: 4,
+        date: '05/09/2026',
+        isoDate: '2026-09-05',
+        weekday: 'Sáb',
+        description: 'Supermercado Pão de Açúcar',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Supermercado',
+        amount: -650.40,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 5,
+        date: '04/09/2026',
+        isoDate: '2026-09-04',
+        weekday: 'Sex',
+        description: 'Aluguel Apartamento',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Moradia',
+        amount: -3500.00,
+        reimbursement: null,
+        notes: 'Boleto QuintoAndar'
+      },
+      {
+        id: 6,
+        date: '03/09/2026',
+        isoDate: '2026-09-03',
+        weekday: 'Qui',
+        description: 'Uber *Trip São Paulo',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Transporte',
+        amount: -45.90,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 7,
+        date: '02/09/2026',
+        isoDate: '2026-09-02',
+        weekday: 'Qua',
+        description: 'Posto Ipiranga Combustível',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: null,
+        suggestedCategory: 'Transporte',
+        amount: -220.00,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 8,
+        date: '01/09/2026',
+        isoDate: '2026-09-01',
+        weekday: 'Ter',
+        description: 'PIX Recebido — Salário Empresa XYZ',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Salário',
+        amount: 13000.00,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 9,
+        date: '01/09/2026',
+        isoDate: '2026-09-01',
+        weekday: 'Ter',
+        description: 'Rendimento Poupança / CDB',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Rendimento',
+        amount: 2420.00,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 10,
+        date: '01/09/2026',
+        isoDate: '2026-09-01',
+        weekday: 'Ter',
+        description: 'Cafeteria Doce Grão',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: null,
+        suggestedCategory: null,
+        amount: -32.50,
+        reimbursement: null,
+        notes: ''
+      },
+      // === AGOSTO 2026 ===
+      {
+        id: 12,
+        date: '28/08/2026',
+        isoDate: '2026-08-28',
+        weekday: 'Sex',
+        description: 'Restaurante Fogo de Chão',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Alimentação',
+        amount: -340.00,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 13,
+        date: '25/08/2026',
+        isoDate: '2026-08-25',
+        weekday: 'Ter',
+        description: 'Amazon.com.br — Livros Técnicos',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Educação',
+        amount: -189.90,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 14,
+        date: '20/08/2026',
+        isoDate: '2026-08-20',
+        weekday: 'Qui',
+        description: 'Posto Shell — Abastecimento',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Transporte',
+        amount: -210.00,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 15,
+        date: '15/08/2026',
+        isoDate: '2026-08-15',
+        weekday: 'Sáb',
+        description: 'Supermercado St. Marché',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Supermercado',
+        amount: -540.20,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 16,
+        date: '10/08/2026',
+        isoDate: '2026-08-10',
+        weekday: 'Seg',
+        description: 'Fatura Celular Vivo Fibra',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Moradia',
+        amount: -179.90,
+        reimbursement: null,
+        notes: 'Débito automático'
+      },
+      {
+        id: 17,
+        date: '05/08/2026',
+        isoDate: '2026-08-05',
+        weekday: 'Qua',
+        description: 'Aluguel Apartamento',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Moradia',
+        amount: -3500.00,
+        reimbursement: null,
+        notes: 'Boleto QuintoAndar'
+      },
+      {
+        id: 18,
+        date: '01/08/2026',
+        isoDate: '2026-08-01',
+        weekday: 'Sáb',
+        description: 'PIX Recebido — Salário Empresa XYZ',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Salário',
+        amount: 13000.00,
+        reimbursement: null,
+        notes: ''
+      },
+      // === JULHO 2026 ===
+      {
+        id: 19,
+        date: '25/07/2026',
+        isoDate: '2026-07-25',
+        weekday: 'Sáb',
+        description: 'Cinemark Shopping Iguatemi',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Lazer',
+        amount: -86.00,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 20,
+        date: '20/07/2026',
+        isoDate: '2026-07-20',
+        weekday: 'Seg',
+        description: 'Farmácia Pacheco',
+        account: 'Nubank',
+        accountType: 'Cartão',
+        category: 'Saúde',
+        amount: -154.30,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 21,
+        date: '10/07/2026',
+        isoDate: '2026-07-10',
+        weekday: 'Sex',
+        description: 'Manutenção Veículo / Revisão',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Transporte',
+        amount: -1250.00,
+        reimbursement: null,
+        notes: ''
+      },
+      {
+        id: 22,
+        date: '01/07/2026',
+        isoDate: '2026-07-01',
+        weekday: 'Qua',
+        description: 'PIX Recebido — Salário Empresa XYZ',
+        account: 'Itaú',
+        accountType: 'Conta Corrente',
+        category: 'Salário',
+        amount: 13000.00,
+        reimbursement: null,
+        notes: ''
+      }
+    ];
+
+    // Ordenação estrita garantida: Mais recente (maior data) para mais antiga (menor data)
+    ALL_TRANSACTIONS.sort((a, b) => b.isoDate.localeCompare(a.isoDate) || (b.id - a.id));
+
+    let currentSearch = '';
+    let currentPeriod = 'all';
+    let currentCategory = '';
+    let currentAccount = '';
+    let currentType = '';
+    let selectedIds = new Set();
+
+    // Estado da Paginação / Scroll Infinito
+    const PAGE_SIZE = 7;
+    let visibleCount = PAGE_SIZE;
+    let isLoadingMore = false;
+
+    function formatBRL(val) {
+      const abs = Math.abs(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (val < 0) return `-R$ ${abs}`;
+      return `+R$ ${abs}`;
+    }
+
+    // ================= FILTRAGEM E ORDENAÇÃO =================
+    function getFilteredData() {
+      // Ordenação rigorosa da mais recente para a mais antiga
+      let filtered = [...ALL_TRANSACTIONS].sort((a, b) => b.isoDate.localeCompare(a.isoDate) || (b.id - a.id));
+
+      if (currentSearch) {
+        const q = currentSearch.toLowerCase();
+        filtered = filtered.filter(t => t.description.toLowerCase().includes(q) || String(Math.abs(t.amount)).includes(q));
+      }
+
+      if (currentPeriod !== 'all') {
+        if (currentPeriod === '2026-all') {
+          filtered = filtered.filter(t => t.isoDate.startsWith('2026'));
+        } else {
+          filtered = filtered.filter(t => t.isoDate.startsWith(currentPeriod));
+        }
+      }
+
+      if (currentCategory === 'pending') {
+        filtered = filtered.filter(t => !t.category);
+      } else if (currentCategory) {
+        filtered = filtered.filter(t => t.category === currentCategory);
+      }
+
+      if (currentAccount) {
+        filtered = filtered.filter(t => t.account === currentAccount);
+      }
+
+      if (currentType === 'debit') {
+        filtered = filtered.filter(t => t.amount < 0);
+      } else if (currentType === 'credit') {
+        filtered = filtered.filter(t => t.amount > 0);
+      }
+
+      return filtered;
+    }
+
+    // ================= RENDERIZADOR DA TABELA =================
+    function renderTable(resetPagination = false) {
+      if (resetPagination) {
+        visibleCount = PAGE_SIZE;
+      }
+
+      const allFiltered = getFilteredData();
+      const pagedItems = allFiltered.slice(0, visibleCount);
+
+      // Renderiza linhas
+      const tbody = document.getElementById('tx-tbody');
+      if (pagedItems.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-slate-400 italic font-medium">Nenhuma transação encontrada com os filtros atuais.</td></tr>`;
+      } else {
+        tbody.innerHTML = pagedItems.map(tx => {
+          const isSelected = selectedIds.has(tx.id);
+          const isNegative = tx.amount < 0;
+
+          // Categoria Cell:
+          let categoryHtml = '';
+          if (tx.category) {
+            categoryHtml = `
+              <div class="flex items-center gap-1.5 group/cat">
+                <span class="font-semibold text-slate-800 hover:text-blue-600 cursor-pointer text-xs" onclick="promptChangeCat(${tx.id})">
+                  ${tx.category}
+                </span>
+                <button onclick="promptChangeCat(${tx.id})" class="text-slate-400 hover:text-blue-600 opacity-0 group-hover/cat:opacity-100 transition p-0.5" title="Alterar Categoria">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                </button>
+              </div>
+            `;
+          } else if (tx.suggestedCategory) {
+            // Sugestão em 1 clique!
+            categoryHtml = `
+              <button onclick="acceptSuggestion(${tx.id}, '${tx.suggestedCategory}')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold text-[10px] transition shadow-2xs" title="Clique para aprovar sugestão">
+                <svg class="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <span>${tx.suggestedCategory}</span>
+              </button>
+            `;
+          } else {
+            // Pendente sem sugestão
+            categoryHtml = `
+              <button onclick="promptChangeCat(${tx.id})" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 font-bold text-[10px] transition">
+                <span>+ Definir</span>
+              </button>
+            `;
+          }
+
+          // Badge de Reembolso na descrição (com vínculo à transação de crédito)
+          let reimbBadge = '';
+          if (tx.reimbursement) {
+            const isClickable = tx.reimbursement.linkedTxId ? 'cursor-pointer hover:opacity-80 active:scale-95' : '';
+            const linkTooltip = tx.reimbursement.linkedTxId ? `title="Vinculado a: ${tx.reimbursement.linkedTxDesc} (${tx.reimbursement.linkedTxDate}) — Clique para focar"` : '';
+            const clickHandler = tx.reimbursement.linkedTxId ? `onclick="focusTransaction(${tx.reimbursement.linkedTxId})"` : '';
+
+            if (tx.reimbursement.status === 'paid') {
+              reimbBadge = `
+                <div class="mt-1.5 flex items-center gap-1.5">
+                  <span ${clickHandler} ${linkTooltip} class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-[#e8f8f0] border border-[#a8ecc3] text-[#0d6838] font-bold text-[11px] transition ${isClickable}">
+                    <svg class="w-3.5 h-3.5 text-[#0d6838]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-width="2"></circle><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12l2.5 2.5L16 9"/></svg>
+                    <span>${tx.reimbursement.text}</span>
+                    ${tx.reimbursement.linkedTxId ? `<svg class="w-3 h-3 opacity-60 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>` : ''}
+                  </span>
+                </div>
+              `;
+            } else if (tx.reimbursement.status === 'credit') {
+              reimbBadge = `
+                <div class="mt-1.5 flex items-center gap-1.5">
+                  <span ${clickHandler} ${linkTooltip} class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 font-bold text-[11px] transition ${isClickable}">
+                    <svg class="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+                    <span>${tx.reimbursement.text}</span>
+                    <svg class="w-3 h-3 opacity-60 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                  </span>
+                </div>
+              `;
+            } else if (tx.reimbursement.status === 'requested') {
+              reimbBadge = `
+                <div class="mt-1.5 flex items-center gap-1.5">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 font-bold text-[11px]">
+                    <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-width="2"></circle><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3"/></svg>
+                    <span>${tx.reimbursement.text}</span>
+                  </span>
+                </div>
+              `;
+            } else if (tx.reimbursement.status === 'pending') {
+              reimbBadge = `
+                <div class="mt-1.5 flex items-center gap-1.5">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 font-bold text-[11px]">
+                    <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <span>${tx.reimbursement.text}</span>
+                  </span>
+                </div>
+              `;
+            }
+          }
+
+          return `
+            <tr id="tx-row-${tx.id}" class="hover:bg-slate-50/60 transition duration-300 ${isSelected ? 'bg-blue-50/30' : ''}">
+              <td class="py-3 px-4">
+                <input type="checkbox" onchange="toggleSelectOne(${tx.id}, this.checked)" ${isSelected ? 'checked' : ''} class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+              </td>
+              <td class="py-3 px-4 whitespace-nowrap">
+                <span class="font-medium text-slate-800">${tx.date}</span>
+                <span class="text-[10px] text-slate-400 block font-sans">${tx.weekday}</span>
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-semibold text-slate-900">${tx.description}</div>
+                ${tx.notes ? `<span class="text-[10px] text-slate-400 italic block mt-0.5">Nota: ${tx.notes}</span>` : ''}
+                ${reimbBadge}
+              </td>
+              <td class="py-3 px-4 whitespace-nowrap">
+                <span class="font-medium text-slate-700">${tx.account}</span>
+                <span class="text-[10px] text-slate-400 block font-sans">${tx.accountType}</span>
+              </td>
+              <td class="py-3 px-4 whitespace-nowrap">
+                ${categoryHtml}
+              </td>
+              <td class="py-3 px-4 text-right font-mono font-bold whitespace-nowrap ${isNegative ? 'text-rose-500' : 'text-teal-600'}">
+                ${formatBRL(tx.amount)}
+              </td>
+              <td class="py-3 px-4 text-center whitespace-nowrap">
+                <div class="flex items-center justify-center gap-1 text-slate-400">
+                  <button onclick="openTxModal('edit', ${tx.id})" class="p-1 hover:text-blue-600 transition" title="Editar / Ver Detalhes">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                  </button>
+                  <button onclick="openDeleteModal(${tx.id})" class="p-1 hover:text-rose-500 transition" title="Excluir">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Atualiza sentinela de scroll
+      const countEl = document.getElementById('scroll-count-info');
+      const endOfListEl = document.getElementById('end-of-list');
+      if (allFiltered.length === 0) {
+        countEl.textContent = `0 transações`;
+      } else if (pagedItems.length >= allFiltered.length) {
+        countEl.textContent = `Exibindo todas as ${allFiltered.length} transações (ordem: mais recentes primeiro)`;
+        endOfListEl.classList.remove('hidden');
+      } else {
+        countEl.textContent = `Exibindo ${pagedItems.length} de ${allFiltered.length} transações — Role para baixo para carregar mais...`;
+        endOfListEl.classList.remove('hidden');
+      }
+
+      updateSummary(allFiltered);
+      updateBulkBar();
+    }
+
+    // ================= ATUALIZAÇÃO DO RESUMO CONTEXTUAL DINÂMICO =================
+    function updateSummary(filtered) {
+      const contextualCard = document.getElementById('contextual-summary');
+      const pendingBar = document.getElementById('pending-summary-bar');
+      const iconBox = document.getElementById('summary-icon-box');
+      const titleEl = document.getElementById('summary-title');
+      const countEl = document.getElementById('summary-count');
+      const metricsEl = document.getElementById('summary-metrics');
+
+      // Verifica se há algum filtro ativamente estreitando o extrato
+      const isFilterActive = !!(currentSearch || currentPeriod !== 'all' || currentCategory || currentAccount || currentType);
+
+      if (!isFilterActive) {
+        // ESTADO SEM FILTRO: Exibe permanentemente a Barra de Saúde e Pendências do Extrato
+        contextualCard.classList.add('hidden');
+        pendingBar.classList.remove('hidden');
+        return;
+      }
+
+      // ESTADO COM FILTRO ATIVO: Transição suave para o Resumo Financeiro do Recorte
+      pendingBar.classList.add('hidden');
+      contextualCard.classList.remove('hidden');
+
+      // 1. Se filtrou especificamente por uma categoria (ex: "Saúde"):
+      if (currentCategory === 'Saúde') {
+        const totalGasto = filtered.filter(t => t.amount < 0).reduce((acc, t) => acc + Math.abs(t.amount), 0);
+        const totalReembolsado = filtered.filter(t => t.amount > 0).reduce((acc, t) => acc + t.amount, 0);
+        const custoReal = totalGasto - totalReembolsado;
+
+        iconBox.className = "w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0";
+        titleEl.textContent = "Filtro Ativo: Categoria Saúde (Consultas e Exames)";
+        countEl.textContent = `${filtered.length} transações (${filtered.filter(t=>t.amount<0).length} despesas, ${filtered.filter(t=>t.amount>0).length} reembolso)`;
+
+        metricsEl.innerHTML = `
+          <div>
+            <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans">Total Gasto</span>
+            <span class="font-black text-sm text-rose-500 font-mono">-R$ ${totalGasto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+          </div>
+          <div class="pl-6">
+            <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans">Reembolsado (Plano)</span>
+            <span class="font-black text-sm text-teal-600 font-mono">+R$ ${totalReembolsado.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+          </div>
+          <div class="pl-6">
+            <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans">Custo Real (Seu Bolso)</span>
+            <span class="font-black text-sm text-blue-600 font-mono">-R$ ${custoReal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+          </div>
+        `;
+        return;
+      }
+
+      // 2. Se filtrou por período (mês ou ano) ou busca geral:
+      const income = filtered.filter(t => t.amount > 0).reduce((acc, t) => acc + t.amount, 0);
+      const expense = filtered.filter(t => t.amount < 0).reduce((acc, t) => acc + t.amount, 0);
+      const net = income + expense;
+
+      iconBox.className = "w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0";
+      
+      let periodLabel = "Extrato Filtrado";
+      if (currentPeriod === '2026-09') periodLabel = "Setembro 2026";
+      else if (currentPeriod === '2026-08') periodLabel = "Agosto 2026";
+      else if (currentPeriod === '2026-07') periodLabel = "Julho 2026";
+      else if (currentPeriod === '2026-all') periodLabel = "Ano 2026";
+
+      if (currentCategory) periodLabel += ` · Categoria: ${currentCategory}`;
+      if (currentAccount) periodLabel += ` · Conta: ${currentAccount}`;
+
+      titleEl.textContent = currentSearch ? `Busca: "${currentSearch}"` : periodLabel;
+      countEl.textContent = `${filtered.length} transações no recorte selecionado`;
+
+      metricsEl.innerHTML = `
+        <div>
+          <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans">Entradas</span>
+          <span class="font-black text-sm text-teal-600 font-mono">${formatBRL(income)}</span>
+        </div>
+        <div class="pl-6">
+          <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans">Saídas</span>
+          <span class="font-black text-sm text-rose-500 font-mono">${formatBRL(expense)}</span>
+        </div>
+        <div class="pl-6">
+          <span class="text-[10px] font-bold uppercase text-slate-400 block font-sans">Balanço do Recorte</span>
+          <span class="font-black text-sm text-blue-600 font-mono">${formatBRL(net)}</span>
+        </div>
+      `;
+    }
+
+    // ================= IMPLEMENTAÇÃO DO SCROLL INFINITO =================
+    function initInfiniteScroll() {
+      const sentinel = document.getElementById('infinite-scroll-sentinel');
+      const spinner = document.getElementById('loading-spinner');
+
+      const observer = new IntersectionObserver((entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting && !isLoadingMore) {
+          const allFiltered = getFilteredData();
+          if (visibleCount < allFiltered.length) {
+            isLoadingMore = true;
+            spinner.classList.remove('hidden');
+
+            setTimeout(() => {
+              visibleCount += PAGE_SIZE;
+              isLoadingMore = false;
+              spinner.classList.add('hidden');
+              renderTable(false);
+            }, 350); // Delay suave simulando o fetch de mais itens
+          }
+        }
+      }, {
+        rootMargin: '120px'
+      });
+
+      observer.observe(sentinel);
+    }
+
+    // ================= SELEÇÃO EM LOTE =================
+    function updateBulkBar() {
+      const bar = document.getElementById('bulk-bar');
+      if (selectedIds.size > 0) {
+        bar.classList.remove('hidden');
+        document.getElementById('bulk-count').textContent = `${selectedIds.size} transações selecionadas`;
+        
+        const sum = ALL_TRANSACTIONS
+          .filter(t => selectedIds.has(t.id))
+          .reduce((acc, t) => acc + t.amount, 0);
+        document.getElementById('bulk-sum').textContent = `Total Seleção: ${formatBRL(sum)}`;
+      } else {
+        bar.classList.add('hidden');
+      }
+    }
+
+    function toggleSelectOne(id, checked) {
+      if (checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+      renderTable(false);
+    }
+
+    function toggleSelectAll(checked) {
+      const allFiltered = getFilteredData();
+      if (checked) {
+        allFiltered.forEach(t => selectedIds.add(t.id));
+      } else {
+        selectedIds.clear();
+      }
+      renderTable(false);
+    }
+
+    function clearSelection() {
+      selectedIds.clear();
+      renderTable(false);
+    }
+
+    // ================= EVENT HANDLERS DE FILTROS =================
+    function onSearchInput(val) {
+      currentSearch = val;
+      renderTable(true);
+    }
+
+    function onPeriodChange(val) {
+      currentPeriod = val;
+      renderTable(true);
+    }
+
+    function onCategoryFilterChange(val) {
+      currentCategory = val;
+      renderTable(true);
+    }
+
+    function applyFilters() {
+      currentAccount = document.getElementById('filter-account').value;
+      renderTable(true);
+    }
+
+    function filterDemoSaude() {
+      document.getElementById('filter-category').value = 'Saúde';
+      currentCategory = 'Saúde';
+      renderTable(true);
+    }
+
+    function togglePendingFilter() {
+      const select = document.getElementById('filter-category');
+      if (currentCategory === 'pending') {
+        select.value = '';
+        currentCategory = '';
+      } else {
+        select.value = 'pending';
+        currentCategory = 'pending';
+      }
+      renderTable(true);
+    }
+
+    function setTypeFilter(type) {
+      currentType = type;
+      document.getElementById('btn-type-all').className = type === '' ? 'flex-1 py-2 text-[11px] font-bold rounded-lg bg-white shadow-xs text-slate-800 transition' : 'flex-1 py-2 text-[11px] font-bold rounded-lg text-slate-500 hover:text-slate-900 transition';
+      document.getElementById('btn-type-debit').className = type === 'debit' ? 'flex-1 py-2 text-[11px] font-bold rounded-lg bg-white shadow-xs text-rose-600 transition' : 'flex-1 py-2 text-[11px] font-bold rounded-lg text-slate-500 hover:text-slate-900 transition';
+      document.getElementById('btn-type-credit').className = type === 'credit' ? 'flex-1 py-2 text-[11px] font-bold rounded-lg bg-white shadow-xs text-teal-600 transition' : 'flex-1 py-2 text-[11px] font-bold rounded-lg text-slate-500 hover:text-slate-900 transition';
+      renderTable(true);
+    }
+
+    function resetFilters() {
+      document.getElementById('filter-search').value = '';
+      document.getElementById('filter-category').value = '';
+      document.getElementById('filter-account').value = '';
+      document.getElementById('filter-period').value = 'all';
+      currentSearch = '';
+      currentPeriod = 'all';
+      currentCategory = '';
+      currentAccount = '';
+      setTypeFilter('');
+    }
+
+    function acceptSuggestion(id, cat) {
+      const tx = ALL_TRANSACTIONS.find(t => t.id === id);
+      if (tx) {
+        tx.category = cat;
+        tx.suggestedCategory = null;
+        renderTable(false);
+      }
+    }
+
+    function promptChangeCat(id) {
+      const cat = prompt("Selecione ou digite uma categoria (ex: Alimentação, Transporte, Saúde, Lazer):");
+      if (cat) {
+        const tx = ALL_TRANSACTIONS.find(t => t.id === id);
+        if (tx) {
+          tx.category = cat;
+          renderTable(false);
+        }
+      }
+    }
+
+    function focusTransaction(targetId) {
+      // Garante que a transação esteja visível se estiver além da página atual
+      const index = getFilteredData().findIndex(t => t.id === targetId);
+      if (index >= visibleCount) {
+        visibleCount = index + 1;
+        renderTable(false);
+      }
+
+      setTimeout(() => {
+        const targetRow = document.getElementById(`tx-row-${targetId}`);
+        if (targetRow) {
+          targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          targetRow.classList.add('bg-emerald-100', 'ring-2', 'ring-emerald-400');
+          setTimeout(() => {
+            targetRow.classList.remove('bg-emerald-100', 'ring-2', 'ring-emerald-400');
+          }, 2200);
+        }
+      }, 50);
+    }
+
+    // ================= CONTROLE DO MODAL DE TRANSAÇÃO (NOVO / EDITAR) =================
+    let currentModalMode = 'new';
+    let editingTxId = null;
+
+    function onAmountInput(val) {
+      const input = document.getElementById('form-amount');
+      const hint = document.getElementById('form-amount-hint');
+      const trimmed = (val || '').trim();
+
+      if (!trimmed) {
+        hint.textContent = 'Ex: -150,00 ou 2500,00';
+        hint.className = 'text-[10px] font-bold text-slate-400 font-sans';
+        input.className = 'w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-slate-700 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+        return;
+      }
+
+      if (trimmed.startsWith('-')) {
+        hint.textContent = 'Despesa (Débito)';
+        hint.className = 'text-[10px] font-bold text-rose-500 font-sans';
+        input.className = 'w-full bg-slate-50 border border-rose-300 rounded-xl py-2 px-3 text-rose-600 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-rose-500';
+      } else {
+        hint.textContent = 'Receita (Crédito)';
+        hint.className = 'text-[10px] font-bold text-teal-600 font-sans';
+        input.className = 'w-full bg-slate-50 border border-teal-300 rounded-xl py-2 px-3 text-teal-600 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-teal-500';
+      }
+    }
+
+    function openTxModal(mode = 'new', txId = null) {
+      currentModalMode = mode;
+      editingTxId = txId;
+
+      const modal = document.getElementById('tx-modal');
+      const modalTitle = document.getElementById('modal-title');
+      const modalSubtitle = document.getElementById('modal-subtitle');
+      const reconcileInfo = document.getElementById('form-reconcile-info');
+      const reconcileContent = document.getElementById('reconcile-detail-content');
+
+      if (mode === 'new') {
+        modalTitle.textContent = "Nova Transação Manual";
+        modalSubtitle.textContent = "Preencha os dados do lançamento financeiro";
+        
+        // Valores padrão
+        document.getElementById('form-date').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('form-amount').value = '';
+        onAmountInput('');
+        document.getElementById('form-description').value = '';
+        document.getElementById('form-account').value = 'Nubank';
+        document.getElementById('form-category').value = '';
+        document.getElementById('form-notes').value = '';
+        reconcileInfo.classList.add('hidden');
+      } else {
+        // Modo edição
+        const tx = ALL_TRANSACTIONS.find(t => t.id === txId);
+        if (!tx) return;
+
+        modalTitle.textContent = "Editar / Detalhes da Transação";
+        modalSubtitle.textContent = `ID #${tx.id} · Origem: ${tx.accountType}`;
+
+        document.getElementById('form-date').value = tx.isoDate;
+        const formattedAmount = (tx.amount < 0 ? '-' : '') + Math.abs(tx.amount).toFixed(2).replace('.', ',');
+        document.getElementById('form-amount').value = formattedAmount;
+        onAmountInput(formattedAmount);
+        document.getElementById('form-description').value = tx.description;
+        document.getElementById('form-account').value = tx.account;
+        document.getElementById('form-category').value = tx.category || '';
+        document.getElementById('form-notes').value = tx.notes || '';
+
+        // Exibe vínculos especiais se houver
+        let infoHtml = [];
+        if (tx.reimbursement) {
+          infoHtml.push(`
+            <div class="flex items-center gap-1.5 text-emerald-700 font-medium">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>Reembolso: <b>${tx.reimbursement.text}</b> (${tx.reimbursement.status === 'paid' ? 'Vinculado a ' + tx.reimbursement.linkedTxDesc : 'Aguardando pagamento'})</span>
+            </div>
+          `);
+        }
+        if (tx.description.includes('DOC/TED') || tx.description.includes('PIX Recebido')) {
+          infoHtml.push(`
+            <div class="flex items-center gap-1.5 text-blue-700 font-medium">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+              <span>Tipo de Lançamento: Crédito Bancário Direto (Importado/Conciliado)</span>
+            </div>
+          `);
+        }
+
+        if (infoHtml.length > 0) {
+          reconcileContent.innerHTML = infoHtml.join('');
+          reconcileInfo.classList.remove('hidden');
+        } else {
+          reconcileInfo.classList.add('hidden');
+        }
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeTxModal() {
+      document.getElementById('tx-modal').classList.add('hidden');
+    }
+
+    function saveTxForm(e) {
+      e.preventDefault();
+      const rawVal = document.getElementById('form-amount').value.trim();
+      const cleanVal = rawVal.replace(/\./g, '').replace(',', '.');
+      const parsedAmount = parseFloat(cleanVal);
+      const finalAmount = isNaN(parsedAmount) ? 0 : parsedAmount;
+
+      const dateVal = document.getElementById('form-date').value;
+      const [y, m, d] = dateVal.split('-');
+
+      if (currentModalMode === 'new') {
+        const newTx = {
+          id: Date.now(),
+          date: `${d}/${m}/${y}`,
+          isoDate: dateVal,
+          weekday: 'Seg',
+          description: document.getElementById('form-description').value,
+          account: document.getElementById('form-account').value,
+          accountType: document.getElementById('form-account').value === 'Nubank' ? 'Cartão' : 'Conta Corrente',
+          category: document.getElementById('form-category').value || null,
+          suggestedCategory: null,
+          amount: finalAmount,
+          reimbursement: null,
+          notes: document.getElementById('form-notes').value
+        };
+        ALL_TRANSACTIONS.unshift(newTx);
+      } else {
+        const tx = ALL_TRANSACTIONS.find(t => t.id === editingTxId);
+        if (tx) {
+          tx.date = `${d}/${m}/${y}`;
+          tx.isoDate = dateVal;
+          tx.description = document.getElementById('form-description').value;
+          tx.account = document.getElementById('form-account').value;
+          tx.accountType = document.getElementById('form-account').value === 'Nubank' ? 'Cartão' : 'Conta Corrente';
+          tx.category = document.getElementById('form-category').value || null;
+          tx.amount = finalAmount;
+          tx.notes = document.getElementById('form-notes').value;
+        }
+      }
+
+      closeTxModal();
+      renderTable(false);
+    }
+
+    // ================= CONTROLE DO MODAL DE CONFIRMAÇÃO DE EXCLUSÃO =================
+    let deletingTxId = null;
+
+    function openDeleteModal(txId) {
+      const tx = ALL_TRANSACTIONS.find(t => t.id === txId);
+      if (!tx) return;
+
+      deletingTxId = txId;
+      document.getElementById('delete-tx-desc').textContent = tx.description;
+      document.getElementById('delete-tx-date').textContent = `${tx.date} · ${tx.account}`;
+      
+      const valEl = document.getElementById('delete-tx-val');
+      valEl.textContent = formatBRL(tx.amount);
+      valEl.className = tx.amount < 0 ? 'font-bold text-rose-600' : 'font-bold text-teal-600';
+
+      document.getElementById('delete-modal').classList.remove('hidden');
+    }
+
+    function closeDeleteModal() {
+      deletingTxId = null;
+      document.getElementById('delete-modal').classList.add('hidden');
+    }
+
+    function executeDeleteTx() {
+      if (!deletingTxId) return;
+      const idx = ALL_TRANSACTIONS.findIndex(t => t.id === deletingTxId);
+      if (idx !== -1) {
+        ALL_TRANSACTIONS.splice(idx, 1);
+        selectedIds.delete(deletingTxId);
+      }
+      closeDeleteModal();
+      renderTable(false);
+    }
+
+    // Inicialização
+    renderTable(true);
+    initInfiniteScroll();
+  </script>
+</body>
+</html>

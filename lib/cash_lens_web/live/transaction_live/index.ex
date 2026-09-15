@@ -9,6 +9,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   alias CashLens.Transactions
   alias CashLens.Transactions.CategorySuggester
   alias CashLens.Transactions.PluggyMatcher
+  alias CashLens.Transactions.Transaction
 
   @impl true
   def mount(_params, _session, socket) do
@@ -58,6 +59,10 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:filters, default_filters())
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
+     |> assign(:stream_loaded?, false)
+     |> assign(:form_action, nil)
+     |> assign(:form_transaction, nil)
+     |> assign(:show_transaction, nil)
      |> assign(:return_to, nil)
      |> assign(:pending_count, Transactions.count_pending_transactions())
      |> assign(:statement_health, Transactions.statement_health())
@@ -68,10 +73,14 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_params(params, _url, socket) do
     {return_to, params} = Map.pop(params, "return_to")
-    {open_import, filters_param} = Map.pop(params, "open_import")
+    {open_import, params} = Map.pop(params, "open_import")
+    # `:id` addresses the overlaid show/edit modal — it is never a filter.
+    {id, filters_param} = Map.pop(params, "id")
+
+    previous_filters = socket.assigns.filters
 
     filters =
-      socket.assigns.filters
+      previous_filters
       |> Map.merge(filters_param || %{})
       # A month/year arriving in the URL must show up in the period select too.
       |> sync_period()
@@ -81,9 +90,72 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> assign(:filters, filters)
       |> assign(:return_to, return_to)
       |> assign(:show_import_modal, open_import == "true")
-      |> refresh_transactions_page1(filters)
+      |> maybe_refresh_stream(filters, previous_filters)
+      |> apply_action(socket.assigns.live_action, id)
 
     {:noreply, socket}
+  end
+
+  # Opening or closing a modal is a `live_patch`, and `handle_params` runs for
+  # it exactly like it does for a filter deep link. Rebuilding the stream here
+  # unconditionally would drop every page the user scrolled in and snap the
+  # statement back to the top, so page 1 is only re-fetched on the first
+  # `handle_params` after mount or when the URL actually changed the filters.
+  defp maybe_refresh_stream(socket, filters, previous_filters) do
+    if socket.assigns.stream_loaded? and filters == previous_filters do
+      socket
+    else
+      socket
+      |> refresh_transactions_page1(filters)
+      |> assign(:stream_loaded?, true)
+    end
+  end
+
+  defp apply_action(socket, :new, _id) do
+    socket
+    |> assign(:page_title, "Nova Transação")
+    |> assign(:form_action, :new)
+    |> assign(:form_transaction, %Transaction{date: Date.utc_today()})
+    |> assign(:show_transaction, nil)
+  end
+
+  defp apply_action(socket, :edit, id) do
+    transaction = Transactions.get_transaction!(id)
+
+    socket
+    |> assign(:page_title, "Editar Transação")
+    |> assign(:form_action, :edit)
+    |> assign(:form_transaction, transaction)
+    |> assign(:accounts, with_account(socket.assigns.accounts, transaction))
+    |> assign(:show_transaction, nil)
+  end
+
+  defp apply_action(socket, :show, id) do
+    socket
+    |> assign(:page_title, "Detalhes da Transação")
+    |> assign(:form_action, nil)
+    |> assign(:form_transaction, nil)
+    |> assign(:show_transaction, Transactions.get_transaction!(id))
+  end
+
+  defp apply_action(socket, _index, _id) do
+    socket
+    |> assign(:page_title, "Transações")
+    |> assign(:form_action, nil)
+    |> assign(:form_transaction, nil)
+    |> assign(:show_transaction, nil)
+  end
+
+  # A transaction may sit on a closed account that the select no longer lists;
+  # without this the edit modal would silently re-point it somewhere else.
+  defp with_account(accounts, %{account_id: nil}), do: accounts
+
+  defp with_account(accounts, transaction) do
+    if Enum.any?(accounts, &(&1.id == transaction.account_id)) do
+      accounts
+    else
+      [Accounts.get_account!(transaction.account_id) | accounts]
+    end
   end
 
   defp assign_transfer_category_id(socket) do
@@ -305,6 +377,10 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
+  def handle_event("close_transaction_modal", _params, socket) do
+    {:noreply, push_patch(socket, to: ~p"/transactions")}
+  end
+
   def handle_event("close_modal", _params, socket) do
     {:noreply,
      socket
@@ -660,13 +736,17 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("confirm_delete", %{"id" => id}, socket) do
-    confirm = %{action: JS.push("delete", value: %{id: id})}
+    confirm = %{
+      action: JS.push("delete", value: %{id: id}),
+      transaction: Transactions.get_transaction!(id)
+    }
+
     {:noreply, assign(socket, :confirm_modal, confirm)}
   end
 
   @impl true
   def handle_event("confirm_delete_all", _params, socket) do
-    confirm = %{action: JS.push("delete_all")}
+    confirm = %{action: JS.push("delete_all"), transaction: nil}
     {:noreply, assign(socket, :confirm_modal, confirm)}
   end
 
@@ -710,6 +790,30 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:filters, new_filters)
      |> refresh_transactions_page1(new_filters)}
+  end
+
+  @impl true
+  def handle_info({:transaction_saved, transaction, action}, socket) do
+    message =
+      if action == :new,
+        do: "Transação criada com sucesso",
+        else: "Transação atualizada com sucesso"
+
+    {:noreply,
+     socket
+     |> put_flash(:success, message)
+     |> insert_saved_transaction(transaction, action)
+     |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> recalculate_summary()
+     |> push_patch(to: ~p"/transactions")}
+  end
+
+  @impl true
+  def handle_info({:transaction_duplicate}, socket) do
+    {:noreply,
+     socket
+     |> put_flash(:info, "Transação idêntica já existe — nada foi criado.")
+     |> push_patch(to: ~p"/transactions")}
   end
 
   @impl true
@@ -938,6 +1042,23 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> annotate_pluggy_categories()
 
     tx
+  end
+
+  # A brand new row belongs at the top of the (newest first) statement; an
+  # edited one goes through the filter-aware update path so it disappears when
+  # the change moved it out of the current filter.
+  defp insert_saved_transaction(socket, transaction, :new) do
+    tx = annotate_one(Transactions.get_transaction!(transaction.id))
+
+    if matches_filters?(tx, socket.assigns.filters, socket.assigns.transfer_category_id) do
+      stream_insert(socket, :transactions, tx, at: 0)
+    else
+      socket
+    end
+  end
+
+  defp insert_saved_transaction(socket, transaction, :edit) do
+    stream_update_transaction(socket, transaction)
   end
 
   defp stream_update_transaction(socket, tx) do

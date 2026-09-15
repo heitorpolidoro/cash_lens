@@ -147,3 +147,13 @@
 - `calculate_summary/1` (`transaction_live/index.ex:1284`) recomputes `statement_health/0` even when `filters_active?` hides the bar — four aggregates per search keystroke.
 - `#filter-summary-card` pairs `@filtered_count` (includes transfers) with `@summary` (excludes them), so the row count and the totals disagree on transfer-containing slices.
 - Pre-existing: `String.to_existing_atom(filters["sort_order"] || "desc")` (`transactions.ex:158`) raises on a crafted value, since `sort_order` is an accepted filter key.
+
+## [CL-10] Unificar formulário manual, edição e modal de confirmação de exclusão — 2026-09-15
+- **MONEY-CORRECTNESS RISK:** `transactions/amount_input.ex:127` — `"1,234.56"` (US grouping) silently parses to `1.23456`, and `"1.23,45"` to `123.45`. Decide by the last separator or reject mixed separators. The moduledoc claim that a typo "can never persist a wrong amount" is overstated for that input.
+- Pin the ambiguous cases (`"1,234.56"`, `"1.23,45"`, `",50"`) in `amount_input_test.exs`.
+- The deleted `form_test.exs` covered "handles error on save"; no new test submits a repo-invalid changeset, so both `{:error, changeset}` branches of `FormComponent.persist/3` are now uncovered.
+- `form_component.ex:33` and `:47` duplicate the same three-line validate-changeset block.
+- The manual `time` field is no longer editable (the old full-page form had it). In spec, but worth a product confirmation.
+- (round 2, parser fix) Values with more than two decimals (`1.2345`) persist as typed into an unconstrained `field :amount, :decimal`, while `to_input_value/1` rounds to 2 — consider rounding at parse time or validating scale.
+- The rejection error for `1,234.56` could name the accepted formats.
+- Pre-existing: `.5` and `5.` are rejected by the amount parser.

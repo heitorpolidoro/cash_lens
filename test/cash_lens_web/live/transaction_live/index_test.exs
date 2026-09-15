@@ -143,7 +143,10 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
       assert html =~ "Não foi possível atualizar dados do Pluggy"
 
       FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
-      html = render_patch(live, ~p"/transactions?search=")
+      # Re-queries through a filter change: since CL-10 a bare `live_patch` is
+      # how the transaction modals open and close, so it deliberately does NOT
+      # rebuild the stream (that would reset the infinite scroll).
+      html = live |> form("#transaction-filters", %{"search" => ""}) |> render_change()
 
       refute html =~ "Não foi possível atualizar dados do Pluggy"
     end

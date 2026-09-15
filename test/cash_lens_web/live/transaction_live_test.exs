@@ -37,63 +37,65 @@ defmodule CashLensWeb.TransactionLiveTest do
       account = account_fixture()
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-      assert {:ok, form_live, html} =
-               index_live
-               |> element("main a[href='/transactions/new']")
-               |> render_click()
-               |> follow_redirect(conn, ~p"/transactions/new")
+      index_live
+      |> element("main a[href='/transactions/new']")
+      |> render_click()
 
-      assert html =~ "New Transaction"
+      assert_patch(index_live, ~p"/transactions/new")
+      assert has_element?(index_live, "#transaction-form-modal")
 
-      assert form_live
+      assert index_live
              |> form("#transaction-form", transaction: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
-      assert {:ok, _index_live, html} =
-               form_live
-               |> form("#transaction-form",
-                 transaction: Map.put(@create_attrs, :account_id, account.id)
-               )
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/transactions")
+      index_live
+      |> form("#transaction-form",
+        transaction: Map.put(@create_attrs, :account_id, account.id)
+      )
+      |> render_submit()
 
-      assert html =~ "Transaction created successfully"
-      assert html =~ "some description"
+      assert_patch(index_live, ~p"/transactions")
+      assert render(index_live) =~ "some description"
+      refute has_element?(index_live, "#transaction-form-modal")
     end
 
     test "updates transaction in listing", %{conn: conn, transaction: transaction} do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-      assert {:ok, form_live, html} =
-               index_live
-               |> element("#transactions-#{transaction.id} a[href$='/edit']")
-               |> render_click()
-               |> follow_redirect(conn, ~p"/transactions/#{transaction}/edit")
+      index_live
+      |> element("#transactions-#{transaction.id} a[href$='/edit']")
+      |> render_click()
 
-      assert html =~ "Edit Transaction"
+      assert_patch(index_live, ~p"/transactions/#{transaction}/edit")
+      assert has_element?(index_live, "#transaction-form-modal")
 
-      assert form_live
+      assert index_live
              |> form("#transaction-form", transaction: @invalid_attrs)
              |> render_change() =~ "can&#39;t be blank"
 
-      assert {:ok, _index_live, html} =
-               form_live
-               |> form("#transaction-form", transaction: @update_attrs)
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/transactions")
+      index_live
+      |> form("#transaction-form", transaction: @update_attrs)
+      |> render_submit()
 
-      assert html =~ "Transaction updated successfully"
-      assert html =~ "some updated description"
+      assert_patch(index_live, ~p"/transactions")
+      assert render(index_live) =~ "some updated description"
+      refute has_element?(index_live, "#transaction-form-modal")
     end
 
-    test "deletes transaction in listing", %{conn: conn, transaction: transaction} do
+    test "deletes transaction in listing only after the confirmation modal", %{
+      conn: conn,
+      transaction: transaction
+    } do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
       assert index_live
              |> element("#transactions-#{transaction.id} button[phx-click='confirm_delete']")
              |> render_click()
 
-      render_click(index_live, "delete", %{"id" => transaction.id})
+      # Still on screen: opening the modal must not delete anything.
+      assert has_element?(index_live, "#transactions-#{transaction.id}")
+
+      index_live |> element("#confirm-delete-transaction-btn") |> render_click()
       refute has_element?(index_live, "#transactions-#{transaction.id}")
     end
 
@@ -113,36 +115,26 @@ defmodule CashLensWeb.TransactionLiveTest do
   describe "Show" do
     setup [:create_transaction]
 
-    test "displays transaction", %{conn: conn, transaction: transaction} do
-      {:ok, _show_live, html} = live(conn, ~p"/transactions/#{transaction}")
+    test "displays transaction in an overlaid modal", %{conn: conn, transaction: transaction} do
+      {:ok, live, html} = live(conn, ~p"/transactions/#{transaction}")
 
-      assert html =~ "Show Transaction"
+      assert has_element?(live, "#transaction-show-modal")
+      assert html =~ "Detalhes da Transação"
       assert html =~ transaction.description
     end
 
-    test "updates transaction and returns to show", %{conn: conn, transaction: transaction} do
-      {:ok, show_live, _html} = live(conn, ~p"/transactions/#{transaction}")
+    test "edit link inside the show modal patches to the edit modal", %{
+      conn: conn,
+      transaction: transaction
+    } do
+      {:ok, live, _html} = live(conn, ~p"/transactions/#{transaction}")
 
-      {:ok, form_live, _html} =
-        show_live
-        |> element("a", "Edit transaction")
-        |> render_click()
-        |> follow_redirect(conn, ~p"/transactions/#{transaction}/edit?return_to=show")
+      live
+      |> element("#transaction-show-modal a[href$='/edit']")
+      |> render_click()
 
-      assert render(form_live) =~ "Edit Transaction"
-
-      assert form_live
-             |> form("#transaction-form", transaction: @invalid_attrs)
-             |> render_change() =~ "can&#39;t be blank"
-
-      assert {:ok, _show_live, html} =
-               form_live
-               |> form("#transaction-form", transaction: @update_attrs)
-               |> render_submit()
-               |> follow_redirect(conn, ~p"/transactions/#{transaction}")
-
-      assert html =~ "Transaction updated successfully"
-      assert html =~ "some updated description"
+      assert_patch(live, ~p"/transactions/#{transaction}/edit")
+      assert has_element?(live, "#transaction-form-modal")
     end
   end
 
@@ -605,6 +597,342 @@ defmodule CashLensWeb.TransactionLiveTest do
         |> render_click()
 
       assert html =~ "Consulta medica"
+    end
+  end
+
+  describe "CL-10 unified transaction modals" do
+    setup do
+      %{account: account_fixture()}
+    end
+
+    test "opening and closing the new modal never re-fetches the statement stream", %{
+      conn: conn,
+      account: account
+    } do
+      transaction_fixture(%{account_id: account.id, description: "Ja no extrato"})
+
+      {:ok, live, html} = live(conn, ~p"/transactions")
+      assert html =~ "Ja no extrato"
+
+      # Inserted behind the LiveView's back: it may only show up if the stream
+      # is re-fetched from page 1, which patching a modal must never do.
+      transaction_fixture(%{account_id: account.id, description: "InseridaAposMount"})
+
+      html =
+        live
+        |> element("main a[href='/transactions/new']")
+        |> render_click()
+
+      assert has_element?(live, "#transaction-form-modal")
+      assert html =~ "Ja no extrato"
+      refute html =~ "InseridaAposMount"
+
+      html = live |> element("#transaction-form-modal-close") |> render_click()
+
+      assert_patch(live, ~p"/transactions")
+      refute has_element?(live, "#transaction-form-modal")
+      assert html =~ "Ja no extrato"
+      refute html =~ "InseridaAposMount"
+    end
+
+    test "deep linking straight to a modal still loads the statement behind it", %{
+      conn: conn,
+      account: account
+    } do
+      transaction_fixture(%{account_id: account.id, description: "Fundo do extrato"})
+
+      {:ok, live, html} = live(conn, ~p"/transactions/new")
+
+      assert has_element?(live, "#transaction-form-modal")
+      assert html =~ "Fundo do extrato"
+    end
+
+    test "a filter arriving in the URL still rebuilds the stream", %{conn: conn, account: account} do
+      transaction_fixture(%{account_id: account.id, description: "AlvoDeBusca"})
+      transaction_fixture(%{account_id: account.id, description: "Outro lancamento"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      html = render_patch(live, ~p"/transactions?search=AlvoDeBusca")
+
+      assert html =~ "AlvoDeBusca"
+      refute html =~ "Outro lancamento"
+    end
+
+    test "amount field gives live expense/income feedback from the typed sign", %{
+      conn: conn,
+      account: account
+    } do
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+
+      html =
+        live
+        |> form("#transaction-form",
+          transaction: %{amount: "-80,00", description: "Mercado", account_id: account.id}
+        )
+        |> render_change()
+
+      assert html =~ "Despesa"
+      assert has_element?(live, "#transaction-amount-hint[data-kind='expense']")
+
+      html =
+        live
+        |> form("#transaction-form",
+          transaction: %{amount: "2500,00", description: "Salario", account_id: account.id}
+        )
+        |> render_change()
+
+      assert html =~ "Receita"
+      assert has_element?(live, "#transaction-amount-hint[data-kind='income']")
+    end
+
+    test "form has no income/expense toggle", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+
+      refute has_element?(live, "#transaction-form input[type='radio']")
+      refute has_element?(live, "#transaction-form [name='transaction[kind]']")
+      refute has_element?(live, "#transaction-form [name='transaction[transaction_type]']")
+    end
+
+    test "persists the typed sign straight into the amount column", %{
+      conn: conn,
+      account: account
+    } do
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+
+      live
+      |> form("#transaction-form",
+        transaction: %{
+          amount: "-1.234,56",
+          description: "Despesa assinada",
+          date: Date.to_iso8601(~D[2026-05-10]),
+          account_id: account.id
+        }
+      )
+      |> render_submit()
+
+      assert_patch(live, ~p"/transactions")
+
+      [created] =
+        CashLens.Transactions.list_all_transactions()
+        |> Enum.filter(&(&1.description == "Despesa assinada"))
+
+      assert Decimal.equal?(created.amount, Decimal.new("-1234.56"))
+    end
+
+    test "rejects a malformed amount without crashing", %{conn: conn, account: account} do
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+
+      html =
+        live
+        |> form("#transaction-form",
+          transaction: %{amount: "abc", description: "Invalida", account_id: account.id}
+        )
+        |> render_submit()
+
+      assert html =~ "Valor inválido"
+      assert has_element?(live, "#transaction-form-modal")
+      assert CashLens.Transactions.list_all_transactions() == []
+    end
+
+    test "editing and saving an existing expense keeps its negative sign", %{
+      conn: conn,
+      account: account
+    } do
+      transaction =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "-800.00",
+          description: "Consulta"
+        })
+
+      {:ok, live, html} = live(conn, ~p"/transactions/#{transaction}/edit")
+
+      assert html =~ "-800,00"
+
+      live
+      |> form("#transaction-form", transaction: %{description: "Consulta revisada"})
+      |> render_submit()
+
+      assert_patch(live, ~p"/transactions")
+
+      updated = CashLens.Transactions.get_transaction!(transaction.id)
+      assert updated.description == "Consulta revisada"
+      assert Decimal.equal?(updated.amount, Decimal.new("-800.00"))
+    end
+
+    test "delete confirmation modal shows description, date, account and amount", %{
+      conn: conn,
+      account: account
+    } do
+      transaction =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "-800.00",
+          date: ~D[2026-09-10],
+          description: "Consulta Dr. Roberto"
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      html =
+        live
+        |> element("#transactions-#{transaction.id} button[phx-click='confirm_delete']")
+        |> render_click()
+
+      assert html =~ "Consulta Dr. Roberto"
+      assert html =~ "10/09/2026"
+      assert html =~ CashLensWeb.Formatters.account_label(account)
+      assert html =~ "R$ -800,00"
+      assert has_element?(live, "#confirm-delete-transaction-btn")
+
+      # Cancelling leaves the transaction untouched.
+      live |> element("#confirm-modal button[phx-click='close_modal']") |> render_click()
+      assert CashLens.Transactions.get_transaction!(transaction.id)
+    end
+
+    test "edit modal shows the traceability block for a linked transaction", %{
+      conn: conn,
+      account: account
+    } do
+      expense =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "-100.00",
+          date: ~D[2026-02-01],
+          description: "Consulta medica"
+        })
+
+      {:ok, expense} =
+        CashLens.Transactions.update_transaction(expense, %{reimbursement_status: "pending"})
+
+      credit =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "100.00",
+          date: ~D[2026-02-10],
+          description: "Credito Unimed"
+        })
+
+      {:ok, {expense, _credit}} =
+        CashLens.Transactions.link_reimbursement_pair(expense.id, credit.id)
+
+      {:ok, live, html} = live(conn, ~p"/transactions/#{expense}/edit")
+
+      assert has_element?(live, "#transaction-links")
+      assert html =~ "Conciliações &amp; Rastreabilidade"
+      assert html =~ "Credito Unimed"
+    end
+
+    test "traceability block names a transfer pair and an installment group", %{
+      conn: conn,
+      account: account
+    } do
+      other_account = account_fixture(%{name: "Destino"})
+      transfer_key = Ecto.UUID.generate()
+
+      group =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "GELADEIRA",
+          installments: 12,
+          start_date: ~D[2026-01-10],
+          total_amount: Decimal.new("1200.00")
+        })
+        |> elem(1)
+
+      origin =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "-500.00",
+          description: "Saida para destino"
+        })
+
+      transaction_fixture(%{
+        account_id: other_account.id,
+        amount: "500.00",
+        description: "Entrada do destino"
+      })
+      |> CashLens.Transactions.update_transaction(%{transfer_key: transfer_key})
+
+      {:ok, origin} =
+        CashLens.Transactions.update_transaction(origin, %{
+          transfer_key: transfer_key,
+          installment_group_id: group.id,
+          installment_number: 1
+        })
+
+      {:ok, live, html} = live(conn, ~p"/transactions/#{origin}/edit")
+
+      assert has_element?(live, "#transaction-links")
+      assert html =~ "Entrada do destino"
+      assert html =~ "GELADEIRA"
+    end
+
+    test "traceability block names the statement this transaction settles", %{
+      conn: conn,
+      account: account
+    } do
+      card = account_fixture(%{name: "Cartao", is_credit_card: true})
+
+      {:ok, statement} =
+        CashLens.CreditCards.create_statement(%{
+          account_id: card.id,
+          competencia: ~D[2026-06-01],
+          due_date: ~D[2026-06-15],
+          total_a_pagar: Decimal.new("100.00")
+        })
+
+      payment =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "-100.00",
+          date: ~D[2026-06-15],
+          description: "Pagamento fatura"
+        })
+
+      {:ok, _result} = CashLens.CreditCards.link_payment(statement, payment.id)
+
+      {:ok, live, html} = live(conn, ~p"/transactions/#{payment}/edit")
+
+      assert has_element?(live, "#transaction-links")
+      assert html =~ "Fatura"
+      assert html =~ "01/06/2026"
+    end
+
+    test "a duplicate manual entry is reported instead of silently created", %{
+      conn: conn,
+      account: account
+    } do
+      attrs = %{
+        amount: "-42,00",
+        description: "Lancamento repetido",
+        date: Date.to_iso8601(~D[2026-05-10]),
+        account_id: account.id
+      }
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      live |> form("#transaction-form", transaction: attrs) |> render_submit()
+      assert_patch(live, ~p"/transactions")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      live |> form("#transaction-form", transaction: attrs) |> render_submit()
+      assert_patch(live, ~p"/transactions")
+
+      assert render(live) =~ "já existe"
+
+      assert CashLens.Transactions.list_all_transactions()
+             |> Enum.count(&(&1.description == "Lancamento repetido")) == 1
+    end
+
+    test "edit modal omits the traceability block when there is nothing linked", %{
+      conn: conn,
+      account: account
+    } do
+      transaction = transaction_fixture(%{account_id: account.id, description: "Solta"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/#{transaction}/edit")
+
+      refute has_element?(live, "#transaction-links")
     end
   end
 end

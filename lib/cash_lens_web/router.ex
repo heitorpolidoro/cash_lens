@@ -29,10 +29,14 @@ defmodule CashLensWeb.Router do
       live "/accounts/:id", AccountLive.Show, :show
       live "/accounts/:id/edit", AccountLive.Form, :edit
 
+      # The form, detail and edit routes are overlaid modals on top of the
+      # statement, not standalone pages: they all mount `Index` so a
+      # `live_patch` opens/closes them without re-fetching the infinite-scroll
+      # stream or losing the user's scroll position (CL-10).
       live "/transactions", TransactionLive.Index, :index
-      live "/transactions/new", TransactionLive.Form, :new
-      live "/transactions/:id", TransactionLive.Show, :show
-      live "/transactions/:id/edit", TransactionLive.Form, :edit
+      live "/transactions/new", TransactionLive.Index, :new
+      live "/transactions/:id", TransactionLive.Index, :show
+      live "/transactions/:id/edit", TransactionLive.Index, :edit
 
       live "/categories", CategoryLive.Index, :index
       live "/categories/new", CategoryLive.Form, :new

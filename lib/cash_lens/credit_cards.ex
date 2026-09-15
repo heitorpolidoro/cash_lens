@@ -370,6 +370,20 @@ defmodule CashLens.CreditCards do
     }
   end
 
+  @doc """
+  Returns the statement (fatura) settled by the given bank transaction, or
+  `nil` when that transaction does not pay any statement.
+
+  Used by the transaction edit modal to warn that editing the payment would
+  affect a reconciled statement.
+  """
+  def get_statement_paid_by(nil), do: nil
+
+  def get_statement_paid_by(transaction_id) do
+    from(s in Statement, where: s.payment_transaction_id == ^transaction_id, preload: [:account])
+    |> Repo.one()
+  end
+
   def get_statement_detail(id) do
     statement =
       from(s in Statement, where: s.id == ^id, preload: [:account, :absorbed_by])
