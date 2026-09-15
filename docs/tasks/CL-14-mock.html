@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CashLens — Faturas de Cartão de Crédito</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+  <!-- Header da Aplicação -->
+  <header class="border-b border-slate-200 bg-white sticky top-0 z-40 px-6 py-4 shadow-xs">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-6">
+        <span class="text-2xl font-black text-blue-600 tracking-tight">CashLens</span>
+        <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Painel</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Transações</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Transferências</a>
+          <a href="#" class="px-3 py-2 rounded-lg bg-slate-100 text-blue-600 font-bold">Faturas de Cartão</a>
+        </nav>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700">Setembro / 2026</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+
+    <!-- Topo da Tela -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Faturas de Cartão de Crédito</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Acompanhe faturas abertas, fechadas e a conciliação com os débitos de pagamento em conta.</p>
+      </div>
+    </div>
+
+    <!-- 3 Cards de Métricas do Mês -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">Total a Pagar (Setembro)</span>
+        <div class="text-2xl font-black text-slate-900">R$ 5.820,40</div>
+        <p class="text-xs text-slate-500 mt-1">Soma de faturas fechadas aguardando quitação</p>
+      </div>
+
+      <div class="bg-white rounded-2xl p-5 border border-amber-200 shadow-xs">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-bold uppercase tracking-wider text-amber-700">Faturas Aguardando Baixa</span>
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">Ação</span>
+        </div>
+        <div class="text-2xl font-black text-amber-600">2 faturas</div>
+        <p class="text-xs text-slate-500 mt-1">Faturas fechadas prontas para conciliar pagamento</p>
+      </div>
+
+      <div class="bg-white rounded-2xl p-5 border border-blue-200 shadow-xs">
+        <span class="text-xs font-bold uppercase tracking-wider text-blue-700 block mb-1">Próximo Vencimento</span>
+        <div class="text-2xl font-black text-blue-600">20/09 (em 6 dias)</div>
+        <p class="text-xs text-slate-500 mt-1">Nubank Ultravioleta · R$ 3.420,00</p>
+      </div>
+    </div>
+
+    <!-- Sugestão de Pagamento Inteligente em Destaque -->
+    <div id="payment-suggestion" class="bg-amber-50/80 border border-amber-200 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <div>
+          <h2 class="text-sm font-bold text-slate-900">Pagamento Detectado no Extrato Bancário!</h2>
+          <p class="text-xs text-slate-600">
+            Débito de <strong>R$ 3.420,00</strong> no Itaú ("Pagamento Fatura Nubank" em 18/09) coincide com a fatura fechada do <strong>Nubank</strong>.
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 self-end md:self-auto">
+        <button onclick="confirmPaymentLink()" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition">
+          Conciliar Pagamento em 1 Clique
+        </button>
+      </div>
+    </div>
+
+    <!-- Lista de Faturas por Cartão -->
+    <div class="space-y-4">
+      <h2 class="text-sm font-bold text-slate-900 uppercase tracking-wider text-xs">Faturas por Cartão</h2>
+
+      <!-- Cartão 1: Nubank Ultravioleta -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-[#820ad1] text-white flex items-center justify-center font-black text-sm shadow-xs">
+              Nu
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 text-base">Nubank Ultravioleta</h3>
+              <p class="text-xs text-slate-400">Fechamento dia 13 · Vencimento dia 20</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+              Fechada (Aguardando Pagamento)
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+          <div>
+            <span class="text-slate-400 block font-semibold">Competência</span>
+            <span class="font-bold text-slate-800 text-sm">Setembro / 2026</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-semibold">Vencimento</span>
+            <span class="font-bold text-slate-800 text-sm">20/09/2026</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-semibold">Total da Fatura</span>
+            <span class="font-mono font-black text-slate-900 text-base">R$ 3.420,00</span>
+          </div>
+          <div class="flex items-center justify-start sm:justify-end">
+            <button onclick="openStatementDetails('Nubank Ultravioleta', 'Setembro / 2026', 3420.00)" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition text-xs">
+              Ver 18 Compras do Ciclo
+            </button>
+          </div>
+        </div>
+
+        <!-- Histórico por Competência -->
+        <div class="border-t border-slate-100 pt-3">
+          <button onclick="toggleHistory('hist-nubank')" class="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1">
+            <span id="hist-nubank-caret">▸</span> Histórico por competência (5 faturas)
+          </button>
+          <div id="hist-nubank" class="hidden mt-3 divide-y divide-slate-100 text-xs">
+            <button onclick="openStatementDetails('Nubank Ultravioleta', 'Agosto / 2026', 2980.10)" class="w-full py-2 flex items-center justify-between hover:bg-slate-50 px-2 rounded-lg">
+              <span class="font-semibold text-slate-700">Agosto / 2026</span>
+              <span class="text-slate-400">Venceu 20/08</span>
+              <span class="font-mono font-bold text-slate-800">R$ 2.980,10</span>
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Paga</span>
+            </button>
+            <button onclick="openStatementDetails('Nubank Ultravioleta', 'Julho / 2026', 3110.75)" class="w-full py-2 flex items-center justify-between hover:bg-slate-50 px-2 rounded-lg">
+              <span class="font-semibold text-slate-700">Julho / 2026</span>
+              <span class="text-slate-400">Venceu 20/07</span>
+              <span class="font-mono font-bold text-slate-800">R$ 3.110,75</span>
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Paga</span>
+            </button>
+            <div class="w-full py-2 flex items-center justify-between px-2 opacity-60">
+              <span class="font-semibold text-slate-700">Junho / 2026</span>
+              <span class="text-slate-400">Sem vencimento</span>
+              <span class="font-mono font-bold text-slate-800">R$ 420,00</span>
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">Incorporada em Jul/2026</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cartão 2: Itaú Visa Infinite -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-[#ec7000] text-white flex items-center justify-center font-black text-sm shadow-xs">
+              It
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 text-base">Itaú Visa Infinite</h3>
+              <p class="text-xs text-slate-400">Fechamento dia 25 · Vencimento dia 05</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+              Aberta (Em Curso)
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+          <div>
+            <span class="text-slate-400 block font-semibold">Competência</span>
+            <span class="font-bold text-slate-800 text-sm">Outubro / 2026</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-semibold">Fecha em</span>
+            <span class="font-bold text-slate-800 text-sm">25/09/2026 (em 11 dias)</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-semibold">Total Parcial</span>
+            <span class="font-mono font-black text-slate-900 text-base">R$ 2.400,40</span>
+          </div>
+          <div class="flex items-center justify-start sm:justify-end">
+            <button onclick="openStatementDetails('Itaú Visa Infinite', 'Outubro / 2026', 2400.40)" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition text-xs">
+              Ver 12 Compras em Aberto
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cartão 3: Mercado Pago (Fatura Paga) -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4 opacity-80">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-[#009ee3] text-white flex items-center justify-center font-black text-sm shadow-xs">
+              MP
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 text-base">Mercado Pago Cartão</h3>
+              <p class="text-xs text-slate-400">Fechamento dia 01 · Vencimento dia 10</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              ✓ Paga e Conciliada
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+          <div>
+            <span class="text-slate-400 block font-semibold">Competência</span>
+            <span class="font-bold text-slate-800 text-sm">Setembro / 2026</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-semibold">Paga em</span>
+            <span class="font-bold text-slate-800 text-sm">09/09/2026</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-semibold">Valor Pago</span>
+            <span class="font-mono font-black text-slate-900 text-base">R$ 850,00</span>
+          </div>
+          <div class="flex items-center justify-start sm:justify-end">
+            <span class="text-emerald-600 font-bold text-xs flex items-center gap-1">
+              ✓ Débito Itaú vinculado
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cartão 4: Fatura Fechada SEM sugestão de pagamento (vinculação manual) -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-[#ff7a00] text-white flex items-center justify-center font-black text-sm shadow-xs">
+              In
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 text-base">Inter Mastercard</h3>
+              <p class="text-xs text-slate-400">Fechamento dia 22 · Vencimento dia 30</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+              Fechada (Aguardando Pagamento)
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+          <div>
+            <span class="text-slate-400 block font-semibold">Competência</span>
+            <span class="font-bold text-slate-800 text-sm">Setembro / 2026</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-semibold">Vencimento</span>
+            <span class="font-bold text-slate-800 text-sm">30/09/2026</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block font-semibold">Total da Fatura</span>
+            <span class="font-mono font-black text-slate-900 text-base">R$ 2.400,40</span>
+          </div>
+          <div class="flex items-center justify-start sm:justify-end">
+            <button onclick="openStatementDetails('Inter Mastercard', 'Setembro / 2026', 2400.40)" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition text-xs">
+              Ver 9 Compras do Ciclo
+            </button>
+          </div>
+        </div>
+
+        <!-- Sem débito compatível: nenhum bloco de conciliação, apenas vinculação manual -->
+        <div id="inter-manual" class="border-t border-slate-100 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <p class="text-xs text-slate-500 italic">Nenhum débito bancário compatível encontrado — a fatura segue como Fechada.</p>
+          <button onclick="openManualLink()" class="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold transition text-xs">
+            Vincular pagamento manualmente
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Modal: Detalhe da Fatura (compras e parcelas do ciclo) -->
+  <div id="detail-modal" class="hidden fixed inset-0 z-50 bg-slate-900/50 p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-3xl mx-auto mt-12 shadow-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex items-start justify-between">
+        <div>
+          <h3 id="detail-title" class="font-bold text-slate-900 text-base">Nubank Ultravioleta</h3>
+          <p id="detail-subtitle" class="text-xs text-slate-500 mt-0.5">Competência Setembro / 2026</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="detail-total" class="font-mono font-black text-slate-900 text-lg">R$ 3.420,00</span>
+          <button onclick="closeModal('detail-modal')" class="text-slate-400 hover:text-slate-700 font-bold text-lg">✕</button>
+        </div>
+      </div>
+      <table class="w-full text-xs">
+        <thead class="bg-slate-50 text-slate-400 uppercase text-[10px]">
+          <tr>
+            <th class="text-left px-6 py-2 font-bold">Data</th>
+            <th class="text-left px-6 py-2 font-bold">Descrição</th>
+            <th class="text-left px-6 py-2 font-bold">Categoria</th>
+            <th class="text-right px-6 py-2 font-bold">Valor</th>
+          </tr>
+        </thead>
+        <tbody id="detail-rows" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal: Vinculação Manual de Pagamento -->
+  <div id="manual-modal" class="hidden fixed inset-0 z-50 bg-slate-900/50 p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-xl mx-auto mt-16 shadow-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-slate-900 text-base">Vincular pagamento manualmente</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Inter Mastercard · Setembro / 2026 · R$ 2.400,40</p>
+        </div>
+        <button onclick="closeModal('manual-modal')" class="text-slate-400 hover:text-slate-700 font-bold text-lg">✕</button>
+      </div>
+      <div id="manual-candidates" class="divide-y divide-slate-100 text-xs"></div>
+    </div>
+  </div>
+
+  <script>
+    function confirmPaymentLink() {
+      document.getElementById('payment-suggestion').innerHTML = `
+        <div class="text-center w-full py-2 text-xs text-emerald-700 font-bold">
+          ✓ Pagamento da fatura conciliado com sucesso!
+        </div>
+      `;
+    }
+
+    const CYCLE_TRANSACTIONS = [
+      { date: '02/09', description: 'Mercado Municipal', category: 'Mercado', amount: 312.45 },
+      { date: '05/09', description: 'Notebook Dell', category: 'Eletrônicos', amount: 499.90, installment: '3/10' },
+      { date: '07/09', description: 'Plano de saúde', category: 'Saúde', amount: 680.00 },
+      { date: '11/09', description: 'Passagem aérea GRU-REC', category: 'Viagem', amount: 428.30, installment: '2/6' },
+      { date: '12/09', description: 'Assinatura streaming', category: 'Lazer', amount: 55.90 }
+    ];
+
+    const PAYMENT_CANDIDATES = [
+      { description: 'PAGAMENTO FATURA CARTAO', date: '29/09/2026', account: 'Itaú Conta Corrente', amount: 2400.40 },
+      { description: 'PAGTO DEBITO AUTOMATICO', date: '30/09/2026', account: 'Itaú Conta Corrente', amount: 2380.00 },
+      { description: 'TED ENVIADA', date: '28/09/2026', account: 'Nubank Conta', amount: 1900.00 }
+    ];
+
+    const brl = (v) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function toggleHistory(id) {
+      const el = document.getElementById(id);
+      const caret = document.getElementById(id + '-caret');
+      el.classList.toggle('hidden');
+      caret.textContent = el.classList.contains('hidden') ? '▸' : '▾';
+    }
+
+    function openStatementDetails(card, comp, total) {
+      document.getElementById('detail-title').textContent = card;
+      document.getElementById('detail-subtitle').textContent = 'Competência ' + comp;
+      document.getElementById('detail-total').textContent = brl(total);
+      document.getElementById('detail-rows').innerHTML = CYCLE_TRANSACTIONS.map((t) => `
+        <tr class="hover:bg-slate-50">
+          <td class="px-6 py-2 font-mono text-slate-400 whitespace-nowrap">${t.date}</td>
+          <td class="px-6 py-2 text-slate-800 font-semibold">
+            ${t.description}
+            ${t.installment ? `<span class="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">Parcela ${t.installment}</span>` : ''}
+          </td>
+          <td class="px-6 py-2 text-slate-500">${t.category}</td>
+          <td class="px-6 py-2 text-right font-mono font-black text-slate-900">${brl(t.amount)}</td>
+        </tr>
+      `).join('');
+      document.getElementById('detail-modal').classList.remove('hidden');
+    }
+
+    function openManualLink() {
+      document.getElementById('manual-candidates').innerHTML = PAYMENT_CANDIDATES.map((c) => `
+        <div class="px-6 py-3 flex items-center justify-between gap-3 hover:bg-slate-50">
+          <div>
+            <p class="font-bold text-slate-800">${c.description}</p>
+            <p class="text-slate-400">${c.date} · ${c.account}</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="font-mono font-black text-slate-900">${brl(c.amount)}</span>
+            <button onclick="confirmManualLink()" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs">Vincular</button>
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('manual-modal').classList.remove('hidden');
+    }
+
+    function confirmManualLink() {
+      closeModal('manual-modal');
+      document.getElementById('inter-manual').innerHTML = `
+        <div class="w-full py-1 text-xs text-emerald-700 font-bold">✓ Pagamento vinculado manualmente — fatura marcada como Paga.</div>
+      `;
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+  </script>
+</body>
+</html>

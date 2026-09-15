@@ -246,10 +246,25 @@ defmodule CashLens.CreditCards do
     from(t in Transaction,
       where: t.import_batch_id == ^statement_id,
       order_by: [asc: t.date, asc: t.inserted_at],
-      preload: [:category]
+      preload: [:category, :installment_group]
     )
     |> Repo.all()
   end
+
+  @doc """
+  Presentation-level lifecycle of a statement, on top of `statement_status/2`:
+
+    * `:absorbed` — absorbed by another statement (wins over everything else).
+    * `:paid` — a payment transaction is linked.
+    * `:closed` — no payment and a consolidated `total_a_pagar`.
+    * `:open` — no payment and no consolidated total (cycle still accumulating).
+  """
+  def lifecycle_status(%Statement{absorbed_by_statement_id: id}) when not is_nil(id),
+    do: :absorbed
+
+  def lifecycle_status(%Statement{payment_transaction_id: id}) when not is_nil(id), do: :paid
+  def lifecycle_status(%Statement{total_a_pagar: nil}), do: :open
+  def lifecycle_status(%Statement{}), do: :closed
 
   def list_statements do
     statements =
@@ -277,9 +292,82 @@ defmodule CashLens.CreditCards do
         line_total: line_total,
         line_count: line_count,
         status: statement_status(s, line_total),
+        lifecycle: lifecycle_status(s),
+        amount: s.total_a_pagar || line_total,
         absorbed_into: s.absorbed_by && s.absorbed_by.competencia
       }
     end)
+  end
+
+  @doc """
+  Groups statement entries (as returned by `list_statements/0`) per credit-card
+  account. Each group carries the most recent cycle as `:current` and the
+  earlier competências as `:history`, both ordered most-recent first.
+  """
+  def group_by_card(entries) do
+    entries
+    |> Enum.group_by(& &1.account.id)
+    |> Enum.map(fn {_id, group} -> build_card_group(group) end)
+    |> Enum.sort_by(& &1.account.name)
+  end
+
+  defp build_card_group(group) do
+    [current | history] = Enum.sort_by(group, &cycle_key/1, {:desc, Date})
+    %{account: current.account, current: current, history: history}
+  end
+
+  defp cycle_key(%{statement: s}), do: s.competencia || s.due_date || ~D[0001-01-01]
+
+  @doc """
+  Month-commitment metrics over the given statement entries, ignoring absorbed
+  statements so their amounts are never counted twice:
+
+    * `:total_due` — sum of the closed statements due in `today`'s month.
+    * `:awaiting_count` — how many statements are closed and awaiting payment.
+    * `:next_due` — the closed statement due first on or after `today`.
+  """
+  def hub_metrics(entries, today \\ Date.utc_today()) do
+    closed = Enum.filter(entries, &(&1.lifecycle == :closed))
+
+    %{
+      total_due: total_due_in_month(closed, today),
+      awaiting_count: length(closed),
+      next_due: next_due(closed, today)
+    }
+  end
+
+  defp total_due_in_month(closed, today) do
+    closed
+    |> Enum.filter(&same_month?(&1.statement.due_date, today))
+    |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, &1.statement.total_a_pagar))
+  end
+
+  defp same_month?(nil, _today), do: false
+
+  defp same_month?(%Date{} = date, today),
+    do: date.year == today.year and date.month == today.month
+
+  defp next_due(closed, today) do
+    closed
+    |> Enum.filter(&upcoming?(&1.statement.due_date, today))
+    |> Enum.min_by(& &1.statement.due_date, Date, fn -> nil end)
+    |> case do
+      nil -> nil
+      entry -> next_due_summary(entry, today)
+    end
+  end
+
+  defp upcoming?(nil, _today), do: false
+  defp upcoming?(%Date{} = date, today), do: Date.compare(date, today) != :lt
+
+  defp next_due_summary(entry, today) do
+    %{
+      account_name: entry.account && entry.account.name,
+      due_date: entry.statement.due_date,
+      days_remaining: Date.diff(entry.statement.due_date, today),
+      amount: entry.amount,
+      statement_id: entry.statement.id
+    }
   end
 
   def get_statement_detail(id) do
@@ -301,6 +389,8 @@ defmodule CashLens.CreditCards do
       line_total: line_total,
       payment: payment,
       status: statement_status(statement, line_total),
+      lifecycle: lifecycle_status(statement),
+      amount: statement.total_a_pagar || line_total,
       absorbed_into: statement.absorbed_by && statement.absorbed_by.competencia,
       absorbed_by_id: statement.absorbed_by_statement_id
     }
@@ -343,15 +433,19 @@ defmodule CashLens.CreditCards do
     end
   end
 
-  def suggest_payment(%Statement{} = statement) do
+  @doc """
+  Payment transactions that could settle a statement, ranked nearest-match
+  first: smallest `|amount - total_a_pagar|`, tie-broken by the smallest
+  distance between the transaction date and the due date. Candidates are the
+  transactions categorized as `cartao-de-credito`, on an account other than the
+  statement's, not already parented by another payment.
+  """
+  def payment_candidates(%Statement{} = statement) do
     case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
       nil ->
-        nil
+        []
 
       category ->
-        target = statement.total_a_pagar
-        due = statement.due_date
-
         from(t in Transaction,
           where: t.category_id == ^category.id,
           where: t.account_id != ^statement.account_id,
@@ -359,15 +453,31 @@ defmodule CashLens.CreditCards do
           preload: [:account]
         )
         |> Repo.all()
-        |> Enum.sort_by(fn t ->
-          amount_diff =
-            if target, do: Decimal.abs(Decimal.sub(t.amount, target)), else: Decimal.new(0)
-
-          date_diff = if due, do: abs(Date.diff(t.date, due)), else: 0
-          {Decimal.to_float(amount_diff), date_diff}
-        end)
-        |> List.first()
+        |> Enum.sort_by(&candidate_rank(&1, statement))
     end
+  end
+
+  defp candidate_rank(%Transaction{} = transaction, %Statement{} = statement) do
+    amount_diff =
+      case statement.total_a_pagar do
+        nil -> Decimal.new(0)
+        total -> Decimal.abs(Decimal.sub(transaction.amount, total))
+      end
+
+    date_diff =
+      case statement.due_date do
+        nil -> 0
+        due -> abs(Date.diff(transaction.date, due))
+      end
+
+    {Decimal.to_float(amount_diff), date_diff}
+  end
+
+  @doc """
+  The best payment candidate for a statement, or nil when there is none.
+  """
+  def suggest_payment(%Statement{} = statement) do
+    statement |> payment_candidates() |> List.first()
   end
 
   @doc """

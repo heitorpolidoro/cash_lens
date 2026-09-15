@@ -115,3 +115,11 @@
 - `assert html =~ "detectada(s)"` in the admin test passes even for a zero-count scan — assert the count instead.
 - `current_month/0` now exists but `upcoming_installments/1` and `first_incomplete_month/0` still compute it inline.
 - The new `commitment_type` index is unused (type filtering happens in memory).
+
+## [CL-14] Redesenhar Central de Faturas de Cartão (/statements) — 2026-09-15
+- `credit_card_statement_live/index.ex:78` — `@unpaid` is `[:open, :closed]`, so the one-click reconcile block also renders for open cycles, where `total_a_pagar` is nil and the rank degenerates to nearest-date. Carried over from the old code; consider restricting the block to `:closed` in the detail view too.
+- `due_label(days) when days < 0` is unreachable, since `next_due/1` filters to dates on or after today.
+- Template repeats `@suggestions[group.current.statement.id]` five times and duplicates the reconcile markup between overview and detail — extract a function component.
+- `[:open, :closed]` is hardcoded in the template while `@unpaid` exists in code.
+- No context-level tests for `lifecycle_status/1`, `group_by_card/1`, `hub_metrics/2`, `payment_candidates/1`; covered only via the LiveView.
+- `group_by_card/1` can elect an absorbed statement as the card's `:current` cycle.
