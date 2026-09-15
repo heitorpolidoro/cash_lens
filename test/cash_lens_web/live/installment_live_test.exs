@@ -108,14 +108,14 @@ defmodule CashLensWeb.InstallmentLiveTest do
         description_pattern: "ULTIMA (10x)",
         total_amount: "1000.00",
         installments: 10,
-        start_date: ~D[2025-10-08]
+        start_date: ~D[2026-01-08]
       })
 
     {:ok, _live, html} = live(conn, ~p"/installments")
 
     assert html =~ "Última Parcela"
-    # 2025-10 + 9 months = 2026-07 -> "jul/26"
-    assert html =~ "jul/26"
+    # 2026-01 + 9 months = 2026-10 -> "out/26"
+    assert html =~ "out/26"
   end
 
   describe "filters" do
@@ -123,8 +123,8 @@ defmodule CashLensWeb.InstallmentLiveTest do
       {:ok, a} =
         Installments.create_installment_group(%{
           description_pattern: "ALPHA STORE",
-          total_amount: "300.00",
-          installments: 3,
+          total_amount: "500.00",
+          installments: 5,
           start_date: ~D[2026-05-10]
         })
 
