@@ -12,6 +12,8 @@ defmodule CashLens.Transactions.Transaction do
     field :transfer_key, Ecto.UUID
     field :reimbursement_status, :string
     field :reimbursement_link_key, Ecto.UUID
+    field :reimbursement_carrier, :string
+    field :reimbursement_protocol, :string
     field :fingerprint, :string
     # The un-hashed dedupe base key: "account_id|date|cents|normalized_description".
     # Persisted (not just hashed) so the occurrence-index can be computed with a
@@ -54,6 +56,8 @@ defmodule CashLens.Transactions.Transaction do
       :transfer_key,
       :reimbursement_status,
       :reimbursement_link_key,
+      :reimbursement_carrier,
+      :reimbursement_protocol,
       :notes,
       :pluggy_category,
       :source,

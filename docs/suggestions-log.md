@@ -123,3 +123,11 @@
 - `[:open, :closed]` is hardcoded in the template while `@unpaid` exists in code.
 - No context-level tests for `lifecycle_status/1`, `group_by_card/1`, `hub_metrics/2`, `payment_candidates/1`; covered only via the LiveView.
 - `group_by_card/1` can elect an absorbed statement as the card's `:current` cycle.
+
+## [CL-12] Redesenhar Central de Reembolsos (/reimbursements) — 2026-09-15
+- `reimbursement_live/index.ex:987` — `confirm_all` is `Enum.each` over suggestions, atomic per pair but not per batch, and discards the return value. Identical to HEAD; the fix belongs in the context. Overlapping suggested pairs (two expenses + two credits at the same amount) can relink a leg and orphan an earlier link key.
+- Partial links mark the expense `"paid"` with no residual record — visible in the UI but not queryable.
+- `index.ex:1416` `filter_credits/2` compares the raw term against `Decimal.to_string/1`, so `84,20` matches nothing in the manual link modal, unlike the statement modal.
+- `scan_statement/1` routes through `list_transactions/3`, which runs `CategorySuggester.annotate/1` (full scan) on every debounced keystroke, for data the modal never shows.
+- `Transactions.list_linked_reimbursement_pairs/0` is now dead public API; `save_reimbursement_details` should pattern-match `tx_id` in the clause head.
+- **PRE-EXISTING FINANCIAL-ACCURACY DEFECT, worth its own task.** Confirmed by QA against real data: linking a partial reimbursement marks the expense fully `paid` with no residual record. Example observed: expense -1.000,00 linked to a +400,00 credit leaves both rows `paid` under one link key, and the uncovered R$ 600,00 disappears from every KPI. Lives in the pre-existing `link_reimbursement_group/3`, so outside CL-12's scope, but it silently understates money still owed to the user.

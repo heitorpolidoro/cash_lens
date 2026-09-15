@@ -19,7 +19,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       {:ok, _index_live, html} = live(conn, ~p"/reimbursements")
 
-      assert html =~ "Gerenciamento de Reembolsos"
+      assert html =~ "Central de Reembolsos"
       assert html =~ "Lunch for team"
     end
 
@@ -37,14 +37,14 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
 
       # Initially not selected
-      refute render(index_live) =~ "Total Selecionado (1"
+      refute render(index_live) =~ "1 selecionado"
 
       # Select
       index_live
       |> element("input[phx-click='toggle_selection'][phx-value-id='#{tx.id}']")
       |> render_click()
 
-      assert render(index_live) =~ "Total Selecionado (1"
+      assert render(index_live) =~ "1 selecionado"
       assert render(index_live) =~ "100,00"
 
       # Deselect
@@ -52,7 +52,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> element("input[phx-click='toggle_selection'][phx-value-id='#{tx.id}']")
       |> render_click()
 
-      refute render(index_live) =~ "Total Selecionado (1"
+      refute render(index_live) =~ "1 selecionado"
     end
 
     test "clears selection of reimbursement expenses", %{conn: conn} do
@@ -85,7 +85,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> element("input[phx-click='toggle_selection'][phx-value-id='#{tx2.id}']")
       |> render_click()
 
-      assert render(index_live) =~ "Total Selecionado (2"
+      assert render(index_live) =~ "2 selecionados"
 
       # Clear
       index_live
@@ -139,7 +139,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
           description: "Credit"
         })
 
-      {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
+      {:ok, index_live, _html} = live(conn, ~p"/reimbursements?tab=linked")
 
       index_live
       |> element(
@@ -183,7 +183,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> render_click()
 
       index_live |> element("button[phx-click='open_batch_linker']") |> render_click()
-      assert render(index_live) =~ "Vincular Recebimento"
+      assert render(index_live) =~ "Vincular Crédito de Reembolso"
       assert render(index_live) =~ credit.description
 
       render_hook(index_live, "linker_search_change", %{"value" => "Batch"})
@@ -278,7 +278,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> element("button[phx-click='confirm_link']")
       |> render_click()
 
-      assert render(index_live) =~ "1 crédito(s) vinculado(s) à despesa!"
+      assert render(index_live) =~ "Reembolso vinculado com sucesso!"
 
       updated_expense = CashLens.Transactions.get_transaction!(expense.id)
       assert updated_expense.reimbursement_status == "paid"
@@ -314,7 +314,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
 
-      assert render(index_live) =~ "Pares Sugeridos"
+      assert render(index_live) =~ "Conciliação Automática Sugerida"
       assert render(index_live) =~ "Suggest expense"
       assert render(index_live) =~ "Suggest credit"
 
@@ -505,7 +505,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
 
-      assert render(index_live) =~ "0 pares sugeridos"
+      refute render(index_live) =~ "Conciliação Automática Sugerida"
       refute render(index_live) =~ "Confirmar"
     end
 
@@ -533,7 +533,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
 
-      assert render(index_live) =~ "0 pares sugeridos"
+      refute render(index_live) =~ "Conciliação Automática Sugerida"
       refute render(index_live) =~ "Confirmar"
     end
 
@@ -599,7 +599,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
       html = render(index_live)
 
-      assert html =~ "1 pares sugeridos"
+      assert html =~ "1 par encontrado"
       assert html =~ "Anuidade"
       assert html =~ "Desconto Anuidade"
     end
@@ -625,7 +625,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       {:ok, index_live, _html} = live(conn, ~p"/reimbursements")
 
-      assert render(index_live) =~ "1 pares sugeridos"
+      assert render(index_live) =~ "1 par encontrado"
 
       # Click "Ignorar"
       index_live
@@ -640,7 +640,381 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> render_click()
 
       assert render(index_live) =~ "Sugestão de reembolso ignorada."
-      assert render(index_live) =~ "0 pares sugeridos"
+      refute render(index_live) =~ "Conciliação Automática Sugerida"
+    end
+  end
+
+  describe "Index — ciclo de vida" do
+    test "renders the three lifecycle cards in chronological order", %{conn: conn} do
+      acc = account_fixture()
+      link_key = Ecto.UUID.generate()
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        reimbursement_status: "pending",
+        amount: "-600.00",
+        description: "Consulta Dr. Roberto"
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        reimbursement_status: "requested",
+        amount: "-1850.00",
+        description: "Exames laboratoriais"
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        reimbursement_status: "paid",
+        reimbursement_link_key: link_key,
+        amount: "-300.00",
+        description: "Fisioterapia",
+        date: Date.utc_today()
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        reimbursement_status: "paid",
+        reimbursement_link_key: link_key,
+        amount: "300.00",
+        description: "PIX Reembolso",
+        date: Date.utc_today()
+      })
+
+      {:ok, _live, html} = live(conn, ~p"/reimbursements")
+
+      assert html =~ "Central de Reembolsos"
+
+      idx_to_request = :binary.match(html, "1. A Solicitar") |> elem(0)
+      idx_requested = :binary.match(html, "2. Solicitado") |> elem(0)
+      idx_received = :binary.match(html, "3. Recebidos") |> elem(0)
+
+      assert idx_to_request < idx_requested
+      assert idx_requested < idx_received
+
+      assert html =~ "Ação Necessária"
+      assert html =~ "Em Análise"
+      assert html =~ "Últimos 12 meses"
+
+      assert html =~ "600,00"
+      assert html =~ "1.850,00"
+      assert html =~ "300,00"
+    end
+
+    test "received metric only counts credits compensated in the last 12 months", %{conn: conn} do
+      acc = account_fixture()
+      recent_key = Ecto.UUID.generate()
+      old_key = Ecto.UUID.generate()
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        reimbursement_status: "paid",
+        reimbursement_link_key: recent_key,
+        amount: "111.00",
+        description: "Credito recente",
+        date: Date.utc_today()
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        reimbursement_status: "paid",
+        reimbursement_link_key: old_key,
+        amount: "999.00",
+        description: "Credito antigo",
+        date: Date.add(Date.utc_today(), -400)
+      })
+
+      {:ok, live_view, _html} = live(conn, ~p"/reimbursements")
+
+      assert render(live_view) =~ "111,00"
+      refute render(live_view) =~ "999,00"
+    end
+
+    test "switches between A Receber and Histórico Vinculado tabs", %{conn: conn} do
+      acc = account_fixture()
+      link_key = Ecto.UUID.generate()
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        reimbursement_status: "pending",
+        amount: "-70.00",
+        description: "Despesa em aberto"
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        reimbursement_status: "paid",
+        reimbursement_link_key: link_key,
+        amount: "-80.00",
+        description: "Despesa conciliada"
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        reimbursement_status: "paid",
+        reimbursement_link_key: link_key,
+        amount: "80.00",
+        description: "Credito conciliado"
+      })
+
+      {:ok, live_view, html} = live(conn, ~p"/reimbursements")
+
+      assert html =~ "Despesa em aberto"
+      refute html =~ "Despesa conciliada"
+
+      linked_html =
+        live_view
+        |> element("a[href='/reimbursements?tab=linked']")
+        |> render_click()
+
+      assert linked_html =~ "Despesa conciliada"
+      assert linked_html =~ "Credito conciliado"
+      refute linked_html =~ "Despesa em aberto"
+
+      pending_html =
+        live_view
+        |> element("a[href='/reimbursements?tab=pending']")
+        |> render_click()
+
+      assert pending_html =~ "Despesa em aberto"
+      refute pending_html =~ "Despesa conciliada"
+    end
+
+    test "statement modal filters candidates by description and adds one in a single click",
+         %{conn: conn} do
+      acc = account_fixture()
+
+      candidate =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-350.00",
+          description: "Exame de Sangue Fleury",
+          date: Date.utc_today()
+        })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-120.00",
+        description: "Almoco Reuniao Externa",
+        date: Date.utc_today()
+      })
+
+      {:ok, live_view, _html} = live(conn, ~p"/reimbursements")
+
+      html =
+        live_view |> element("button[phx-click='open_statement_modal']") |> render_click()
+
+      assert html =~ "Marcar Despesa como Reembolsável"
+      assert html =~ "Exame de Sangue Fleury"
+      assert html =~ "Almoco Reuniao Externa"
+
+      filtered = render_hook(live_view, "statement_search_change", %{"value" => "Fleury"})
+      assert filtered =~ "Exame de Sangue Fleury"
+      refute filtered =~ "Almoco Reuniao Externa"
+
+      live_view
+      |> element("button[phx-click='mark_reimbursable'][phx-value-id='#{candidate.id}']")
+      |> render_click()
+
+      assert CashLens.Transactions.get_transaction!(candidate.id).reimbursement_status ==
+               "pending"
+
+      live_view |> element("button[phx-click='close_statement_modal']") |> render_click()
+      assert render(live_view) =~ "Exame de Sangue Fleury"
+    end
+
+    test "statement modal filters candidates by numeric amount", %{conn: conn} do
+      acc = account_fixture()
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-84.20",
+        description: "Uber Viagem Cliente",
+        date: Date.utc_today()
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-350.00",
+        description: "Consulta Clinica",
+        date: Date.utc_today()
+      })
+
+      {:ok, live_view, _html} = live(conn, ~p"/reimbursements")
+      live_view |> element("button[phx-click='open_statement_modal']") |> render_click()
+
+      by_decimal = render_hook(live_view, "statement_search_change", %{"value" => "84,20"})
+      assert by_decimal =~ "Uber Viagem Cliente"
+      refute by_decimal =~ "Consulta Clinica"
+
+      by_integer = render_hook(live_view, "statement_search_change", %{"value" => "350"})
+      assert by_integer =~ "Consulta Clinica"
+      refute by_integer =~ "Uber Viagem Cliente"
+    end
+
+    test "statement modal hides transactions already marked as reimbursable", %{conn: conn} do
+      acc = account_fixture()
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-99.00",
+        description: "Ja marcada reembolsavel",
+        reimbursement_status: "pending",
+        date: Date.utc_today()
+      })
+
+      transaction_fixture(%{
+        account_id: acc.id,
+        amount: "-98.00",
+        description: "Ainda nao marcada",
+        date: Date.utc_today()
+      })
+
+      {:ok, live_view, _html} = live(conn, ~p"/reimbursements")
+
+      html = live_view |> element("button[phx-click='open_statement_modal']") |> render_click()
+
+      candidates = html |> String.split("statement-candidates") |> Enum.at(1) || ""
+      assert candidates =~ "Ainda nao marcada"
+      refute candidates =~ "Ja marcada reembolsavel"
+    end
+
+    test "toggles the reimbursement badge between Pendente and Solicitado", %{conn: conn} do
+      acc = account_fixture()
+
+      tx =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-210.00",
+          description: "Consulta a solicitar"
+        })
+
+      {:ok, live_view, html} = live(conn, ~p"/reimbursements")
+      assert html =~ "Pendente de Solicitação"
+
+      requested_html =
+        live_view
+        |> element("button[phx-click='mark_requested'][phx-value-id='#{tx.id}']")
+        |> render_click()
+
+      assert requested_html =~ "Solicitado (Em Análise)"
+
+      pending_html =
+        live_view
+        |> element("button[phx-click='mark_pending'][phx-value-id='#{tx.id}']")
+        |> render_click()
+
+      assert pending_html =~ "Pendente de Solicitação"
+    end
+
+    test "saves convenio and protocolo for a reimbursable expense", %{conn: conn} do
+      acc = account_fixture()
+
+      tx =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "requested",
+          amount: "-500.00",
+          description: "Consulta Oftalmologista"
+        })
+
+      {:ok, live_view, _html} = live(conn, ~p"/reimbursements")
+
+      html =
+        live_view
+        |> form("form[phx-submit='save_reimbursement_details'][data-tx-id='#{tx.id}']", %{
+          "carrier" => "Bradesco Saúde",
+          "protocol" => "PROT-2026-9812"
+        })
+        |> render_submit()
+
+      assert html =~ "PROT-2026-9812"
+      assert html =~ "Bradesco Saúde"
+
+      updated = CashLens.Transactions.get_transaction!(tx.id)
+      assert updated.reimbursement_carrier == "Bradesco Saúde"
+      assert updated.reimbursement_protocol == "PROT-2026-9812"
+    end
+
+    test "manual link modal reports a partial balance when the credit does not cover the expense",
+         %{conn: conn} do
+      acc = account_fixture()
+      cat = category_fixture()
+
+      expense =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "requested",
+          amount: "-200.00",
+          description: "Despesa parcial",
+          category_id: cat.id,
+          date: ~D[2026-02-23]
+        })
+
+      credit =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "120.00",
+          description: "Credito parcial",
+          category_id: cat.id,
+          date: ~D[2026-03-20]
+        })
+
+      {:ok, live_view, _html} = live(conn, ~p"/reimbursements")
+
+      live_view
+      |> element("button[phx-click='link_single_expense'][phx-value-id='#{expense.id}']")
+      |> render_click()
+
+      html = render_click(live_view, "toggle_credit", %{"credit-id" => credit.id})
+
+      refute html =~ "Match Perfeito"
+      assert html =~ "Reembolso parcial"
+      assert html =~ "80,00"
+    end
+
+    test "batch selection bar shows the selected total and opens the manual link modal",
+         %{conn: conn} do
+      acc = account_fixture()
+
+      tx_a =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-100.00",
+          description: "Lote A",
+          date: ~D[2026-02-23]
+        })
+
+      tx_b =
+        transaction_fixture(%{
+          account_id: acc.id,
+          reimbursement_status: "pending",
+          amount: "-150.00",
+          description: "Lote B",
+          date: ~D[2026-02-24]
+        })
+
+      {:ok, live_view, _html} = live(conn, ~p"/reimbursements")
+
+      live_view
+      |> element("input[phx-click='toggle_selection'][phx-value-id='#{tx_a.id}']")
+      |> render_click()
+
+      html =
+        live_view
+        |> element("input[phx-click='toggle_selection'][phx-value-id='#{tx_b.id}']")
+        |> render_click()
+
+      assert html =~ "2 selecionados"
+      assert html =~ "250,00"
+
+      modal_html =
+        live_view |> element("button[phx-click='open_batch_linker']") |> render_click()
+
+      assert modal_html =~ "Vincular Crédito de Reembolso"
+      assert modal_html =~ "Total a Cobrir"
     end
   end
 end

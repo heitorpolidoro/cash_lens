@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CashLens — Gestão de Reembolsos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen flex flex-col antialiased">
+
+  <!-- Header Oficial CashLens -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-8">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-sm">
+            CL
+          </div>
+          <span class="font-extrabold text-xl tracking-tight text-slate-900">Cash<span class="text-blue-600">Lens</span></span>
+        </div>
+
+        <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Dashboard</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Extrato</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Saldos</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Fechamento</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Importação</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">Parcelamentos</a>
+          <a href="#" class="px-3 py-1.5 rounded-lg text-blue-600 bg-blue-50 font-bold">Reembolsos</a>
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+          Ref: Setembro 2026
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Conteúdo Principal -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+    <!-- Topo: Título da Tela + Ações Globais -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <h1 class="text-2xl font-black text-slate-900 tracking-tight">Central de Reembolsos</h1>
+          <span id="pending-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200/60">
+            4 pendentes de recebimento
+          </span>
+        </div>
+        <p class="text-xs text-slate-500 mt-1">
+          Acompanhe despesas médicas ou corporativas até a compensação do crédito na sua conta corrente.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button onclick="openSelectFromStatementModal()" class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-xs transition active:scale-95">
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>Marcar Despesa do Extrato</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= 3 CARDS DO CICLO DE REEMBOLSO (ORDEM SOLICITADA PELO OPERADOR) ================= -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      
+      <!-- Card 1: A Solicitar (Ação Necessária - Despesas marcadas como reembolso mas não solicitadas ainda) -->
+      <div class="bg-white rounded-2xl p-5 border border-amber-200/80 shadow-xs flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-700">1. A Solicitar</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/60">Ação Necessária</span>
+          </div>
+          <div class="text-2xl font-black text-amber-600 font-mono" id="metric-pending">R$ 600,00</div>
+          <span class="text-xs text-slate-500 mt-1 block">Transações marcadas como reembolso mas não enviadas</span>
+        </div>
+        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span>1 despesa pendente</span>
+          <span class="font-bold text-amber-700">Consulta Dr. Roberto</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Solicitado (Em Análise - Reembolsos marcados como já solicitados) -->
+      <div class="bg-white rounded-2xl p-5 border border-blue-200/80 shadow-xs flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-blue-700">2. Solicitado</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60">Em Análise</span>
+          </div>
+          <div class="text-2xl font-black text-blue-600 font-mono" id="metric-requested">R$ 1.850,00</div>
+          <span class="text-xs text-slate-500 mt-1 block">Protocolos submetidos aguardando pagamento</span>
+        </div>
+        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span>3 pedidos formalizados</span>
+          <span class="font-bold text-blue-600">Aguardando Depósito</span>
+        </div>
+      </div>
+
+      <!-- Card 3: Recebidos (Compensados nos últimos 12 meses) -->
+      <div class="bg-white rounded-2xl p-5 border border-emerald-200/80 shadow-xs flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-700">3. Recebidos</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60">Últimos 12 meses</span>
+          </div>
+          <div class="text-2xl font-black text-emerald-600 font-mono">R$ 12.800,00</div>
+          <span class="text-xs text-slate-500 mt-1 block">Total compensado e conciliado no período</span>
+        </div>
+        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span>14 despesas liquidadas</span>
+          <span class="font-bold text-emerald-600">✓ Conciliado</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================= CARD INTELIGENTE: PARES SUGERIDOS (MATCH AUTOMÁTICO) ================= -->
+    <div id="suggestions-card" class="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-5 shadow-xs space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-black text-emerald-950 uppercase tracking-tight">Conciliação Automática Sugerida</h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200/70 text-emerald-900" id="suggestions-count">
+                2 pares encontrados
+              </span>
+            </div>
+            <p class="text-xs text-emerald-700 mt-0.5">
+              Identificamos créditos bancários que batem com suas despesas em aberto. Deseja conciliar?
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="confirmAllSuggestions()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition active:scale-95 flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span>Confirmar Todos</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Lista de Pares Sugeridos -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="suggestions-container">
+        <!-- Renderizado dinamicamente via JS -->
+      </div>
+    </div>
+
+    <!-- ================= BARRA DE CONTROLE, ABAS & AÇÕES EM LOTE ================= -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-3">
+      
+      <!-- Linha de Abas e Busca -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <!-- Abas Principais -->
+        <div class="flex items-center bg-slate-100 p-1 rounded-xl w-fit">
+          <button onclick="setTab('pending')" id="tab-pending" class="px-4 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-xs transition flex items-center gap-1.5">
+            <span>A Receber</span>
+            <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-100 text-blue-700" id="tab-count-pending">4</span>
+          </button>
+          <button onclick="setTab('history')" id="tab-history" class="px-4 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-900 transition flex items-center gap-1.5">
+            <span>Histórico Vinculado</span>
+            <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-700" id="tab-count-history">3</span>
+          </button>
+        </div>
+
+        <!-- Busca Unificada -->
+        <div class="relative w-full sm:max-w-xs">
+          <input 
+            type="text" 
+            id="search-input" 
+            oninput="onSearch(this.value)" 
+            placeholder="Buscar por médico, clínica ou valor..." 
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+          >
+          <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <button onclick="clearSearch()" id="btn-clear-search" class="hidden absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+      </div>
+
+      <!-- Barra Flutuante de Seleção em Lote (Quando há itens marcados) -->
+      <div id="batch-bar" class="hidden bg-slate-900 text-white rounded-xl p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200">
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-blue-300" id="batch-selected-count">
+            2 selecionados
+          </span>
+          <span class="text-xs font-mono font-bold" id="batch-selected-sum">
+            Total Selecionado: R$ 1.250,00
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="openBatchLinkModal()" class="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+            <span>Vincular a um Crédito</span>
+          </button>
+          <button onclick="clearSelection()" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-white text-xs font-semibold">
+            Cancelar
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================= TABELA PRINCIPAL ================= -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      
+      <!-- Visão 1: Despesas a Receber (Pendentes & Solicitadas) -->
+      <div id="view-pending">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-50/80 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+              <tr>
+                <th class="py-3 px-4 w-8">
+                  <input type="checkbox" onchange="toggleSelectAll(this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                </th>
+                <th class="py-3 px-4">Data</th>
+                <th class="py-3 px-4">Despesa Reembolsável</th>
+                <th class="py-3 px-4">Conta / Cartão</th>
+                <th class="py-3 px-4">Status no Ciclo</th>
+                <th class="py-3 px-4 text-right">Valor Gasto</th>
+                <th class="py-3 px-4 text-center w-36">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-pending" class="divide-y divide-slate-100">
+              <!-- Renderizado dinamicamente via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Visão 2: Histórico de Reembolsos Vinculados / Conciliados -->
+      <div id="view-history" class="hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-50/80 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+              <tr>
+                <th class="py-3 px-4">Despesa Original</th>
+                <th class="py-3 px-4">Crédito de Reembolso Compensado</th>
+                <th class="py-3 px-4 text-right">Valor Conciliado</th>
+                <th class="py-3 px-4 text-center w-24">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-history" class="divide-y divide-slate-100">
+              <!-- Renderizado dinamicamente via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Estado Vazio -->
+      <div id="empty-state" class="hidden py-12 px-4 text-center">
+        <div class="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h3 class="text-sm font-bold text-slate-800">Tudo em dia!</h3>
+        <p class="text-xs text-slate-400 max-w-sm mx-auto mt-1">Nenhuma despesa pendente de reembolso encontrada neste filtro.</p>
+      </div>
+
+    </div>
+
+    <!-- ================= MODAL: VINCULAR RECEBIMENTO (MANUAL / EM LOTE) ================= -->
+    <div id="link-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeLinkModal()"></div>
+
+      <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden z-10 animate-in zoom-in-95 duration-200">
+        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Vincular Crédito de Reembolso</h3>
+              <p class="text-[11px] text-slate-400">Associe o depósito bancário às despesas que ele cobre</p>
+            </div>
+          </div>
+          <button onclick="closeLinkModal()" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition">
+            ✕
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4 text-xs">
+          
+          <!-- Box com as despesas a serem cobertas -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Despesas Selecionadas para Quitar
+            </span>
+            <div id="modal-selected-expenses" class="space-y-1 text-slate-700">
+              <!-- Preenchido via JS -->
+            </div>
+            <div class="border-t border-slate-200 pt-2 flex items-center justify-between font-bold">
+              <span>Total a Cobrir:</span>
+              <span class="text-rose-600 font-mono text-sm" id="modal-target-amount">R$ 0,00</span>
+            </div>
+          </div>
+
+          <!-- Créditos Disponíveis no Extrato Bancário -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold text-slate-700">Selecione o Crédito Recebido no Banco</span>
+              <span class="text-[10px] text-slate-400">Apenas créditos sem vínculo</span>
+            </div>
+
+            <!-- Busca rápida de créditos -->
+            <input 
+              type="text" 
+              placeholder="Filtrar créditos (ex: TED, UNIMED, PIX)..." 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+
+            <div class="space-y-2 max-h-48 overflow-y-auto pr-1" id="modal-available-credits">
+              <!-- Preenchido dinamicamente via JS -->
+            </div>
+          </div>
+
+          <!-- Feedback de Match / Saldo Restante -->
+          <div id="match-feedback-box" class="p-3 rounded-xl border text-xs flex items-center justify-between bg-slate-50 border-slate-200">
+            <span class="text-slate-500 font-medium">Selecione um crédito acima para conciliar.</span>
+            <span class="font-mono font-bold text-slate-700">Diferença: R$ 0,00</span>
+          </div>
+
+          <!-- Botões de Ação do Modal -->
+          <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button type="button" onclick="closeLinkModal()" class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 transition">
+              Cancelar
+            </button>
+            <button type="button" id="btn-confirm-link" onclick="executeLink()" disabled class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold transition shadow-sm active:scale-95">
+              Confirmar Vínculo
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MODAL: SELECIONAR DO EXTRATO ================= -->
+    <div id="select-statement-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeSelectStatementModal()"></div>
+
+      <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden z-10 p-6 space-y-4 text-xs animate-in zoom-in-95 duration-200">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">Marcar Despesa como Reembolsável</h3>
+            <p class="text-[11px] text-slate-400">Escolha transações recentes para acompanhar o reembolso</p>
+          </div>
+          <button onclick="closeSelectStatementModal()" class="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+
+        <input 
+          id="select-statement-search"
+          type="text" 
+          placeholder="Buscar por descrição (médico, clínica, Uber) ou valor (ex: 350 ou 84,20)..." 
+          oninput="onStatementSearch(this.value)"
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+
+        <div id="statement-candidates-list" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+          <div class="p-3 rounded-xl border border-slate-200 hover:border-blue-400 cursor-pointer flex items-center justify-between transition bg-slate-50/50">
+            <div>
+              <span class="font-bold text-slate-900 block">Exame de Sangue Fleury</span>
+              <span class="text-[10px] text-slate-400">08/09/2026 · Nubank Ultravioleta · Categoria: Saúde</span>
+            </div>
+            <div class="text-right">
+              <span class="font-mono font-bold text-rose-600 block">-R$ 350,00</span>
+              <button onclick="addMockReimbursable('Exame Fleury', 350.00)" class="mt-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold text-[10px] hover:bg-blue-700">
+                + Adicionar
+              </button>
+            </div>
+          </div>
+
+          <div class="p-3 rounded-xl border border-slate-200 hover:border-blue-400 cursor-pointer flex items-center justify-between transition bg-slate-50/50">
+            <div>
+              <span class="font-bold text-slate-900 block">Uber Viagem Cliente SP</span>
+              <span class="text-[10px] text-slate-400">11/09/2026 · Itaú Corrente · Categoria: Transporte</span>
+            </div>
+            <div class="text-right">
+              <span class="font-mono font-bold text-rose-600 block">-R$ 84,20</span>
+              <button onclick="addMockReimbursable('Uber Cliente SP', 84.20)" class="mt-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold text-[10px] hover:bg-blue-700">
+                + Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button onclick="closeSelectStatementModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // ================= DADOS MOCKADOS DE REEMBOLSOS =================
+    
+    // Sugestões Automáticas (Identificadas no extrato prontas para 1-clique)
+    let SUGGESTIONS = [
+      {
+        id: 'sug-1',
+        expense: { id: 1, desc: "Consulta Cardiologista Dr. André", date: "02/09/2026", account: "Nubank (Cartão)", amount: -650.00 },
+        credit: { id: 101, desc: "PIX Recebido BRADESCO SEGUROS REEMB", date: "12/09/2026", account: "Itaú Corrente", amount: 650.00 }
+      },
+      {
+        id: 'sug-2',
+        expense: { id: 2, desc: "Almoço Reunião Diretoria Cliente", date: "04/09/2026", account: "Itaú Corrente", amount: -280.00 },
+        credit: { id: 102, desc: "TED EMPRESA TECH SOLUCOES REEMB", date: "10/09/2026", account: "Itaú Corrente", amount: 280.00 }
+      }
+    ];
+
+    // Despesas a Reembolsar (Pendentes ou Solicitadas)
+    let UNMATCHED_EXPENSES = [
+      {
+        id: 3,
+        desc: "Consulta Oftalmologista Dra. Beatriz",
+        date: "05/09/2026",
+        account: "Nubank Ultravioleta",
+        category: "Saúde",
+        amount: -500.00,
+        status: "requested", // 'pending' ou 'requested'
+        protocol: "PROT-2026-9812",
+        carrier: "Bradesco Saúde"
+      },
+      {
+        id: 4,
+        desc: "Exames Laboratório Alta Diagnósticos",
+        date: "06/09/2026",
+        account: "Nubank Ultravioleta",
+        category: "Saúde",
+        amount: -1200.00,
+        status: "requested",
+        protocol: "PROT-2026-9844",
+        carrier: "Bradesco Saúde"
+      },
+      {
+        id: 5,
+        desc: "Uber Viagem Aeroporto Santos Dumont",
+        date: "07/09/2026",
+        account: "Itaú Corrente",
+        category: "Trabalho",
+        amount: -150.00,
+        status: "requested",
+        protocol: "EXP-SET-01",
+        carrier: "Empresa"
+      },
+      {
+        id: 6,
+        desc: "Consulta Dr. Roberto (Psiquiatria)",
+        date: "10/09/2026",
+        account: "Itaú Corrente",
+        category: "Saúde",
+        amount: -600.00,
+        status: "pending", // ainda não enviou
+        protocol: null,
+        carrier: "Unimed"
+      }
+    ];
+
+    // Histórico de Reembolsos Já Concluídos / Vinculados
+    let LINKED_HISTORY = [
+      {
+        linkKey: "link-01",
+        expenses: [{ desc: "Fisioterapia Sessões 1 a 5", date: "15/08/2026", account: "Nubank", amount: -750.00 }],
+        credits: [{ desc: "PIX BRADESCO SEGUROS REEMB", date: "28/08/2026", account: "Itaú", amount: 750.00 }]
+      },
+      {
+        linkKey: "link-02",
+        expenses: [{ desc: "Passagem Ônibus Visita Fábrica", date: "10/08/2026", account: "Itaú", amount: -180.00 }],
+        credits: [{ desc: "TED EMPRESA TECH REEMB DESPESA", date: "20/08/2026", account: "Itaú", amount: 180.00 }]
+      },
+      {
+        linkKey: "link-03",
+        expenses: [{ desc: "Vacina Febre Amarela Clínica Imune", date: "02/08/2026", account: "Nubank", amount: -220.00 }],
+        credits: [{ desc: "DOC/TED BRADESCO SAUDE REEMB", date: "14/08/2026", account: "Itaú", amount: 220.00 }]
+      }
+    ];
+
+    // Créditos disponíveis para vinculação manual
+    let AVAILABLE_CREDITS = [
+      { id: 201, desc: "PIX BRADESCO SAUDE REEMB 9844", date: "14/09/2026", account: "Itaú Corrente", amount: 1200.00 },
+      { id: 202, desc: "TED REEMBOLSO VIAGEM EMPRESA", date: "13/09/2026", account: "Itaú Corrente", amount: 150.00 },
+      { id: 203, desc: "PIX BRADESCO SAUDE DIVERSOS", date: "11/09/2026", account: "Itaú Corrente", amount: 500.00 }
+    ];
+
+    let currentTab = 'pending'; // 'pending' ou 'history'
+    let currentSearch = '';
+    let selectedExpenseIds = new Set();
+    let modalSelectedCreditId = null;
+
+    function formatBRL(val) {
+      return 'R$ ' + Math.abs(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderSuggestions() {
+      const container = document.getElementById('suggestions-container');
+      const card = document.getElementById('suggestions-card');
+      const countEl = document.getElementById('suggestions-count');
+
+      if (SUGGESTIONS.length === 0) {
+        card.classList.add('hidden');
+        return;
+      }
+
+      card.classList.remove('hidden');
+      countEl.textContent = `${SUGGESTIONS.length} ${SUGGESTIONS.length === 1 ? 'par encontrado' : 'pares encontrados'}`;
+
+      container.innerHTML = SUGGESTIONS.map(s => {
+        return `
+          <div class="bg-white rounded-xl border border-emerald-200/80 p-3.5 shadow-2xs space-y-2.5">
+            <!-- Despesa -->
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shrink-0">
+                  Despesa
+                </span>
+                <span class="font-bold text-slate-800 truncate" title="${s.expense.desc}">${s.expense.desc}</span>
+              </div>
+              <span class="font-mono font-bold text-rose-600 shrink-0">-${formatBRL(s.expense.amount)}</span>
+            </div>
+
+            <!-- Crédito Vinculado -->
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                  Crédito
+                </span>
+                <span class="font-bold text-slate-800 truncate text-emerald-900" title="${s.credit.desc}">${s.credit.desc}</span>
+              </div>
+              <span class="font-mono font-bold text-emerald-600 shrink-0">+${formatBRL(s.credit.amount)}</span>
+            </div>
+
+            <!-- Detalhes e Ações -->
+            <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+              <span class="text-slate-400 font-mono">${s.expense.date} ➔ ${s.credit.date}</span>
+              <div class="flex items-center gap-1.5">
+                <button onclick="rejectSuggestion('${s.id}')" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition font-bold text-[10px]">
+                  Ignorar
+                </button>
+                <button onclick="confirmSuggestion('${s.id}')" class="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition font-bold text-[10px] shadow-2xs">
+                  ✓ Conciliar
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderPendingTable() {
+      const tbody = document.getElementById('tbody-pending');
+      const emptyState = document.getElementById('empty-state');
+
+      let filtered = UNMATCHED_EXPENSES.filter(t => {
+        if (!currentSearch) return true;
+        const needle = currentSearch.toLowerCase();
+        return t.desc.toLowerCase().includes(needle) || 
+               t.category.toLowerCase().includes(needle) ||
+               t.account.toLowerCase().includes(needle) ||
+               (t.carrier && t.carrier.toLowerCase().includes(needle));
+      });
+
+      // Atualiza contadores
+      document.getElementById('tab-count-pending').textContent = UNMATCHED_EXPENSES.length;
+      document.getElementById('tab-count-history').textContent = LINKED_HISTORY.length;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      tbody.innerHTML = filtered.map(t => {
+        const isSelected = selectedExpenseIds.has(t.id);
+        const isRequested = t.status === 'requested';
+
+        return `
+          <tr class="hover:bg-slate-50/80 transition-colors ${isSelected ? 'bg-blue-50/30' : ''}">
+            <td class="py-3.5 px-4 text-center">
+              <input type="checkbox" onchange="toggleSelectExpense(${t.id}, this.checked)" ${isSelected ? 'checked' : ''} class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+            </td>
+
+            <td class="py-3.5 px-4 font-mono text-slate-500 whitespace-nowrap">
+              ${t.date}
+            </td>
+
+            <td class="py-3.5 px-4">
+              <div class="font-bold text-slate-900">${t.desc}</div>
+              <div class="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                <span class="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold">${t.category}</span>
+                ${t.carrier ? `<span>Convênio: <b class="text-slate-600">${t.carrier}</b></span>` : ''}
+                ${t.protocol ? `<span>Protocolo: <b class="font-mono text-blue-600">${t.protocol}</b></span>` : ''}
+              </div>
+            </td>
+
+            <td class="py-3.5 px-4 font-medium text-slate-700 whitespace-nowrap">
+              ${t.account}
+            </td>
+
+            <td class="py-3.5 px-4 whitespace-nowrap">
+              ${isRequested ? `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                  Solicitado (Em Análise)
+                </span>
+              ` : `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                  Pendente de Solicitação
+                </span>
+              `}
+            </td>
+
+            <td class="py-3.5 px-4 text-right font-mono font-bold text-rose-600 whitespace-nowrap">
+              -${formatBRL(t.amount)}
+            </td>
+
+            <td class="py-3.5 px-4 text-center whitespace-nowrap">
+              <div class="flex items-center justify-center gap-1.5">
+                <!-- Botão de vincular individual -->
+                <button onclick="openSingleLinkModal(${t.id})" class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition" title="Vincular Crédito Recebido">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                </button>
+
+                <!-- Alternador de status: Pendente <-> Solicitado -->
+                ${isRequested ? `
+                  <button onclick="toggleStatus(${t.id}, 'pending')" class="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition" title="Reverter para Pendente">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+                  </button>
+                ` : `
+                  <button onclick="toggleStatus(${t.id}, 'requested')" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition" title="Marcar como Solicitado ao Plano">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                  </button>
+                `}
+
+                <!-- Remover marcação de reembolsável -->
+                <button onclick="removeReimbursable(${t.id})" class="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition" title="Não é Reembolsável">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      updateMetrics();
+      updateBatchBar();
+    }
+
+    function renderHistoryTable() {
+      const tbody = document.getElementById('tbody-history');
+      tbody.innerHTML = LINKED_HISTORY.map(h => {
+        return `
+          <tr class="hover:bg-slate-50/80 transition-colors">
+            <td class="py-3.5 px-4 space-y-1">
+              ${h.expenses.map(e => `
+                <div class="flex items-center justify-between text-xs">
+                  <div>
+                    <span class="font-bold text-slate-900">${e.desc}</span>
+                    <span class="text-[10px] text-slate-400 block">${e.date} · ${e.account}</span>
+                  </div>
+                  <span class="font-mono font-semibold text-rose-600">-${formatBRL(e.amount)}</span>
+                </div>
+              `).join('')}
+            </td>
+
+            <td class="py-3.5 px-4 space-y-1 border-l border-slate-100">
+              ${h.credits.map(c => `
+                <div class="flex items-center justify-between text-xs">
+                  <div>
+                    <span class="font-bold text-emerald-800">${c.desc}</span>
+                    <span class="text-[10px] text-slate-400 block">${c.date} · ${c.account}</span>
+                  </div>
+                  <span class="font-mono font-semibold text-emerald-600">+${formatBRL(c.amount)}</span>
+                </div>
+              `).join('')}
+            </td>
+
+            <td class="py-3.5 px-4 text-right font-mono font-bold text-emerald-700">
+              ${formatBRL(h.credits[0].amount)}
+            </td>
+
+            <td class="py-3.5 px-4 text-center whitespace-nowrap">
+              <button onclick="unlinkHistory('${h.linkKey}')" class="text-[11px] text-slate-400 hover:text-rose-600 font-bold transition flex items-center justify-center gap-1 mx-auto" title="Desfazer conciliação">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                <span>Desvincular</span>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateMetrics() {
+      const pendingSum = UNMATCHED_EXPENSES.filter(t => t.status === 'pending').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+      const requestedSum = UNMATCHED_EXPENSES.filter(t => t.status === 'requested').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+      const totalSum = pendingSum + requestedSum;
+
+      document.getElementById('metric-total-to-receive').textContent = formatBRL(totalSum);
+      document.getElementById('metric-requested').textContent = formatBRL(requestedSum);
+      document.getElementById('metric-pending').textContent = formatBRL(pendingSum);
+    }
+
+    function updateBatchBar() {
+      const bar = document.getElementById('batch-bar');
+      if (selectedExpenseIds.size > 0) {
+        bar.classList.remove('hidden');
+        document.getElementById('batch-selected-count').textContent = `${selectedExpenseIds.size} selecionados`;
+        
+        const sum = UNMATCHED_EXPENSES
+          .filter(t => selectedExpenseIds.has(t.id))
+          .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+        document.getElementById('batch-selected-sum').textContent = `Total Selecionado: ${formatBRL(sum)}`;
+      } else {
+        bar.classList.add('hidden');
+      }
+    }
+
+    function setTab(tab) {
+      currentTab = tab;
+      const tabPending = document.getElementById('tab-pending');
+      const tabHistory = document.getElementById('tab-history');
+      const viewPending = document.getElementById('view-pending');
+      const viewHistory = document.getElementById('view-history');
+
+      if (tab === 'pending') {
+        tabPending.className = "px-4 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-xs transition flex items-center gap-1.5";
+        tabHistory.className = "px-4 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-900 transition flex items-center gap-1.5";
+        viewPending.classList.remove('hidden');
+        viewHistory.classList.add('hidden');
+      } else {
+        tabHistory.className = "px-4 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-xs transition flex items-center gap-1.5";
+        tabPending.className = "px-4 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-900 transition flex items-center gap-1.5";
+        viewHistory.classList.remove('hidden');
+        viewPending.classList.add('hidden');
+        renderHistoryTable();
+      }
+    }
+
+    function toggleSelectExpense(id, checked) {
+      if (checked) selectedExpenseIds.add(id);
+      else selectedExpenseIds.delete(id);
+      renderPendingTable();
+    }
+
+    function toggleSelectAll(checked) {
+      if (checked) {
+        UNMATCHED_EXPENSES.forEach(t => selectedExpenseIds.add(t.id));
+      } else {
+        selectedExpenseIds.clear();
+      }
+      renderPendingTable();
+    }
+
+    function clearSelection() {
+      selectedExpenseIds.clear();
+      renderPendingTable();
+    }
+
+    function toggleStatus(id, newStatus) {
+      const tx = UNMATCHED_EXPENSES.find(t => t.id === id);
+      if (tx) {
+        tx.status = newStatus;
+        if (newStatus === 'requested' && !tx.protocol) {
+          tx.protocol = 'PROT-' + Math.floor(1000 + Math.random() * 9000);
+        }
+        renderPendingTable();
+      }
+    }
+
+    function removeReimbursable(id) {
+      const idx = UNMATCHED_EXPENSES.findIndex(t => t.id === id);
+      if (idx !== -1) {
+        UNMATCHED_EXPENSES.splice(idx, 1);
+        selectedExpenseIds.delete(id);
+        renderPendingTable();
+      }
+    }
+
+    // Ações de Sugestão
+    function confirmSuggestion(id) {
+      const sug = SUGGESTIONS.find(s => s.id === id);
+      if (!sug) return;
+
+      LINKED_HISTORY.unshift({
+        linkKey: 'link-' + Date.now(),
+        expenses: [sug.expense],
+        credits: [sug.credit]
+      });
+
+      SUGGESTIONS = SUGGESTIONS.filter(s => s.id !== id);
+      renderSuggestions();
+      renderHistoryTable();
+    }
+
+    function confirmAllSuggestions() {
+      SUGGESTIONS.forEach(sug => {
+        LINKED_HISTORY.unshift({
+          linkKey: 'link-' + Date.now() + Math.random(),
+          expenses: [sug.expense],
+          credits: [sug.credit]
+        });
+      });
+      SUGGESTIONS = [];
+      renderSuggestions();
+      renderHistoryTable();
+    }
+
+    function rejectSuggestion(id) {
+      SUGGESTIONS = SUGGESTIONS.filter(s => s.id !== id);
+      renderSuggestions();
+    }
+
+    function unlinkHistory(linkKey) {
+      const idx = LINKED_HISTORY.findIndex(h => h.linkKey === linkKey);
+      if (idx !== -1) {
+        const item = LINKED_HISTORY[idx];
+        // Retorna a despesa para unmatched
+        item.expenses.forEach(ex => {
+          UNMATCHED_EXPENSES.push({
+            id: Date.now() + Math.random(),
+            desc: ex.desc,
+            date: ex.date,
+            account: ex.account,
+            category: "Saúde",
+            amount: ex.amount,
+            status: "requested",
+            carrier: "Plano"
+          });
+        });
+        LINKED_HISTORY.splice(idx, 1);
+        renderPendingTable();
+        renderHistoryTable();
+      }
+    }
+
+    // ================= MODAL DE VINCULAÇÃO =================
+    let targetExpenses = [];
+
+    function openSingleLinkModal(id) {
+      const tx = UNMATCHED_EXPENSES.find(t => t.id === id);
+      if (!tx) return;
+      targetExpenses = [tx];
+      renderLinkModal();
+    }
+
+    function openBatchLinkModal() {
+      targetExpenses = UNMATCHED_EXPENSES.filter(t => selectedExpenseIds.has(t.id));
+      if (targetExpenses.length === 0) return;
+      renderLinkModal();
+    }
+
+    function renderLinkModal() {
+      modalSelectedCreditId = null;
+      document.getElementById('btn-confirm-link').disabled = true;
+
+      const listEl = document.getElementById('modal-selected-expenses');
+      const targetTotal = targetExpenses.reduce((acc, t) => acc + Math.abs(t.amount), 0);
+      document.getElementById('modal-target-amount').textContent = formatBRL(targetTotal);
+
+      listEl.innerHTML = targetExpenses.map(t => `
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="truncate max-w-[280px]">${t.desc}</span>
+          <span class="font-mono font-bold text-rose-600">-${formatBRL(t.amount)}</span>
+        </div>
+      `).join('');
+
+      // Lista de créditos disponíveis
+      const creditsEl = document.getElementById('modal-available-credits');
+      creditsEl.innerHTML = AVAILABLE_CREDITS.map(c => {
+        const isMatch = Math.abs(c.amount - targetTotal) < 0.01;
+        return `
+          <div onclick="selectCreditForLink(${c.id})" id="credit-row-${c.id}" class="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 cursor-pointer flex items-center justify-between transition bg-white">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-slate-900">${c.desc}</span>
+                ${isMatch ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">Match Perfeito</span>' : ''}
+              </div>
+              <span class="text-[10px] text-slate-400">${c.date} · ${c.account}</span>
+            </div>
+            <span class="font-mono font-bold text-emerald-600 text-xs">+${formatBRL(c.amount)}</span>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('match-feedback-box').className = "p-3 rounded-xl border text-xs flex items-center justify-between bg-slate-50 border-slate-200";
+      document.getElementById('match-feedback-box').innerHTML = `
+        <span class="text-slate-500 font-medium">Selecione um crédito acima para conciliar.</span>
+        <span class="font-mono font-bold text-slate-700">Diferença: R$ 0,00</span>
+      `;
+
+      document.getElementById('link-modal').classList.remove('hidden');
+    }
+
+    function selectCreditForLink(id) {
+      modalSelectedCreditId = id;
+      const credit = AVAILABLE_CREDITS.find(c => c.id === id);
+      const targetTotal = targetExpenses.reduce((acc, t) => acc + Math.abs(t.amount), 0);
+      const diff = credit.amount - targetTotal;
+
+      // Estiliza linhas
+      AVAILABLE_CREDITS.forEach(c => {
+        const row = document.getElementById(`credit-row-${c.id}`);
+        if (c.id === id) {
+          row.className = "p-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-50/40 flex items-center justify-between";
+        } else {
+          row.className = "p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 cursor-pointer flex items-center justify-between transition bg-white";
+        }
+      });
+
+      const box = document.getElementById('match-feedback-box');
+      if (Math.abs(diff) < 0.01) {
+        box.className = "p-3 rounded-xl border text-xs flex items-center justify-between bg-emerald-50 border-emerald-300 text-emerald-900";
+        box.innerHTML = `
+          <span class="font-bold flex items-center gap-1">✓ Valores 100% coincidentes!</span>
+          <span class="font-mono font-bold text-emerald-700">Diferença: R$ 0,00</span>
+        `;
+      } else {
+        box.className = "p-3 rounded-xl border text-xs flex items-center justify-between bg-amber-50 border-amber-300 text-amber-900";
+        box.innerHTML = `
+          <span class="font-medium">Reembolso parcial ou divergente</span>
+          <span class="font-mono font-bold text-amber-700">Diferença: ${formatBRL(diff)}</span>
+        `;
+      }
+
+      document.getElementById('btn-confirm-link').disabled = false;
+    }
+
+    function executeLink() {
+      if (!modalSelectedCreditId || targetExpenses.length === 0) return;
+      const credit = AVAILABLE_CREDITS.find(c => c.id === modalSelectedCreditId);
+
+      // Adiciona ao histórico vinculado
+      LINKED_HISTORY.unshift({
+        linkKey: 'link-' + Date.now(),
+        expenses: targetExpenses.map(t => ({ desc: t.desc, date: t.date, account: t.account, amount: t.amount })),
+        credits: [credit]
+      });
+
+      // Remove de unmatched
+      const targetIds = new Set(targetExpenses.map(t => t.id));
+      UNMATCHED_EXPENSES = UNMATCHED_EXPENSES.filter(t => !targetIds.has(t.id));
+      AVAILABLE_CREDITS = AVAILABLE_CREDITS.filter(c => c.id !== modalSelectedCreditId);
+      selectedExpenseIds.clear();
+
+      closeLinkModal();
+      renderPendingTable();
+    }
+
+    function closeLinkModal() {
+      document.getElementById('link-modal').classList.add('hidden');
+    }
+
+    const STATEMENT_CANDIDATES = [
+      { id: 201, desc: "Exame de Sangue Fleury", date: "08/09/2026", account: "Nubank Ultravioleta", category: "Saúde", amount: 350.00 },
+      { id: 202, desc: "Uber Viagem Cliente SP", date: "11/09/2026", account: "Itaú Corrente", category: "Transporte", amount: 84.20 },
+      { id: 203, desc: "Farmácia Droga Raia - Medicamentos", date: "10/09/2026", account: "Nubank Ultravioleta", category: "Saúde", amount: 145.90 },
+      { id: 204, desc: "Almoço Reunião Externa", date: "09/09/2026", account: "Itaú Corrente", category: "Alimentação", amount: 120.00 }
+    ];
+
+    function renderStatementCandidates(filter = "") {
+      const container = document.getElementById('statement-candidates-list');
+      if (!container) return;
+      const term = filter.toLowerCase().trim().replace(',', '.');
+      
+      const filtered = STATEMENT_CANDIDATES.filter(c => {
+        if (!term) return true;
+        const descMatch = c.desc.toLowerCase().includes(term);
+        const accountMatch = c.account.toLowerCase().includes(term);
+        const amountStr = c.amount.toFixed(2);
+        const amountMatch = amountStr.includes(term) || c.amount.toString().includes(term);
+        return descMatch || accountMatch || amountMatch;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs italic">Nenhuma despesa encontrada para "${filter}".</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(c => `
+        <div class="p-3 rounded-xl border border-slate-200 hover:border-blue-400 cursor-pointer flex items-center justify-between transition bg-slate-50/50">
+          <div>
+            <span class="font-bold text-slate-900 block">${c.desc}</span>
+            <span class="text-[10px] text-slate-400">${c.date} · ${c.account} · ${c.category}</span>
+          </div>
+          <div class="text-right">
+            <span class="font-mono font-bold text-rose-600 block">-R$ ${c.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+            <button onclick="addMockReimbursable('${c.desc}', ${c.amount})" class="mt-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold text-[10px] hover:bg-blue-700">
+              + Adicionar
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function onStatementSearch(val) {
+      renderStatementCandidates(val);
+    }
+
+    // Modal de seleção a partir do extrato
+    function openSelectFromStatementModal() {
+      const input = document.getElementById('select-statement-search');
+      if (input) input.value = '';
+      renderStatementCandidates('');
+      document.getElementById('select-statement-modal').classList.remove('hidden');
+    }
+
+    function closeSelectStatementModal() {
+      document.getElementById('select-statement-modal').classList.add('hidden');
+    }
+
+    function addMockReimbursable(desc, amount) {
+      UNMATCHED_EXPENSES.unshift({
+        id: Date.now(),
+        desc: desc,
+        date: new Date().toLocaleDateString('pt-BR'),
+        account: "Nubank Ultravioleta",
+        category: "Saúde",
+        amount: -amount,
+        status: "pending",
+        protocol: null,
+        carrier: "Convênio"
+      });
+      closeSelectStatementModal();
+      renderPendingTable();
+    }
+
+    function onSearch(val) {
+      currentSearch = val.trim();
+      document.getElementById('btn-clear-search').classList.toggle('hidden', !currentSearch);
+      renderPendingTable();
+    }
+
+    function clearSearch() {
+      document.getElementById('search-input').value = '';
+      currentSearch = '';
+      document.getElementById('btn-clear-search').classList.add('hidden');
+      renderPendingTable();
+    }
+
+    // Inicialização
+    renderSuggestions();
+    renderPendingTable();
+  </script>
+</body>
+</html>
