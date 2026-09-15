@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CashLens — Fechamento e Comparação Mensal (/months)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+  <!-- Top Navbar -->
+  <header class="border-b border-slate-200 bg-white sticky top-0 z-50 px-6 py-4 shadow-sm">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-8">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl font-black tracking-tight text-blue-600">CashLens</span>
+        </div>
+
+        <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Painel</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Transações</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Saldos</a>
+          <a href="#" class="px-3 py-2 rounded-lg bg-blue-50 text-blue-600 font-bold">Fechamento do Mês</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Contas</a>
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="balances_preview.html" class="text-xs font-bold text-slate-600 hover:text-blue-600 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center gap-1.5 transition">
+          <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          Auditoria de Saldos (/balances)
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+
+    <!-- Top Bar com Toggle de Comparação -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Fechamento do Mês</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Demonstrativo de receitas e gastos por categoria</p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="btn-toggle-compare" onclick="toggleCompare()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center gap-2 shadow-sm">
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+          <span id="compare-btn-label">Ativar Comparação de Meses</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= MODO 1: MÊS ÚNICO ================= -->
+    <div id="single-view" class="space-y-6">
+
+      <!-- Navegador Rápido: Ano e Mês Separados (Facilita navegação entre anos) -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        
+        <div class="flex items-center gap-3">
+          <!-- Bloco 1: Seletor de Ano < [2026] > -->
+          <div class="flex items-center bg-white border border-slate-200 rounded-xl p-0.5 shadow-sm">
+            <button onclick="navigateSingleYear(-1)" class="p-1.5 rounded-lg hover:bg-slate-50 text-slate-600 transition">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <div class="relative">
+              <select id="select-single-year" onchange="onSingleYearChange(this.value)" class="appearance-none bg-transparent font-bold text-xs text-slate-700 py-1 pl-2 pr-6 cursor-pointer focus:outline-none">
+                <option value="2024">2024</option>
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-1.5 text-slate-400">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </div>
+            </div>
+            <button onclick="navigateSingleYear(1)" class="p-1.5 rounded-lg hover:bg-slate-50 text-slate-600 transition">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+
+          <!-- Divisor sutil -->
+          <span class="text-slate-300 font-mono">/</span>
+
+          <!-- Bloco 2: Seletor de Mês < [Setembro] > -->
+          <div class="flex items-center bg-white border border-slate-200 rounded-xl p-0.5 shadow-sm">
+            <button id="btn-single-prev" onclick="navigateSingleMonth(-1)" class="p-2 rounded-lg hover:bg-slate-50 text-slate-600 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <div class="relative">
+              <select id="select-single-month" onchange="onSingleMonthChange(this.value)" class="appearance-none bg-transparent font-extrabold text-base text-slate-900 py-1 pl-3 pr-8 cursor-pointer focus:outline-none">
+                <option value="07">Julho</option>
+                <option value="08">Agosto</option>
+                <option value="09" selected>Setembro</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </div>
+            </div>
+            <button id="btn-single-next" onclick="navigateSingleMonth(1)" class="p-2 rounded-lg hover:bg-slate-50 text-slate-600 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <a id="link-single-txns" href="#" class="text-xs text-blue-600 font-bold hover:underline self-center">
+          Ver todas as transações (Set/2026) →
+        </a>
+      </div>
+
+      <!-- Cards de Resumo -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <!-- Saldo de Abertura: Azul Oficial -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Saldo de Abertura</span>
+          <div id="single-kpi-initial" class="text-2xl font-black text-blue-600 mt-2">R$ 38.989,56</div>
+          <div id="single-kpi-date" class="text-xs text-slate-400 mt-1">Total em 01/09/2026</div>
+        </div>
+
+        <!-- Receitas: Verde Suave Teal -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <span class="text-xs font-bold uppercase tracking-wider text-teal-600">Receitas</span>
+          <div id="single-kpi-income" class="text-2xl font-black text-teal-600 mt-2">R$ 15.420,00</div>
+          <div id="single-kpi-income-sub" class="text-xs text-slate-400 mt-1">2 categorias</div>
+        </div>
+
+        <!-- Despesas: Rosa Suave Rose -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <span class="text-xs font-bold uppercase tracking-wider text-rose-500">Despesas</span>
+          <div id="single-kpi-expense" class="text-2xl font-black text-rose-500 mt-2">R$ 8.150,40</div>
+          <div id="single-kpi-expense-sub" class="text-xs text-slate-400 mt-1">5 categorias</div>
+        </div>
+
+        <!-- Saldo Final: Azul Oficial com Badge de Superávit / Déficit -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm bg-gradient-to-br from-white to-blue-50/40">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Saldo Final</span>
+            <span id="single-kpi-badge" class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Superávit: +R$ 7.269,60
+            </span>
+          </div>
+          <div id="single-kpi-final" class="text-2xl font-black text-blue-600 mt-2">R$ 46.259,96</div>
+          <div class="text-xs text-slate-400 mt-1">Total consolidado das contas</div>
+        </div>
+      </div>
+
+      <!-- RECEITAS POR CATEGORIA -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="font-extrabold uppercase tracking-tight text-xs text-slate-800">RECEITAS POR CATEGORIA</h2>
+          <span id="single-income-count" class="text-xs text-slate-400 font-medium">2 categorias</span>
+        </div>
+
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-50/50 border-b border-slate-100 text-slate-500 font-bold text-[11px]">
+            <tr>
+              <th class="py-2.5 px-6">Categoria</th>
+              <th class="py-2.5 px-4 text-right">Valor</th>
+              <th class="py-2.5 px-6 text-right w-56">% do total</th>
+            </tr>
+          </thead>
+          <tbody id="single-income-tbody" class="divide-y divide-slate-100">
+            <!-- Renderizado via JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- GASTOS POR CATEGORIA -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="font-extrabold uppercase tracking-tight text-xs text-slate-800">GASTOS POR CATEGORIA</h2>
+          <span id="single-expense-count" class="text-xs text-slate-400 font-medium">5 categorias</span>
+        </div>
+
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-50/50 border-b border-slate-100 text-slate-500 font-bold text-[11px]">
+            <tr>
+              <th class="py-2.5 px-6">Categoria</th>
+              <th class="py-2.5 px-4 text-right">Valor</th>
+              <th class="py-2.5 px-6 text-right w-56">% do total</th>
+            </tr>
+          </thead>
+          <tbody id="single-expense-tbody" class="divide-y divide-slate-100">
+            <!-- Renderizado via JS -->
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ================= MODO 2: COMPARAÇÃO CRONOLÓGICA (COM ANO E MÊS INDEPENDENTES) ================= -->
+    <div id="compare-view" class="hidden space-y-6">
+
+      <!-- Barra de Instrução Sutil de Comparação -->
+      <div class="bg-blue-50/60 border border-blue-100 rounded-xl px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-blue-900">
+        <div class="flex items-center gap-2">
+          <span class="font-bold">Modo de Comparação Ativo:</span>
+          <span>Permite comparar mês a mês ou o mesmo mês em anos diferentes (ex: Set/2025 vs Set/2026).</span>
+        </div>
+        <span class="text-[11px] font-medium text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200 self-start sm:self-auto">
+          Diferença = Mês em Análise (Direita) − Mês Base (Esquerda)
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        
+        <!-- ================= PAINEL ESQUERDO: MÊS BASE (PASSADO) ================= -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 space-y-6">
+          
+          <!-- Cabeçalho do Mês Base com Seletores Separados de Ano e Mês -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Mês Base (Referência)</span>
+              
+              <div class="flex items-center gap-2 mt-1">
+                <!-- Seletor de Ano Esquerda -->
+                <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                  <button onclick="navigateCompareLeftYear(-1)" class="p-1 rounded hover:bg-slate-100 text-slate-600">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                  </button>
+                  <select id="select-compare-left-year" onchange="onCompareLeftYearChange(this.value)" class="bg-transparent font-bold text-xs text-slate-800 py-0.5 px-1 cursor-pointer focus:outline-none">
+                    <option value="2025">2025</option>
+                    <option value="2026" selected>2026</option>
+                  </select>
+                  <button onclick="navigateCompareLeftYear(1)" class="p-1 rounded hover:bg-slate-100 text-slate-600">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                  </button>
+                </div>
+
+                <!-- Seletor de Mês Esquerda -->
+                <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                  <button onclick="navigateCompareLeftMonth(-1)" class="p-1 rounded hover:bg-slate-100 text-slate-600">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                  </button>
+                  <select id="select-compare-left-month" onchange="onCompareLeftMonthChange(this.value)" class="bg-transparent font-extrabold text-xs text-slate-900 py-0.5 px-1.5 cursor-pointer focus:outline-none">
+                    <option value="07">Julho</option>
+                    <option value="08" selected>Agosto</option>
+                    <option value="09">Setembro</option>
+                  </select>
+                  <button onclick="navigateCompareLeftMonth(1)" class="p-1 rounded hover:bg-slate-100 text-slate-600">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Resumo da Operação: Balanço Líquido do Mês Base -->
+            <div class="sm:text-right">
+              <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block">Resultado Líquido</span>
+              <span id="compare-left-net" class="text-sm font-mono font-black text-teal-600 block mt-0.5">+R$ 1.350,00</span>
+            </div>
+          </div>
+
+          <!-- SEÇÃO 1: RECEITAS POR CATEGORIA (ESQUERDA) -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between pb-1 border-b border-slate-100">
+              <div>
+                <h3 class="font-extrabold uppercase tracking-tight text-[11px] text-slate-700">RECEITAS POR CATEGORIA</h3>
+                <span id="compare-left-income-count" class="text-[10px] text-slate-400 font-medium">2 categorias</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Total Receitas</span>
+                <span id="compare-left-income-total" class="font-mono font-bold text-xs text-teal-600">R$ 15.100,00</span>
+              </div>
+            </div>
+
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-50/50 border-b border-slate-100 text-slate-500 font-bold text-[10px]">
+                <tr>
+                  <th class="py-2">Categoria</th>
+                  <th class="py-2 text-right">Valor</th>
+                  <th class="py-2 text-right w-24">% total</th>
+                </tr>
+              </thead>
+              <tbody id="compare-left-income-tbody" class="divide-y divide-slate-100">
+                <!-- Renderizado via JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- SEÇÃO 2: GASTOS POR CATEGORIA (ESQUERDA) -->
+          <div class="space-y-2 pt-2">
+            <div class="flex items-center justify-between pb-1 border-b border-slate-100">
+              <div>
+                <h3 class="font-extrabold uppercase tracking-tight text-[11px] text-slate-700">GASTOS POR CATEGORIA</h3>
+                <span id="compare-left-expense-count" class="text-[10px] text-slate-400 font-medium">6 categorias</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Total Gastos</span>
+                <span id="compare-left-expense-total" class="font-mono font-bold text-xs text-rose-500">R$ 13.750,00</span>
+              </div>
+            </div>
+
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-50/50 border-b border-slate-100 text-slate-500 font-bold text-[10px]">
+                <tr>
+                  <th class="py-2">Categoria</th>
+                  <th class="py-2 text-right">Valor</th>
+                  <th class="py-2 text-right w-24">% total</th>
+                </tr>
+              </thead>
+              <tbody id="compare-left-expense-tbody" class="divide-y divide-slate-100">
+                <!-- Renderizado via JS -->
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+        <!-- ================= PAINEL DIREITO: MÊS COMPARADO / ATUAL ================= -->
+        <div class="bg-white border-2 border-blue-500/30 rounded-2xl shadow-sm p-5 space-y-6">
+          
+          <!-- Cabeçalho do Mês em Análise com Seletores Separados de Ano e Mês -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 block">Mês em Análise (Foco)</span>
+              
+              <div class="flex items-center gap-2 mt-1">
+                <!-- Seletor de Ano Direita -->
+                <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                  <button onclick="navigateCompareRightYear(-1)" class="p-1 rounded hover:bg-slate-100 text-slate-600">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                  </button>
+                  <select id="select-compare-right-year" onchange="onCompareRightYearChange(this.value)" class="bg-transparent font-bold text-xs text-slate-800 py-0.5 px-1 cursor-pointer focus:outline-none">
+                    <option value="2025">2025</option>
+                    <option value="2026" selected>2026</option>
+                  </select>
+                  <button onclick="navigateCompareRightYear(1)" class="p-1 rounded hover:bg-slate-100 text-slate-600">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                  </button>
+                </div>
+
+                <!-- Seletor de Mês Direita -->
+                <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                  <button onclick="navigateCompareRightMonth(-1)" class="p-1 rounded hover:bg-slate-100 text-slate-600">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+                  </button>
+                  <select id="select-compare-right-month" onchange="onCompareRightMonthChange(this.value)" class="bg-transparent font-extrabold text-xs text-slate-900 py-0.5 px-1.5 cursor-pointer focus:outline-none">
+                    <option value="07">Julho</option>
+                    <option value="08">Agosto</option>
+                    <option value="09" selected>Setembro</option>
+                  </select>
+                  <button onclick="navigateCompareRightMonth(1)" class="p-1 rounded hover:bg-slate-100 text-slate-600">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Resumo da Operação: Balanço Líquido do Mês Atual -->
+            <div class="sm:text-right">
+              <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block">Resultado Líquido</span>
+              <div class="flex items-baseline sm:justify-end gap-3 mt-0.5">
+                <span id="compare-right-net" class="text-sm font-mono font-black text-teal-600">+R$ 7.269,60</span>
+                <span id="compare-right-net-diff" class="text-xs font-mono font-bold text-emerald-600">
+                  +R$ 5.919,60
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SEÇÃO 1: RECEITAS POR CATEGORIA (DIREITA) -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between pb-1 border-b border-slate-100">
+              <div>
+                <h3 class="font-extrabold uppercase tracking-tight text-[11px] text-slate-700">RECEITAS POR CATEGORIA</h3>
+                <span id="compare-right-income-count" class="text-[10px] text-slate-400 font-medium">2 categorias</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Total Receitas</span>
+                <div class="flex items-baseline justify-end gap-3 mt-0.5">
+                  <span id="compare-right-income-total" class="font-mono font-bold text-xs text-teal-600">R$ 15.420,00</span>
+                  <span id="compare-right-income-diff-text" class="font-mono font-bold text-xs text-emerald-600">
+                    +R$ 320,00
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-50/50 border-b border-slate-100 text-slate-500 font-bold text-[10px]">
+                <tr>
+                  <th class="py-2">Categoria</th>
+                  <th class="py-2 text-right">Valor</th>
+                  <th class="py-2 text-right w-20">% total</th>
+                  <th class="py-2 text-right w-24">Diferença</th>
+                </tr>
+              </thead>
+              <tbody id="compare-right-income-tbody" class="divide-y divide-slate-100">
+                <!-- Renderizado via JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- SEÇÃO 2: GASTOS POR CATEGORIA (DIREITA) -->
+          <div class="space-y-2 pt-2">
+            <div class="flex items-center justify-between pb-1 border-b border-slate-100">
+              <div>
+                <h3 class="font-extrabold uppercase tracking-tight text-[11px] text-slate-700">GASTOS POR CATEGORIA</h3>
+                <span id="compare-right-expense-count" class="text-[10px] text-slate-400 font-medium">6 categorias</span>
+              </div>
+              <div class="text-right">
+                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Total Gastos</span>
+                <div class="flex items-baseline justify-end gap-3 mt-0.5">
+                  <span id="compare-right-expense-total" class="font-mono font-bold text-xs text-rose-500">R$ 8.150,40</span>
+                  <span id="compare-right-expense-diff-text" class="font-mono font-bold text-xs text-emerald-600">
+                    -R$ 5.599,60
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-50/50 border-b border-slate-100 text-slate-500 font-bold text-[10px]">
+                <tr>
+                  <th class="py-2">Categoria</th>
+                  <th class="py-2 text-right">Valor</th>
+                  <th class="py-2 text-right w-20">% total</th>
+                  <th class="py-2 text-right w-24">Diferença</th>
+                </tr>
+              </thead>
+              <tbody id="compare-right-expense-tbody" class="divide-y divide-slate-100">
+                <!-- Renderizado via JS -->
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    // Catálogo de referência das categorias
+    const ALL_EXPENSE_CATEGORIES = [
+      { category: 'Moradia', tag: 'FIXED', tagClass: 'text-blue-600', barColor: 'bg-blue-500' },
+      { category: 'Financiamento', tag: 'FIXED', tagClass: 'text-blue-600', barColor: 'bg-blue-500' },
+      { category: 'Saúde', tag: 'VARIABLE', tagClass: 'text-amber-600', barColor: 'bg-blue-500' },
+      { category: 'Supermercado', tag: 'VARIABLE', tagClass: 'text-amber-600', barColor: 'bg-blue-500' },
+      { category: 'Transporte', tag: 'VARIABLE', tagClass: 'text-amber-600', barColor: 'bg-blue-500' },
+      { category: 'Lazer / Viagem', tag: 'VARIABLE', tagClass: 'text-amber-600', barColor: 'bg-blue-500' },
+      { category: 'Assinaturas', tag: 'FIXED', tagClass: 'text-blue-600', barColor: 'bg-blue-500' }
+    ];
+
+    const ALL_INCOME_CATEGORIES = [
+      { category: 'Salário', tag: 'RECEITA', tagClass: 'text-teal-600', barColor: 'bg-teal-500' },
+      { category: 'Rendimento', tag: 'RECEITA', tagClass: 'text-teal-600', barColor: 'bg-teal-500' },
+      { category: 'Reembolso', tag: 'RECEITA', tagClass: 'text-teal-600', barColor: 'bg-teal-500' }
+    ];
+
+    const MONTH_NAMES = {
+      '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
+      '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
+      '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro'
+    };
+
+    const MONTH_SHORTS = {
+      '01': 'Jan', '02': 'Fev', '03': 'Mar', '04': 'Abr',
+      '05': 'Mai', '06': 'Jun', '07': 'Jul', '08': 'Ago',
+      '09': 'Set', '10': 'Out', '11': 'Nov', '12': 'Dez'
+    };
+
+    // ================= DADOS MOCKADOS =================
+    const MONTHS_DATA = {
+      // Ano 2025 (permite testar comparativo anual!)
+      '2025-09': {
+        initialBalance: 32000.00,
+        finalBalance: 36500.00,
+        incomes: {
+          'Salário': 11500.00,
+          'Rendimento': 1200.00
+        },
+        expenses: {
+          'Moradia': 3200.00,
+          'Financiamento': 2800.00,
+          'Saúde': 950.00,
+          'Supermercado': 1600.00,
+          'Transporte': 650.00,
+          'Assinaturas': 600.00
+        }
+      },
+      // Ano 2026
+      '2026-07': {
+        initialBalance: 40500.00,
+        finalBalance: 42790.00,
+        incomes: {
+          'Salário': 13000.00,
+          'Rendimento': 1800.00,
+          'Reembolso': 450.00
+        },
+        expenses: {
+          'Moradia': 3500.00,
+          'Financiamento': 2800.00,
+          'Saúde': 2400.00,
+          'Supermercado': 2300.00,
+          'Transporte': 810.00,
+          'Lazer / Viagem': 750.00,
+          'Assinaturas': 700.00
+        }
+      },
+      '2026-08': {
+        initialBalance: 42790.00,
+        finalBalance: 44140.00,
+        incomes: {
+          'Salário': 13000.00,
+          'Rendimento': 2100.00
+        },
+        expenses: {
+          'Moradia': 3500.00,
+          'Financiamento': 2800.00,
+          'Saúde': 3800.00,
+          'Supermercado': 2100.00,
+          'Transporte': 850.00,
+          'Assinaturas': 700.00
+        }
+      },
+      '2026-09': {
+        initialBalance: 38989.56,
+        finalBalance: 46259.96,
+        incomes: {
+          'Salário': 13000.00,
+          'Rendimento': 2420.00
+        },
+        expenses: {
+          'Moradia': 3500.00,
+          'Saúde': 1200.00,
+          'Supermercado': 1850.40,
+          'Transporte': 900.00,
+          'Assinaturas': 700.00
+        }
+      }
+    };
+
+    // Estado da página: Ano e Mês desacoplados
+    let singleYear = '2026';
+    let singleMonth = '09';
+
+    let compareLeftYear = '2026';
+    let compareLeftMonth = '08';
+
+    let compareRightYear = '2026';
+    let compareRightMonth = '09';
+
+    let isComparing = false;
+
+    function formatBRL(val) {
+      const abs = Math.abs(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (val < 0) return `-R$ ${abs}`;
+      return `R$ ${abs}`;
+    }
+
+    function formatDiffBRL(val) {
+      const abs = Math.abs(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (val > 0) return `+R$ ${abs}`;
+      if (val < 0) return `-R$ ${abs}`;
+      return `R$ 0,00`;
+    }
+
+    // ================= RENDERIZADOR: MÊS ÚNICO =================
+    function renderSingleView() {
+      const key = `${singleYear}-${singleMonth}`;
+      const data = MONTHS_DATA[key];
+
+      document.getElementById('select-single-year').value = singleYear;
+      document.getElementById('select-single-month').value = singleMonth;
+
+      const mShort = MONTH_SHORTS[singleMonth];
+      document.getElementById('link-single-txns').textContent = `Ver todas as transações (${mShort}/${singleYear}) →`;
+
+      if (!data) {
+        // Fallback para meses sem dados no mock
+        document.getElementById('single-kpi-initial').textContent = "R$ 0,00";
+        document.getElementById('single-kpi-income').textContent = "R$ 0,00";
+        document.getElementById('single-kpi-expense').textContent = "R$ 0,00";
+        document.getElementById('single-kpi-final').textContent = "R$ 0,00";
+        document.getElementById('single-income-tbody').innerHTML = `<tr><td colspan="3" class="py-4 text-center text-slate-400">Sem lançamentos para este mês no mock.</td></tr>`;
+        document.getElementById('single-expense-tbody').innerHTML = `<tr><td colspan="3" class="py-4 text-center text-slate-400">Sem lançamentos para este mês no mock.</td></tr>`;
+        return;
+      }
+
+      const incomeItems = ALL_INCOME_CATEGORIES
+        .map(cat => ({ ...cat, amount: (data.incomes && data.incomes[cat.category]) || 0.00 }))
+        .filter(item => item.amount > 0);
+
+      const expenseItems = ALL_EXPENSE_CATEGORIES
+        .map(cat => ({ ...cat, amount: (data.expenses && data.expenses[cat.category]) || 0.00 }))
+        .filter(item => item.amount > 0);
+
+      const totalIncome = incomeItems.reduce((acc, i) => acc + i.amount, 0);
+      const totalExpense = expenseItems.reduce((acc, e) => acc + e.amount, 0);
+      const net = totalIncome - totalExpense;
+
+      // KPIs
+      document.getElementById('single-kpi-initial').textContent = formatBRL(data.initialBalance);
+      document.getElementById('single-kpi-date').textContent = `Total em 01/${singleMonth}/${singleYear}`;
+      
+      document.getElementById('single-kpi-income').textContent = formatBRL(totalIncome);
+      document.getElementById('single-kpi-income-sub').textContent = `${incomeItems.length} categorias`;
+
+      document.getElementById('single-kpi-expense').textContent = formatBRL(totalExpense);
+      document.getElementById('single-kpi-expense-sub').textContent = `${expenseItems.length} categorias`;
+
+      document.getElementById('single-kpi-final').textContent = formatBRL(data.finalBalance);
+      
+      const badge = document.getElementById('single-kpi-badge');
+      if (net >= 0) {
+        badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200";
+        badge.textContent = `Superávit: +${formatBRL(net)}`;
+      } else {
+        badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200";
+        badge.textContent = `Déficit: ${formatBRL(net)}`;
+      }
+
+      // Tabela de Receitas
+      document.getElementById('single-income-count').textContent = `${incomeItems.length} categorias`;
+      const incomeTbody = document.getElementById('single-income-tbody');
+      incomeTbody.innerHTML = incomeItems.map(item => {
+        const pct = totalIncome > 0 ? ((item.amount / totalIncome) * 100).toFixed(1) : "0.0";
+        return `
+          <tr class="hover:bg-slate-50/60 transition cursor-pointer select-none">
+            <td class="py-3 px-6">
+              <div class="flex items-center gap-2">
+                <span class="text-slate-400 text-[10px] font-mono">›</span>
+                <div>
+                  <span class="font-semibold text-slate-800">${item.category}</span>
+                  <span class="text-[9px] font-bold uppercase tracking-wider ${item.tagClass} block mt-0.5">${item.tag}</span>
+                </div>
+              </div>
+            </td>
+            <td class="py-3 px-4 text-right font-mono text-teal-600 font-medium">${formatBRL(item.amount)}</td>
+            <td class="py-3 px-6 text-right">
+              <div class="flex items-center justify-end gap-3">
+                <div class="w-28 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div class="bg-teal-500 h-1.5 rounded-full" style="width: ${pct}%"></div>
+                </div>
+                <span class="w-12 text-right opacity-70">${pct}%</span>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Tabela de Despesas
+      document.getElementById('single-expense-count').textContent = `${expenseItems.length} categorias`;
+      const expenseTbody = document.getElementById('single-expense-tbody');
+      expenseTbody.innerHTML = expenseItems.map(item => {
+        const pct = totalExpense > 0 ? ((item.amount / totalExpense) * 100).toFixed(1) : "0.0";
+        return `
+          <tr class="hover:bg-slate-50/60 transition cursor-pointer select-none">
+            <td class="py-3 px-6">
+              <div class="flex items-center gap-2">
+                <span class="text-slate-400 text-[10px] font-mono">›</span>
+                <div>
+                  <span class="font-semibold text-slate-800">${item.category}</span>
+                  <span class="text-[9px] font-bold uppercase tracking-wider ${item.tagClass} block mt-0.5">${item.tag}</span>
+                </div>
+              </div>
+            </td>
+            <td class="py-3 px-4 text-right font-mono text-rose-500 font-medium">${formatBRL(item.amount)}</td>
+            <td class="py-3 px-6 text-right">
+              <div class="flex items-center justify-end gap-3">
+                <div class="w-28 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div class="${item.barColor} h-1.5 rounded-full" style="width: ${pct}%"></div>
+                </div>
+                <span class="w-12 text-right opacity-70">${pct}%</span>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // ================= RENDERIZADOR: MODO COMPARAÇÃO =================
+    function renderCompareView() {
+      const leftKey = `${compareLeftYear}-${compareLeftMonth}`;
+      const rightKey = `${compareRightYear}-${compareRightMonth}`;
+
+      const leftData = MONTHS_DATA[leftKey] || { incomes: {}, expenses: {} };
+      const rightData = MONTHS_DATA[rightKey] || { incomes: {}, expenses: {} };
+
+      document.getElementById('select-compare-left-year').value = compareLeftYear;
+      document.getElementById('select-compare-left-month').value = compareLeftMonth;
+
+      document.getElementById('select-compare-right-year').value = compareRightYear;
+      document.getElementById('select-compare-right-month').value = compareRightMonth;
+
+      // Totais
+      const leftIncome = Object.values(leftData.incomes).reduce((a, b) => a + b, 0);
+      const leftExpense = Object.values(leftData.expenses).reduce((a, b) => a + b, 0);
+      const leftNet = leftIncome - leftExpense;
+
+      const rightIncome = Object.values(rightData.incomes).reduce((a, b) => a + b, 0);
+      const rightExpense = Object.values(rightData.expenses).reduce((a, b) => a + b, 0);
+      const rightNet = rightIncome - rightExpense;
+
+      const incomeDiff = rightIncome - leftIncome;
+      const expenseDiff = rightExpense - leftExpense;
+      const netDiff = rightNet - leftNet;
+
+      // Header Resultado Líquido
+      const netLeftEl = document.getElementById('compare-left-net');
+      netLeftEl.textContent = (leftNet >= 0 ? '+' : '') + formatBRL(leftNet);
+      netLeftEl.className = leftNet >= 0 ? "text-sm font-mono font-black text-teal-600 block mt-0.5" : "text-sm font-mono font-black text-rose-500 block mt-0.5";
+
+      const netRightEl = document.getElementById('compare-right-net');
+      netRightEl.textContent = (rightNet >= 0 ? '+' : '') + formatBRL(rightNet);
+      netRightEl.className = rightNet >= 0 ? "text-sm font-mono font-black text-teal-600" : "text-sm font-mono font-black text-rose-500";
+
+      const netRightDiffEl = document.getElementById('compare-right-net-diff');
+      netRightDiffEl.textContent = formatDiffBRL(netDiff);
+      if (netDiff > 0) {
+        netRightDiffEl.className = "text-xs font-mono font-bold text-emerald-600";
+      } else if (netDiff < 0) {
+        netRightDiffEl.className = "text-xs font-mono font-bold text-rose-500";
+      } else {
+        netRightDiffEl.className = "text-xs font-mono font-bold text-slate-400";
+      }
+
+      // Totais de Receitas
+      document.getElementById('compare-left-income-total').textContent = formatBRL(leftIncome);
+      document.getElementById('compare-right-income-total').textContent = formatBRL(rightIncome);
+      
+      const incomeDiffText = document.getElementById('compare-right-income-diff-text');
+      incomeDiffText.textContent = formatDiffBRL(incomeDiff);
+      incomeDiffText.className = incomeDiff > 0 ? "font-mono font-bold text-xs text-emerald-600" : (incomeDiff < 0 ? "font-mono font-bold text-xs text-rose-500" : "font-mono font-bold text-xs text-slate-400");
+
+      // Totais de Gastos
+      document.getElementById('compare-left-expense-total').textContent = formatBRL(leftExpense);
+      document.getElementById('compare-right-expense-total').textContent = formatBRL(rightExpense);
+
+      const expenseDiffText = document.getElementById('compare-right-expense-diff-text');
+      expenseDiffText.textContent = formatDiffBRL(expenseDiff);
+      expenseDiffText.className = expenseDiff < 0 ? "font-mono font-bold text-xs text-emerald-600" : (expenseDiff > 0 ? "font-mono font-bold text-xs text-rose-500" : "font-mono font-bold text-xs text-slate-400");
+
+      // Receitas
+      const activeIncomeCategories = ALL_INCOME_CATEGORIES.filter(cat => {
+        const l = leftData.incomes[cat.category] || 0;
+        const r = rightData.incomes[cat.category] || 0;
+        return l > 0 || r > 0;
+      });
+
+      document.getElementById('compare-left-income-count').textContent = `${activeIncomeCategories.length} categorias`;
+      document.getElementById('compare-right-income-count').textContent = `${activeIncomeCategories.length} categorias`;
+
+      document.getElementById('compare-left-income-tbody').innerHTML = activeIncomeCategories.map(cat => {
+        const amt = leftData.incomes[cat.category] || 0.00;
+        const isZero = amt === 0;
+        const pct = leftIncome > 0 ? ((amt / leftIncome) * 100).toFixed(1) : "0.0";
+        return `
+          <tr class="${isZero ? 'opacity-40' : ''}">
+            <td class="py-2.5">
+              <span class="font-semibold ${isZero ? 'text-slate-500' : 'text-slate-800'}">${cat.category}</span>
+              <span class="text-[9px] font-bold uppercase ${cat.tagClass} block">${cat.tag}</span>
+            </td>
+            <td class="py-2.5 text-right font-mono ${isZero ? 'text-slate-400' : 'text-teal-600 font-medium'}">${formatBRL(amt)}</td>
+            <td class="py-2.5 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                <div class="w-12 bg-slate-100 rounded-full h-1 overflow-hidden">
+                  <div class="${cat.barColor} h-1 rounded-full" style="width: ${pct}%"></div>
+                </div>
+                <span class="opacity-70 text-[11px]">${pct}%</span>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      document.getElementById('compare-right-income-tbody').innerHTML = activeIncomeCategories.map(cat => {
+        const rightAmt = rightData.incomes[cat.category] || 0.00;
+        const leftAmt = leftData.incomes[cat.category] || 0.00;
+        const isZero = rightAmt === 0;
+        const pct = rightIncome > 0 ? ((rightAmt / rightIncome) * 100).toFixed(1) : "0.0";
+        const diff = rightAmt - leftAmt;
+
+        let diffColor = diff > 0 ? "text-emerald-600" : (diff < 0 ? "text-rose-500" : "text-slate-400");
+
+        return `
+          <tr class="${isZero ? 'opacity-40' : ''}">
+            <td class="py-2.5">
+              <span class="font-semibold ${isZero ? 'text-slate-500' : 'text-slate-800'}">${cat.category}</span>
+              <span class="text-[9px] font-bold uppercase ${cat.tagClass} block">${cat.tag}</span>
+            </td>
+            <td class="py-2.5 text-right font-mono ${isZero ? 'text-slate-400' : 'text-teal-600 font-medium'}">${formatBRL(rightAmt)}</td>
+            <td class="py-2.5 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                <div class="w-12 bg-slate-100 rounded-full h-1 overflow-hidden">
+                  <div class="${cat.barColor} h-1 rounded-full" style="width: ${pct}%"></div>
+                </div>
+                <span class="opacity-70 text-[11px]">${pct}%</span>
+              </div>
+            </td>
+            <td class="py-2.5 text-right">
+              <span class="font-mono font-bold text-[11px] ${diffColor}">${formatDiffBRL(diff)}</span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Gastos
+      const activeExpenseCategories = ALL_EXPENSE_CATEGORIES.filter(cat => {
+        const l = leftData.expenses[cat.category] || 0;
+        const r = rightData.expenses[cat.category] || 0;
+        return l > 0 || r > 0;
+      });
+
+      document.getElementById('compare-left-expense-count').textContent = `${activeExpenseCategories.length} categorias`;
+      document.getElementById('compare-right-expense-count').textContent = `${activeExpenseCategories.length} categorias`;
+
+      document.getElementById('compare-left-expense-tbody').innerHTML = activeExpenseCategories.map(cat => {
+        const amt = leftData.expenses[cat.category] || 0.00;
+        const isZero = amt === 0;
+        const pct = leftExpense > 0 ? ((amt / leftExpense) * 100).toFixed(1) : "0.0";
+        return `
+          <tr class="${isZero ? 'opacity-40' : ''}">
+            <td class="py-2.5">
+              <span class="font-semibold ${isZero ? 'text-slate-500' : 'text-slate-800'}">${cat.category}</span>
+              <span class="text-[9px] font-bold uppercase ${cat.tagClass} block">${cat.tag}</span>
+            </td>
+            <td class="py-2.5 text-right font-mono ${isZero ? 'text-slate-400' : 'text-rose-500 font-medium'}">${formatBRL(amt)}</td>
+            <td class="py-2.5 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                <div class="w-12 bg-slate-100 rounded-full h-1 overflow-hidden">
+                  <div class="${cat.barColor} h-1 rounded-full" style="width: ${pct}%"></div>
+                </div>
+                <span class="opacity-70 text-[11px]">${pct}%</span>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      document.getElementById('compare-right-expense-tbody').innerHTML = activeExpenseCategories.map(cat => {
+        const rightAmt = rightData.expenses[cat.category] || 0.00;
+        const leftAmt = leftData.expenses[cat.category] || 0.00;
+        const isZero = rightAmt === 0;
+        const pct = rightExpense > 0 ? ((rightAmt / rightExpense) * 100).toFixed(1) : "0.0";
+        const diff = rightAmt - leftAmt;
+
+        let diffColor = diff < 0 ? "text-emerald-600" : (diff > 0 ? "text-rose-500" : "text-slate-400");
+
+        return `
+          <tr class="${isZero ? 'opacity-40' : ''}">
+            <td class="py-2.5">
+              <span class="font-semibold ${isZero ? 'text-slate-500' : 'text-slate-800'}">${cat.category}</span>
+              <span class="text-[9px] font-bold uppercase ${cat.tagClass} block">${cat.tag}</span>
+            </td>
+            <td class="py-2.5 text-right font-mono ${isZero ? 'text-slate-400' : 'text-rose-500 font-medium'}">${formatBRL(rightAmt)}</td>
+            <td class="py-2.5 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                <div class="w-12 bg-slate-100 rounded-full h-1 overflow-hidden">
+                  <div class="${cat.barColor} h-1 rounded-full" style="width: ${pct}%"></div>
+                </div>
+                <span class="opacity-70 text-[11px]">${pct}%</span>
+              </div>
+            </td>
+            <td class="py-2.5 text-right">
+              <span class="font-mono font-bold text-[11px] ${diffColor}">${formatDiffBRL(diff)}</span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // ================= EVENT HANDLERS =================
+
+    // Navegação Mês Único
+    function onSingleYearChange(val) {
+      singleYear = val;
+      renderSingleView();
+    }
+
+    function onSingleMonthChange(val) {
+      singleMonth = val;
+      renderSingleView();
+    }
+
+    function navigateSingleYear(dir) {
+      const y = parseInt(singleYear, 10) + dir;
+      if (y >= 2024 && y <= 2026) {
+        singleYear = String(y);
+        renderSingleView();
+      }
+    }
+
+    function navigateSingleMonth(dir) {
+      let m = parseInt(singleMonth, 10) + dir;
+      if (m < 7) m = 7;
+      if (m > 9) m = 9;
+      singleMonth = String(m).padStart(2, '0');
+      renderSingleView();
+    }
+
+    // Navegação Comparativo: Ano e Mês Esquerda
+    function onCompareLeftYearChange(val) {
+      if (`${val}-${compareLeftMonth}` >= `${compareRightYear}-${compareRightMonth}`) {
+        alert("O Mês Base (esquerda) deve ser anterior ao Mês em Análise (direita).");
+        document.getElementById('select-compare-left-year').value = compareLeftYear;
+        return;
+      }
+      compareLeftYear = val;
+      renderCompareView();
+    }
+
+    function onCompareLeftMonthChange(val) {
+      if (`${compareLeftYear}-${val}` >= `${compareRightYear}-${compareRightMonth}`) {
+        alert("O Mês Base (esquerda) deve ser anterior ao Mês em Análise (direita).");
+        document.getElementById('select-compare-left-month').value = compareLeftMonth;
+        return;
+      }
+      compareLeftMonth = val;
+      renderCompareView();
+    }
+
+    function navigateCompareLeftYear(dir) {
+      const y = String(parseInt(compareLeftYear, 10) + dir);
+      if (`${y}-${compareLeftMonth}` < `${compareRightYear}-${compareRightMonth}` && (y === '2025' || y === '2026')) {
+        compareLeftYear = y;
+        renderCompareView();
+      }
+    }
+
+    function navigateCompareLeftMonth(dir) {
+      let m = parseInt(compareLeftMonth, 10) + dir;
+      if (m < 7) m = 7;
+      if (m > 9) m = 9;
+      const mStr = String(m).padStart(2, '0');
+      if (`${compareLeftYear}-${mStr}` < `${compareRightYear}-${compareRightMonth}`) {
+        compareLeftMonth = mStr;
+        renderCompareView();
+      }
+    }
+
+    // Navegação Comparativo: Ano e Mês Direita
+    function onCompareRightYearChange(val) {
+      if (`${val}-${compareRightMonth}` <= `${compareLeftYear}-${compareLeftMonth}`) {
+        alert("O Mês em Análise (direita) deve ser posterior ao Mês Base (esquerda).");
+        document.getElementById('select-compare-right-year').value = compareRightYear;
+        return;
+      }
+      compareRightYear = val;
+      renderCompareView();
+    }
+
+    function onCompareRightMonthChange(val) {
+      if (`${compareRightYear}-${val}` <= `${compareLeftYear}-${compareLeftMonth}`) {
+        alert("O Mês em Análise (direita) deve ser posterior ao Mês Base (esquerda).");
+        document.getElementById('select-compare-right-month').value = compareRightMonth;
+        return;
+      }
+      compareRightMonth = val;
+      renderCompareView();
+    }
+
+    function navigateCompareRightYear(dir) {
+      const y = String(parseInt(compareRightYear, 10) + dir);
+      if (`${y}-${compareRightMonth}` > `${compareLeftYear}-${compareLeftMonth}` && (y === '2025' || y === '2026')) {
+        compareRightYear = y;
+        renderCompareView();
+      }
+    }
+
+    function navigateCompareRightMonth(dir) {
+      let m = parseInt(compareRightMonth, 10) + dir;
+      if (m < 7) m = 7;
+      if (m > 9) m = 9;
+      const mStr = String(m).padStart(2, '0');
+      if (`${compareRightYear}-${mStr}` > `${compareLeftYear}-${compareLeftMonth}`) {
+        compareRightMonth = mStr;
+        renderCompareView();
+      }
+    }
+
+    function toggleCompare() {
+      isComparing = !isComparing;
+      document.getElementById('single-view').classList.toggle('hidden', isComparing);
+      document.getElementById('compare-view').classList.toggle('hidden', !isComparing);
+      
+      const btn = document.getElementById('btn-toggle-compare');
+      const label = document.getElementById('compare-btn-label');
+      
+      if (isComparing) {
+        label.textContent = "Fechar Comparação";
+        btn.className = "bg-blue-50 text-blue-700 border border-blue-200 font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center gap-2 shadow-sm";
+        renderCompareView();
+      } else {
+        label.textContent = "Ativar Comparação de Meses";
+        btn.className = "bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center gap-2 shadow-sm";
+      }
+    }
+
+    // Inicialização
+    renderSingleView();
+  </script>
+</body>
+</html>

@@ -101,3 +101,9 @@
 - A negative diff under "Rendimento do Mês" books a negative-amount transaction in the income category (arithmetically correct, semantically odd).
 - `format_transfer(nil)` guards a `nil` that `calculate_totals/1` does not — the column is `null: false`, so drop the dead clause.
 - Spec drift: `docs/tasks/CL-5-spec.md` "Files Touched" still names `accounting.ex`.
+
+## [CL-6] Reformular tela de Fechamento do Mês e Comparação (/months) — 2026-09-15
+- PRE-EXISTING DEFECT worth its own task: `lib/cash_lens/transactions.ex:503-511` — the uncategorized leg of `get_month_category_breakdown/2` does not apply `exclude_transactions_with_children/1` as the categorized leg does, so a re-parented *uncategorized* card bill would be counted alongside its children.
+- `total_of/1` in `month_live/show.ex:250` is a generic name for "sum the `:total` field of breakdown rows"; `breakdown_total/1` would read better.
+- Crafted `phx-value-scope`/`dir`/`year` params crash the LiveView (MatchError in `move/3` when `comparison` is nil, CaseClauseError on unknown scope, `String.to_integer` on non-numeric input). The chronological guard itself is sound and cannot be bypassed; this is robustness, not an authorization hole.
+- `positive?/1` (`month_panel.ex:572`) treats a net of exactly zero as a green "Superávit".
