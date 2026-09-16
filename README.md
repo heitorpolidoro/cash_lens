@@ -29,12 +29,59 @@
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_cash_lens"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_cash_lens&metric=sqale_rating" alt="SonarCloud Maintainability"></a>
 </div>
 
-To start your Phoenix server:
+## Running locally
 
-* Run `mix setup` to install and setup dependencies
-* Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+The app comes up the same way with or without [poli-runner](../polidoro-runner/README.md) —
+the runner only decides *which* Postgres it talks to.
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+Either way, step one:
+
+```sh
+cp .env.example .env
+```
+
+Compose reads `.env` in every subcommand, so without it `docker compose up` starts the app
+with no database and `docker compose stop` exits `0` without stopping anything.
+
+### With its own Postgres (the default)
+
+```sh
+docker compose up
+```
+
+`.env` activates the `standalone` profile: a bundled Postgres on `:5432`, in a volume of its
+own.
+
+### Under poli-runner
+
+```sh
+poli-runner start cash_lens
+```
+
+The runner keeps the bundled `db` down and supplies the connection variables itself. What it
+points the app at is declared in `poli-runner.yml`, not here. Nothing about this is
+runner-only — by hand it is the same thing:
+
+```sh
+COMPOSE_PROFILES=poli-runner DATABASE_HOST=<host> DATABASE_PORT=<port> docker compose up
+```
+
+To use the runner but keep the bundled database, add `--no-deps`.
+
+## Running with Elixir directly
+
+`./run` starts this repo's Postgres (`docker compose up -d --wait db`) and then the Phoenix
+server on the host, pointed at `localhost:5432`:
+
+```sh
+./run          # mix phx.server
+./run --iex    # inside an IEx shell
+```
+
+`DATABASE_HOST`, `DATABASE_PORT` and `DATABASE_NAME` set in the environment override the
+defaults. Run `mix setup` once first, to install dependencies.
+
+Either way the app is at [`localhost:4444`](http://localhost:4444).
 
 Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
 

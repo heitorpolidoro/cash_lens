@@ -1,30 +1,49 @@
+# Two modes, one file — see "Making a compose repo runner-ready" in polidoro-runner/README.md.
+#
+#   standalone     COMPOSE_PROFILES=standalone (the default, from .env) — this repo starts
+#                  its own Postgres on :5432 and the app talks to it over the compose network.
+#   poli-runner    COMPOSE_PROFILES=poli-runner (injected by the runner) — `db` stays down and
+#                  DATABASE_HOST/PORT come from the runner, which decides what this app
+#                  connects to. That target is declared in poli-runner.yml, not here.
+#
+# `cp .env.example .env` is step one either way: Compose reads .env in every subcommand.
 services:
   db:
+    profiles: [standalone]      # bundled DB — omitted in poli-runner mode
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: cash_lens
     ports:
-      - "5433:5432"
+      - "5432:5432"             # published for native runs (./run)
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - cash_lens_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  app:
+  app:                          # no profile: always starts, always stops
     build: .
     command: /bin/sh -c "mix deps.get && mix phx.server"
     ports:
-      - "4000:4000"
+      - "4444:4444"
     env_file:
       - dev.env
+    environment:              # passthrough: .env in standalone, the runner in poli-runner mode
+      - DATABASE_HOST           # config/dev.exs reads these; DATABASE_URL is prod-only
+      - DATABASE_PORT
     volumes:
       - .:/app
       - /app/_build
       - /app/deps
       - gemini_data:/root/.gemini
     depends_on:
-      - db
-
+      db:
+        condition: service_healthy
+        required: false         # without this, an inactive profile invalidates the project
 volumes:
-  postgres_data:
   gemini_data:
+  cash_lens_pgdata:

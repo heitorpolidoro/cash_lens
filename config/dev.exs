@@ -2,10 +2,11 @@ import Config
 
 # Configure your database
 config :cash_lens, CashLens.Repo,
-  username: "postgres",
-  password: "postgres",
-  hostname: System.get_env("DATABASE_HOST") || "db",
-  database: "cash_lens",
+  username: System.get_env("DATABASE_USER") || "postgres",
+  password: System.get_env("DATABASE_PASSWORD") || "postgres",
+  hostname: System.get_env("DATABASE_HOST") || "localhost",
+  port: String.to_integer(System.get_env("DATABASE_PORT") || "5432"),
+  database: System.get_env("DATABASE_NAME") || "cash_lens",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
@@ -19,7 +20,7 @@ config :cash_lens, CashLens.Repo,
 config :cash_lens, CashLensWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {0, 0, 0, 0}, port: 4000],
+  http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT") || "4444")],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

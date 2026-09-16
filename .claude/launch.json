@@ -3,13 +3,10 @@
   "configurations": [
     {
       "name": "local",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "-c",
-        "docker compose -f /Users/heitor/workspace/docker-compose.yml up -d --wait postgres && export $(grep -v '^#' .env | xargs) && exec mix phx.server"
-      ],
+      "runtimeExecutable": "./run",
+      "runtimeArgs": [],
       "cwd": ".",
-      "port": 4000,
+      "port": 4444,
       "env": {}
     }
   ]

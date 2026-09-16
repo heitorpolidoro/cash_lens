@@ -1,0 +1,25 @@
+name: cash_lens
+alias: cl
+description: Financial statement importer and analyzer (Phoenix app)
+
+commands:
+  start: docker compose up -d
+  stop:  docker compose stop
+  logs:  docker compose logs $FOLLOW --tail=200
+  status:
+    url: http://localhost:4444/
+    timeout_secs: 120
+
+# Pull the shared Postgres into the run, so `start cash_lens` wires to it by default.
+# `start cash_lens --no-deps` leaves it out and the repo falls back to its bundled db.
+depends_on: [postgres]
+
+integrations:
+  postgres:
+    description: Shared dev Postgres (:54321)
+    # No `mock` scenario on purpose: when postgres is not in the run the runner injects
+    # nothing, .env applies, and docker-compose.yml starts this repo's own database.
+    local:
+      COMPOSE_PROFILES: poli-runner    # no service declares it → the bundled `db` stays down
+      DATABASE_HOST: host.docker.internal
+      DATABASE_PORT: "54321"
