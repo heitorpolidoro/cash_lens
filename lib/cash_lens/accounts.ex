@@ -10,9 +10,44 @@ defmodule CashLens.Accounts do
 
   @doc """
   Returns the list of accounts.
+
+  Pass `include_closed: false` to leave closed (archived) accounts out.
   """
-  def list_accounts do
-    Repo.all(Account)
+  def list_accounts(opts \\ []) do
+    Account
+    |> filter_closed(opts)
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns the bank accounts and digital wallets (`is_credit_card: false`),
+  ordered by name.
+
+  Pass `include_closed: false` to leave closed (archived) accounts out.
+  """
+  def list_bank_accounts(opts \\ []) do
+    from(a in Account, where: a.is_credit_card == false, order_by: a.name)
+    |> filter_closed(opts)
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns the credit-card accounts (`is_credit_card: true`), ordered by name.
+
+  Pass `include_closed: false` to leave closed (archived) accounts out.
+  """
+  def list_credit_cards(opts \\ []) do
+    from(a in Account, where: a.is_credit_card == true, order_by: a.name)
+    |> filter_closed(opts)
+    |> Repo.all()
+  end
+
+  defp filter_closed(query, opts) do
+    if Keyword.get(opts, :include_closed, true) do
+      query
+    else
+      from a in query, where: a.is_closed == false
+    end
   end
 
   @doc """

@@ -24,10 +24,14 @@ defmodule CashLensWeb.Router do
     live_session :default,
       layout: {CashLensWeb.Layouts, :app},
       on_mount: CashLensWeb.ActivePath do
+      # The create and edit routes are an overlaid modal on top of the accounts
+      # screen, not standalone pages: they mount `Index` so a `live_patch`
+      # opens/closes the account settings form without leaving the cards
+      # behind it (CL-15).
       live "/accounts", AccountLive.Index, :index
-      live "/accounts/new", AccountLive.Form, :new
+      live "/accounts/new", AccountLive.Index, :new
       live "/accounts/:id", AccountLive.Show, :show
-      live "/accounts/:id/edit", AccountLive.Form, :edit
+      live "/accounts/:id/edit", AccountLive.Index, :edit
 
       # The form, detail and edit routes are overlaid modals on top of the
       # statement, not standalone pages: they all mount `Index` so a

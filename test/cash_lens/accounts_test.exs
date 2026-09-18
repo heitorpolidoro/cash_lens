@@ -15,6 +15,34 @@ defmodule CashLens.AccountsTest do
       assert Accounts.list_accounts() == [account]
     end
 
+    test "list_accounts/1 can leave closed accounts out" do
+      open_account = account_fixture()
+      closed = account_fixture(%{is_closed: true})
+
+      assert Accounts.list_accounts() |> Enum.map(& &1.id) |> Enum.sort() ==
+               Enum.sort([open_account.id, closed.id])
+
+      assert Accounts.list_accounts(include_closed: false) == [open_account]
+    end
+
+    test "list_bank_accounts/1 returns only non credit-card accounts, closed ones optional" do
+      bank = account_fixture(%{name: "A bank", is_credit_card: false})
+      closed_bank = account_fixture(%{name: "B bank", is_credit_card: false, is_closed: true})
+      _card = account_fixture(%{is_credit_card: true})
+
+      assert Accounts.list_bank_accounts(include_closed: false) == [bank]
+      assert Accounts.list_bank_accounts() == [bank, closed_bank]
+    end
+
+    test "list_credit_cards/1 returns only credit-card accounts, closed ones optional" do
+      card = account_fixture(%{name: "A card", is_credit_card: true})
+      closed_card = account_fixture(%{name: "B card", is_credit_card: true, is_closed: true})
+      _bank = account_fixture(%{is_credit_card: false})
+
+      assert Accounts.list_credit_cards(include_closed: false) == [card]
+      assert Accounts.list_credit_cards() == [card, closed_card]
+    end
+
     test "get_account!/1 returns the account with given id" do
       account = account_fixture()
       assert Accounts.get_account!(account.id) == account

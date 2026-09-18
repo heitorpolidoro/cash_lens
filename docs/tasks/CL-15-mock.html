@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CashLens — Gestão de Contas e Cartões</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+  <header class="border-b border-slate-200 bg-white sticky top-0 z-40 px-6 py-4 shadow-xs">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-6">
+        <span class="text-2xl font-black text-blue-600 tracking-tight">CashLens</span>
+        <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Painel</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Transações</a>
+          <a href="#" class="px-3 py-2 rounded-lg bg-slate-100 text-blue-600 font-bold">Contas</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Categorias</a>
+        </nav>
+      </div>
+      <button onclick="openAccountModal('new')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+        Nova Conta / Cartão
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+    <!-- Topo -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Minhas Contas e Cartões</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Gerencie suas contas bancárias ativas, configurações de extrato e cartões de crédito.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+          <input type="checkbox" id="toggle-closed" onchange="toggleClosedAccounts()" class="rounded text-blue-600 focus:ring-blue-500">
+          Mostrar contas encerradas
+        </label>
+      </div>
+    </div>
+
+    <!-- Seção 1: Contas Correntes e Carteiras Digitais -->
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold text-slate-900 uppercase tracking-wider text-xs">Contas Bancárias e Carteiras (3)</h2>
+        <span class="text-xs font-bold text-slate-500">Saldo Total: <strong class="text-blue-600 font-black text-sm">R$ 46.259,96</strong></span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <!-- Conta Itaú -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-[#ec7000] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                  It
+                </div>
+                <div>
+                  <h3 class="font-bold text-slate-900 text-sm">Itaú Uniclass</h3>
+                  <span class="text-xs text-slate-400">Conta Corrente</span>
+                </div>
+              </div>
+              <button onclick="openAccountModal('edit', 'Itaú Uniclass')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+            </div>
+            <div>
+              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Saldo Atual</span>
+              <div class="text-2xl font-black text-slate-900 font-mono">R$ 20.000,00</div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-400">Extrator: <strong>OFX / CSV</strong></span>
+            <a href="#" class="font-bold text-blue-600 hover:underline">Ver Extrato ➔</a>
+          </div>
+        </div>
+
+        <!-- Conta Nubank -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-[#820ad1] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                  Nu
+                </div>
+                <div>
+                  <h3 class="font-bold text-slate-900 text-sm">Nubank</h3>
+                  <span class="text-xs text-slate-400">Conta Digital</span>
+                </div>
+              </div>
+              <button onclick="openAccountModal('edit', 'Nubank')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+            </div>
+            <div>
+              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Saldo Atual</span>
+              <div class="text-2xl font-black text-slate-900 font-mono">R$ 15.000,00</div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-400">Extrator: <strong>OFX</strong></span>
+            <a href="#" class="font-bold text-blue-600 hover:underline">Ver Extrato ➔</a>
+          </div>
+        </div>
+
+        <!-- Conta Mercado Pago -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-[#009ee3] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                  MP
+                </div>
+                <div>
+                  <h3 class="font-bold text-slate-900 text-sm">Mercado Pago</h3>
+                  <span class="text-xs text-slate-400">Conta de Pagamento</span>
+                </div>
+              </div>
+              <button onclick="openAccountModal('edit', 'Mercado Pago')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+            </div>
+            <div>
+              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Saldo Atual</span>
+              <div class="text-2xl font-black text-slate-900 font-mono">R$ 11.259,96</div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-400">Extrator: <strong>CSV</strong></span>
+            <a href="#" class="font-bold text-blue-600 hover:underline">Ver Extrato ➔</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seção 2: Cartões de Crédito -->
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold text-slate-900 uppercase tracking-wider text-xs">Cartões de Crédito Cadastrados (2)</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <!-- Cartão 1 -->
+        <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-black tracking-widest uppercase text-slate-400">NUBANK</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">Ultravioleta</span>
+            </div>
+            <button onclick="openAccountModal('edit', 'Nubank Cartão')" class="p-1 text-slate-400 hover:text-white">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+          </div>
+          <div>
+            <span class="text-[11px] text-slate-400 block mb-1">Fatura Atual (Setembro)</span>
+            <span class="text-2xl font-black font-mono">R$ 3.420,00</span>
+          </div>
+          <div class="pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
+            <span>Fecha dia <strong>13</strong> · Vence dia <strong>20</strong></span>
+            <a href="#" class="font-bold text-blue-400 hover:underline">Ver Faturas ➔</a>
+          </div>
+        </div>
+
+        <!-- Cartão 2 -->
+        <div class="bg-gradient-to-br from-[#d35400] to-[#b33900] text-white rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-black tracking-widest uppercase text-orange-200">ITAÚ</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-white/20 text-white border border-white/30">Visa Infinite</span>
+            </div>
+            <button onclick="openAccountModal('edit', 'Itaú Cartão')" class="p-1 text-orange-200 hover:text-white">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+          </div>
+          <div>
+            <span class="text-[11px] text-orange-200 block mb-1">Fatura Atual (Setembro)</span>
+            <span class="text-2xl font-black font-mono">R$ 2.400,40</span>
+          </div>
+          <div class="pt-3 border-t border-white/20 flex items-center justify-between text-xs text-orange-100">
+            <span>Fecha dia <strong>25</strong> · Vence dia <strong>05</strong></span>
+            <a href="#" class="font-bold text-white hover:underline">Ver Faturas ➔</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Modal de Criação / Edição de Conta -->
+  <div id="account-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs" onclick="closeAccountModal()"></div>
+    <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md p-6 space-y-4 z-10 text-xs">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 id="modal-title" class="text-sm font-bold text-slate-900">Configurar Conta</h3>
+        <button onclick="closeAccountModal()" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Nome da Conta</label>
+          <input type="text" id="acc-name" value="Itaú Uniclass" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Instituição / Banco</label>
+            <input type="text" id="acc-bank" value="Itaú" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Cor do Card</label>
+            <input type="color" id="acc-color" value="#ec7000" class="w-full h-8 bg-slate-50 border border-slate-200 rounded-xl p-1 cursor-pointer">
+          </div>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Extrator (Parser)</label>
+          <select id="acc-parser" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">Selecione um extrator</option>
+            <option value="bradesco_csv">Bradesco (CSV)</option>
+            <option value="bradesco_cartao_pdf">Bradesco Cartão (PDF)</option>
+            <option value="mercadopago_cartao_pdf">Mercado Pago Cartão (PDF)</option>
+            <option value="bb_csv" selected>Banco do Brasil (CSV)</option>
+            <option value="mercado_pago_csv">Mercado Pago (CSV)</option>
+            <option value="ourocard_ofx">Ourocard (OFX)</option>
+            <option value="sem_parar_pdf">Sem Parar (PDF)</option>
+            <option value="standard_ofx">OFX Padrão</option>
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">Define como os arquivos de extrato/fatura desta conta são lidos na importação.</p>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Ícone da Conta (URL)</label>
+          <div class="flex items-center gap-3">
+            <div id="acc-icon-preview-wrap" class="size-11 shrink-0 rounded-full border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
+              <img id="acc-icon-preview" src="https://logo.clearbit.com/itau.com.br" alt="Prévia do ícone" class="w-full h-full object-cover" onerror="showIconPlaceholder()">
+              <svg id="acc-icon-placeholder" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-slate-300 hidden"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+            </div>
+            <input type="url" id="acc-icon" value="https://logo.clearbit.com/itau.com.br" placeholder="https://..." oninput="updateIconPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <p class="text-[10px] text-slate-400 mt-1">Opcional. Cole a URL da logo da instituição; a prévia é atualizada ao digitar.</p>
+        </div>
+
+        <div class="flex items-center gap-2 pt-2">
+          <input type="checkbox" id="acc-is-credit" class="rounded text-blue-600">
+          <label for="acc-is-credit" class="font-bold text-slate-700">Esta conta é um Cartão de Crédito</label>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button onclick="closeAccountModal()" class="px-4 py-2 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
+        <button onclick="closeAccountModal()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold">Salvar Alterações</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openAccountModal(mode, name = '') {
+      document.getElementById('modal-title').innerText = mode === 'new' ? 'Nova Conta / Cartão' : `Editar ${name}`;
+      document.getElementById('account-modal').classList.remove('hidden');
+    }
+    function closeAccountModal() {
+      document.getElementById('account-modal').classList.add('hidden');
+    }
+    function showIconPlaceholder() {
+      document.getElementById('acc-icon-preview').classList.add('hidden');
+      document.getElementById('acc-icon-placeholder').classList.remove('hidden');
+    }
+    function updateIconPreview() {
+      const url = document.getElementById('acc-icon').value.trim();
+      const img = document.getElementById('acc-icon-preview');
+      const ph = document.getElementById('acc-icon-placeholder');
+      if (url === '') {
+        img.classList.add('hidden');
+        ph.classList.remove('hidden');
+        return;
+      }
+      img.src = url;
+      img.classList.remove('hidden');
+      ph.classList.add('hidden');
+    }
+    function toggleClosedAccounts() {
+      alert("Alternando visibilidade de contas arquivadas.");
+    }
+  </script>
+</body>
+</html>

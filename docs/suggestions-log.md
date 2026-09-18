@@ -169,3 +169,11 @@
 - Sign filter for link candidates runs in Elixir over a full 30-day window; could be pushed into SQL.
 - Suggestion tests pin 2 days (in) / 4 days (out) but not the inclusive boundary at exactly 3 days.
 - The pending tab label uses `@pending_count`, which counts suggestion legs shown above the tabs rather than the rows in that tab's table.
+
+## [CL-15] Redesenhar tela de Contas (/accounts) — 2026-09-18
+- Parser option labels are hardcoded in `account_live/form_component.ex:19-28` while `index.ex` renders the same strings via `Formatters.translate_parser_type/1` — derive them to prevent drift.
+- `close_account_modal` in `index.ex` always patches to `/accounts`, so cancel drops `return_to`; arriving from `import_modal_component.ex:311` the old form's Cancel returned to `/transactions`. Save still honours `return_to`.
+- The consolidated total uses latest calculated `final_balance` with fallback to `account.balance`, while the dashboard additionally prefers a stored `pluggy_balance` and adds live entries. Pre-existing per-card difference; consider aligning or documenting it.
+- The total's test only exercises the `account.balance` fallback; a case with a rebuilt balance would pin the calculated-balance path.
+- `account.color` is interpolated into `style="background-color: …"` (`index.ex:89`, `:172`) with no format validation on the changeset.
+- `FormComponent.update/2` rebuilds `:form` on every parent render; theoretical input loss if the parent re-renders while the modal is open.
