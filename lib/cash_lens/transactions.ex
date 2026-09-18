@@ -19,6 +19,16 @@ defmodule CashLens.Transactions do
 
   @default_page_size 50
 
+  # Maximum number of days between the two sides of an automatically suggested
+  # transfer pair.
+  @transfer_pairing_window_days 3
+
+  # Date window used when listing manual-link candidates in the transfers modal.
+  @transfer_link_window_days 30
+
+  # Maximum number of manual-link candidates shown at once.
+  @transfer_link_candidate_limit 50
+
   @doc """
   Rows returned per page by `list_transactions/3`. Exposed so the transactions
   LiveView can tell a full page (there may be more) from a short one (the
@@ -1246,19 +1256,32 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
-  Returns suggested transfer pairs: same date, opposite amounts, different accounts,
-  both unmatched and both either uncategorized or categorized as 'transfer'.
+  Returns suggested transfer pairs: opposite amounts on different accounts whose
+  dates fall within #{@transfer_pairing_window_days} days of each other, both
+  unmatched and both either uncategorized or categorized as 'transfer'.
+
+  Each transaction takes part in at most one suggestion: candidate pairs are
+  ranked by how close their dates are (then by recency) and greedily assigned.
   Returns a list of {tx_out, tx_in} tuples sorted by date desc.
   """
   def list_transfer_suggestions do
-    transfer_cat = CashLens.Categories.get_category_by_slug("transfer")
-    transfer_cat_id = if transfer_cat, do: transfer_cat.id, else: nil
+    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat_id = transfer_cat && transfer_cat.id
+
+    transfer_suggestion_candidates_query(transfer_cat_id)
+    |> Repo.all()
+    |> pick_disjoint_pairs()
+    |> Enum.map(&order_transfer_pair/1)
+  end
+
+  defp transfer_suggestion_candidates_query(transfer_cat_id) do
+    window = @transfer_pairing_window_days
 
     from(a in Transaction,
       join: acct_a in assoc(a, :account),
       join: b in Transaction,
       on:
-        a.date == b.date and
+        fragment("ABS(? - ?) <= ?", a.date, b.date, ^window) and
           a.amount == fragment("? * -1", b.amount) and
           a.account_id != b.account_id and
           a.id < b.id,
@@ -1271,8 +1294,25 @@ defmodule CashLens.Transactions do
       order_by: [desc: a.date],
       select: {a, b}
     )
-    |> Repo.all()
-    |> Enum.map(&order_transfer_pair/1)
+  end
+
+  # Greedily keeps the best candidate pair for each transaction: the closest
+  # dates win, ties broken by the most recent pair, so a transaction never shows
+  # up in two suggestions at once.
+  defp pick_disjoint_pairs(candidates) do
+    candidates
+    |> Enum.sort_by(fn {a, b} ->
+      {abs(Date.diff(a.date, b.date)), Date.diff(~D[0000-01-01], a.date)}
+    end)
+    |> Enum.reduce({[], MapSet.new()}, fn {a, b}, {kept, used} ->
+      if MapSet.member?(used, a.id) or MapSet.member?(used, b.id) do
+        {kept, used}
+      else
+        {[{a, b} | kept], used |> MapSet.put(a.id) |> MapSet.put(b.id)}
+      end
+    end)
+    |> elem(0)
+    |> Enum.sort_by(fn {a, _b} -> a.date end, {:desc, Date})
   end
 
   # Preloads both sides of a suggested transfer pair and orders them so the
@@ -1286,44 +1326,126 @@ defmodule CashLens.Transactions do
   @doc """
   Returns unmatched transfers (transfer category, no transfer_key) that have
   no auto-suggestion pair.
+
+  Callers that already hold the output of `list_transfer_suggestions/0` can pass
+  it in to avoid recomputing the pairing query.
   """
-  def list_unmatched_transfers_without_suggestion do
-    transfer_cat = CashLens.Categories.get_category_by_slug("transfer")
+  def list_unmatched_transfers_without_suggestion(suggestions \\ nil) do
+    transfer_cat = Categories.get_category_by_slug("transfer")
 
     if is_nil(transfer_cat) do
       []
     else
-      cat_id = transfer_cat.id
-
-      # IDs that appear in suggestions (excluding credit-card accounts)
-      paired_ids =
-        from(a in Transaction,
-          join: acct_a in assoc(a, :account),
-          join: b in Transaction,
-          on:
-            a.date == b.date and
-              a.amount == fragment("? * -1", b.amount) and
-              a.account_id != b.account_id,
-          join: acct_b in assoc(b, :account),
-          where: is_nil(a.transfer_key) and is_nil(b.transfer_key),
-          where:
-            (is_nil(a.category_id) or a.category_id == ^cat_id) and
-              (is_nil(b.category_id) or b.category_id == ^cat_id),
-          where: not acct_a.is_credit_card and not acct_b.is_credit_card,
-          select: a.id
-        )
-        |> Repo.all()
+      suggested_ids =
+        (suggestions || list_transfer_suggestions())
+        |> Enum.flat_map(fn {out, inc} -> [out.id, inc.id] end)
 
       from(t in Transaction,
         join: acct in assoc(t, :account),
         where: is_nil(t.transfer_key),
-        where: t.category_id == ^cat_id,
-        where: t.id not in ^paired_ids,
+        where: t.category_id == ^transfer_cat.id,
+        where: t.id not in ^suggested_ids,
         where: not acct.is_credit_card,
         order_by: [desc: t.date],
         preload: [:account, :category]
       )
       |> Repo.all()
+    end
+  end
+
+  @doc """
+  Returns manual-link candidates for `transaction`: opposite-sign, unmatched
+  transactions on other accounts within
+  #{@transfer_link_window_days} days, each annotated with the absolute amount
+  difference and the number of days between the two dates.
+
+  Sorted by amount difference, then by day difference, so the closest match
+  comes first.
+  """
+  def list_transfer_link_candidates(%Transaction{} = transaction) do
+    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat_id = transfer_cat && transfer_cat.id
+    opposite_sign = if Decimal.negative?(transaction.amount), do: :positive, else: :negative
+
+    from(t in Transaction,
+      join: acct in assoc(t, :account),
+      where: t.id != ^transaction.id,
+      where: t.account_id != ^transaction.account_id,
+      where: is_nil(t.transfer_key),
+      where: is_nil(t.category_id) or t.category_id == ^transfer_cat_id,
+      where: not acct.is_credit_card,
+      where: fragment("ABS(? - ?) <= ?", t.date, ^transaction.date, ^@transfer_link_window_days),
+      preload: [:account]
+    )
+    |> Repo.all()
+    |> Enum.filter(&matching_sign?(&1.amount, opposite_sign))
+    |> Enum.map(fn candidate ->
+      %{
+        transaction: candidate,
+        amount_diff: candidate.amount |> Decimal.add(transaction.amount) |> Decimal.abs(),
+        day_diff: abs(Date.diff(candidate.date, transaction.date))
+      }
+    end)
+    |> Enum.sort_by(&{Decimal.to_float(&1.amount_diff), &1.day_diff})
+    |> Enum.take(@transfer_link_candidate_limit)
+  end
+
+  defp matching_sign?(amount, :positive), do: Decimal.positive?(amount)
+  defp matching_sign?(amount, :negative), do: Decimal.negative?(amount)
+
+  @doc """
+  Creates the mirror of `transaction_id` on `destination_account_id` — the
+  symmetric transaction that was never imported — and links both rows as a
+  transfer pair.
+
+  Returns `{:error, :same_account}` when the destination is the origin account,
+  and `{:error, :already_linked}` when the transaction already belongs to a pair.
+  """
+  def create_mirror_transaction(transaction_id, destination_account_id) do
+    origin = get_transaction!(transaction_id)
+
+    cond do
+      origin.account_id == destination_account_id ->
+        {:error, :same_account}
+
+      not is_nil(origin.transfer_key) ->
+        {:error, :already_linked}
+
+      true ->
+        insert_mirror(origin, destination_account_id)
+    end
+  end
+
+  defp insert_mirror(origin, destination_account_id) do
+    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_key = Ecto.UUID.generate()
+
+    attrs = %{
+      account_id: destination_account_id,
+      category_id: transfer_cat && transfer_cat.id,
+      date: origin.date,
+      description: origin.description,
+      amount: Decimal.negate(origin.amount),
+      source: "manual",
+      transfer_key: transfer_key
+    }
+
+    case %Transaction{} |> Transaction.changeset(attrs) |> Repo.insert() do
+      {:ok, mirror} ->
+        {:ok, _} =
+          origin
+          |> Transaction.changeset(%{
+            transfer_key: transfer_key,
+            category_id: attrs.category_id || origin.category_id
+          })
+          |> Repo.update()
+
+        CashLens.Accounting.rebuild_account_balances(destination_account_id)
+
+        {:ok, Repo.preload(mirror, [:account, :category])}
+
+      {:error, changeset} ->
+        {:error, changeset}
     end
   end
 

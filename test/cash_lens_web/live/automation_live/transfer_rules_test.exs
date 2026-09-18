@@ -241,4 +241,37 @@ defmodule CashLensWeb.AutomationLive.TransferRulesTest do
     updated = Transactions.get_transfer_rule!(rule.id)
     refute updated.create_mirror
   end
+
+  describe "reapply automatic rules" do
+    test "runs the rules and flashes the result", %{
+      conn: conn,
+      source: source,
+      destination: destination
+    } do
+      transaction_fixture(%{
+        account_id: source.id,
+        description: "reapply test rule",
+        category_id: nil,
+        amount: "-200.00"
+      })
+
+      {:ok, _rule} =
+        Transactions.create_transfer_rule(%{
+          label: "Ingest Rule",
+          description_patterns: ["reapply test rule"],
+          source_account_id: source.id,
+          destination_account_id: destination.id,
+          create_mirror: true
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/admin/transfer_rules")
+
+      html =
+        live
+        |> element("button[phx-click='reapply_rules']")
+        |> render_click()
+
+      assert html =~ "Regras reaplicadas"
+    end
+  end
 end

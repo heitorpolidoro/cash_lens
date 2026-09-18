@@ -14,6 +14,15 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
           Defina regras que criam automaticamente transações espelhadas em uma conta de destino
           quando uma transação com descrição correspondente é encontrada na conta de origem.
         </:subtitle>
+        <:actions>
+          <button
+            phx-click="reapply_rules"
+            phx-disable-with="Processando..."
+            class="btn btn-outline btn-sm"
+          >
+            <.icon name="hero-play" class="size-4" /> Reaplicar Regras Automáticas
+          </button>
+        </:actions>
       </.header>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -172,6 +181,13 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
   end
 
   @impl true
+  def handle_event("reapply_rules", _params, socket) do
+    {:ok, categorized} = Transactions.reapply_transfer_rules()
+
+    {:noreply, put_flash(socket, :success, reapply_message(categorized))}
+  end
+
+  @impl true
   def handle_event("validate", %{"transfer_rule" => params}, socket) do
     rule = socket.assigns.current_rule || %TransferRule{}
     attrs = parse_form_params(params)
@@ -240,6 +256,14 @@ defmodule CashLensWeb.AutomationLive.TransferRules do
      |> stream_delete(:transfer_rules, rule)
      |> put_flash(:success, "Regra de transferência excluída.")}
   end
+
+  defp reapply_message(0),
+    do: "Regras reaplicadas — nenhuma transação nova categorizada como transferência."
+
+  defp reapply_message(1), do: "Regras reaplicadas — 1 transação categorizada como transferência."
+
+  defp reapply_message(count),
+    do: "Regras reaplicadas — #{count} transações categorizadas como transferência."
 
   defp build_form(rule) do
     patterns_raw = Enum.join(rule.description_patterns || [], ", ")

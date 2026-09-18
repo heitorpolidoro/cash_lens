@@ -157,3 +157,15 @@
 - (round 2, parser fix) Values with more than two decimals (`1.2345`) persist as typed into an unconstrained `field :amount, :decimal`, while `to_input_value/1` rounds to 2 — consider rounding at parse time or validating scale.
 - The rejection error for `1,234.56` could name the accepted formats.
 - Pre-existing: `.5` and `5.` are rejected by the amount parser.
+
+## [CL-21] Criar contexto CashLens.Imports com rastreio de arquivos e histórico de execuções — 2026-09-18
+- Reword the spec's "No other line of `ingestor.ex` changes" to "no instrumentation is added anywhere else in `ingestor.ex`" — `process_imported_content/5`'s signature and its call at line 93 do change to thread the raw bytes.
+- Follow-up (not this task): collapse a duplicate absolute + relative `imported_files` pair once the monitored root is configured. The no-root case deliberately keys rows absolutely, so a legacy duplicate can exist and is resolved read-side with relative-first precedence.
+
+## [CL-13] Redesenhar Central de Transferências (/transfers) — 2026-09-18
+- `transactions.ex:1300` — the tie-break comment/doc say "most recent pair" but the sort key is ascending epoch-days, i.e. oldest first. Documentation drift, untested either way.
+- `transactions.ex:1424` — `insert_mirror/2` inserts the mirror and then updates the origin with `{:ok, _} = ...` outside a transaction; a failure leaves a committed mirror holding a lone `transfer_key`.
+- `transactions.ex:1628` — `link_transfer_pair/2` could add `where: is_nil(t.transfer_key)` to close the cross-tab race outright.
+- Sign filter for link candidates runs in Elixir over a full 30-day window; could be pushed into SQL.
+- Suggestion tests pin 2 days (in) / 4 days (out) but not the inclusive boundary at exactly 3 days.
+- The pending tab label uses `@pending_count`, which counts suggestion legs shown above the tabs rather than the rows in that tab's table.
