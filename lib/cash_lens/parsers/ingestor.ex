@@ -4,6 +4,7 @@ defmodule CashLens.Parsers.Ingestor do
   """
   require Logger
   alias CashLens.Accounting
+  alias CashLens.Imports
   alias CashLens.Parsers.CSVParser
   alias CashLens.Parsers.OFXParser
   alias CashLens.Parsers.OurocardTXTParser
@@ -90,10 +91,12 @@ defmodule CashLens.Parsers.Ingestor do
 
     case File.read(file_path) do
       {:ok, content} ->
-        process_imported_content(content, account, file_path, notify_fn, dry_run)
+        process_imported_content(content, account, file_path, notify_fn, dry_run, opts)
 
       {:error, reason} ->
-        {:error, "Could not read file: #{reason}"}
+        message = "Could not read file: #{reason}"
+        if dry_run == false, do: record_import(account, file_path, opts, {:error, message}, nil)
+        {:error, message}
     end
   end
 
@@ -144,14 +147,17 @@ defmodule CashLens.Parsers.Ingestor do
     end
   end
 
-  defp process_imported_content(content, account, file_path, notify_fn, dry_run) do
-    content = prepare_content(content, account, file_path)
+  defp process_imported_content(raw_content, account, file_path, notify_fn, dry_run, opts) do
+    content = prepare_content(raw_content, account, file_path)
 
     Logger.info("INGESTOR: #{account.parser_type} <- #{file_path} (#{account.name})")
 
     case parse(content, account.parser_type) do
       {:error, reason} ->
         Logger.error("INGESTOR: Parsing failed: #{reason}")
+        # This branch is shared with the dry run (it sits above the `if dry_run`
+        # below), so the recording carries an explicit non-dry-run guard.
+        if dry_run == false, do: record_import(account, file_path, opts, {:error, reason}, nil)
         {:error, reason}
 
       transactions_data ->
@@ -165,7 +171,9 @@ defmodule CashLens.Parsers.Ingestor do
           statement_id =
             maybe_create_statement(account, content, file_path, transactions_data)
 
-          finalize_import(transactions_data, account.id, statement_id)
+          {:ok, summary} = result = finalize_import(transactions_data, account.id, statement_id)
+          record_import(account, file_path, opts, {:ok, summary}, raw_content)
+          result
         end
     end
   end
@@ -453,6 +461,71 @@ defmodule CashLens.Parsers.Ingestor do
     |> Map.put(:updated_at, now)
     |> Map.put(:import_batch_id, statement_id)
   end
+
+  # Records one executed file import in `CashLens.Imports`. Called from exactly
+  # three places in `import_file/3`'s path — the unreadable-file branch, the
+  # parse-error branch (guarded by `dry_run == false`, since it is shared with
+  # the dry run) and the non-dry-run finalization branch — and from nowhere
+  # else. `preview_file/3` is never instrumented.
+  #
+  # Recording must never fail an import: any error is logged and the caller's
+  # original return value is preserved byte-for-byte.
+  defp record_import(account, file_path, opts, outcome, raw_content) do
+    ran_at = DateTime.utc_now() |> DateTime.truncate(:second)
+    path_key = Imports.relative_path(file_path, Imports.import_root(opts))
+
+    base = %{ran_at: ran_at, account_id: account.id, file_path: path_key}
+
+    base
+    |> Map.merge(run_attrs(outcome, path_key, file_path, raw_content, ran_at))
+    |> Imports.record_run()
+    |> log_record_failure(file_path)
+  rescue
+    e -> Logger.error("INGESTOR: could not record import run: #{Exception.message(e)}")
+  end
+
+  defp run_attrs({:error, reason}, _path_key, _file_path, _raw_content, _ran_at) do
+    %{
+      status: "error",
+      imported_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      error_message: to_string(reason)
+    }
+  end
+
+  defp run_attrs({:ok, summary}, path_key, file_path, raw_content, ran_at) do
+    %{
+      status: if(summary.failed == [], do: "success", else: "warning"),
+      imported_count: summary.imported,
+      skipped_count: Map.get(summary, :skipped, 0),
+      failed_count: length(summary.failed),
+      imported_file_id: touch_imported_file(path_key, file_path, raw_content, ran_at)
+    }
+  end
+
+  # The hash is taken over the *raw* bytes read from disk, before
+  # `prepare_content/3` normalizes encoding or extracts PDF text, so the value
+  # matches what `Imports.scan/1` measures on the same file.
+  defp touch_imported_file(path_key, file_path, raw_content, ran_at) do
+    attrs = %{
+      path: path_key,
+      content_hash: raw_content && Imports.content_hash(raw_content),
+      mtime: Imports.file_mtime(file_path),
+      last_imported_at: ran_at
+    }
+
+    case Imports.upsert_imported_file(attrs) do
+      {:ok, imported_file} -> imported_file.id
+      {:error, _changeset} -> nil
+    end
+  end
+
+  defp log_record_failure({:error, changeset}, file_path) do
+    Logger.error("INGESTOR: could not record import run for #{file_path}: #{inspect(changeset)}")
+  end
+
+  defp log_record_failure(other, _file_path), do: other
 
   defp batch_insert_transactions(entries) do
     CashLens.Repo.insert_all(

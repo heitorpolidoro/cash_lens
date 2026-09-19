@@ -18,7 +18,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
   """
   def preflight(path) do
     if File.dir?(path) do
-      {account_dirs, _skipped} = classify(path)
+      {account_dirs, _skipped} = account_dirs(path)
 
       {errors, missing} =
         Enum.reduce(account_dirs, {[], []}, fn dir, {errs, miss} ->
@@ -83,7 +83,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
 
     emit = Keyword.get(opts, :on_event, fn _ -> :ok end)
     dry_run = Keyword.get(opts, :dry_run, false)
-    {account_dirs, skipped_dirs} = classify(path)
+    {account_dirs, skipped_dirs} = account_dirs(path)
 
     emit.({:start, length(account_dirs)})
 
@@ -102,7 +102,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
   end
 
   defp create_missing_accounts(path) do
-    {account_dirs, _} = classify(path)
+    {account_dirs, _} = account_dirs(path)
 
     Enum.each(account_dirs, fn dir ->
       with {:ok, attrs} <- AccountFile.read(dir),
@@ -121,10 +121,13 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end)
   end
 
+  @doc false
   # A path that itself has a `.account` is a single account folder. Otherwise,
   # it recursively traverses subdirectories looking for `.account` files.
   # Subfolders without `.account` that contain supported files are skipped with a warning.
-  defp classify(path) do
+  # Returns `{account_dirs, skipped_dirs}`. Public (but undocumented) so
+  # `CashLens.Imports.scan/1` walks the exact same tree `run/2` imports.
+  def account_dirs(path) do
     if AccountFile.exists?(path) do
       {[path], []}
     else
@@ -232,7 +235,10 @@ defmodule CashLens.Parsers.DirectoryImporter do
           if dry_run do
             Ingestor.preview_file(account, file, claimed)
           else
-            {Ingestor.import_file(account, file, dry_run: dry_run), claimed}
+            {Ingestor.import_file(account, file,
+               dry_run: dry_run,
+               import_root: root_path
+             ), claimed}
           end
 
         acc =
@@ -301,7 +307,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
   """
   def each_credit_card_file(path, fun) do
     if File.dir?(path) do
-      {account_dirs, _skipped} = classify(path)
+      {account_dirs, _skipped} = account_dirs(path)
 
       Enum.each(account_dirs, fn dir ->
         with {:ok, %{bank: bank, account: name}} <- AccountFile.read(dir),
@@ -344,11 +350,14 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end
   end
 
+  @doc false
   # Recursive: an account folder commonly has files organized into year/month
   # subfolders (e.g. "BB Conta Corrente/2026/junho.csv") with a single `.account`
   # at the top, not one per subfolder. A non-recursive listing would silently
   # skip everything below the first level.
-  defp partition_files(dir, expected) do
+  # Public (but undocumented) so `CashLens.Imports.scan/1` reuses this walk
+  # instead of re-implementing it.
+  def partition_files(dir, expected) do
     Path.join(dir, "**/*")
     |> Path.wildcard()
     |> Enum.filter(&(File.regular?(&1) and extname(&1) in @supported_extensions))

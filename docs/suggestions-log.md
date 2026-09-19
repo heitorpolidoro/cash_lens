@@ -177,3 +177,11 @@
 - The total's test only exercises the `account.balance` fallback; a case with a rebuilt balance would pin the calculated-balance path.
 - `account.color` is interpolated into `style="background-color: …"` (`index.ex:89`, `:172`) with no format validation on the changeset.
 - `FormComponent.update/2` rebuilds `:form` on every parent render; theoretical input loss if the parent re-renders while the modal is open.
+
+## [CL-21] Criar contexto CashLens.Imports com rastreio de arquivos e histórico — 2026-09-19
+- **CONFIRMED BY QA, worth its own task:** `path`/`file_path` are `varchar(255)`. QA built a 397-character absolute path, imported a valid statement there with no monitored root configured, and observed: Postgres rejects the insert with `22001 string_data_right_truncation`, the error is swallowed by the `rescue` in `record_import/5`, and BOTH rows are lost (`imported_files: []`, `import_runs: []`) while the 3 transactions commit and the caller still receives `{:ok, ...}`. No financial data is lost and the user cannot notice — the only trace is one `[error] INGESTOR: could not record import run` log line. The lasting effect is that the file becomes invisible to the tracking feature and a later `scan/1` calls it `:new` forever. Reachable only through ad-hoc single-file imports; the Drive folder goes through `DirectoryImporter.run/2`, which now always passes its root and produces short relative keys. Fix: migration widening both columns to `:text`.
+- `touch_imported_file/4` drops `{:error, changeset}` with no log, unlike `log_record_failure/2` beside it.
+- `normalize_root/1` trims only to test blankness and returns the untrimmed binary.
+- `scan/1` is not silent — it inherits `maybe_warn_skipped_dir/2`'s warnings from the reused traversal, which the later `/imports` LiveView will emit on every load.
+- Symlinked roots are not resolved by `Path.expand/1` (not reachable in production today).
+- Extracting a `status_for(summary)` would let the `"warning"` branch be unit-tested directly; end-to-end it needs `prepare_transaction_entry/5` to raise.
