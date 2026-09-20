@@ -673,12 +673,401 @@ defmodule CashLensWeb.ImportLiveTest do
     end
   end
 
-  describe "later parts" do
-    test "no dropzone is rendered", %{conn: conn} do
+  describe "universal dropzone" do
+    alias CashLens.Imports.ImportedFile
+    alias CashLens.Imports.ImportRun
+    alias CashLens.Parsers.PDFConverterMock
+    alias CashLens.Repo
+    alias CashLens.Transactions.Transaction
+
+    # Body of test/cash_lens/parsers/ofx_parser_test.exs:5.
+    @ofx_sample """
+    <OFX>
+    <STMTTRN>
+    <TRNTYPE>DEBIT</TRNTYPE>
+    <DTPOSTED>20260410120000</DTPOSTED>
+    <TRNAMT>-150.00</TRNAMT>
+    <MEMO>COMPRA SUPERMERCADO</MEMO>
+    </STMTTRN>
+    <STMTTRN>
+    <TRNTYPE>CREDIT</TRNTYPE>
+    <DTPOSTED>20260415103000</DTPOSTED>
+    <TRNAMT>1200,50</TRNAMT>
+    <NAME>TRANSFERENCIA RECEBIDA</NAME>
+    </STMTTRN>
+    </OFX>
+    """
+
+    # Body of test/cash_lens/parsers/ourocard_txt_parser_test.exs:5.
+    @ourocard_sample """
+                             Fatura do Cartão de Crédito
+    Vencimento      : 16.07.2026
+    Total da fatura : R$ 11.938,58
+
+    Data     Transações                             País        Valor R$   Valor US$
+    --------------------------------------------------------------------------------
+             1 - HEITOR L POLIDORO
+
+             Educação
+    15.06.2026SCHOOL OF ROCK         SAO JOSE DOS  BR              537,82        0,00
+    """
+
+    # Text lifted from test/cash_lens/parsers/pdf_parser_test.exs:8.
+    @sem_parar_text """
+    Extrato Mensal de Utilização
+    Plano Contratado: SEM PARAR 10/12/25 R$ 58,17
+    01/12/2025 PEDAGIO SP R$ 10,00
+    """
+
+    @raw_pdf "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n"
+
+    @garbage <<0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46>>
+
+    setup do
+      before = session_names()
+      on_exit(fn -> Enum.each(new_sessions(before), &File.rm_rf!/1) end)
+      {:ok, sessions_before: before}
+    end
+
+    defp session_names do
+      case File.ls(Imports.drop_root()) do
+        {:ok, names} -> names
+        {:error, _reason} -> []
+      end
+    end
+
+    defp new_sessions(before) do
+      (session_names() -- before) |> Enum.map(&Path.join(Imports.drop_root(), &1))
+    end
+
+    # Every staging directory this test created, across the sessions it created.
+    defp staged_dirs(before) do
+      before
+      |> new_sessions()
+      |> Enum.flat_map(fn session ->
+        case File.ls(session) do
+          {:ok, names} -> Enum.map(names, &Path.join(session, &1))
+          {:error, _reason} -> []
+        end
+      end)
+    end
+
+    defp drop_file(view, name, content) do
+      view
+      |> file_input("#dropzone-form", :drop, [
+        %{name: name, content: content, type: "application/octet-stream"}
+      ])
+      |> render_upload(name)
+
+      render(view)
+    end
+
+    defp detection(view), do: view |> element("#drop-detection") |> render()
+
+    defp account_options(view) do
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#drop-account option")
+      |> Enum.map(&LazyHTML.text/1)
+    end
+
+    defp select_account(view, account) do
+      view
+      |> form("#drop-account-form", %{"account_id" => to_string(account.id)})
+      |> render_change()
+    end
+
+    test "the dropzone is rendered with a file input", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/imports")
 
-      refute html =~ ~s(id="dropzone")
-      refute html =~ ~s(id="inspection-modal")
+      assert html =~ ~s(id="dropzone")
+      assert html =~ "Arraste um extrato aqui (OFX, CSV, PDF ou TXT) ou clique para escolher"
+      assert html =~ "phx-drop-target"
+    end
+
+    test "a dropped CSV is detected and previewed for its only candidate", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      html = drop_file(view, "bb_sample.csv", @bb_sample)
+
+      assert html =~ ~s(id="inspect-drawer")
+      assert html =~ "bb_sample.csv"
+      assert detection(view) =~ "CSV"
+      assert detection(view) =~ "bb_csv"
+      assert view |> element("#preview-new-count") |> render() |> extract_count() > 0
+    end
+
+    test "a dropped OFX is detected and previewed", %{conn: conn} do
+      account_fixture(bank: "Itaú", name: "Conta OFX", parser_type: "standard_ofx")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      html = drop_file(view, "extrato.ofx", @ofx_sample)
+
+      assert html =~ ~s(id="inspect-drawer")
+      assert detection(view) =~ "OFX"
+      assert detection(view) =~ "standard_ofx"
+      assert view |> element("#preview-new-count") |> render() |> extract_count() == 2
+    end
+
+    test "a dropped Ourocard TXT is detected and previewed", %{conn: conn} do
+      account_fixture(bank: "Banco do Brasil", name: "Ourocard", parser_type: "ourocard_txt")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      html = drop_file(view, "ourocard.txt", @ourocard_sample)
+
+      assert html =~ ~s(id="inspect-drawer")
+      assert detection(view) =~ "TXT"
+      assert detection(view) =~ "ourocard_txt"
+      assert view |> element("#preview-new-count") |> render() |> extract_count() == 1
+    end
+
+    test "a dropped PDF is detected through the extracted text", %{conn: conn} do
+      account_fixture(bank: "Sem Parar", name: "Tag", parser_type: "sem_parar_pdf")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      Mox.stub(PDFConverterMock, :convert, fn _path -> {:ok, @sem_parar_text} end)
+      Mox.allow(PDFConverterMock, self(), view.pid)
+
+      html = drop_file(view, "fatura.pdf", @raw_pdf)
+
+      assert html =~ ~s(id="inspect-drawer")
+      assert detection(view) =~ "PDF"
+      assert detection(view) =~ "sem_parar_pdf"
+    end
+
+    test "unrecognised content writes nothing and leaves no staged file", %{
+      conn: conn,
+      sessions_before: before
+    } do
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      counts_before = counts()
+
+      html = drop_file(view, "lixo.csv", @garbage)
+
+      assert html =~ ~s(id="drop-error")
+      assert html =~ "Formato não reconhecido: lixo.csv"
+      refute html =~ ~s(id="inspect-drawer")
+      assert counts() == counts_before
+      assert staged_dirs(before) == []
+
+      html = view |> element("#drop-error-dismiss") |> render_click()
+      refute html =~ ~s(id="drop-error")
+    end
+
+    test "content decides the format, not the extension", %{conn: conn} do
+      ofx = account_fixture(bank: "Itaú", name: "Conta OFX", parser_type: "standard_ofx")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      drop_file(view, "extrato.csv", @ofx_sample)
+
+      assert detection(view) =~ "OFX"
+      assert Enum.any?(account_options(view), &(&1 =~ ofx.name))
+      refute Enum.any?(account_options(view), &(&1 =~ "bb_csv"))
+    end
+
+    test "an ourocard_ofx account is a candidate for an OFX drop", %{conn: conn} do
+      ourocard = account_fixture(bank: "Itaú", name: "Cartão OFX", parser_type: "ourocard_ofx")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      html = drop_file(view, "extrato.ofx", @ofx_sample)
+
+      assert Enum.any?(account_options(view), &(&1 =~ ourocard.name))
+      refute html =~ "Nenhuma conta compatível com este formato."
+
+      # The predicate is the extension family, not "everything": a CSV drop
+      # never offers the OFX account.
+      drop_file(view, "bb_sample.csv", @bb_sample)
+
+      refute Enum.any?(account_options(view), &(&1 =~ ourocard.name))
+    end
+
+    test "nothing is written while the drawer is open, and closing it cleans up", %{
+      conn: conn,
+      sessions_before: before
+    } do
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      counts_before = counts()
+
+      drop_file(view, "bb_sample.csv", @bb_sample)
+
+      assert has_element?(view, "#inspect-drawer")
+      assert counts() == counts_before
+      assert length(staged_dirs(before)) == 1
+
+      view |> element("#inspect-cancel") |> render_click()
+
+      refute has_element?(view, "#inspect-drawer")
+      assert counts() == counts_before
+      assert staged_dirs(before) == []
+    end
+
+    test "confirming a drop imports it and records the content-addressed key", %{
+      conn: conn,
+      account: account,
+      sessions_before: before
+    } do
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      drop_file(view, "bb_sample.csv", @bb_sample)
+
+      expected = view |> element("#preview-new-count") |> render() |> extract_count()
+      assert expected > 0
+
+      html = view |> element("#confirm-import") |> render_click()
+
+      assert Repo.aggregate(from(t in Transaction, where: t.account_id == ^account.id), :count) ==
+               expected
+
+      assert [run] = Repo.all(ImportRun)
+      key = "#{Imports.content_hash(@bb_sample)}/bb_sample.csv"
+      assert run.file_path == key
+      assert [imported_file] = Repo.all(ImportedFile)
+      assert imported_file.path == key
+
+      refute html =~ ~s(id="inspect-drawer")
+      assert html =~ "#{expected} transações importadas"
+      assert staged_dirs(before) == []
+    end
+
+    test "a staged file gone at confirm time is refused and writes nothing", %{
+      conn: conn,
+      sessions_before: before
+    } do
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      counts_before = counts()
+
+      drop_file(view, "bb_sample.csv", @bb_sample)
+
+      assert [dir] = staged_dirs(before)
+      File.rm_rf!(dir)
+
+      html = view |> element("#confirm-import") |> render_click()
+
+      assert html =~ "O arquivo solto não está mais disponível. Solte-o novamente."
+      assert counts() == counts_before
+      refute has_element?(view, "#inspect-drawer")
+    end
+
+    test "an ambiguous account choice waits for the operator", %{conn: conn, account: account} do
+      # The bank hint of the BB sample is "Banco do Brasil": with the two
+      # candidates banking elsewhere it matches neither, so no rule can fire.
+      {:ok, _} = CashLens.Accounts.update_account(account, %{accepts_import: false})
+      account_fixture(bank: "Bradesco", name: "Conta Um", parser_type: "bb_csv")
+      second = account_fixture(bank: "Santander", name: "Conta Dois", parser_type: "bb_csv")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      html = drop_file(view, "bb_sample.csv", @bb_sample)
+
+      assert html =~ ~s(id="drop-account")
+      assert html =~ "Escolha a conta desta importação."
+      assert preview_rows(view) == []
+      assert has_element?(view, "#confirm-import[disabled]")
+
+      select_account(view, second)
+
+      assert preview_rows(view) != []
+      refute has_element?(view, "#confirm-import[disabled]")
+    end
+
+    test "no compatible account opens the drawer on the error block", %{
+      conn: conn,
+      sessions_before: before
+    } do
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      html = drop_file(view, "ourocard.txt", @ourocard_sample)
+
+      assert html =~ ~s(id="inspect-error")
+      assert html =~ "Nenhuma conta compatível com este formato."
+      refute has_element?(view, "#confirm-import")
+
+      view |> element("#inspect-cancel") |> render_click()
+
+      assert staged_dirs(before) == []
+    end
+
+    test "a second drop replaces the first, leaving one staging directory", %{
+      conn: conn,
+      sessions_before: before
+    } do
+      account_fixture(bank: "Itaú", name: "Conta OFX", parser_type: "standard_ofx")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      drop_file(view, "bb_sample.csv", @bb_sample)
+      assert has_element?(view, "#inspect-drawer")
+
+      html = drop_file(view, "extrato.ofx", @ofx_sample)
+
+      assert html =~ ~s(id="inspect-drawer")
+      assert html =~ "extrato.ofx"
+      refute html =~ "bb_sample.csv"
+      assert detection(view) =~ "OFX"
+
+      assert [dir] = staged_dirs(before)
+      assert Path.basename(dir) == Imports.content_hash(@ofx_sample)
+    end
+
+    test "a drop replaces an open folder inspection", %{conn: conn, root: root} do
+      account_fixture(bank: "Itaú", name: "Conta OFX", parser_type: "standard_ofx")
+      dir = account_folder(root, "bb")
+      write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      assert has_element?(view, "#inspect-drawer")
+
+      html = drop_file(view, "extrato.ofx", @ofx_sample)
+
+      assert html =~ ~s(id="inspect-drawer")
+      assert view |> element("#inspect-path") |> render() =~ "extrato.ofx"
+      refute view |> element("#inspect-path") |> render() =~ "bb/extrato.csv"
+      assert detection(view) =~ "OFX"
+    end
+
+    test "mount sweeps stale session directories and keeps fresh ones", %{conn: conn} do
+      stale = Path.join(Imports.drop_root(), "stale#{System.unique_integer([:positive])}")
+      fresh = Path.join(Imports.drop_root(), "fresh#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(stale, "x"))
+      File.mkdir_p!(Path.join(fresh, "x"))
+      on_exit(fn -> Enum.each([stale, fresh], &File.rm_rf!/1) end)
+
+      File.touch!(stale, System.os_time(:second) - 25 * 60 * 60)
+
+      {:ok, _view, _html} = live(conn, ~p"/imports")
+
+      refute File.dir?(stale)
+      assert File.dir?(fresh)
+    end
+
+    test "terminating the LiveView removes the session directory", %{
+      conn: conn,
+      sessions_before: before
+    } do
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      drop_file(view, "bb_sample.csv", @bb_sample)
+      assert length(staged_dirs(before)) == 1
+
+      ref = Process.monitor(view.pid)
+      GenServer.stop(view.pid)
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
+
+      assert new_sessions(before) == []
     end
   end
 end

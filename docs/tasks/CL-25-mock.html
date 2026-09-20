@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CashLens — Dropzone universal (CL-25)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>body{font-family:'Plus Jakarta Sans',sans-serif}</style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+<header class="border-b border-slate-200 bg-white sticky top-0 z-40 px-6 py-4 shadow-xs">
+  <div class="max-w-7xl mx-auto flex items-center justify-between">
+    <div class="flex items-center gap-6">
+      <span class="text-2xl font-black text-blue-600 tracking-tight">CashLens</span>
+      <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+        <span class="px-3 py-2 rounded-lg text-slate-400 cursor-default">Painel</span>
+        <span class="px-3 py-2 rounded-lg text-slate-400 cursor-default">Transações</span>
+        <span class="px-3 py-2 rounded-lg text-slate-400 cursor-default">Faturas</span>
+        <span class="px-3 py-2 rounded-lg bg-slate-100 text-blue-600 font-bold">Central de Importação</span>
+      </nav>
+    </div>
+    <span class="text-[11px] font-bold text-slate-400 border border-dashed border-slate-300 px-3 py-1.5 rounded-lg">Mockup CL-25 — dropzone universal</span>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+
+  <div class="pb-2 border-b border-slate-200">
+    <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Central de Importação</h1>
+    <p class="text-xs text-slate-500 mt-0.5">Arquivos avulsos passam pela detecção de formato e pela inspeção pré-gravação antes de qualquer escrita.</p>
+  </div>
+
+  <!-- Card da pasta monitorada (CL-23, inerte aqui) -->
+  <section class="bg-white border border-slate-200 rounded-2xl shadow-xs p-5">
+    <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Pasta monitorada <span class="text-slate-300 normal-case font-bold">(CL-23 — inerte neste mockup)</span></label>
+    <p class="mt-1.5 font-mono text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">/Users/heitor/CashLens/extratos</p>
+  </section>
+
+  <!-- ======================= DROPZONE (CL-25) ======================= -->
+  <section id="dropzone" class="bg-white border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center transition-colors hover:border-blue-400">
+    <i data-lucide="upload-cloud" class="w-10 h-10 mx-auto text-slate-300"></i>
+    <p class="mt-3 text-sm font-bold text-slate-700">Arraste um extrato aqui (OFX, CSV, PDF ou TXT) ou clique para escolher</p>
+    <p class="mt-1 text-[11px] text-slate-400">Um arquivo por vez · até 10 MB · o formato é identificado pelo conteúdo, não pela extensão</p>
+
+    <div class="mt-5 inline-flex flex-wrap items-center justify-center gap-2">
+      <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1">Simular soltura:</span>
+      <button onclick="drop('csv')"  class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700">bb_sample.csv</button>
+      <button onclick="drop('ofx')"  class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700">extrato.csv <span class="text-slate-400">(conteúdo OFX)</span></button>
+      <button onclick="drop('pdf')"  class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700">fatura.pdf <span class="text-slate-400">(banco ambíguo)</span></button>
+      <button onclick="drop('txt')"  class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700">ourocard.txt</button>
+      <button onclick="drop('lixo')" class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-[11px] font-bold text-rose-700">lixo.csv <span class="text-rose-400">(não reconhecido)</span></button>
+      <button onclick="drop('vazio')" class="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-[11px] font-bold text-amber-700">boleto.pdf <span class="text-amber-500">(sem conta compatível)</span></button>
+    </div>
+  </section>
+
+  <!-- Erro de soltura -->
+  <section id="drop-error" class="hidden bg-rose-50 border border-rose-200 rounded-2xl p-5 flex items-start gap-3">
+    <i data-lucide="file-x-2" class="w-5 h-5 text-rose-500 shrink-0 mt-0.5"></i>
+    <div class="flex-1">
+      <p class="text-sm font-bold text-rose-800" id="drop-error-title"></p>
+      <p class="text-[11px] text-rose-600 mt-0.5">Nenhum dado foi gravado e o arquivo temporário foi descartado. Confira se o arquivo é mesmo um extrato suportado.</p>
+    </div>
+    <button onclick="clearDrop()" class="px-3 py-1.5 rounded-lg bg-white border border-rose-200 text-[11px] font-bold text-rose-700 hover:bg-rose-100">Dispensar</button>
+  </section>
+
+  <!-- Lista de arquivos da pasta monitorada (CL-23/24, inerte aqui) -->
+  <section id="file-list" class="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden opacity-70">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+      <h2 class="text-sm font-black uppercase tracking-wider text-slate-400">Arquivos da pasta monitorada</h2>
+      <span class="text-[11px] font-bold text-slate-400">CL-23/CL-24 — inerte neste mockup</span>
+    </div>
+    <table class="w-full text-xs">
+      <thead class="bg-slate-50 text-slate-400 text-[10px] uppercase tracking-wider">
+        <tr>
+          <th class="text-left font-black px-5 py-2.5">Arquivo</th>
+          <th class="text-left font-black px-5 py-2.5">Conta</th>
+          <th class="text-left font-black px-5 py-2.5">Situação</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 text-slate-500">
+        <tr><td class="px-5 py-3 font-mono">bb/extrato-06.csv</td><td class="px-5 py-3">Banco do Brasil · Conta Corrente</td><td class="px-5 py-3"><span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold">Novo</span></td></tr>
+        <tr><td class="px-5 py-3 font-mono">ourocard/fatura-06.txt</td><td class="px-5 py-3">Banco do Brasil · Ourocard</td><td class="px-5 py-3"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold">Sincronizado</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <p class="text-[11px] text-slate-400 text-center">Histórico de importações (CL-26) e remoção do modal legado (CL-27) seguem fora desta entrega.</p>
+</main>
+
+<!-- Flash simulado -->
+<div id="flash" class="hidden fixed top-20 right-6 z-[60] shadow-lg rounded-xl px-4 py-3 text-xs font-bold"></div>
+
+<!-- ======================= GAVETA DE INSPEÇÃO (CL-24, estendida) ======================= -->
+<div id="inspect-backdrop" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px]" onclick="closeInspect()"></div>
+
+<aside id="inspect-drawer" class="hidden fixed z-50 inset-y-0 right-0 w-full max-w-3xl bg-white shadow-2xl flex flex-col">
+  <div class="px-6 py-5 border-b border-slate-200">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <p class="text-[10px] font-black uppercase tracking-wider text-blue-500">Inspeção pré-gravação · arquivo solto</p>
+        <h2 id="drop-filename" class="text-lg font-bold text-slate-900 mt-0.5 font-mono"></h2>
+      </div>
+      <button onclick="closeInspect()" class="text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+
+    <!-- Detecção -->
+    <div id="drop-detection" class="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-bold"></div>
+
+    <!-- Escolha da conta -->
+    <div id="drop-account-block" class="mt-4">
+      <label for="drop-account" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Conta desta importação</label>
+      <select id="drop-account" onchange="selectAccount(this.value)" class="mt-1.5 w-full text-xs font-semibold border border-slate-200 rounded-xl px-3 py-2.5 bg-white"></select>
+      <p id="drop-account-hint" class="mt-1.5 text-[11px] text-slate-500"></p>
+    </div>
+  </div>
+
+  <!-- Erro: nenhuma conta compatível -->
+  <div id="inspect-error" class="hidden m-6 p-5 rounded-2xl bg-amber-50 border border-amber-200">
+    <p class="text-sm font-bold text-amber-800">Nenhuma conta compatível com este formato.</p>
+    <p class="text-[11px] text-amber-700 mt-1">Cadastre uma conta que aceite importação com o extrator correspondente e solte o arquivo novamente. Nada foi gravado.</p>
+  </div>
+
+  <!-- Corpo: prévia -->
+  <div id="inspect-body" class="hidden flex-1 overflow-y-auto">
+    <div class="px-6 py-4 grid grid-cols-2 gap-3">
+      <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+        <p class="text-[10px] font-black uppercase tracking-wider text-emerald-600">Novas</p>
+        <p id="preview-new-count" class="text-2xl font-black text-emerald-700"></p>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Duplicadas (ignoradas)</p>
+        <p id="preview-skipped-count" class="text-2xl font-black text-slate-700"></p>
+      </div>
+    </div>
+    <table class="w-full text-xs">
+      <thead class="bg-slate-50 text-slate-400 text-[10px] uppercase tracking-wider sticky top-0">
+        <tr>
+          <th class="text-left font-black px-6 py-2.5">Data</th>
+          <th class="text-left font-black px-6 py-2.5">Descrição</th>
+          <th class="text-right font-black px-6 py-2.5">Valor</th>
+          <th class="text-right font-black px-6 py-2.5">Situação</th>
+        </tr>
+      </thead>
+      <tbody id="preview-rows" class="divide-y divide-slate-100"></tbody>
+    </table>
+  </div>
+
+  <!-- Aguardando escolha de conta -->
+  <div id="inspect-waiting" class="hidden flex-1 flex items-center justify-center px-10 text-center">
+    <div>
+      <i data-lucide="mouse-pointer-click" class="w-8 h-8 mx-auto text-slate-300"></i>
+      <p class="mt-3 text-sm font-bold text-slate-600">Escolha a conta desta importação.</p>
+      <p class="mt-1 text-[11px] text-slate-400">O conteúdo do arquivo diz o formato, mas não diz em qual conta ele entra. A prévia é calculada para a conta escolhida.</p>
+    </div>
+  </div>
+
+  <!-- Rodapé -->
+  <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-between gap-3 bg-slate-50">
+    <p class="text-[11px] text-slate-500">Nada é gravado até você confirmar. O arquivo temporário é descartado ao fechar.</p>
+    <div class="flex items-center gap-2">
+      <button onclick="closeInspect()" class="px-4 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Cancelar</button>
+      <button id="confirm-btn" onclick="confirmImport()" class="px-4 py-2 rounded-xl bg-blue-600 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">Confirmar importação</button>
+    </div>
+  </div>
+</aside>
+
+<script>
+const ACCOUNTS = [
+  {id: 1, bank: "Banco do Brasil", name: "Conta Corrente", parser: "bb_csv"},
+  {id: 2, bank: "Banco do Brasil", name: "Ourocard",       parser: "ourocard_txt"},
+  {id: 3, bank: "Bradesco",        name: "Conta Corrente", parser: "standard_ofx"},
+  {id: 4, bank: "Bradesco",        name: "Cartão Bradesco", parser: "bradesco_cartao_pdf"},
+  {id: 5, bank: "Mercado Pago",    name: "Cartão MP",       parser: "mercadopago_cartao_pdf"},
+  {id: 6, bank: "Banco do Brasil", name: "Ourocard OFX",     parser: "ourocard_ofx"}
+];
+
+const DROPS = {
+  csv:   {file: "bb_sample.csv", format: "CSV", parser: "bb_csv",   hintBank: "Banco do Brasil", candidates: [1]},
+  ofx:   {file: "extrato.csv",   format: "OFX", parser: "standard_ofx", hintBank: null,          candidates: [3, 6], note: "extensão .csv, conteúdo OFX"},
+  txt:   {file: "ourocard.txt",  format: "TXT", parser: "ourocard_txt", hintBank: "Banco do Brasil", candidates: [2]},
+  pdf:   {file: "fatura.pdf",    format: "PDF", parser: null,       hintBank: null,             candidates: [4, 5]},
+  lixo:  {file: "lixo.csv",      unrecognized: true},
+  vazio: {file: "boleto.pdf",    format: "PDF", parser: null,       hintBank: null,             candidates: []}
+};
+
+const SAMPLE_ROWS = [
+  {date: "05/06/2026", desc: "PIX RECEBIDO - ALUGUEL",    amount: "R$ 1.800,00", status: "new"},
+  {date: "06/06/2026", desc: "MERCADO SAO JOAO",          amount: "-R$ 214,37",  status: "new"},
+  {date: "07/06/2026", desc: "POSTO IPIRANGA 221",        amount: "-R$ 180,00",  status: "dup"},
+  {date: "08/06/2026", desc: "ASSINATURA STREAMING",      amount: "-R$ 39,90",   status: "new"},
+  {date: "09/06/2026", desc: "TARIFA PACOTE DE SERVICOS", amount: "-R$ 32,00",   status: "dup"}
+];
+
+let current = null;
+
+function el(id) { return document.getElementById(id); }
+
+function drop(kind) {
+  // Decisão 10: um novo arquivo sempre substitui o anterior (e fecha qualquer gaveta
+  // aberta, inclusive uma inspeção de pasta), removendo a pasta de staging anterior.
+  const replacing = current !== null;
+  clearDrop();
+  if (replacing) flash("info", "Novo arquivo substituiu o anterior; o temporário anterior foi descartado.");
+  const d = DROPS[kind];
+  current = {drop: d, accountId: null};
+
+  if (d.unrecognized) {
+    el("drop-error-title").textContent = "Formato não reconhecido: " + d.file;
+    el("drop-error").classList.remove("hidden");
+    flash("error", "Formato não reconhecido. Nada foi gravado.");
+    return;
+  }
+
+  el("drop-filename").textContent = d.file;
+  renderDetection(d);
+
+  const cands = d.candidates.map(id => ACCOUNTS.find(a => a.id === id));
+  if (cands.length === 0) {
+    el("drop-account-block").classList.add("hidden");
+    el("inspect-error").classList.remove("hidden");
+    el("confirm-btn").disabled = true;
+  } else {
+    el("drop-account-block").classList.remove("hidden");
+    // Elegibilidade = mesma família de extensão (expected_extensions/1).
+    // O parser detectado só ordena: correspondências exatas primeiro.
+    const exact  = cands.filter(a => d.parser && a.parser === d.parser);
+    const family = cands.filter(a => !(d.parser && a.parser === d.parser));
+    const ordered = exact.concat(family);
+
+    const sel = el("drop-account");
+    sel.innerHTML = '<option value="">— selecione —</option>' +
+      ordered.map(a => `<option value="${a.id}">${a.bank} · ${a.name} (${a.parser})</option>`).join("");
+
+    const hinted = cands.filter(a => d.hintBank && a.bank.toLowerCase() === d.hintBank.toLowerCase());
+    let auto = null, why = "";
+    if (cands.length === 1)      { auto = cands[0];  why = "Única conta compatível com o formato detectado — pré-selecionada."; }
+    else if (exact.length === 1) { auto = exact[0];  why = "Pré-selecionada pelo extrator detectado no conteúdo."; }
+    else if (hinted.length === 1){ auto = hinted[0]; why = "Pré-selecionada pelo banco identificado no conteúdo."; }
+
+    if (auto) {
+      sel.value = String(auto.id);
+      el("drop-account-hint").textContent = why;
+      selectAccount(String(auto.id));
+    } else {
+      el("drop-account-hint").textContent = "O conteúdo não identifica a conta. Escolha uma para calcular a prévia.";
+      showWaiting();
+    }
+  }
+  openDrawer();
+}
+
+function renderDetection(d) {
+  const chips = [
+    `<span class="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">Formato: ${d.format}</span>`,
+    d.parser
+      ? `<span class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-mono">${d.parser}</span>`
+      : `<span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700">banco não identificado</span>`
+  ];
+  if (d.note) chips.push(`<span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">${d.note} — classificado pelo conteúdo</span>`);
+  el("drop-detection").innerHTML = chips.join("");
+}
+
+function selectAccount(value) {
+  if (!current) return;
+  if (!value) { current.accountId = null; showWaiting(); return; }
+  current.accountId = Number(value);
+  const acc = ACCOUNTS.find(a => a.id === current.accountId);
+  const det = current.drop.parser;
+  if (acc && det && acc.parser !== det) {
+    el("drop-account-hint").textContent = "Compatível pelo formato — o extrator da conta é que será usado.";
+  }
+  renderPreview();
+}
+
+function showWaiting() {
+  el("inspect-body").classList.add("hidden");
+  el("inspect-waiting").classList.remove("hidden");
+  el("confirm-btn").disabled = true;
+}
+
+function renderPreview() {
+  el("inspect-waiting").classList.add("hidden");
+  el("inspect-error").classList.add("hidden");
+  el("inspect-body").classList.remove("hidden");
+  el("confirm-btn").disabled = false;
+
+  const news = SAMPLE_ROWS.filter(r => r.status === "new").length;
+  const dups = SAMPLE_ROWS.length - news;
+  el("preview-new-count").textContent = news;
+  el("preview-skipped-count").textContent = dups;
+
+  el("preview-rows").innerHTML = SAMPLE_ROWS.map(r => `
+    <tr data-preview-row data-row-status="${r.status}">
+      <td class="px-6 py-2.5 font-mono text-slate-500">${r.date}</td>
+      <td class="px-6 py-2.5 text-slate-700">${r.desc}</td>
+      <td class="px-6 py-2.5 text-right font-mono ${r.amount.startsWith("-") ? "text-rose-600" : "text-emerald-600"}">${r.amount}</td>
+      <td class="px-6 py-2.5 text-right">
+        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === "new" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}">${r.status === "new" ? "Nova" : "Duplicada"}</span>
+      </td>
+    </tr>`).join("");
+}
+
+function confirmImport() {
+  const news = SAMPLE_ROWS.filter(r => r.status === "new").length;
+  const dups = SAMPLE_ROWS.length - news;
+  closeInspect();
+  flash("info", `${news} transações importadas, ${dups} duplicadas ignoradas.`);
+}
+
+function openDrawer() {
+  el("inspect-backdrop").classList.remove("hidden");
+  el("inspect-drawer").classList.remove("hidden");
+  lucide.createIcons();
+}
+
+function closeInspect() {
+  el("inspect-backdrop").classList.add("hidden");
+  el("inspect-drawer").classList.add("hidden");
+  el("inspect-body").classList.add("hidden");
+  el("inspect-waiting").classList.add("hidden");
+  el("inspect-error").classList.add("hidden");
+  el("drop-account-block").classList.remove("hidden");
+  current = null;
+}
+
+function clearDrop() {
+  el("drop-error").classList.add("hidden");
+  closeInspect();
+}
+
+function flash(kind, msg) {
+  const f = el("flash");
+  f.textContent = msg;
+  f.className = "fixed top-20 right-6 z-[60] shadow-lg rounded-xl px-4 py-3 text-xs font-bold " +
+    (kind === "error" ? "bg-rose-600 text-white" : "bg-emerald-600 text-white");
+  setTimeout(() => f.classList.add("hidden"), 3200);
+}
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeInspect(); });
+lucide.createIcons();
+</script>
+</body>
+</html>

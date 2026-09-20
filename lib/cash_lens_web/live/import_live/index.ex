@@ -14,6 +14,9 @@ defmodule CashLensWeb.ImportLive.Index do
   alias CashLens.Imports
   alias CashLens.Parsers.Ingestor
 
+  @drop_accept ~w(.csv .pdf .ofx .txt)
+  @drop_max_size 10_000_000
+
   @statuses [:new, :updated, :synced]
 
   # The drawer renders at most this many preview rows. The Ingestor always
@@ -93,7 +96,55 @@ defmodule CashLensWeb.ImportLive.Index do
           </p>
         </div>
       </section>
-      <!-- CL-25: universal dropzone -->
+
+      <section
+        id="dropzone"
+        phx-drop-target={@uploads.drop.ref}
+        class={[
+          "card bg-base-100 border-2 border-dashed border-base-300 rounded-2xl",
+          "p-8 text-center transition-colors hover:border-primary"
+        ]}
+      >
+        <form id="dropzone-form" phx-change="validate_drop" phx-submit="validate_drop">
+          <.icon name="hero-arrow-up-tray" class="size-8 mx-auto opacity-20" />
+          <p class="mt-3 text-sm font-bold">
+            Arraste um extrato aqui (OFX, CSV, PDF ou TXT) ou clique para escolher
+          </p>
+          <p class="mt-1 text-[11px] opacity-40">
+            Um arquivo por vez · até 10 MB · o formato é identificado pelo conteúdo, não pela
+            extensão
+          </p>
+          <.live_file_input
+            upload={@uploads.drop}
+            class="file-input file-input-bordered file-input-sm mt-4 w-full max-w-sm mx-auto"
+          />
+        </form>
+      </section>
+
+      <section
+        :if={@drop_error || drop_upload_errors(@uploads.drop) != []}
+        id="drop-error"
+        class="alert alert-error items-start rounded-2xl"
+      >
+        <.icon name="hero-document-minus" class="size-5 shrink-0" />
+        <div class="flex-1">
+          <p id="drop-error-title" class="text-sm font-bold">
+            {@drop_error || upload_error_message(hd(drop_upload_errors(@uploads.drop)))}
+          </p>
+          <p class="text-[11px] mt-0.5">
+            Nenhum dado foi gravado e o arquivo temporário foi descartado. Confira se o arquivo é
+            mesmo um extrato suportado.
+          </p>
+        </div>
+        <button
+          id="drop-error-dismiss"
+          type="button"
+          phx-click="clear_drop"
+          class="btn btn-sm rounded-xl"
+        >
+          Dispensar
+        </button>
+      </section>
 
       <section :if={@scan_error} id="scan-error" class="alert alert-warning items-start rounded-2xl">
         <.icon name="hero-exclamation-triangle" class="size-5 shrink-0" />
@@ -280,13 +331,75 @@ defmodule CashLensWeb.ImportLive.Index do
         <div class="space-y-4">
           <div class="min-w-0">
             <p class="text-[10px] font-black uppercase tracking-wider text-primary">
-              Inspeção pré-gravação
+              Inspeção pré-gravação{if drop?(@inspect), do: " · arquivo solto"}
             </p>
             <p id="inspect-path" class="mt-1 font-mono text-sm font-bold break-all">
               {@inspect.entry.path}
             </p>
-            <p id="inspect-account" class="text-xs opacity-50 mt-0.5">
+            <p
+              :if={not drop?(@inspect)}
+              id="inspect-account"
+              class="text-xs opacity-50 mt-0.5"
+            >
               {@inspect.entry.bank} · {@inspect.entry.account}
+            </p>
+          </div>
+
+          <div :if={drop?(@inspect)} class="space-y-3">
+            <div id="drop-detection" class="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+              <span class="px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+                Formato: {format_label(@drop.verdict.format)}
+              </span>
+              <span
+                :if={@drop.verdict.parser_type}
+                class="px-2.5 py-1 rounded-full bg-base-200 font-mono"
+              >
+                {@drop.verdict.parser_type}
+              </span>
+              <span
+                :if={is_nil(@drop.verdict.parser_type)}
+                class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700"
+              >
+                banco não identificado
+              </span>
+              <span class="px-2.5 py-1 rounded-full bg-base-200 opacity-60">
+                {@drop.basename} — classificado pelo conteúdo
+              </span>
+            </div>
+
+            <form :if={@drop.candidates != []} id="drop-account-form" phx-change="select_drop_account">
+              <label for="drop-account" class="text-[10px] font-black uppercase opacity-50">
+                Conta desta importação
+              </label>
+              <select
+                id="drop-account"
+                name="account_id"
+                class="select select-bordered select-sm w-full mt-1.5"
+              >
+                <option value="">— selecione —</option>
+                <option
+                  :for={account <- @drop.candidates}
+                  value={account.id}
+                  selected={@drop.selected_id == account.id}
+                >
+                  {account_option_label(account)}
+                </option>
+              </select>
+              <p :if={@drop.hint} id="drop-account-hint" class="mt-1.5 text-[11px] opacity-50">
+                {@drop.hint}
+              </p>
+            </form>
+          </div>
+
+          <div
+            :if={drop_waiting?(@inspect, @drop)}
+            id="inspect-waiting"
+            class="rounded-2xl border border-base-300 bg-base-200/50 px-4 py-6 text-center"
+          >
+            <p class="text-sm font-bold opacity-60">Escolha a conta desta importação.</p>
+            <p class="mt-1 text-[11px] opacity-40">
+              O conteúdo do arquivo diz o formato, mas não diz em qual conta ele entra. A prévia é
+              calculada para a conta escolhida.
             </p>
           </div>
 
@@ -410,9 +523,10 @@ defmodule CashLensWeb.ImportLive.Index do
                 Cancelar
               </button>
               <button
-                :if={@inspect.summary}
+                :if={confirm_button?(@inspect)}
                 id="confirm-import"
                 type="button"
+                disabled={is_nil(@inspect.summary)}
                 phx-click="confirm_import"
                 phx-disable-with="Importando..."
                 class="btn btn-sm btn-primary rounded-xl gap-1.5"
@@ -432,6 +546,12 @@ defmodule CashLensWeb.ImportLive.Index do
     stored_root = Imports.import_root([])
     root = stored_root || Imports.default_import_root()
 
+    # 8 random bytes are enough to keep two tabs (or a tab and its reconnect)
+    # from sharing a staging directory: content-addressed staging alone is
+    # shared, and one tab's cleanup would delete the other's file mid-preview.
+    session_id = :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)
+    Imports.sweep_stale_drops(session_id)
+
     {:ok,
      socket
      |> assign(:page_title, "Central de Importação")
@@ -439,9 +559,57 @@ defmodule CashLensWeb.ImportLive.Index do
      |> assign(:preview_limit, @preview_limit)
      |> assign(:inspect, nil)
      |> assign(:history_limit, @history_limit)
+     |> assign(:session_id, session_id)
+     |> assign(:drop, nil)
+     |> assign(:drop_error, nil)
+     |> allow_upload(:drop,
+       accept: @drop_accept,
+       max_entries: 1,
+       max_file_size: @drop_max_size,
+       auto_upload: true,
+       progress: &handle_progress/3
+     )
      |> assign_scan(root)
      |> assign_history()}
   end
+
+  # `terminate/2` is best-effort — it does not run on a crash, a `:brutal_kill`
+  # shutdown or a VM kill — which is why `mount/3` also sweeps stale sessions.
+  @impl true
+  def terminate(_reason, socket) do
+    case socket.assigns[:session_id] do
+      nil -> :ok
+      session_id -> File.rm_rf(Imports.session_drop_root(session_id))
+    end
+
+    :ok
+  end
+
+  @doc """
+  Consumes a dropped file the moment its upload completes.
+
+  Consuming here is mandatory: LiveView removes the temp file as soon as the
+  entry finishes, so nothing later in this flow — detection, preview, confirm —
+  could read it. `max_entries: 1` bounds *concurrent* entries only, so a file
+  dropped while a drawer is open is handled by replacing the previous drop
+  (and its staging directory) before the new bytes are staged.
+  """
+  def handle_progress(:drop, %{done?: true} = entry, socket) do
+    session_id = socket.assigns.session_id
+    socket = socket |> discard_drop() |> assign(:inspect, nil)
+
+    staged =
+      consume_uploaded_entries(socket, :drop, fn %{path: tmp_path}, upload_entry ->
+        {:ok, Imports.stage_drop(session_id, tmp_path, upload_entry.client_name)}
+      end)
+
+    case staged do
+      [{:ok, file}] -> {:noreply, open_drop(socket, file)}
+      _other -> {:noreply, unrecognized_drop(socket, nil, entry.client_name)}
+    end
+  end
+
+  def handle_progress(:drop, _entry, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("validate_path", %{"path" => path}, socket) do
@@ -473,8 +641,42 @@ defmodule CashLensWeb.ImportLive.Index do
 
   @impl true
   def handle_event("close_inspect", _params, socket) do
+    socket = if drop?(socket.assigns.inspect), do: discard_drop(socket), else: socket
     {:noreply, assign(socket, :inspect, nil)}
   end
+
+  # The dropzone form exists only because `live_file_input` requires one: the
+  # drop itself is the trigger, so both handlers keep the socket untouched.
+  @impl true
+  def handle_event("validate_drop", _params, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_event("clear_drop", _params, socket) do
+    {:noreply, socket |> discard_drop() |> cancel_pending_drops() |> assign(:inspect, nil)}
+  end
+
+  @impl true
+  def handle_event(
+        "select_drop_account",
+        %{"account_id" => id},
+        %{assigns: %{drop: %{} = drop}} = socket
+      ) do
+    account = Enum.find(drop.candidates, &(to_string(&1.id) == id))
+
+    drop = %{
+      drop
+      | selected_id: account && account.id,
+        hint: hint(account, drop.verdict, :manual)
+    }
+
+    {:noreply,
+     socket
+     |> assign(:drop, drop)
+     |> assign(:inspect, drop_inspection(drop, account))}
+  end
+
+  @impl true
+  def handle_event("select_drop_account", _params, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("confirm_import", _params, %{assigns: %{inspect: nil}} = socket) do
@@ -511,7 +713,14 @@ defmodule CashLensWeb.ImportLive.Index do
   # `dry_run: true`, which writes no transaction, no `imported_files` row, no
   # `import_runs` row and no credit-card statement.
   defp build_inspection(entry) do
-    base = %{entry: entry, account: nil, summary: nil, hash: entry.content_hash, error: nil}
+    base = %{
+      source: :folder,
+      entry: entry,
+      account: nil,
+      summary: nil,
+      hash: entry.content_hash,
+      error: nil
+    }
 
     case Imports.account_for_entry(entry) do
       {:ok, account} -> %{base | account: account} |> run_preview()
@@ -537,6 +746,8 @@ defmodule CashLensWeb.ImportLive.Index do
   # the operator inspected. The check narrows the window but is not atomic —
   # `Ingestor.import_file/3` performs its own `File.read/1` — which is accepted
   # for a local single-operator folder and documented in the CL-24 spec.
+  defp confirm_import(socket, %{source: :drop} = inspection), do: confirm_drop(socket, inspection)
+
   defp confirm_import(socket, %{entry: entry, account: account} = inspection) do
     case File.read(entry.absolute_path) do
       {:ok, raw} ->
@@ -583,6 +794,208 @@ defmodule CashLensWeb.ImportLive.Index do
      |> assign(:inspect, build_inspection(refreshed))
      |> put_flash(:error, "O arquivo mudou no disco. Inspecione novamente.")}
   end
+
+  # --- Dropped files (CL-25) ---
+
+  # Detection, account resolution and the preview, in the one place a dropped
+  # file enters the screen. Nothing here writes: `detect_file/1` reads the
+  # staged bytes and the preview is a dry run.
+  defp open_drop(socket, file) do
+    case Imports.detect_file(file.path) do
+      {:ok, verdict} -> assign_drop(socket, file, verdict)
+      {:error, _reason} -> unrecognized_drop(socket, file, file.basename)
+    end
+  end
+
+  defp assign_drop(socket, file, verdict) do
+    candidates = Imports.candidate_accounts(verdict)
+    {selected, reason} = Imports.preselect_account(candidates, verdict)
+
+    drop = %{
+      basename: file.basename,
+      path: file.path,
+      dir: file.dir,
+      content_hash: file.content_hash,
+      verdict: verdict,
+      candidates: candidates,
+      selected_id: selected && selected.id,
+      hint: hint(selected, verdict, reason)
+    }
+
+    socket
+    |> assign(:drop, drop)
+    |> assign(:drop_error, nil)
+    |> assign(:inspect, drop_inspection(drop, selected))
+  end
+
+  # The unrecognised case leaves nothing behind: the staging directory goes in
+  # the same callback, no drawer opens and no Ingestor call is ever made, so no
+  # `transactions`, `imported_files` or `import_runs` row can exist.
+  defp unrecognized_drop(socket, file, name) do
+    if file, do: File.rm_rf(file.dir)
+
+    socket
+    |> assign(:drop, nil)
+    |> assign(:inspect, nil)
+    |> assign(:drop_error, "Formato não reconhecido: #{name}")
+  end
+
+  # The drop's `@inspect` is CL-24's map plus `source: :drop`. `entry` is
+  # synthetic but carries the same keys the rest of the code reads, so the
+  # drawer, the hash check and the confirm stay a single code path.
+  defp drop_inspection(drop, account) do
+    base = %{
+      source: :drop,
+      entry: drop_entry(drop, account),
+      account: account,
+      summary: nil,
+      hash: drop.content_hash,
+      error: nil
+    }
+
+    cond do
+      drop.candidates == [] -> %{base | error: "Nenhuma conta compatível com este formato."}
+      is_nil(account) -> base
+      true -> run_preview(base)
+    end
+  end
+
+  defp drop_entry(drop, account) do
+    %{
+      path: drop.basename,
+      absolute_path: drop.path,
+      bank: account && account.bank,
+      account: account && account.name,
+      content_hash: drop.content_hash
+    }
+  end
+
+  # The hash check of CL-24 is kept for a drop even though the staging
+  # directory is private: it is the one guarantee that the confirmed bytes are
+  # the previewed bytes. A *missing* staged file is not a mismatch — it means
+  # the staging was reaped, so the drop is refused before any Ingestor call and
+  # writes no `import_runs` row at all (CL-24 records one for a folder entry,
+  # where a vanished file is a real, reportable import attempt).
+  defp confirm_drop(socket, %{entry: entry, account: account} = inspection) do
+    case File.read(entry.absolute_path) do
+      {:ok, raw} ->
+        if Imports.content_hash(raw) == inspection.hash do
+          run_drop_import(socket, entry, account)
+        else
+          {:noreply, refuse_drop(socket, "O arquivo solto mudou no disco. Solte-o novamente.")}
+        end
+
+      {:error, _reason} ->
+        {:noreply,
+         refuse_drop(socket, "O arquivo solto não está mais disponível. Solte-o novamente.")}
+    end
+  end
+
+  defp refuse_drop(socket, message) do
+    socket
+    |> discard_drop()
+    |> assign(:inspect, nil)
+    |> put_flash(:error, message)
+  end
+
+  # `import_root:` is the **session** staging root, never the shared drop root:
+  # that is what makes the recorded key exactly `"<content_hash>/<basename>"`,
+  # a content-addressed key the same bytes hit again from a later session.
+  defp run_drop_import(socket, entry, account) do
+    root = Imports.session_drop_root(socket.assigns.session_id)
+    result = Ingestor.import_file(account, entry.absolute_path, import_root: root)
+
+    socket = socket |> discard_drop() |> assign(:inspect, nil)
+
+    case result do
+      {:ok, summary} ->
+        {:noreply,
+         socket
+         |> assign_scan(socket.assigns.root)
+         |> assign_history()
+         |> put_flash(:info, imported_message(summary))}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Falha ao importar: #{reason}")}
+    end
+  end
+
+  # The single cleanup path: every exit a drop has goes through it, so the
+  # session staging root holds at most one directory at any moment.
+  defp discard_drop(socket) do
+    case socket.assigns[:drop] do
+      nil -> nil
+      drop -> File.rm_rf(drop.dir)
+    end
+
+    socket
+    |> assign(:drop, nil)
+    |> assign(:drop_error, nil)
+  end
+
+  # Only ever called outside the progress callback: cancelling the entry being
+  # consumed would kill the upload channel mid-consume. After a successful
+  # consume the entry is already gone, so the only entries left here are the
+  # ones LiveView itself rejected (too large, wrong extension).
+  defp cancel_pending_drops(socket) do
+    Enum.reduce(socket.assigns.uploads.drop.entries, socket, fn entry, acc ->
+      cancel_upload(acc, :drop, entry.ref)
+    end)
+  end
+
+  defp drop?(%{source: :drop}), do: true
+  defp drop?(_inspection), do: false
+
+  defp drop_waiting?(%{source: :drop, summary: nil, error: nil}, %{candidates: [_ | _]}), do: true
+  defp drop_waiting?(_inspection, _drop), do: false
+
+  # A folder inspection always has a preview; a drop shows the button as soon
+  # as an account can be chosen, disabled until one is.
+  defp confirm_button?(%{source: :drop, error: nil}), do: true
+  defp confirm_button?(inspection), do: not is_nil(inspection.summary)
+
+  defp account_option_label(account),
+    do: "#{account.bank} · #{account.name} (#{account.parser_type})"
+
+  defp format_label(:ofx), do: "OFX"
+  defp format_label(:csv), do: "CSV"
+  defp format_label(:pdf), do: "PDF"
+  defp format_label(:txt), do: "TXT"
+
+  defp hint(nil, _verdict, _reason),
+    do: "O conteúdo não identifica a conta. Escolha uma para calcular a prévia."
+
+  defp hint(account, verdict, reason) do
+    if other_parser?(account, verdict) do
+      "Compatível pelo formato — o extrator da conta é que será usado."
+    else
+      preselection_hint(reason)
+    end
+  end
+
+  # The account is eligible by extension family but its own extractor is not
+  # the one the content pointed at — the account's is what the import uses.
+  defp other_parser?(account, %{parser_type: parser_type}) when is_binary(parser_type),
+    do: account.parser_type != parser_type
+
+  defp other_parser?(_account, _verdict), do: false
+
+  defp preselection_hint(:unique),
+    do: "Única conta compatível com o formato detectado — pré-selecionada."
+
+  defp preselection_hint(:parser), do: "Pré-selecionada pelo extrator detectado no conteúdo."
+  defp preselection_hint(:bank), do: "Pré-selecionada pelo banco identificado no conteúdo."
+  defp preselection_hint(_reason), do: nil
+
+  defp drop_upload_errors(upload) do
+    Enum.flat_map(upload.entries, &Phoenix.Component.upload_errors(upload, &1)) ++
+      Phoenix.Component.upload_errors(upload)
+  end
+
+  defp upload_error_message(:too_large), do: "Arquivo grande demais — o limite é 10 MB."
+  defp upload_error_message(:not_accepted), do: "Extensão não aceita (use OFX, CSV, PDF ou TXT)."
+  defp upload_error_message(:too_many_files), do: "Solte um arquivo por vez."
+  defp upload_error_message(error), do: "Falha no envio do arquivo: #{error}."
 
   defp imported_message(summary) do
     "#{summary.imported} transações importadas, #{Map.get(summary, :skipped, 0)} duplicadas ignoradas."
