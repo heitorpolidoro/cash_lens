@@ -22,10 +22,24 @@ defmodule CashLensWeb.ImportLive.Index do
   # are always the Ingestor's full-file numbers, never derived from this slice.
   @preview_limit 200
 
+  # The history is a recency panel, not a log browser: it shows the newest runs
+  # up to this bound and offers no pagination.
+  @history_limit 20
+
+  # A `file_path` directory that is a bare SHA-256 is a dropped file's key: it
+  # is meaningless to the operator, so it is labelled instead of shown.
+  @content_hash_dir ~r/^[0-9a-f]{64}$/
+
   @badges %{
     new: %{label: "Novo", class: "bg-emerald-50 text-emerald-700 border-emerald-200"},
     updated: %{label: "Atualizado", class: "bg-amber-50 text-amber-700 border-amber-200"},
     synced: %{label: "Sincronizado", class: "bg-slate-100 text-slate-500 border-slate-200"}
+  }
+
+  @run_badges %{
+    "success" => %{label: "Sucesso", class: "bg-emerald-50 text-emerald-700 border-emerald-200"},
+    "warning" => %{label: "Aviso", class: "bg-amber-50 text-amber-700 border-amber-200"},
+    "error" => %{label: "Erro", class: "bg-red-50 text-red-700 border-red-200"}
   }
 
   @impl true
@@ -165,7 +179,102 @@ defmodule CashLensWeb.ImportLive.Index do
           </tbody>
         </table>
       </section>
-      <!-- CL-26: recent import history -->
+      <section
+        id="import-history"
+        class="card bg-base-100 shadow-sm border border-base-300 overflow-hidden"
+      >
+        <div class="px-5 py-4 border-b border-base-300">
+          <h2 class="text-sm font-black uppercase opacity-50">Importações recentes</h2>
+          <p class="text-[11px] font-bold opacity-40 mt-0.5">
+            Últimas {@history_limit} execuções
+          </p>
+        </div>
+
+        <table :if={@history != []} class="table w-full text-xs">
+          <thead class="bg-base-200/50">
+            <tr>
+              <th class="w-36">Data</th>
+              <th>Conta</th>
+              <th>Arquivo</th>
+              <th class="w-44">Situação</th>
+              <th class="text-right w-28">Importadas</th>
+              <th class="text-right w-28">Ignoradas</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              :for={run <- @history}
+              data-run-id={run.id}
+              data-run-status={run.status}
+              class="hover"
+            >
+              <td class="align-top whitespace-nowrap font-semibold">
+                {format_datetime(run.ran_at)}
+              </td>
+              <td class="align-top">
+                <span :if={run.account} class="font-semibold">
+                  {run_account_label(run.account)}
+                </span>
+                <span :if={is_nil(run.account)} class="opacity-40" title="Conta removida">—</span>
+              </td>
+              <td class="align-top" title={run.file_path}>
+                <p class="font-mono text-[11px] font-bold break-all">
+                  {run_file_label(run.file_path).base}
+                </p>
+                <p
+                  :if={run_file_label(run.file_path).subtitle}
+                  class="text-[11px] opacity-40 truncate max-w-xs"
+                >
+                  {run_file_label(run.file_path).subtitle}
+                </p>
+                <p
+                  :if={run.error_message}
+                  data-role="run-error"
+                  class="mt-1 text-[11px] font-semibold text-red-600"
+                >
+                  {run.error_message}
+                </p>
+              </td>
+              <td class="align-top">
+                <span class={[
+                  "inline-block border px-2 py-0.5 rounded-full",
+                  "text-[10px] font-black uppercase",
+                  run_badge(run.status).class
+                ]}>
+                  {run_badge(run.status).label}
+                </span>
+                <p
+                  :if={run.status == "warning" and run.failed_count > 0}
+                  data-role="run-failed"
+                  class="mt-1 text-[10px] font-bold text-amber-600"
+                >
+                  {run.failed_count} linha(s) rejeitada(s)
+                </p>
+              </td>
+              <td class={[
+                "align-top text-right font-bold",
+                run.imported_count == 0 && "opacity-30"
+              ]}>
+                {run.imported_count}
+              </td>
+              <td class={[
+                "align-top text-right font-bold",
+                run.skipped_count == 0 && "opacity-30"
+              ]}>
+                {run.skipped_count}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div :if={@history == []} id="history-empty" class="px-5 py-12 text-center">
+          <p class="text-sm font-bold opacity-60">Nenhuma importação registrada ainda.</p>
+          <p class="text-[11px] opacity-40 mt-1">
+            O histórico registra apenas importações executadas — uma inspeção pré-gravação
+            não escreve nada.
+          </p>
+        </div>
+      </section>
 
       <.modal :if={@inspect} id="inspect-drawer" show on_cancel={JS.push("close_inspect")}>
         <div class="space-y-4">
@@ -329,7 +438,9 @@ defmodule CashLensWeb.ImportLive.Index do
      |> assign(:using_default?, is_nil(stored_root))
      |> assign(:preview_limit, @preview_limit)
      |> assign(:inspect, nil)
-     |> assign_scan(root)}
+     |> assign(:history_limit, @history_limit)
+     |> assign_scan(root)
+     |> assign_history()}
   end
 
   @impl true
@@ -386,6 +497,7 @@ defmodule CashLensWeb.ImportLive.Index do
     {:noreply,
      socket
      |> assign_scan(socket.assigns.root)
+     |> assign_history()
      |> put_flash(:info, "Pasta reescaneada.")}
   end
 
@@ -448,6 +560,7 @@ defmodule CashLensWeb.ImportLive.Index do
          socket
          |> assign(:inspect, nil)
          |> assign_scan(root)
+         |> assign_history()
          |> put_flash(:info, imported_message(summary))}
 
       {:error, reason} ->
@@ -532,6 +645,41 @@ defmodule CashLensWeb.ImportLive.Index do
 
   defp short_hash(hash) when is_binary(hash), do: String.slice(hash, 0, 8)
   defp short_hash(_hash), do: ""
+
+  # The single history path: `mount/3`, `"rescan"` and a confirmed import all go
+  # through it, so a confirmed import's row appears without a page reload.
+  defp assign_history(socket) do
+    assign(socket, :history, Imports.list_recent_runs(@history_limit))
+  end
+
+  # Total over any string the column can physically hold: a value written around
+  # the changeset renders grey and raw instead of crashing the screen.
+  defp run_badge(status) do
+    Map.get(@run_badges, status, %{
+      label: status,
+      class: "bg-slate-100 text-slate-600 border-slate-200"
+    })
+  end
+
+  defp run_account_label(nil), do: nil
+  defp run_account_label(account), do: account_label(account)
+
+  # `file_path` is the denormalized path *key*, not a filesystem path: the
+  # basename leads and the directory becomes a subtitle, decoded when it is a
+  # content hash. The cell's `title` keeps the full stored value.
+  defp run_file_label(file_path) do
+    %{base: Path.basename(file_path), subtitle: run_file_subtitle(Path.dirname(file_path))}
+  end
+
+  defp run_file_subtitle("."), do: nil
+
+  defp run_file_subtitle(dir) do
+    if Regex.match?(@content_hash_dir, dir) do
+      "Arquivo solto · #{String.slice(dir, 0, 8)}…"
+    else
+      dir
+    end
+  end
 
   defp format_datetime(nil), do: "—"
   defp format_datetime(datetime), do: Calendar.strftime(datetime, "%d/%m/%Y %H:%M")

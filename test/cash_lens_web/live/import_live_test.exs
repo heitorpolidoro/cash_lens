@@ -432,13 +432,253 @@ defmodule CashLensWeb.ImportLiveTest do
     end
   end
 
+  describe "recent import history" do
+    alias CashLens.Imports.ImportRun
+    alias CashLens.Parsers.Ingestor
+    alias CashLens.Repo
+    alias CashLens.Transactions.Transaction
+
+    @hash "9f2c4b7e1d8a0356e4b1c9d72f0a68b35c1e7d40a9b2f83c6d5e0147a8b93c2f"
+
+    defp run_fixture(attrs) do
+      {:ok, run} =
+        Imports.record_run(
+          Enum.into(attrs, %{
+            ran_at: DateTime.utc_now() |> DateTime.truncate(:second),
+            file_path: "bb/extrato.csv",
+            status: "success"
+          })
+        )
+
+      run
+    end
+
+    defp history_rows(view) do
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#import-history tbody tr")
+    end
+
+    defp row_cells(view, run_id) do
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(~s(#import-history tbody tr[data-run-id="#{run_id}"] td))
+      |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
+    end
+
+    test "renders one row per run with every column read from import_runs", %{
+      conn: conn,
+      account: account
+    } do
+      run =
+        run_fixture(
+          ran_at: ~U[2026-09-20 14:32:00Z],
+          account_id: account.id,
+          file_path: "bb-corrente/extrato-2026-09.csv",
+          imported_count: 7,
+          skipped_count: 3
+        )
+
+      {:ok, view, html} = live(conn, ~p"/imports")
+
+      assert html =~ ~s(id="import-history")
+      assert html =~ "Importações recentes"
+      assert html =~ "Últimas 20 execuções"
+      assert has_element?(view, ~s(tr[data-run-id="#{run.id}"][data-run-status="success"]))
+
+      cells = row_cells(view, run.id)
+
+      assert Enum.at(cells, 0) =~ "20/09/2026 14:32"
+      assert Enum.at(cells, 1) =~ "Banco do Brasil - Conta Corrente"
+      assert Enum.at(cells, 2) =~ "extrato-2026-09.csv"
+      assert Enum.at(cells, 3) =~ "Sucesso"
+      assert Enum.at(cells, 4) == "7"
+      assert Enum.at(cells, 5) == "3"
+    end
+
+    test "renders one badge per stored status", %{conn: conn, account: account} do
+      success = run_fixture(account_id: account.id, status: "success")
+      warning = run_fixture(account_id: account.id, status: "warning", failed_count: 3)
+      error = run_fixture(account_id: account.id, status: "error")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      assert view
+             |> element(~s(tr[data-run-id="#{success.id}"][data-run-status="success"]))
+             |> render() =~ "Sucesso"
+
+      assert view
+             |> element(~s(tr[data-run-id="#{warning.id}"][data-run-status="warning"]))
+             |> render() =~ "Aviso"
+
+      assert view
+             |> element(~s(tr[data-run-id="#{error.id}"][data-run-status="error"]))
+             |> render() =~ "Erro"
+
+      assert view
+             |> element(~s(tr[data-run-id="#{warning.id}"] [data-role="run-failed"]))
+             |> render() =~ "3 linha(s) rejeitada(s)"
+    end
+
+    test "renders an unknown status as a grey badge with the raw value", %{
+      conn: conn,
+      account: account
+    } do
+      # Written around the changeset on purpose: the badge must be total over
+      # any string the column can physically hold.
+      {:ok, run} =
+        Repo.insert(%ImportRun{
+          ran_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          account_id: account.id,
+          file_path: "bb/extrato.csv",
+          status: "partial"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      row =
+        view |> element(~s(tr[data-run-id="#{run.id}"][data-run-status="partial"])) |> render()
+
+      assert row =~ "partial"
+      assert row =~ "bg-slate-100"
+    end
+
+    test "renders the newest 20 runs, newest first, with no pagination control", %{
+      conn: conn,
+      account: account
+    } do
+      runs =
+        for offset <- 0..24 do
+          run_fixture(
+            account_id: account.id,
+            ran_at: DateTime.add(~U[2026-09-20 14:00:00Z], -offset * 3600, :second),
+            file_path: "bb/extrato-#{offset}.csv"
+          )
+        end
+
+      {:ok, view, html} = live(conn, ~p"/imports")
+
+      rows = history_rows(view)
+      assert Enum.count(rows) == 20
+
+      ids = Enum.map(rows, &(&1 |> LazyHTML.attribute("data-run-id") |> List.first()))
+
+      assert ids == runs |> Enum.take(20) |> Enum.map(& &1.id)
+
+      refute html =~ "Ver mais"
+      refute html =~ ~s(id="history-pagination")
+    end
+
+    test "lists an error run with its message and zeroed counts", %{
+      conn: conn,
+      account: account
+    } do
+      run =
+        run_fixture(
+          account_id: account.id,
+          status: "error",
+          error_message: "Could not read file: enoent"
+        )
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      cells = row_cells(view, run.id)
+
+      assert Enum.at(cells, 3) =~ "Erro"
+      assert Enum.at(cells, 4) == "0"
+      assert Enum.at(cells, 5) == "0"
+
+      assert view
+             |> element(~s(tr[data-run-id="#{run.id}"] [data-role="run-error"]))
+             |> render() =~ "Could not read file: enoent"
+    end
+
+    test "renders an em dash for a run whose account is nil", %{conn: conn} do
+      run = run_fixture(account_id: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      assert run.account_id == nil
+      assert view |> row_cells(run.id) |> Enum.at(1) == "—"
+    end
+
+    test "renders a content-hash path as its basename plus a loose-file marker", %{
+      conn: conn,
+      account: account
+    } do
+      run = run_fixture(account_id: account.id, file_path: "#{@hash}/nubank.csv")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      file_cell = view |> row_cells(run.id) |> Enum.at(2)
+
+      assert file_cell =~ "nubank.csv"
+      assert file_cell =~ "Arquivo solto"
+      assert file_cell =~ String.slice(@hash, 0, 8)
+      refute file_cell =~ @hash
+    end
+
+    test "renders the empty state with no runs at all", %{conn: conn} do
+      {:ok, view, html} = live(conn, ~p"/imports")
+
+      assert html =~ ~s(id="import-history")
+      assert html =~ ~s(id="history-empty")
+      assert html =~ "Nenhuma importação registrada ainda."
+      assert history_rows(view) |> Enum.count() == 0
+    end
+
+    test "shows the new run after an import confirmed on the screen", %{
+      conn: conn,
+      root: root,
+      account: account
+    } do
+      dir = account_folder(root, "bb")
+      write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      assert has_element?(view, "#history-empty")
+
+      view
+      |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      view |> element("#confirm-import") |> render_click()
+
+      imported =
+        Repo.aggregate(from(t in Transaction, where: t.account_id == ^account.id), :count)
+
+      assert [run] = Repo.all(ImportRun)
+      assert [row] = Enum.to_list(history_rows(view))
+      assert row |> LazyHTML.attribute("data-run-id") |> List.first() == run.id
+      refute has_element?(view, "#history-empty")
+      assert view |> row_cells(run.id) |> Enum.at(4) == to_string(imported)
+    end
+
+    test "refreshes the panel on rescan", %{conn: conn, root: root, account: account} do
+      dir = account_folder(root, "bb")
+      file = write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+      assert has_element?(view, "#history-empty")
+
+      {:ok, _summary} = Ingestor.import_file(account, file, import_root: root)
+
+      view |> element("#rescan-button") |> render_click()
+
+      assert [run] = Repo.all(ImportRun)
+      assert has_element?(view, ~s(tr[data-run-id="#{run.id}"]))
+    end
+  end
+
   describe "later parts" do
-    test "no dropzone, inspection modal or history table is rendered", %{conn: conn} do
+    test "no dropzone is rendered", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/imports")
 
       refute html =~ ~s(id="dropzone")
       refute html =~ ~s(id="inspection-modal")
-      refute html =~ ~s(id="import-history")
     end
   end
 end
