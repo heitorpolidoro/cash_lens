@@ -34,6 +34,11 @@ defmodule CashLens.Categories.Category do
       get_change(changeset, :slug) ->
         changeset
 
+      # Without a name there is nothing to build a slug from; `validate_required`
+      # is what reports the problem back to the user.
+      is_nil(get_field(changeset, :name)) ->
+        changeset
+
       # Auto-generate slug if name or parent_id changed
       get_change(changeset, :name) || get_change(changeset, :parent_id) ->
         name = get_field(changeset, :name)

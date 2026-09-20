@@ -174,4 +174,62 @@ defmodule CashLens.CategoriesTest do
       assert Category.full_name(%{not: "a category"}) == ""
     end
   end
+
+  describe "slug generation" do
+    alias CashLens.Categories.Category
+
+    import CashLens.CategoriesFixtures
+
+    test "does not generate a slug when the name is missing" do
+      parent = category_fixture(%{name: "Slugless Parent"})
+
+      changeset = Categories.change_category(%Category{}, %{"parent_id" => parent.id})
+
+      refute changeset.valid?
+      assert %{name: ["can't be blank"]} = errors_on(changeset)
+      refute Ecto.Changeset.get_change(changeset, :slug)
+    end
+  end
+
+  describe "group_by_parent/1" do
+    import CashLens.CategoriesFixtures
+
+    test "groups root categories with their children" do
+      root = category_fixture(%{name: "Root A"})
+      child_a = category_fixture(%{name: "Child A", parent_id: root.id})
+      child_b = category_fixture(%{name: "Child B", parent_id: root.id})
+      leaf = category_fixture(%{name: "Leaf"})
+
+      tree = Categories.group_by_parent(Categories.list_categories())
+
+      assert {found_root, children} = Enum.find(tree, fn {r, _} -> r.id == root.id end)
+      assert found_root.id == root.id
+      assert Enum.sort(Enum.map(children, & &1.id)) == Enum.sort([child_a.id, child_b.id])
+
+      assert {_leaf, []} = Enum.find(tree, fn {r, _} -> r.id == leaf.id end)
+    end
+
+    test "nests a deeper descendant under its top-level ancestor" do
+      root = category_fixture(%{name: "Root C"})
+      child = category_fixture(%{name: "Child D", parent_id: root.id})
+      grandchild = category_fixture(%{name: "Grandchild D", parent_id: child.id})
+
+      tree = Categories.group_by_parent(Categories.list_categories())
+
+      assert {_root, children} = Enum.find(tree, fn {r, _} -> r.id == root.id end)
+      assert grandchild.id in Enum.map(children, & &1.id)
+      refute Enum.any?(tree, fn {r, _} -> r.id in [child.id, grandchild.id] end)
+    end
+
+    test "returns an empty list for an empty category list" do
+      assert Categories.group_by_parent([]) == []
+    end
+
+    test "ignores children whose parent is not in the list" do
+      parent = category_fixture(%{name: "Root B"})
+      child = category_fixture(%{name: "Child C", parent_id: parent.id})
+
+      assert Categories.group_by_parent([child]) == []
+    end
+  end
 end

@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CashLens — Gestão de Categorias e Árvore de Gastos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+  <!-- Header Global -->
+  <header class="border-b border-slate-200 bg-white sticky top-0 z-40 px-6 py-4 shadow-xs">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-6">
+        <span class="text-2xl font-black text-blue-600 tracking-tight">CashLens</span>
+        <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Painel</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Transações</a>
+          <a href="#" class="px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition">Contas</a>
+          <a href="#" class="px-3 py-2 rounded-lg bg-slate-100 text-blue-600 font-bold">Categorias</a>
+        </nav>
+      </div>
+      <button onclick="openCategoryModal('new')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+        Nova Categoria
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+    <!-- Topo Informativo -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Árvore de Categorias</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Organize despesas e receitas em grupos hierárquicos e configure regras automáticas por palavras-chave.</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button onclick="toggleAllGroups(true)" class="text-xs font-bold text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg transition shadow-2xs">
+          Expandir Todos
+        </button>
+        <button onclick="toggleAllGroups(false)" class="text-xs font-bold text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg transition shadow-2xs">
+          Recolher Todos
+        </button>
+      </div>
+    </div>
+
+    <!-- Filtros e Busca -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <!-- Abas de Tipo -->
+      <div class="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl overflow-x-auto text-xs font-bold">
+        <button onclick="filterType('all')" id="tab-all" class="px-3 py-1.5 rounded-lg bg-white text-blue-600 shadow-xs transition">Todas</button>
+        <button onclick="filterType('fixed')" id="tab-fixed" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">Custos Fixos</button>
+        <button onclick="filterType('variable')" id="tab-variable" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">Variáveis</button>
+        <button onclick="filterType('reimbursable')" id="tab-reimbursable" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">Reembolsáveis</button>
+      </div>
+
+      <!-- Campo de Busca Dinâmica -->
+      <div class="relative flex-1 max-w-sm">
+        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <input type="text" id="search-input" onkeyup="filterTree()" placeholder="Buscar categoria ou palavra-chave..." class="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50">
+      </div>
+    </div>
+
+    <!-- Lista de Categorias Hierárquicas -->
+    <div class="space-y-4" id="category-tree">
+
+      <!-- Grupo 1: Moradia (Custo Fixo) -->
+      <div class="category-card bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden" data-type="fixed" data-name="moradia aluguel condominio luz energia agua internet">
+        <div class="p-4 bg-slate-50/70 flex items-center justify-between cursor-pointer border-b border-slate-200" onclick="toggleGroup('grp-moradia')">
+          <div class="flex items-center gap-3">
+            <button class="text-slate-400 hover:text-slate-700 transition" id="arrow-grp-moradia">
+              <svg class="w-4 h-4 transform rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+            </button>
+            <div class="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 font-black text-xs flex items-center justify-center">
+              🏠
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-bold text-slate-900">Moradia</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">Custo Fixo</span>
+              </div>
+              <span class="text-[11px] text-slate-500 font-medium">4 subcategorias associadas</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+            <button onclick="openCategoryModal('new_sub', 'Moradia')" class="text-xs font-bold text-blue-600 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200 transition flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+              Subcategoria
+            </button>
+            <button onclick="openCategoryModal('edit', 'Moradia')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Editar categoria" aria-label="Editar categoria">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+            <button onclick="openDeleteModal('Moradia', true)" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Excluir categoria" aria-label="Excluir categoria">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Subcategorias de Moradia -->
+        <div class="divide-y divide-slate-100 p-2 space-y-1" id="grp-moradia">
+          <!-- Sub 1 -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition gap-2">
+            <div class="flex items-center gap-3 pl-8">
+              <div class="w-2 h-2 rounded-full bg-indigo-500"></div>
+              <div>
+                <span class="text-xs font-bold text-slate-800">Aluguel & Condomínio</span>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">quintoandar</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">lello</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">condominio</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4 self-end sm:self-center">
+              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer" title="Fixo (Contas Essenciais): entra na previsão de caixa em /forecast como compromisso recorrente.">
+                <input type="checkbox" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                Fixo
+              </label>
+              <button onclick="openCategoryModal('edit', 'Aluguel & Condomínio')" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Editar subcategoria" aria-label="Editar subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+              <button onclick="openDeleteModal('Aluguel & Condomínio', false)" class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Excluir subcategoria" aria-label="Excluir subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Sub 2 -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition gap-2">
+            <div class="flex items-center gap-3 pl-8">
+              <div class="w-2 h-2 rounded-full bg-indigo-500"></div>
+              <div>
+                <span class="text-xs font-bold text-slate-800">Energia Elétrica & Gás</span>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">enel</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">comgas</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">eletropaulo</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4 self-end sm:self-center">
+              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer" title="Fixo (Contas Essenciais): entra na previsão de caixa em /forecast como compromisso recorrente.">
+                <input type="checkbox" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                Fixo
+              </label>
+              <button onclick="openCategoryModal('edit', 'Energia Elétrica & Gás')" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Editar subcategoria" aria-label="Editar subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+              <button onclick="openDeleteModal('Energia Elétrica & Gás', false)" class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Excluir subcategoria" aria-label="Excluir subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Sub 3 -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition gap-2">
+            <div class="flex items-center gap-3 pl-8">
+              <div class="w-2 h-2 rounded-full bg-indigo-500"></div>
+              <div>
+                <span class="text-xs font-bold text-slate-800">Internet & Fibra</span>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">claro fibra</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">vivo fibra</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4 self-end sm:self-center">
+              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer" title="Fixo (Contas Essenciais): entra na previsão de caixa em /forecast como compromisso recorrente.">
+                <input type="checkbox" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                Fixo
+              </label>
+              <button onclick="openCategoryModal('edit', 'Internet & Fibra')" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Editar subcategoria" aria-label="Editar subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+              <button onclick="openDeleteModal('Internet & Fibra', false)" class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Excluir subcategoria" aria-label="Excluir subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grupo 2: Alimentação (Gastos Variáveis) -->
+      <div class="category-card bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden" data-type="variable" data-name="alimentacao supermercado feira restaurantes delivery ifood cafe">
+        <div class="p-4 bg-slate-50/70 flex items-center justify-between cursor-pointer border-b border-slate-200" onclick="toggleGroup('grp-alimentacao')">
+          <div class="flex items-center gap-3">
+            <button class="text-slate-400 hover:text-slate-700 transition" id="arrow-grp-alimentacao">
+              <svg class="w-4 h-4 transform rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+            </button>
+            <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 font-black text-xs flex items-center justify-center">
+              🛒
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-bold text-slate-900">Alimentação</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">Gasto Variável</span>
+              </div>
+              <span class="text-[11px] text-slate-500 font-medium">3 subcategorias associadas</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+            <button onclick="openCategoryModal('new_sub', 'Alimentação')" class="text-xs font-bold text-blue-600 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200 transition flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+              Subcategoria
+            </button>
+            <button onclick="openCategoryModal('edit', 'Alimentação')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Editar categoria" aria-label="Editar categoria">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+            <button onclick="openDeleteModal('Alimentação', true)" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Excluir categoria" aria-label="Excluir categoria">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Subcategorias de Alimentação -->
+        <div class="divide-y divide-slate-100 p-2 space-y-1" id="grp-alimentacao">
+          <!-- Sub 1 -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition gap-2">
+            <div class="flex items-center gap-3 pl-8">
+              <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+              <div>
+                <span class="text-xs font-bold text-slate-800">Supermercado & Feira</span>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">pao de acucar</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">carrefour</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">swift</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4 self-end sm:self-center">
+              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer" title="Fixo (Contas Essenciais): entra na previsão de caixa em /forecast como compromisso recorrente.">
+                <input type="checkbox" class="rounded text-amber-600 focus:ring-amber-500">
+                Fixo
+              </label>
+              <button onclick="openCategoryModal('edit', 'Supermercado & Feira')" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Editar subcategoria" aria-label="Editar subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+              <button onclick="openDeleteModal('Supermercado & Feira', false)" class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Excluir subcategoria" aria-label="Excluir subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Sub 2 -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition gap-2">
+            <div class="flex items-center gap-3 pl-8">
+              <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+              <div>
+                <span class="text-xs font-bold text-slate-800">Restaurantes & Delivery</span>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">ifood</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">rappi</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">rest</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4 self-end sm:self-center">
+              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer" title="Fixo (Contas Essenciais): entra na previsão de caixa em /forecast como compromisso recorrente.">
+                <input type="checkbox" class="rounded text-amber-600 focus:ring-amber-500">
+                Fixo
+              </label>
+              <button onclick="openCategoryModal('edit', 'Restaurantes & Delivery')" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Editar subcategoria" aria-label="Editar subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+              <button onclick="openDeleteModal('Restaurantes & Delivery', false)" class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Excluir subcategoria" aria-label="Excluir subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grupo 3: Saúde (Com Suporte a Reembolsável) -->
+      <div class="category-card bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden" data-type="reimbursable" data-name="saude consultas medicas exames farmacia reembolso">
+        <div class="p-4 bg-slate-50/70 flex items-center justify-between cursor-pointer border-b border-slate-200" onclick="toggleGroup('grp-saude')">
+          <div class="flex items-center gap-3">
+            <button class="text-slate-400 hover:text-slate-700 transition" id="arrow-grp-saude">
+              <svg class="w-4 h-4 transform rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+            </button>
+            <div class="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 font-black text-xs flex items-center justify-center">
+              🩺
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-bold text-slate-900">Saúde</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">Reembolsável por Padrão</span>
+              </div>
+              <span class="text-[11px] text-slate-500 font-medium">3 subcategorias associadas</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+            <button onclick="openCategoryModal('new_sub', 'Saúde')" class="text-xs font-bold text-blue-600 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200 transition flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+              Subcategoria
+            </button>
+            <button onclick="openCategoryModal('edit', 'Saúde')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Editar categoria" aria-label="Editar categoria">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+            <button onclick="openDeleteModal('Saúde', true)" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Excluir categoria" aria-label="Excluir categoria">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Subcategorias de Saúde -->
+        <div class="divide-y divide-slate-100 p-2 space-y-1" id="grp-saude">
+          <!-- Sub 1 -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition gap-2">
+            <div class="flex items-center gap-3 pl-8">
+              <div class="w-2 h-2 rounded-full bg-rose-500"></div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-800">Consultas & Terapia</span>
+                  <span class="text-[9px] bg-blue-100 text-blue-700 font-extrabold px-1.5 py-0.2 rounded">Marca Reembolso</span>
+                </div>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">clinica</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">terapia</span>
+                  <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-mono">medico</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4 self-end sm:self-center">
+              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer" title="Fixo (Contas Essenciais): entra na previsão de caixa em /forecast como compromisso recorrente.">
+                <input type="checkbox" class="rounded text-rose-600 focus:ring-rose-500">
+                Fixo
+              </label>
+              <button onclick="openCategoryModal('edit', 'Consultas & Terapia')" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Editar subcategoria" aria-label="Editar subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+              <button onclick="openDeleteModal('Consultas & Terapia', false)" class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Excluir subcategoria" aria-label="Excluir subcategoria"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Modal de Criação / Edição de Categoria -->
+  <div id="category-modal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden transition-all transform scale-100">
+      
+      <!-- Cabeçalho Modal -->
+      <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 id="modal-title" class="text-base font-bold text-slate-900">Nova Categoria</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Defina o nome, relação hierárquica e palavras-chave.</p>
+        </div>
+        <button onclick="closeCategoryModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Corpo do Formulário -->
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Nome da Categoria</label>
+          <input type="text" id="cat-name-input" placeholder="Ex: Farmácia & Remédios" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Categoria Pai (Opcional para criar Subcategoria)</label>
+          <select id="cat-parent-select" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+            <option value="">Nenhuma (Categoria Raiz)</option>
+            <option value="Moradia">Moradia</option>
+            <option value="Alimentação">Alimentação</option>
+            <option value="Saúde">Saúde</option>
+            <option value="Transporte">Transporte</option>
+            <option value="Lazer & Viagens">Lazer & Viagens</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Tipo de Gasto</label>
+            <select class="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+              <option value="variable">Gasto Variável (Estilo de Vida)</option>
+              <option value="fixed">Custo Fixo (Essencial)</option>
+            </select>
+            <p class="text-[11px] text-slate-400 mt-1">Fixo (Contas Essenciais): entra na previsão de caixa em /forecast como compromisso recorrente.</p>
+          </div>
+          <div class="flex items-end">
+            <label class="flex items-center gap-2 cursor-pointer pb-2">
+              <input type="checkbox" class="rounded text-blue-600 focus:ring-blue-500">
+              <span class="text-xs font-bold text-slate-700">Reembolsável por Padrão?</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Palavras-chave de Reconhecimento Automático</label>
+          <textarea rows="2" placeholder="Separe por vírgulas. Ex: drogasil, drogaria, pacheco, farmacia" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+          <p class="text-[11px] text-slate-400 mt-1">Ao importar extratos, transações que contenham esses termos serão automaticamente vinculadas a esta categoria.</p>
+        </div>
+      </div>
+
+      <!-- Rodapé com Ações -->
+      <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+        <button onclick="closeCategoryModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition">Cancelar</button>
+        <button onclick="closeCategoryModal()" class="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition shadow-xs">Salvar Categoria</button>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- Modal de Confirmação de Exclusão -->
+  <div id="delete-modal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden">
+      <div class="p-6 space-y-3">
+        <h2 class="text-lg font-black text-slate-900">Excluir Categoria?</h2>
+        <p id="delete-modal-body" class="text-xs text-slate-600"></p>
+      </div>
+      <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+        <button onclick="closeDeleteModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition">Cancelar</button>
+        <button id="delete-confirm-btn" onclick="closeDeleteModal()" class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition shadow-xs">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleGroup(groupId) {
+      const el = document.getElementById(groupId);
+      const arrow = document.getElementById('arrow-' + groupId);
+      if (el.classList.contains('hidden')) {
+        el.classList.remove('hidden');
+        if (arrow) arrow.querySelector('svg').classList.add('rotate-90');
+      } else {
+        el.classList.add('hidden');
+        if (arrow) arrow.querySelector('svg').classList.remove('rotate-90');
+      }
+    }
+
+    function toggleAllGroups(expand) {
+      document.querySelectorAll('[id^="grp-"]').forEach(el => {
+        const id = el.id;
+        const arrow = document.getElementById('arrow-' + id);
+        if (expand) {
+          el.classList.remove('hidden');
+          if (arrow) arrow.querySelector('svg').classList.add('rotate-90');
+        } else {
+          el.classList.add('hidden');
+          if (arrow) arrow.querySelector('svg').classList.remove('rotate-90');
+        }
+      });
+    }
+
+    function filterType(type) {
+      const cards = document.querySelectorAll('.category-card');
+      const tabs = ['all', 'fixed', 'variable', 'reimbursable'];
+      
+      tabs.forEach(t => {
+        const btn = document.getElementById('tab-' + t);
+        if (t === type) {
+          btn.className = "px-3 py-1.5 rounded-lg bg-white text-blue-600 shadow-xs transition";
+        } else {
+          btn.className = "px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition";
+        }
+      });
+
+      cards.forEach(card => {
+        if (type === 'all' || card.dataset.type === type) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    function filterTree() {
+      const term = document.getElementById('search-input').value.toLowerCase();
+      const cards = document.querySelectorAll('.category-card');
+      cards.forEach(card => {
+        const text = (card.dataset.name || '').toLowerCase();
+        if (text.includes(term)) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    function openCategoryModal(mode, parentName = '') {
+      const modal = document.getElementById('category-modal');
+      const title = document.getElementById('modal-title');
+      const select = document.getElementById('cat-parent-select');
+      const nameInput = document.getElementById('cat-name-input');
+
+      if (mode === 'new_sub') {
+        title.innerText = 'Nova Subcategoria em ' + parentName;
+        select.value = parentName;
+        nameInput.value = '';
+      } else if (mode === 'edit') {
+        title.innerText = 'Editar ' + parentName;
+        nameInput.value = parentName;
+      } else {
+        title.innerText = 'Nova Categoria';
+        select.value = '';
+        nameInput.value = '';
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeCategoryModal() {
+      document.getElementById('category-modal').classList.add('hidden');
+    }
+
+    function openDeleteModal(name, hasChildren) {
+      const modal = document.getElementById('delete-modal');
+      const body = document.getElementById('delete-modal-body');
+      const btn = document.getElementById('delete-confirm-btn');
+      if (hasChildren) {
+        body.innerText = 'A categoria "' + name + '" possui subcategorias. Reatribua ou exclua as subcategorias antes de excluir esta categoria.';
+        btn.disabled = true;
+        btn.className = "px-4 py-2 rounded-xl text-xs font-bold bg-slate-300 text-white cursor-not-allowed";
+      } else {
+        body.innerText = 'Esta ação não pode ser desfeita. Excluir "' + name + '" permanentemente?';
+        btn.disabled = false;
+        btn.className = "px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition shadow-xs";
+      }
+      modal.classList.remove('hidden');
+    }
+
+    function closeDeleteModal() {
+      document.getElementById('delete-modal').classList.add('hidden');
+    }
+
+  </script>
+
+</body>
+</html>

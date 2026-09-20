@@ -43,9 +43,9 @@ defmodule CashLensWeb.Router do
       live "/transactions/:id/edit", TransactionLive.Index, :edit
 
       live "/categories", CategoryLive.Index, :index
-      live "/categories/new", CategoryLive.Form, :new
+      live "/categories/new", CategoryLive.Index, :new
       live "/categories/:id", CategoryLive.Show, :show
-      live "/categories/:id/edit", CategoryLive.Form, :edit
+      live "/categories/:id/edit", CategoryLive.Index, :edit
 
       live "/balances", BalanceLive.Index, :index
 

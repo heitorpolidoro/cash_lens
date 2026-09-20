@@ -38,6 +38,52 @@ defmodule CashLens.Categories do
     end)
   end
 
+  @doc """
+  Groups a flat list of categories into the hierarchical structure the
+  categories tree renders: `[{root_category, [descendant_category]}]`.
+
+  Root categories keep the order of the given list, and every descendant is
+  nested under its *top-level* ancestor in that same order — not only direct
+  children. The UI only ever creates two levels, but a deeper category that
+  already exists in the database is still listed under the root it belongs to,
+  so it can always be reached, edited and deleted from `/categories`.
+
+  A category whose ancestry is not fully present in the list is dropped, so the
+  caller can filter the list before grouping without producing orphan rows.
+
+  ## Examples
+
+      iex> group_by_parent([root, child])
+      [{root, [child]}]
+
+  """
+  def group_by_parent(categories) do
+    by_id = Map.new(categories, &{&1.id, &1})
+    {roots, descendants} = Enum.split_with(categories, &is_nil(&1.parent_id))
+    by_root = Enum.group_by(descendants, &root_ancestor_id(&1, by_id, MapSet.new()))
+
+    Enum.map(roots, fn root -> {root, Map.get(by_root, root.id, [])} end)
+  end
+
+  # Walks up to the top-level ancestor. `seen` guards against a cycle, which no
+  # UI path can create but which nothing in the database prevents either;
+  # `nil` (an unknown or cyclic ancestry) drops the category from the tree.
+  defp root_ancestor_id(category, by_id, seen) do
+    cond do
+      MapSet.member?(seen, category.id) ->
+        nil
+
+      is_nil(category.parent_id) ->
+        category.id
+
+      true ->
+        case Map.get(by_id, category.parent_id) do
+          nil -> nil
+          parent -> root_ancestor_id(parent, by_id, MapSet.put(seen, category.id))
+        end
+    end
+  end
+
   defp link_parents(category, map) do
     case category.parent_id do
       nil ->
