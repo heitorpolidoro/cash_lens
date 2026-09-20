@@ -154,7 +154,7 @@ defmodule CashLensWeb.TransferLive.Index do
             Concilie movimentações entre suas contas próprias para anular a dupla contagem contábil.
           </p>
         </div>
-        <.link navigate={~p"/admin/transfer_rules"} class="btn btn-outline btn-sm">
+        <.link navigate={~p"/automation?tab=transfers"} class="btn btn-outline btn-sm">
           <.icon name="hero-cog-6-tooth" class="size-4" /> Regras de Transferência
         </.link>
       </div>

@@ -63,7 +63,7 @@ defmodule CashLensWeb.TransferLiveTest do
 
       assert has_element?(
                live,
-               "#transfers-header a[href='/admin/transfer_rules']",
+               "#transfers-header a[href='/automation?tab=transfers']",
                "Regras de Transferência"
              )
 

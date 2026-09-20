@@ -61,16 +61,10 @@ defmodule CashLensWeb.Layouts do
           nav_item("Contas & Cartões", "/accounts", "hero-building-office-2", "/accounts"),
           nav_item("Categorias", "/categories", "hero-tag", "/categories"),
           nav_item(
-            "Regras de Exclusão",
-            "/admin/exclusion_rules",
-            "hero-funnel",
-            "/admin/exclusion_rules"
-          ),
-          nav_item(
-            "Regras de Transferência",
-            "/admin/transfer_rules",
+            "Automações & Regras",
+            "/automation",
             "hero-adjustments-horizontal",
-            "/admin/transfer_rules"
+            "/automation"
           ),
           nav_item("Banco de Dados", "/admin/db", "hero-circle-stack", "/admin/db")
         ]

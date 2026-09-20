@@ -649,6 +649,50 @@ defmodule CashLens.TransactionsTest do
       # L16: bulk ignore pattern changeset invalid
       assert {:error, _} = Transactions.create_bulk_ignore_pattern(%{pattern: ""})
     end
+
+    test "update_bulk_ignore_pattern/2 persists both fields" do
+      pattern =
+        insert_bulk_ignore_pattern(%{pattern: "^ANTIGO_#{System.unique_integer([:positive])}"})
+
+      new_source = "^NOVO_#{System.unique_integer([:positive])}"
+
+      assert {:ok, updated} =
+               Transactions.update_bulk_ignore_pattern(pattern, %{
+                 pattern: new_source,
+                 description: "Motivo novo"
+               })
+
+      assert updated.pattern == new_source
+
+      reloaded = Transactions.get_bulk_ignore_pattern!(pattern.id)
+      assert reloaded.pattern == new_source
+      assert reloaded.description == "Motivo novo"
+    end
+
+    test "update_bulk_ignore_pattern/2 rejects a regex that does not compile" do
+      original = "^VALIDO_#{System.unique_integer([:positive])}"
+      pattern = insert_bulk_ignore_pattern(%{pattern: original})
+
+      assert {:error, changeset} =
+               Transactions.update_bulk_ignore_pattern(pattern, %{pattern: "[aberto("})
+
+      assert "Regex inválida" in errors_on(changeset).pattern
+      assert Transactions.get_bulk_ignore_pattern!(pattern.id).pattern == original
+    end
+
+    test "update_bulk_ignore_pattern/2 enforces the unique constraint on pattern" do
+      taken = "^TOMADO_#{System.unique_integer([:positive])}"
+      insert_bulk_ignore_pattern(%{pattern: taken})
+
+      pattern =
+        insert_bulk_ignore_pattern(%{pattern: "^LIVRE_#{System.unique_integer([:positive])}"})
+
+      assert {:error, changeset} =
+               Transactions.update_bulk_ignore_pattern(pattern, %{pattern: taken})
+
+      assert errors_on(changeset).pattern != []
+      refute Transactions.get_bulk_ignore_pattern!(pattern.id).pattern == taken
+    end
   end
 
   describe "crud operations" do

@@ -92,6 +92,12 @@ defmodule CashLens.Transactions do
     |> Repo.insert()
   end
 
+  def update_bulk_ignore_pattern(%BulkIgnorePattern{} = pattern, attrs) do
+    pattern
+    |> BulkIgnorePattern.changeset(attrs)
+    |> Repo.update()
+  end
+
   def delete_bulk_ignore_pattern(%BulkIgnorePattern{} = pattern) do
     Repo.delete(pattern)
   end

@@ -21,6 +21,11 @@ defmodule CashLensWeb.Router do
     get "/.well-known/appspecific/com.chrome.devtools.json", PageController, :chrome_devtools
     get "/credit_card_links", RedirectController, :statements
 
+    # The two rule screens merged into the Automation Center (CL-17); the old
+    # paths stay reachable and land on the tab they used to be.
+    get "/admin/exclusion_rules", RedirectController, :exclusion_rules
+    get "/admin/transfer_rules", RedirectController, :transfer_rules
+
     live_session :default,
       layout: {CashLensWeb.Layouts, :app},
       on_mount: CashLensWeb.ActivePath do
@@ -62,8 +67,7 @@ defmodule CashLensWeb.Router do
       live "/admin/db", AdminDatabaseLive, :index
       live "/admin/db/:table", AdminDatabaseLive, :show
 
-      live "/admin/exclusion_rules", AutomationLive.BulkIgnore, :index
-      live "/admin/transfer_rules", AutomationLive.TransferRules, :index
+      live "/automation", AutomationLive.Index, :index
     end
   end
 
