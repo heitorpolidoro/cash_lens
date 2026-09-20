@@ -12,8 +12,15 @@ defmodule CashLensWeb.ImportLive.Index do
   use CashLensWeb, :live_view
 
   alias CashLens.Imports
+  alias CashLens.Parsers.Ingestor
 
   @statuses [:new, :updated, :synced]
+
+  # The drawer renders at most this many preview rows. The Ingestor always
+  # returns every row: truncating there would make the same function mean
+  # different things to different callers, and the two counters above the table
+  # are always the Ingestor's full-file numbers, never derived from this slice.
+  @preview_limit 200
 
   @badges %{
     new: %{label: "Novo", class: "bg-emerald-50 text-emerald-700 border-emerald-200"},
@@ -143,14 +150,170 @@ defmodule CashLensWeb.ImportLive.Index do
                 >{short_hash(entry.content_hash)}… ·
                 </span>{details(entry)}
               </td>
-              <td>
-                <!-- CL-24: pre-write inspection action per row -->
+              <td class="text-right">
+                <button
+                  type="button"
+                  data-role="inspect"
+                  phx-click="inspect"
+                  phx-value-path={entry.path}
+                  class="btn btn-xs rounded-lg gap-1.5"
+                >
+                  <.icon name="hero-eye" class="size-3.5" /> Inspecionar
+                </button>
               </td>
             </tr>
           </tbody>
         </table>
       </section>
       <!-- CL-26: recent import history -->
+
+      <.modal :if={@inspect} id="inspect-drawer" show on_cancel={JS.push("close_inspect")}>
+        <div class="space-y-4">
+          <div class="min-w-0">
+            <p class="text-[10px] font-black uppercase tracking-wider text-primary">
+              Inspeção pré-gravação
+            </p>
+            <p id="inspect-path" class="mt-1 font-mono text-sm font-bold break-all">
+              {@inspect.entry.path}
+            </p>
+            <p id="inspect-account" class="text-xs opacity-50 mt-0.5">
+              {@inspect.entry.bank} · {@inspect.entry.account}
+            </p>
+          </div>
+
+          <div class="alert alert-info rounded-2xl text-[11px] font-bold items-start">
+            <.icon name="hero-information-circle" class="size-4 shrink-0" />
+            <span>
+              Simulação — nenhuma transação, arquivo importado ou execução foi gravada até aqui.
+            </span>
+          </div>
+
+          <div
+            :if={@inspect.error}
+            id="inspect-error"
+            class="alert alert-warning rounded-2xl items-start"
+          >
+            <.icon name="hero-exclamation-triangle" class="size-5 shrink-0" />
+            <div>
+              <p class="text-sm font-bold">Não foi possível montar a prévia</p>
+              <p id="inspect-error-detail" class="text-xs mt-1">{@inspect.error}</p>
+            </div>
+          </div>
+
+          <div :if={@inspect.summary} class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p class="text-[10px] font-black uppercase tracking-wider text-emerald-600">
+                  Novas transações
+                </p>
+                <p id="preview-new-count" class="text-3xl font-black text-emerald-700 mt-0.5">
+                  {@inspect.summary.imported}
+                </p>
+              </div>
+              <div class="rounded-2xl border border-base-300 bg-base-200/50 px-4 py-3">
+                <p class="text-[10px] font-black uppercase tracking-wider opacity-40">
+                  Duplicadas ignoradas
+                </p>
+                <p id="preview-skipped-count" class="text-3xl font-black opacity-60 mt-0.5">
+                  {@inspect.summary.skipped}
+                </p>
+              </div>
+            </div>
+
+            <p
+              :if={@inspect.summary.imported == 0}
+              id="preview-nothing"
+              class="text-xs font-bold opacity-60 bg-base-200/50 border border-base-300 rounded-xl px-4 py-3"
+            >
+              Nada novo para importar — o arquivo já está integralmente no banco.
+            </p>
+
+            <div
+              :if={@inspect.summary.failed != []}
+              id="preview-failed"
+              class="alert alert-warning rounded-2xl items-start text-xs"
+            >
+              <.icon name="hero-exclamation-triangle" class="size-4 shrink-0" />
+              <div>
+                <p class="font-bold">{length(@inspect.summary.failed)} linhas rejeitadas</p>
+                <ul class="mt-1 space-y-0.5 font-mono break-all">
+                  <li :for={{description, reason} <- Enum.take(@inspect.summary.failed, 10)}>
+                    {description} — {reason}
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="max-h-80 overflow-y-auto">
+              <table class="table table-xs w-full">
+                <thead>
+                  <tr>
+                    <th class="w-24">Data</th>
+                    <th>Descrição</th>
+                    <th class="text-right w-28">Valor</th>
+                    <th class="text-right w-28">Situação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    :for={row <- Enum.take(@inspect.summary.preview, @preview_limit)}
+                    data-preview-row
+                    data-row-status={row.status}
+                    class={row.status == :duplicate && "opacity-40"}
+                  >
+                    <td class="font-mono">{format_date(row.date)}</td>
+                    <td class="font-semibold break-all">{row.description}</td>
+                    <td class="text-right font-mono">{format_currency(row.amount)}</td>
+                    <td class="text-right">
+                      <span class={[
+                        "px-2 py-0.5 rounded-md border text-[10px] font-black",
+                        row_badge_class(row.status)
+                      ]}>
+                        {row_badge_label(row.status)}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p
+              :if={length(@inspect.summary.preview) > @preview_limit}
+              id="preview-truncated"
+              class="text-[11px] font-bold opacity-40 text-center"
+            >
+              mostrando {@preview_limit} de {length(@inspect.summary.preview)} linhas — os totais
+              acima são do arquivo inteiro
+            </p>
+          </div>
+
+          <div class="flex items-center justify-between gap-3 border-t border-base-300 pt-4">
+            <p class="text-[11px] opacity-40">
+              Confirmar grava as transações novas e registra a execução no histórico.
+            </p>
+            <div class="flex items-center gap-2">
+              <button
+                id="inspect-cancel"
+                type="button"
+                phx-click="close_inspect"
+                class="btn btn-sm rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                :if={@inspect.summary}
+                id="confirm-import"
+                type="button"
+                phx-click="confirm_import"
+                phx-disable-with="Importando..."
+                class="btn btn-sm btn-primary rounded-xl gap-1.5"
+              >
+                <.icon name="hero-check" class="size-4" /> Confirmar importação
+              </button>
+            </div>
+          </div>
+        </div>
+      </.modal>
     </div>
     """
   end
@@ -164,6 +327,8 @@ defmodule CashLensWeb.ImportLive.Index do
      socket
      |> assign(:page_title, "Central de Importação")
      |> assign(:using_default?, is_nil(stored_root))
+     |> assign(:preview_limit, @preview_limit)
+     |> assign(:inspect, nil)
      |> assign_scan(root)}
   end
 
@@ -188,12 +353,133 @@ defmodule CashLensWeb.ImportLive.Index do
   end
 
   @impl true
+  def handle_event("inspect", %{"path" => path}, socket) do
+    case find_entry(socket, path) do
+      nil -> {:noreply, socket}
+      entry -> {:noreply, assign(socket, :inspect, build_inspection(entry))}
+    end
+  end
+
+  @impl true
+  def handle_event("close_inspect", _params, socket) do
+    {:noreply, assign(socket, :inspect, nil)}
+  end
+
+  @impl true
+  def handle_event("confirm_import", _params, %{assigns: %{inspect: nil}} = socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("confirm_import", _params, socket) do
+    inspection = socket.assigns.inspect
+
+    if inspection.summary do
+      confirm_import(socket, inspection)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
   def handle_event("rescan", _params, socket) do
     {:noreply,
      socket
      |> assign_scan(socket.assigns.root)
      |> put_flash(:info, "Pasta reescaneada.")}
   end
+
+  # The path coming from the client is never used as a filesystem path: it is
+  # looked up against the last scan, and the absolute path actually read is
+  # always the scanned `:absolute_path`.
+  defp find_entry(socket, path), do: Enum.find(socket.assigns.entries, &(&1.path == path))
+
+  # Builds the inspection state for one entry. This is a strictly read-only
+  # path: account resolution is a SELECT and the Ingestor runs with
+  # `dry_run: true`, which writes no transaction, no `imported_files` row, no
+  # `import_runs` row and no credit-card statement.
+  defp build_inspection(entry) do
+    base = %{entry: entry, account: nil, summary: nil, hash: entry.content_hash, error: nil}
+
+    case Imports.account_for_entry(entry) do
+      {:ok, account} -> %{base | account: account} |> run_preview()
+      {:error, :not_found} -> %{base | error: account_error(:not_found, entry)}
+      {:error, :ambiguous} -> %{base | error: account_error(:ambiguous, entry)}
+    end
+  end
+
+  defp run_preview(%{entry: entry, account: account} = inspection) do
+    case Ingestor.import_file(account, entry.absolute_path, dry_run: true) do
+      {:ok, summary} -> %{inspection | summary: summary, error: nil}
+      {:error, reason} -> %{inspection | summary: nil, error: to_string(reason)}
+    end
+  end
+
+  defp account_error(:not_found, entry),
+    do: "Conta não encontrada para esta pasta: #{entry.bank} · #{entry.account}."
+
+  defp account_error(:ambiguous, entry),
+    do: "A conta #{entry.bank} · #{entry.account} está ambígua: mais de um cadastro corresponde."
+
+  # The confirm path re-reads the file and compares its hash against the bytes
+  # the operator inspected. The check narrows the window but is not atomic —
+  # `Ingestor.import_file/3` performs its own `File.read/1` — which is accepted
+  # for a local single-operator folder and documented in the CL-24 spec.
+  defp confirm_import(socket, %{entry: entry, account: account} = inspection) do
+    case File.read(entry.absolute_path) do
+      {:ok, raw} ->
+        if Imports.content_hash(raw) == inspection.hash do
+          run_real_import(socket, entry, account)
+        else
+          refresh_stale_preview(socket, entry)
+        end
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Não foi possível ler o arquivo: #{reason}")}
+    end
+  end
+
+  defp run_real_import(socket, entry, account) do
+    root = socket.assigns.root
+
+    case Ingestor.import_file(account, entry.absolute_path, import_root: root) do
+      {:ok, summary} ->
+        {:noreply,
+         socket
+         |> assign(:inspect, nil)
+         |> assign_scan(root)
+         |> put_flash(:info, imported_message(summary))}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Falha ao importar: #{reason}")}
+    end
+  end
+
+  # The file changed between opening the drawer and confirming: nothing is
+  # imported and the drawer immediately shows the preview of the new bytes, so
+  # the operator never confirms something they did not see.
+  defp refresh_stale_preview(socket, entry) do
+    refreshed =
+      case Imports.scan(socket.assigns.root) do
+        {:ok, entries} -> Enum.find(entries, &(&1.path == entry.path)) || entry
+        {:error, _reason} -> entry
+      end
+
+    {:noreply,
+     socket
+     |> assign(:inspect, build_inspection(refreshed))
+     |> put_flash(:error, "O arquivo mudou no disco. Inspecione novamente.")}
+  end
+
+  defp imported_message(summary) do
+    "#{summary.imported} transações importadas, #{Map.get(summary, :skipped, 0)} duplicadas ignoradas."
+  end
+
+  defp row_badge_label(:new), do: "Nova"
+  defp row_badge_label(:duplicate), do: "Duplicada"
+
+  defp row_badge_class(:new), do: "bg-emerald-50 text-emerald-700 border-emerald-200"
+  defp row_badge_class(:duplicate), do: "bg-base-200 opacity-60 border-base-300"
 
   # The single scanning path: `mount/3` and `"rescan"` both go through it so
   # the two can never drift.

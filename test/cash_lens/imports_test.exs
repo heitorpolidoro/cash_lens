@@ -394,4 +394,28 @@ defmodule CashLens.ImportsTest do
       assert hd(runs).account.id == account.id
     end
   end
+
+  describe "account_for_entry/1" do
+    test "resolves the single account matching the entry's bank and name", %{account: account} do
+      entry = %{bank: "Banco do Brasil", account: "Conta Corrente"}
+
+      assert {:ok, resolved} = Imports.account_for_entry(entry)
+      assert resolved.id == account.id
+    end
+
+    test "returns :not_found when no account matches" do
+      entry = %{bank: "Banco Inexistente", account: "Conta Fantasma"}
+
+      assert {:error, :not_found} = Imports.account_for_entry(entry)
+    end
+
+    test "returns :ambiguous when more than one account matches" do
+      account_fixture(bank: "Itau", name: "Conta Dupla", parser_type: "bb_csv")
+      account_fixture(bank: "Itau", name: "Conta Dupla", parser_type: "bb_csv")
+
+      entry = %{bank: "Itau", account: "Conta Dupla"}
+
+      assert {:error, :ambiguous} = Imports.account_for_entry(entry)
+    end
+  end
 end

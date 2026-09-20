@@ -197,6 +197,26 @@ defmodule CashLens.Imports do
     )
   end
 
+  @doc """
+  Resolves the `CashLens.Accounts.Account` a `scan/1` entry belongs to, from its
+  `:bank` and `:account` strings.
+
+  Returns `{:ok, account}`, `{:error, :not_found}` or `{:error, :ambiguous}`.
+  This is the same resolution `DirectoryImporter` performs for a folder import,
+  kept in the context so the web layer never queries `CashLens.Accounts`
+  directly and a preview always targets the account a real import would use.
+  """
+  def account_for_entry(%{bank: bank, account: name})
+      when is_binary(bank) and is_binary(name) do
+    case Accounts.find_accounts_by_bank_and_name(bank, name) do
+      [account] -> {:ok, account}
+      [] -> {:error, :not_found}
+      _many -> {:error, :ambiguous}
+    end
+  end
+
+  def account_for_entry(_entry), do: {:error, :not_found}
+
   defp do_scan(root) do
     expanded_root = Path.expand(root)
     {account_dirs, _skipped} = DirectoryImporter.account_dirs(expanded_root)

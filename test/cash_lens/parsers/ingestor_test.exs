@@ -382,6 +382,57 @@ defmodule CashLens.Parsers.IngestorTest do
       assert CashLens.Repo.aggregate(CashLens.CreditCards.Statement, :count) == 0
       assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 0
     end
+
+    test "dry_run: true returns one preview row per prepared entry, all new on a virgin DB" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {:ok, summary} = Ingestor.import_file(account, @bb_sample, dry_run: true)
+
+      assert length(summary.preview) == summary.imported + summary.skipped
+
+      Enum.each(summary.preview, fn row ->
+        assert Map.has_key?(row, :date)
+        assert Map.has_key?(row, :description)
+        assert Map.has_key?(row, :amount)
+        assert row.status in [:new, :duplicate]
+        assert Map.has_key?(row, :fingerprint)
+      end)
+
+      assert Enum.all?(summary.preview, &(&1.status == :new))
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 0
+    end
+
+    test "dry_run: true marks every row as duplicate after a real import, writing nothing" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      before = CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count)
+
+      assert {:ok, summary} = Ingestor.import_file(account, @bb_sample, dry_run: true)
+
+      assert summary.imported == 0
+      assert length(summary.preview) == 3
+      assert Enum.all?(summary.preview, &(&1.status == :duplicate))
+      assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == before
+    end
+
+    test "the real import result carries no :preview key" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {:ok, summary} = Ingestor.import_file(account, @bb_sample)
+
+      refute Map.has_key?(summary, :preview)
+    end
+
+    test "preview_file/3 carries the preview rows too" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {{:ok, summary}, claimed} =
+               Ingestor.preview_file(account, @bb_sample, MapSet.new())
+
+      assert length(summary.preview) == 3
+      assert MapSet.size(claimed) == 3
+    end
   end
 
   describe "duplicate-safe re-import" do

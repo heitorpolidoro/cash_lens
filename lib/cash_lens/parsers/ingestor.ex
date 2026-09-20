@@ -83,7 +83,12 @@ defmodule CashLens.Parsers.Ingestor do
   With `dry_run: true`, computes the same `%{imported:, skipped:, failed:}`
   a real call on the same input would return, using the same fingerprint
   logic, but performs zero writes (no transaction rows, no credit-card
-  statement, no balance rebuild).
+  statement, no balance rebuild). The dry run additionally carries a
+  `:preview` key: one row per prepared entry, in file order, shaped
+  `%{date:, time:, description:, amount:, category_id:, fingerprint:,
+  status: :new | :duplicate}`. Rows that failed preparation never became
+  entries and stay in `failed` instead. The real (non-dry-run) path does
+  **not** carry `:preview` — it keeps returning the three-key map.
   """
   def import_file(account, file_path, opts \\ []) do
     notify_fn = Keyword.get(opts, :notify_fn)
@@ -271,6 +276,9 @@ defmodule CashLens.Parsers.Ingestor do
   so without this threading, file 2's preview can't see file 1's rows and
   double-counts them as new. Only `DirectoryImporter`'s dry-run path should
   call this; single-file callers use `import_file/3`.
+
+  The returned summary carries the same `:preview` rows `import_file/3` with
+  `dry_run: true` returns.
   """
   def preview_file(account, file_path, claimed_fingerprints) do
     case File.read(file_path) do
@@ -307,17 +315,42 @@ defmodule CashLens.Parsers.Ingestor do
 
     already_present = existing_fingerprints(Enum.map(entries, & &1.fingerprint))
 
-    {new_count, skipped_count, updated_claimed} =
-      Enum.reduce(entries, {0, 0, claimed_fingerprints}, fn entry, {new, skipped, claimed} ->
+    {new_count, skipped_count, updated_claimed, reversed_preview} =
+      Enum.reduce(entries, {0, 0, claimed_fingerprints, []}, fn entry,
+                                                                {new, skipped, claimed, rows} ->
         if MapSet.member?(already_present, entry.fingerprint) or
              MapSet.member?(claimed, entry.fingerprint) do
-          {new, skipped + 1, claimed}
+          {new, skipped + 1, claimed, [preview_row(entry, :duplicate) | rows]}
         else
-          {new + 1, skipped, MapSet.put(claimed, entry.fingerprint)}
+          {new + 1, skipped, MapSet.put(claimed, entry.fingerprint),
+           [preview_row(entry, :new) | rows]}
         end
       end)
 
-    {{:ok, %{imported: new_count, skipped: skipped_count, failed: failed}}, updated_claimed}
+    summary = %{
+      imported: new_count,
+      skipped: skipped_count,
+      failed: failed,
+      preview: Enum.reverse(reversed_preview)
+    }
+
+    {{:ok, summary}, updated_claimed}
+  end
+
+  # One preview row per classified entry, derived from the very insert entry
+  # the reduce above classified — never from a second parse. `:time` and
+  # `:category_id` are optional: the entry is a changeset's `changes` map and
+  # both keys are legitimately absent when the source row carries neither.
+  defp preview_row(entry, status) do
+    %{
+      date: entry.date,
+      time: Map.get(entry, :time),
+      description: entry.description,
+      amount: entry.amount,
+      category_id: Map.get(entry, :category_id),
+      fingerprint: entry.fingerprint,
+      status: status
+    }
   end
 
   # Never persist (or count as newly-importable) transactions dated in the

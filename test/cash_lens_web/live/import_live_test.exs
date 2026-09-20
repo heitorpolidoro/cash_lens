@@ -13,6 +13,8 @@ defmodule CashLensWeb.ImportLiveTest do
   import CashLens.AccountsFixtures
   import Phoenix.LiveViewTest
 
+  import Ecto.Query, only: [from: 2]
+
   alias CashLens.Imports
   alias CashLens.Settings
 
@@ -221,6 +223,212 @@ defmodule CashLensWeb.ImportLiveTest do
       assert html =~ ~s(id="scan-error")
       assert html =~ "Pasta não encontrada"
       assert html =~ missing
+    end
+  end
+
+  describe "pre-write inspection" do
+    alias CashLens.CreditCards.Statement
+    alias CashLens.Imports.ImportedFile
+    alias CashLens.Imports.ImportRun
+    alias CashLens.Parsers.Ingestor
+    alias CashLens.Repo
+    alias CashLens.Transactions.Transaction
+
+    defp counts do
+      %{
+        transactions: Repo.aggregate(Transaction, :count),
+        imported_files: Repo.aggregate(ImportedFile, :count),
+        import_runs: Repo.aggregate(ImportRun, :count),
+        statements: Repo.aggregate(Statement, :count)
+      }
+    end
+
+    test "opening the drawer shows the dry run's new count", %{
+      conn: conn,
+      root: root,
+      account: account
+    } do
+      dir = account_folder(root, "bb")
+      file = write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, %{imported: expected}} = Ingestor.import_file(account, file, dry_run: true)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      html =
+        view
+        |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+        |> render_click()
+
+      assert html =~ ~s(id="inspect-drawer")
+      assert html =~ "bb/extrato.csv"
+
+      assert view |> element("#preview-new-count") |> render() =~ to_string(expected)
+      assert view |> element("#preview-skipped-count") |> render() =~ "0"
+      assert length(preview_rows(view)) == expected
+    end
+
+    test "opening and closing the drawer writes nothing", %{conn: conn, root: root} do
+      dir = account_folder(root, "bb")
+      write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      before = counts()
+
+      view
+      |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      assert has_element?(view, "#inspect-drawer")
+      assert counts() == before
+
+      view |> element("#inspect-cancel") |> render_click()
+
+      refute has_element?(view, "#inspect-drawer")
+      assert counts() == before
+    end
+
+    test "confirming runs the real import", %{conn: conn, root: root, account: account} do
+      dir = account_folder(root, "bb")
+      write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      expected = view |> element("#preview-new-count") |> render() |> extract_count()
+
+      html = view |> element("#confirm-import") |> render_click()
+
+      assert Repo.aggregate(
+               from(t in Transaction, where: t.account_id == ^account.id),
+               :count
+             ) == expected
+
+      assert [run] = Repo.all(ImportRun)
+      assert run.imported_count == expected
+      assert Imports.get_imported_file_by_path("bb/extrato.csv")
+
+      refute html =~ ~s(id="inspect-drawer")
+      assert has_element?(view, ~s(tr[data-path="bb/extrato.csv"][data-status="synced"]))
+      assert html =~ "#{expected} transações importadas"
+    end
+
+    test "inspecting an already-imported file previews only duplicates", %{
+      conn: conn,
+      root: root,
+      account: account
+    } do
+      dir = account_folder(root, "bb")
+      file = write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, _} = Ingestor.import_file(account, file, import_root: root)
+      before = Repo.aggregate(Transaction, :count)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      assert view |> element("#preview-new-count") |> render() |> extract_count() == 0
+      assert preview_rows(view) != []
+      assert Enum.all?(preview_rows(view), &(&1 == "duplicate"))
+
+      view |> element("#confirm-import") |> render_click()
+
+      assert Repo.aggregate(Transaction, :count) == before
+    end
+
+    test "a file rewritten after the drawer opened refuses the confirm", %{
+      conn: conn,
+      root: root
+    } do
+      dir = account_folder(root, "bb")
+      file = write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      File.write!(file, @other_sample)
+
+      html = view |> element("#confirm-import") |> render_click()
+
+      assert html =~ "O arquivo mudou no disco."
+      assert Repo.aggregate(Transaction, :count) == 0
+      assert Repo.aggregate(ImportRun, :count) == 0
+      assert has_element?(view, "#inspect-drawer")
+    end
+
+    test "a file whose account does not exist opens on the error block", %{
+      conn: conn,
+      root: root
+    } do
+      dir = Path.join(root, "unknown")
+      File.mkdir_p!(dir)
+
+      File.write!(
+        Path.join(dir, ".account"),
+        "bank: Banco Fantasma\naccount: Conta Fantasma\nparser: bb_csv\n"
+      )
+
+      write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="unknown/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      assert has_element?(view, "#inspect-error")
+      refute has_element?(view, "#confirm-import")
+    end
+
+    test "a preview longer than the limit renders 200 rows and the full counters", %{
+      conn: conn,
+      root: root
+    } do
+      dir = account_folder(root, "bb")
+      write_file(dir, "extrato.csv", big_sample(205))
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      assert length(preview_rows(view)) == 200
+      assert view |> element("#preview-new-count") |> render() |> extract_count() == 205
+      assert view |> element("#preview-truncated") |> render() =~ "mostrando 200 de 205 linhas"
+    end
+
+    defp preview_rows(view) do
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("[data-preview-row]")
+      |> Enum.map(&(&1 |> LazyHTML.attribute("data-row-status") |> List.first()))
+    end
+
+    defp extract_count(html) do
+      html |> String.replace(~r/<[^>]*>/, "") |> String.trim() |> String.to_integer()
+    end
+
+    defp big_sample(rows) do
+      header = "Data,Dependência Origem,Term. Origem,Histórico,Documento,Valor,\n"
+
+      body =
+        Enum.map_join(1..rows, "", fn i ->
+          "10/03/2026,1234,5678,COMPRA TESTE #{i},123.#{i},-1.00,\n"
+        end)
+
+      header <> body
     end
   end
 

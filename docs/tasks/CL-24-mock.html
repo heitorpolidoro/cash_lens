@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CashLens — Inspeção pré-gravação (CL-24)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>body{font-family:'Plus Jakarta Sans',sans-serif}</style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+<header class="border-b border-slate-200 bg-white sticky top-0 z-40 px-6 py-4 shadow-xs">
+  <div class="max-w-7xl mx-auto flex items-center justify-between">
+    <div class="flex items-center gap-6">
+      <span class="text-2xl font-black text-blue-600 tracking-tight">CashLens</span>
+      <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+        <span class="px-3 py-2 rounded-lg text-slate-400 cursor-default">Painel</span>
+        <span class="px-3 py-2 rounded-lg text-slate-400 cursor-default">Transações</span>
+        <span class="px-3 py-2 rounded-lg text-slate-400 cursor-default">Faturas</span>
+        <span class="px-3 py-2 rounded-lg bg-slate-100 text-blue-600 font-bold">Central de Importação</span>
+      </nav>
+    </div>
+    <span class="text-[11px] font-bold text-slate-400 border border-dashed border-slate-300 px-3 py-1.5 rounded-lg">Mockup CL-24 — inspeção pré-gravação</span>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+
+  <div class="pb-2 border-b border-slate-200">
+    <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Central de Importação</h1>
+    <p class="text-xs text-slate-500 mt-0.5">Inspecione um arquivo antes de gravar qualquer coisa. Nada é escrito no banco até você confirmar.</p>
+  </div>
+
+  <!-- Card da pasta monitorada (herdado de CL-23, inerte aqui) -->
+  <section class="bg-white border border-slate-200 rounded-2xl shadow-xs p-5">
+    <label class="text-[10px] font-black uppercase tracking-wider text-slate-400">Pasta monitorada <span class="text-slate-300 normal-case font-bold">(CL-23 — inerte neste mockup)</span></label>
+    <p class="mt-1.5 font-mono text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">/Users/heitor/CashLens/extratos</p>
+  </section>
+
+  <!-- Flash simulado -->
+  <div id="flash" class="hidden fixed top-20 right-6 z-[60] shadow-lg rounded-xl px-4 py-3 text-xs font-bold"></div>
+
+  <!-- Controle do mockup, não faz parte da tela -->
+  <label class="flex items-center gap-2 text-[11px] font-bold text-slate-500">
+    <input id="sc-changed" type="checkbox" class="rounded border-slate-300">
+    Cenário do mockup: o arquivo muda no disco entre inspecionar e confirmar
+  </label>
+
+  <!-- Lista de arquivos -->
+  <section id="file-list" class="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+      <h2 class="text-sm font-black uppercase tracking-wider text-slate-400">Arquivos</h2>
+      <div id="counters" class="text-[11px] font-bold text-slate-500"></div>
+    </div>
+    <table class="w-full text-xs">
+      <thead class="bg-slate-50 text-slate-400 text-[10px] uppercase tracking-wider">
+        <tr>
+          <th class="text-left font-black px-5 py-2.5">Arquivo</th>
+          <th class="text-left font-black px-5 py-2.5">Conta</th>
+          <th class="text-left font-black px-5 py-2.5">Situação</th>
+          <th class="text-left font-black px-5 py-2.5">Detalhes</th>
+          <th class="text-right font-black px-5 py-2.5">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="rows" class="divide-y divide-slate-100"></tbody>
+    </table>
+  </section>
+
+  <p class="text-[11px] text-slate-400 text-center">Dropzone (CL-25) e histórico de importações (CL-26) continuam fora desta entrega.</p>
+
+</main>
+
+<!-- ======================= GAVETA DE INSPEÇÃO ======================= -->
+<div id="inspect-backdrop" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px]" onclick="closeInspect()"></div>
+
+<aside id="inspect-drawer" class="hidden fixed z-50 inset-y-0 right-0 w-full max-w-3xl bg-white shadow-2xl flex flex-col">
+  <!-- Cabeçalho -->
+  <div class="px-6 py-5 border-b border-slate-200 flex items-start justify-between gap-4">
+    <div class="min-w-0">
+      <p class="text-[10px] font-black uppercase tracking-wider text-blue-600">Inspeção pré-gravação</p>
+      <p id="inspect-path" class="mt-1 font-mono text-sm font-bold text-slate-800 break-all"></p>
+      <p id="inspect-account" class="text-xs text-slate-500 mt-0.5"></p>
+    </div>
+    <button onclick="closeInspect()" class="shrink-0 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <!-- Aviso permanente de que nada foi gravado -->
+  <div class="px-6 py-3 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+    <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    <p class="text-[11px] font-bold text-blue-700">Simulação — nenhuma transação, arquivo importado ou execução foi gravada até aqui.</p>
+  </div>
+
+  <!-- Conteúdo: conta não resolvida -->
+  <div id="inspect-error" class="hidden flex-1 p-8">
+    <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-3">
+      <svg class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+      <div>
+        <p class="text-sm font-bold text-amber-800">Conta não encontrada para esta pasta</p>
+        <p id="inspect-error-detail" class="text-xs text-amber-700 mt-1"></p>
+        <p class="text-xs text-amber-700 mt-1">Cadastre a conta com o mesmo banco e nome do arquivo <code class="font-mono">.account</code> e inspecione de novo.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conteúdo: prévia -->
+  <div id="inspect-body" class="flex-1 overflow-y-auto">
+    <div class="px-6 py-5 grid grid-cols-2 gap-4">
+      <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+        <p class="text-[10px] font-black uppercase tracking-wider text-emerald-600">Novas transações</p>
+        <p id="preview-new-count" class="text-3xl font-black text-emerald-700 mt-0.5">0</p>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Duplicadas ignoradas</p>
+        <p id="preview-skipped-count" class="text-3xl font-black text-slate-500 mt-0.5">0</p>
+      </div>
+    </div>
+
+    <div id="preview-nothing" class="hidden px-6 pb-4">
+      <p class="text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">Nada novo para importar — o arquivo já está integralmente no banco.</p>
+    </div>
+
+    <div class="px-6 pb-6">
+      <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+        <thead class="bg-slate-50 text-slate-400 text-[10px] uppercase tracking-wider">
+          <tr>
+            <th class="text-left font-black px-4 py-2.5 w-24">Data</th>
+            <th class="text-left font-black px-4 py-2.5">Descrição</th>
+            <th class="text-right font-black px-4 py-2.5 w-28">Valor</th>
+            <th class="text-right font-black px-4 py-2.5 w-28">Situação</th>
+          </tr>
+        </thead>
+        <tbody id="preview-rows" class="divide-y divide-slate-100"></tbody>
+      </table>
+      <p id="preview-truncated" class="hidden text-[11px] font-bold text-slate-400 mt-2 text-center"></p>
+    </div>
+  </div>
+
+  <!-- Rodapé -->
+  <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
+    <p class="text-[11px] text-slate-400">Confirmar grava as transações novas e registra a execução no histórico.</p>
+    <div class="flex items-center gap-2">
+      <button onclick="closeInspect()" class="bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold px-4 py-2.5 rounded-xl text-xs transition">Cancelar</button>
+      <button id="confirm-btn" onclick="confirmImport()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        Confirmar importação
+      </button>
+    </div>
+  </div>
+</aside>
+
+<script>
+  // --- Dados simulados -------------------------------------------------
+  const DESCS = [
+    "PIX RECEBIDO JOANA M", "SUPERMERCADO SAO LUIZ", "POSTO IPIRANGA 402",
+    "NETFLIX.COM", "FARMACIA PAGUE MENOS", "UBER *TRIP", "IFOOD *PEDIDO",
+    "TARIFA PACOTE SERVICOS", "SALARIO", "CONDOMINIO ED AURORA"
+  ];
+
+  function makeRows(n, allDuplicate) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      out.push({
+        date: `${String((i % 28) + 1).padStart(2, "0")}/08/2026`,
+        description: DESCS[i % DESCS.length] + (i > 9 ? ` ${i}` : ""),
+        amount: ((i % 7) === 0 ? 1 : -1) * (12.9 + i * 3.37),
+        status: allDuplicate ? "duplicate" : (i % 9 === 3 ? "duplicate" : "new")
+      });
+    }
+    return out;
+  }
+
+  const FILES = [
+    { path: "bb/conta-corrente/2026-08.csv", bank: "Banco do Brasil", account: "Conta Corrente",
+      status: "new", mtime: "18/09/2026 21:14", last: null, account_ok: true, rows: makeRows(24, false) },
+    { path: "bb/ourocard/2026-08.ofx", bank: "Banco do Brasil", account: "Ourocard",
+      status: "synced", mtime: "10/09/2026 07:55", last: "10/09/2026 08:01", account_ok: true, rows: makeRows(18, true) },
+    { path: "bb/conta-corrente/2026-07.csv", bank: "Banco do Brasil", account: "Conta Corrente",
+      status: "updated", mtime: "19/09/2026 08:02", last: "12/09/2026 19:40", account_ok: true, rows: makeRows(205, false) },
+    { path: "nubank/cartao/2026-08.csv", bank: "Nubank", account: "Cartão",
+      status: "new", mtime: "09/09/2026 22:10", last: null, account_ok: false, rows: [] }
+  ];
+
+  const BADGE = {
+    new:     { label: "Novo",         cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+    updated: { label: "Atualizado",   cls: "bg-amber-50 text-amber-700 border-amber-200",       dot: "bg-amber-500" },
+    synced:  { label: "Sincronizado", cls: "bg-slate-100 text-slate-500 border-slate-200",      dot: "bg-slate-400" }
+  };
+
+  const PREVIEW_LIMIT = 200;
+  let files = FILES.map(f => ({ ...f }));
+  let current = null;
+
+  const brl = v => (v < 0 ? "-" : "") + "R$ " + Math.abs(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // --- Lista -----------------------------------------------------------
+  function details(f) {
+    if (f.status === "updated") return `modificado em ${f.mtime} · importado em ${f.last}`;
+    if (f.status === "synced")  return `importado em ${f.last}`;
+    return `modificado em ${f.mtime}`;
+  }
+
+  function renderList() {
+    document.getElementById("rows").innerHTML = files.map((f, i) => {
+      const b = BADGE[f.status];
+      return `<tr data-path="${f.path}" data-status="${f.status}" class="hover:bg-slate-50/70">
+        <td class="px-5 py-3 font-mono font-bold text-slate-700 break-all">${f.path}</td>
+        <td class="px-5 py-3 text-slate-500">${f.bank} · ${f.account}</td>
+        <td class="px-5 py-3">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-black ${b.cls}">
+            <span class="w-1.5 h-1.5 rounded-full ${b.dot}"></span>${b.label}
+          </span>
+        </td>
+        <td class="px-5 py-3 text-slate-400">${details(f)}</td>
+        <td class="px-5 py-3 text-right">
+          <button data-role="inspect" onclick="openInspect(${i})"
+                  class="bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 font-bold px-3 py-1.5 rounded-lg text-[11px] transition inline-flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/></svg>
+            Inspecionar
+          </button>
+        </td>
+      </tr>`;
+    }).join("");
+
+    const n = s => files.filter(f => f.status === s).length;
+    document.getElementById("counters").innerHTML =
+      `<span class="text-emerald-600">${n("new")} novos</span> · ` +
+      `<span class="text-amber-600">${n("updated")} atualizados</span> · ` +
+      `<span class="text-slate-400">${n("synced")} sincronizados</span>`;
+  }
+
+  // --- Gaveta ----------------------------------------------------------
+  function openInspect(index) {
+    const f = files[index];
+    current = index;
+
+    document.getElementById("inspect-path").textContent = f.path;
+    document.getElementById("inspect-account").textContent = `${f.bank} · ${f.account}`;
+    document.getElementById("inspect-backdrop").classList.remove("hidden");
+    document.getElementById("inspect-drawer").classList.remove("hidden");
+
+    const errorEl = document.getElementById("inspect-error");
+    const bodyEl = document.getElementById("inspect-body");
+    const confirmEl = document.getElementById("confirm-btn");
+
+    if (!f.account_ok) {
+      document.getElementById("inspect-error-detail").textContent =
+        `Nenhuma conta cadastrada como "${f.bank} / ${f.account}".`;
+      errorEl.classList.remove("hidden");
+      bodyEl.classList.add("hidden");
+      confirmEl.classList.add("hidden");
+      return;
+    }
+
+    errorEl.classList.add("hidden");
+    bodyEl.classList.remove("hidden");
+    confirmEl.classList.remove("hidden");
+
+    const novas = f.rows.filter(r => r.status === "new").length;
+    const dups  = f.rows.length - novas;
+    document.getElementById("preview-new-count").textContent = novas;
+    document.getElementById("preview-skipped-count").textContent = dups;
+    document.getElementById("preview-nothing").classList.toggle("hidden", novas !== 0);
+
+    const shown = f.rows.slice(0, PREVIEW_LIMIT);
+    document.getElementById("preview-rows").innerHTML = shown.map(r => `
+      <tr data-preview-row data-row-status="${r.status}" class="${r.status === "duplicate" ? "text-slate-400" : "text-slate-700"}">
+        <td class="px-4 py-2 font-mono">${r.date}</td>
+        <td class="px-4 py-2 font-semibold">${r.description}</td>
+        <td class="px-4 py-2 text-right font-mono ${r.status === "duplicate" ? "" : (r.amount < 0 ? "text-rose-600" : "text-emerald-600")}">${brl(r.amount)}</td>
+        <td class="px-4 py-2 text-right">
+          ${r.status === "new"
+            ? `<span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black">Nova</span>`
+            : `<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-black">Duplicada</span>`}
+        </td>
+      </tr>`).join("");
+
+    const trunc = document.getElementById("preview-truncated");
+    if (f.rows.length > PREVIEW_LIMIT) {
+      trunc.textContent = `mostrando ${PREVIEW_LIMIT} de ${f.rows.length} linhas — os totais acima são do arquivo inteiro`;
+      trunc.classList.remove("hidden");
+    } else {
+      trunc.classList.add("hidden");
+    }
+  }
+
+  function closeInspect() {
+    current = null;
+    document.getElementById("inspect-backdrop").classList.add("hidden");
+    document.getElementById("inspect-drawer").classList.add("hidden");
+  }
+
+  function confirmImport() {
+    if (current === null) return;
+    const f = files[current];
+    const novas = f.rows.filter(r => r.status === "new").length;
+    const dups = f.rows.length - novas;
+
+    // Hash recalculado no confirmar difere do inspecionado: nada é gravado.
+    if (document.getElementById("sc-changed").checked) {
+      flash("error", "O arquivo mudou no disco. Inspecione novamente.");
+      openInspect(current);
+      return;
+    }
+
+    // Após confirmar, o arquivo vira "Sincronizado" e tudo passa a ser duplicado.
+    f.status = "synced";
+    f.last = "20/09/2026 09:12";
+    f.rows = f.rows.map(r => ({ ...r, status: "duplicate" }));
+
+    closeInspect();
+    renderList();
+    flash("info", `${novas} transações importadas, ${dups} duplicadas ignoradas.`);
+  }
+
+  function flash(kind, msg) {
+    const el = document.getElementById("flash");
+    el.className = "fixed top-20 right-6 z-[60] shadow-lg rounded-xl px-4 py-3 text-xs font-bold " +
+      (kind === "error" ? "bg-rose-50 text-rose-700 border border-rose-200"
+                        : "bg-blue-50 text-blue-700 border border-blue-200");
+    el.textContent = msg;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.add("hidden"), 5000);
+  }
+
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeInspect(); });
+  renderList();
+</script>
+</body>
+</html>
