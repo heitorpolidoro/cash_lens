@@ -454,7 +454,7 @@ defmodule CashLens.Parsers.Ingestor do
       TransferMatcher.match_transfers(inserted_transactions ++ mirror_transactions) || []
 
     # Note: installment detection runs once over the full set after the whole batch
-    # import (see ImportModalComponent), because a purchase's parcels can span
+    # import (see DirectoryImporter), because a purchase's parcels can span
     # multiple monthly statements and must be grouped together.
 
     # 5. Collect affected account IDs for balance rebuilding

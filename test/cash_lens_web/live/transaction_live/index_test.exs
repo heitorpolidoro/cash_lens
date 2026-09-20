@@ -363,4 +363,14 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
       assert html =~ "pluggy: Shopping"
     end
   end
+
+  describe "import entry point" do
+    test "the actions dropdown links to /imports instead of opening a modal", %{conn: conn} do
+      {:ok, _live, html} = live(conn, ~p"/transactions")
+
+      assert html =~ ~s(href="/imports")
+      assert html =~ "Importar Extratos"
+      refute html =~ "Importar em Lote"
+    end
+  end
 end

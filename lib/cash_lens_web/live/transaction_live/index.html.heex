@@ -93,14 +93,9 @@
               </.link>
             </li>
             <li>
-              <button type="button" phx-click="open_import">
+              <.link navigate={~p"/imports"}>
                 <.icon name="hero-arrow-up-tray" class="size-4" /> Importar Extratos
-              </button>
-            </li>
-            <li>
-              <button type="button" phx-click="open_batch_import">
-                <.icon name="hero-folder-arrow-down" class="size-4" /> Importar em Lote
-              </button>
+              </.link>
             </li>
             <li>
               <button type="button" phx-click="sync_pluggy">
@@ -1023,18 +1018,6 @@
       </div>
     </div>
   </.modal>
-
-  <.live_component
-    module={CashLensWeb.TransactionLive.ImportModalComponent}
-    id="import-modal"
-    show={@show_import_modal}
-  />
-
-  <.live_component
-    module={CashLensWeb.TransactionLive.BatchImportModalComponent}
-    id="batch-import-modal"
-    show={@show_batch_import_modal}
-  />
 
   <.live_component
     module={CashLensWeb.TransactionLive.QuickCategoryComponent}

@@ -19,8 +19,6 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Transações")
-     |> assign(:show_import_modal, false)
-     |> assign(:show_batch_import_modal, false)
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
      |> assign(:show_transfer_modal, false)
@@ -37,7 +35,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())
      |> assign(:pending_transaction_id, nil)
-     |> assign(:import_account_id, nil)
      |> assign(
        :category_form,
        to_form(Categories.change_category(%Category{default_reimbursable: false}))
@@ -54,7 +51,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:reimbursement_pair_view, nil)
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, accounts)
-     |> assign(:import_accounts, Enum.filter(accounts, & &1.accepts_import))
      |> assign(:categories, Categories.list_categories())
      |> assign(:filters, default_filters())
      |> assign(:page, 1)
@@ -73,7 +69,6 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_params(params, _url, socket) do
     {return_to, params} = Map.pop(params, "return_to")
-    {open_import, params} = Map.pop(params, "open_import")
     # `:id` addresses the overlaid show/edit modal — it is never a filter.
     {id, filters_param} = Map.pop(params, "id")
 
@@ -89,7 +84,6 @@ defmodule CashLensWeb.TransactionLive.Index do
       socket
       |> assign(:filters, filters)
       |> assign(:return_to, return_to)
-      |> assign(:show_import_modal, open_import == "true")
       |> maybe_refresh_stream(filters, previous_filters)
       |> apply_action(socket.assigns.live_action, id)
 
@@ -293,16 +287,6 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_event("open_import", _params, socket) do
-    {:noreply, assign(socket, :show_import_modal, true)}
-  end
-
-  @impl true
-  def handle_event("open_batch_import", _params, socket) do
-    {:noreply, assign(socket, :show_batch_import_modal, true)}
-  end
-
-  @impl true
   def handle_event("sync_pluggy", _params, socket) do
     req_options = Application.get_env(:cash_lens, :pluggy_req_options, [])
     alias CashLens.Pluggy
@@ -384,8 +368,6 @@ defmodule CashLensWeb.TransactionLive.Index do
   def handle_event("close_modal", _params, socket) do
     {:noreply,
      socket
-     |> assign(:show_import_modal, false)
-     |> assign(:show_batch_import_modal, false)
      |> assign(:show_quick_category_modal, false)
      |> assign(:show_reimbursement_modal, false)
      |> assign(:show_transfer_modal, false)
@@ -861,112 +843,6 @@ defmodule CashLensWeb.TransactionLive.Index do
     else
       {:noreply, assign(socket, :categories, Categories.list_categories())}
     end
-  end
-
-  @impl true
-  def handle_info(:close_import_modal, socket) do
-    {:noreply, assign(socket, :show_import_modal, false)}
-  end
-
-  @impl true
-  def handle_info(:close_batch_import_modal, socket) do
-    {:noreply, assign(socket, :show_batch_import_modal, false)}
-  end
-
-  @impl true
-  def handle_info({:batch_import_progress, progress}, socket) do
-    send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
-      id: "batch-import-modal",
-      progress_update: progress
-    )
-
-    {:noreply, socket}
-  end
-
-  @impl true
-  def handle_info({:batch_import_finished, result, preview?, token}, socket) do
-    if preview? do
-      send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
-        id: "batch-import-modal",
-        progress_update: %{phase: :preview_confirm, result: result, run_token: token}
-      )
-
-      {:noreply, socket}
-    else
-      send_update(CashLensWeb.TransactionLive.BatchImportModalComponent,
-        id: "batch-import-modal",
-        progress_update: %{phase: :done, result: result, run_token: token}
-      )
-
-      {:noreply,
-       socket
-       |> assign(:pending_count, Transactions.count_pending_transactions())
-       |> refresh_transactions_page1(socket.assigns.filters)}
-    end
-  end
-
-  @impl true
-  def handle_info({:import_file_start, index, total, filename}, socket) do
-    send_update(CashLensWeb.TransactionLive.ImportModalComponent,
-      id: "import-modal",
-      progress_update: %{
-        file_index: index,
-        file_total: total,
-        current_file: filename,
-        current_file_lines: :parsing
-      }
-    )
-
-    {:noreply, socket}
-  end
-
-  @impl true
-  def handle_info({:import_file_parsed, n_lines}, socket) do
-    send_update(CashLensWeb.TransactionLive.ImportModalComponent,
-      id: "import-modal",
-      progress_update: %{current_file_lines: n_lines}
-    )
-
-    {:noreply, socket}
-  end
-
-  @impl true
-  def handle_info({:import_file_done, cumulative_lines}, socket) do
-    send_update(CashLensWeb.TransactionLive.ImportModalComponent,
-      id: "import-modal",
-      progress_update: %{lines_done: cumulative_lines, current_file_lines: nil}
-    )
-
-    {:noreply, socket}
-  end
-
-  @impl true
-  def handle_info({:import_success, %{imported: count, failed: []}}, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_import_modal, false)
-     |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:success, "Sucesso! #{count} transações importadas.")
-     |> refresh_transactions_page1(socket.assigns.filters)}
-  end
-
-  def handle_info({:import_success, %{imported: count, failed: failed}}, socket) do
-    failed_msg = Enum.map_join(failed, ", ", fn {desc, reason} -> "#{desc}: #{reason}" end)
-
-    {:noreply,
-     socket
-     |> assign(:show_import_modal, false)
-     |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(
-       :info,
-       "#{count} transações importadas. #{length(failed)} linhas ignoradas: #{failed_msg}"
-     )
-     |> refresh_transactions_page1(socket.assigns.filters)}
-  end
-
-  @impl true
-  def handle_info({:import_error, reason}, socket) do
-    {:noreply, put_flash(socket, :error, "Erro na importação: #{reason}")}
   end
 
   @impl true

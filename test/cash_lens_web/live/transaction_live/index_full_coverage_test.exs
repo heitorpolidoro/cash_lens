@@ -122,14 +122,6 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       send(index_live.pid, {:transfer_linked, "Linked!"})
       assert render(index_live) =~ "Linked!"
 
-      send(index_live.pid, :close_import_modal)
-
-      send(index_live.pid, {:import_success, %{imported: 10, failed: []}})
-      assert render(index_live) =~ "10 transações importadas"
-
-      send(index_live.pid, {:import_error, "Failed"})
-      assert render(index_live) =~ "Erro na importação: Failed"
-
       # Test category info handlers
       cat = category_fixture()
       send(index_live.pid, {:category_created, cat, nil})
@@ -305,11 +297,11 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
 
     test "close_modal", %{conn: conn} do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
-      index_live |> render_click("open_import")
-      assert render(index_live) =~ "1. Selecione a Conta de Destino"
+      index_live |> render_click("open_quick_category", %{"name" => "Padaria", "id" => nil})
+      assert render(index_live) =~ "Organize sua hierarquia financeira"
 
       index_live |> render_click("close_modal")
-      refute render(index_live) =~ "1. Selecione a Conta de Destino"
+      refute render(index_live) =~ "Organize sua hierarquia financeira"
     end
   end
 end

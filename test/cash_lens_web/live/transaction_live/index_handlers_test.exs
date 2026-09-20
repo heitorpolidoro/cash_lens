@@ -131,24 +131,6 @@ defmodule CashLensWeb.TransactionLive.IndexHandlersTest do
     end
   end
 
-  describe "import progress handle_info" do
-    test "progress and success messages update the view", %{conn: conn} do
-      {:ok, live, _html} = live(conn, ~p"/transactions")
-
-      send(live.pid, {:import_file_parsed, 5})
-      send(live.pid, {:import_file_done, 5})
-      send(live.pid, {:import_success, %{imported: 3, failed: []}})
-      assert render(live) =~ "3 transações importadas"
-    end
-
-    test "success with failures shows the ignored-lines flash", %{conn: conn} do
-      {:ok, live, _html} = live(conn, ~p"/transactions")
-
-      send(live.pid, {:import_success, %{imported: 2, failed: [{"linha ruim", "motivo"}]}})
-      assert render(live) =~ "linhas ignoradas"
-    end
-  end
-
   describe "notes and reimbursement" do
     test "open_notes, save_notes and mark_reimbursable", %{conn: conn} do
       tx = transaction_fixture(%{amount: "-50.00", notes: nil})

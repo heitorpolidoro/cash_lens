@@ -129,7 +129,7 @@ defmodule CashLensWeb.LayoutsTest do
       html = render_app(%{current_path: "/"})
 
       assert html =~ "Importar Extratos"
-      assert html =~ ~s(href="/transactions?open_import=true")
+      assert html =~ ~s(href="/imports")
       assert html =~ "Nova Transação"
       assert html =~ ~s(href="/transactions/new")
     end

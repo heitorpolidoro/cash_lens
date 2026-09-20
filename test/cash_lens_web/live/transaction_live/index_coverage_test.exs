@@ -100,12 +100,6 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       assert render(index_live) =~ "Debit-TX"
     end
 
-    test "handle_info import errors", %{conn: conn} do
-      {:ok, index_live, _html} = live(conn, ~p"/transactions")
-      send(index_live.pid, {:import_error, "Invalid format"})
-      assert render(index_live) =~ "Erro na importação: Invalid format"
-    end
-
     test "handle_info category updates/deletes", %{conn: conn} do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
       cat = category_fixture()
@@ -121,13 +115,13 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
     test "close_modal event", %{conn: conn} do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
-      render_click(index_live, "open_import")
+      render_click(index_live, "open_quick_category", %{"name" => "Padaria", "id" => nil})
       # Check for specific modal content
-      assert render(index_live) =~ "Selecione a Conta de Destino"
+      assert render(index_live) =~ "Organize sua hierarquia financeira"
 
       render_click(index_live, "close_modal")
       # Content should be gone
-      refute render(index_live) =~ "Selecione a Conta de Destino"
+      refute render(index_live) =~ "Organize sua hierarquia financeira"
     end
   end
 
