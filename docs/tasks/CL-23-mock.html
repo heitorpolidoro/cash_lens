@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CashLens — Central de Importação (CL-23)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>body{font-family:'Plus Jakarta Sans',sans-serif}</style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 min-h-screen">
+
+<header class="border-b border-slate-200 bg-white sticky top-0 z-40 px-6 py-4 shadow-xs">
+  <div class="max-w-7xl mx-auto flex items-center justify-between">
+    <div class="flex items-center gap-6">
+      <span class="text-2xl font-black text-blue-600 tracking-tight">CashLens</span>
+      <nav class="hidden md:flex items-center gap-1 text-sm font-semibold">
+        <span class="px-3 py-2 rounded-lg text-slate-400 cursor-default">Painel</span>
+        <span class="px-3 py-2 rounded-lg text-slate-400 cursor-default">Transações</span>
+        <span class="px-3 py-2 rounded-lg text-slate-400 cursor-default">Faturas</span>
+        <span class="px-3 py-2 rounded-lg bg-slate-100 text-blue-600 font-bold">Central de Importação</span>
+      </nav>
+    </div>
+    <span class="text-[11px] font-bold text-slate-400 border border-dashed border-slate-300 px-3 py-1.5 rounded-lg">Mockup CL-23 — casca da tela</span>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+
+  <div class="pb-2 border-b border-slate-200">
+    <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Central de Importação</h1>
+    <p class="text-xs text-slate-500 mt-0.5">Acompanhe a pasta de extratos sincronizada e veja o que ainda não foi ingerido.</p>
+  </div>
+
+  <!-- Card da pasta monitorada -->
+  <section class="bg-white border border-slate-200 rounded-2xl shadow-xs">
+    <div class="p-5 flex flex-col lg:flex-row lg:items-end gap-4">
+      <div class="flex-1 min-w-0">
+        <label for="root" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Pasta monitorada</label>
+        <div class="mt-1.5 flex items-center gap-2">
+          <span class="text-slate-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+          </span>
+          <input id="root" type="text" value="/Users/heitor/CashLens/extratos"
+                 class="flex-1 font-mono text-xs px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-400 focus:outline-none">
+        </div>
+        <p id="root-hint" class="hidden mt-2 text-[11px] font-semibold text-amber-600">Caminho padrão em uso — salve para que os arquivos sejam registrados de forma relativa à pasta.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="savePath()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition shadow-xs flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          Salvar
+        </button>
+        <button onclick="rescan()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs transition flex items-center gap-1.5">
+          <svg id="rescan-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M5 19A9 9 0 0119 5"/></svg>
+          Reescanear
+        </button>
+      </div>
+    </div>
+    <div class="px-5 pb-4">
+      <p class="text-[11px] text-slate-400">Somente pastas marcadas com um arquivo <code class="font-mono text-slate-500">.account</code> são listadas.</p>
+    </div>
+  </section>
+
+  <!-- Flash simulado -->
+  <div id="flash" class="hidden rounded-xl px-4 py-3 text-xs font-bold"></div>
+
+  <!-- Cenários (controle do mockup, não faz parte da tela) -->
+  <div class="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+    <span class="text-slate-400 uppercase tracking-wider">Cenário do mockup:</span>
+    <button onclick="setState('list')"  id="sc-list"  class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition">Com arquivos</button>
+    <button onclick="setState('empty')" id="sc-empty" class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 transition">Pasta vazia</button>
+    <button onclick="setState('error')" id="sc-error" class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 transition">Pasta não encontrada</button>
+  </div>
+
+  <!-- Lista de arquivos -->
+  <section id="file-list" class="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+      <h2 class="text-sm font-black uppercase tracking-wider text-slate-400">Arquivos</h2>
+      <div id="counters" class="text-[11px] font-bold text-slate-500"></div>
+    </div>
+    <table class="w-full text-xs">
+      <thead class="bg-slate-50 text-slate-400 text-[10px] uppercase tracking-wider">
+        <tr>
+          <th class="text-left font-black px-5 py-2.5">Arquivo</th>
+          <th class="text-left font-black px-5 py-2.5">Conta</th>
+          <th class="text-left font-black px-5 py-2.5">Situação</th>
+          <th class="text-left font-black px-5 py-2.5">Detalhes</th>
+        </tr>
+      </thead>
+      <tbody id="rows" class="divide-y divide-slate-100"></tbody>
+    </table>
+  </section>
+
+  <!-- Estado vazio -->
+  <section id="scan-empty" class="hidden bg-white border border-slate-200 rounded-2xl shadow-xs p-10 text-center">
+    <p class="text-sm font-bold text-slate-500">Nenhum arquivo encontrado</p>
+    <p class="text-xs text-slate-400 mt-1">A pasta existe, mas não há subpastas marcadas com <code class="font-mono">.account</code> contendo extratos compatíveis.</p>
+  </section>
+
+  <!-- Estado de erro -->
+  <section id="scan-error" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-6">
+    <div class="flex items-start gap-3">
+      <svg class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+      <div>
+        <p class="text-sm font-bold text-amber-800">Pasta não encontrada</p>
+        <p class="text-xs text-amber-700 mt-1 font-mono break-all" id="error-path">/Users/heitor/CashLens/extratos</p>
+        <p class="text-xs text-amber-700 mt-1">O caminho não existe ou não é uma pasta. Se ela vive no Google Drive, verifique se o drive está montado e reescaneie.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pontos de extensão das próximas partes: inertes de propósito -->
+  <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center">
+      <p class="text-[11px] font-black uppercase tracking-wider text-slate-300">Reservado — CL-25</p>
+      <p class="text-xs text-slate-400 mt-1">Dropzone universal (drag-and-drop). Não faz parte desta entrega.</p>
+    </div>
+    <div class="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center">
+      <p class="text-[11px] font-black uppercase tracking-wider text-slate-300">Reservado — CL-26</p>
+      <p class="text-xs text-slate-400 mt-1">Histórico de importações recentes. Não faz parte desta entrega.</p>
+    </div>
+  </section>
+  <p class="text-[11px] text-slate-400 text-center">A inspeção pré-gravação por arquivo (CL-24) entra na coluna de ações das linhas acima, em outra tarefa.</p>
+
+</main>
+
+<script>
+  const FILES = [
+    { path: "bb/conta-corrente/2026-07.csv", bank: "Banco do Brasil", account: "Conta Corrente",
+      status: "new",     hash: "9f2ac10b", mtime: "18/09/2026 21:14", last: null },
+    { path: "bb/conta-corrente/2026-08.csv", bank: "Banco do Brasil", account: "Conta Corrente",
+      status: "updated", hash: "c7481ef3", mtime: "19/09/2026 08:02", last: "12/09/2026 19:40" },
+    { path: "bb/ourocard/2026-08.ofx", bank: "Banco do Brasil", account: "Ourocard",
+      status: "synced",  hash: "41ba0c9d", mtime: "10/09/2026 07:55", last: "10/09/2026 08:01" },
+    { path: "nubank/cartao/2026-08.csv", bank: "Nubank", account: "Cartão",
+      status: "synced",  hash: "bb90fe22", mtime: "09/09/2026 22:10", last: "09/09/2026 22:12" }
+  ];
+
+  const BADGE = {
+    new:     { label: "Novo",          cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+    updated: { label: "Atualizado",    cls: "bg-amber-50 text-amber-700 border-amber-200",       dot: "bg-amber-500" },
+    synced:  { label: "Sincronizado",  cls: "bg-slate-100 text-slate-500 border-slate-200",      dot: "bg-slate-400" }
+  };
+
+  let state = "list";
+  let files = FILES.slice();
+
+  function details(f) {
+    if (f.status === "updated")
+      return `<span class="font-mono text-amber-700">${f.hash}…</span> · modificado em ${f.mtime} · importado em ${f.last}`;
+    if (f.status === "synced")
+      return `importado em ${f.last}`;
+    return `modificado em ${f.mtime}`;
+  }
+
+  function render() {
+    document.getElementById("file-list").classList.toggle("hidden", state !== "list");
+    document.getElementById("scan-empty").classList.toggle("hidden", state !== "empty");
+    document.getElementById("scan-error").classList.toggle("hidden", state !== "error");
+    for (const s of ["list", "empty", "error"]) {
+      const b = document.getElementById("sc-" + s);
+      b.className = "px-3 py-1.5 rounded-lg transition " +
+        (s === state ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600");
+    }
+    document.getElementById("error-path").textContent = document.getElementById("root").value;
+    if (state !== "list") return;
+
+    document.getElementById("rows").innerHTML = files.map(f => {
+      const b = BADGE[f.status];
+      return `<tr data-path="${f.path}" data-status="${f.status}" class="hover:bg-slate-50/70">
+        <td class="px-5 py-3 font-mono font-bold text-slate-700 break-all">${f.path}</td>
+        <td class="px-5 py-3 text-slate-500">${f.bank} · ${f.account}</td>
+        <td class="px-5 py-3">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-black ${b.cls}">
+            <span class="w-1.5 h-1.5 rounded-full ${b.dot}"></span>${b.label}
+          </span>
+        </td>
+        <td class="px-5 py-3 text-slate-400">${details(f)}</td>
+      </tr>`;
+    }).join("");
+
+    const n = s => files.filter(f => f.status === s).length;
+    document.getElementById("counters").innerHTML =
+      `<span class="text-emerald-600">${n("new")} novos</span> · ` +
+      `<span class="text-amber-600">${n("updated")} atualizados</span> · ` +
+      `<span class="text-slate-400">${n("synced")} sincronizados</span>`;
+  }
+
+  function flash(kind, msg) {
+    const el = document.getElementById("flash");
+    el.className = "rounded-xl px-4 py-3 text-xs font-bold " +
+      (kind === "error" ? "bg-rose-50 text-rose-700 border border-rose-200"
+                        : "bg-blue-50 text-blue-700 border border-blue-200");
+    el.textContent = msg;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.add("hidden"), 4000);
+  }
+
+  function savePath() {
+    const v = document.getElementById("root").value.trim();
+    document.getElementById("root").value = v;
+    document.getElementById("root-hint").classList.add("hidden");
+    if (v === "") { flash("error", "Informe um caminho."); return; }
+    if (state === "error") { flash("info", "Caminho salvo, mas a pasta não foi encontrada."); render(); return; }
+    flash("info", "Pasta monitorada salva.");
+    render();
+  }
+
+  // Reescanear: simula um arquivo novo aparecendo na pasta.
+  let scanCount = 0;
+  function rescan() {
+    if (state === "list") {
+      scanCount += 1;
+      files.push({
+        path: `bb/conta-corrente/2026-09-${String(scanCount).padStart(2, "0")}.csv`,
+        bank: "Banco do Brasil", account: "Conta Corrente",
+        status: "new", hash: "0d13aa7" + scanCount,
+        mtime: "20/09/2026 06:0" + scanCount, last: null
+      });
+    }
+    flash("info", "Pasta reescaneada.");
+    render();
+  }
+
+  function setState(s) {
+    state = s;
+    if (s === "list") { files = FILES.slice(); scanCount = 0; }
+    render();
+  }
+
+  // Dica do caminho padrão: visível enquanto o valor é o default não salvo.
+  document.getElementById("root-hint").classList.remove("hidden");
+  render();
+</script>
+</body>
+</html>

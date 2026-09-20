@@ -44,7 +44,8 @@ defmodule CashLensWeb.Layouts do
           nav_item("Faturas de Cartão", "/statements", "hero-credit-card", "/statements"),
           nav_item("Transferências", "/transfers", "hero-arrows-right-left", "/transfers"),
           nav_item("Reembolsos", "/reimbursements", "hero-receipt-refund", "/reimbursements"),
-          nav_item("Conexões Bancárias", "/pluggy", "hero-building-library", "/pluggy")
+          nav_item("Conexões Bancárias", "/pluggy", "hero-building-library", "/pluggy"),
+          nav_item("Central de Importação", "/imports", "hero-arrow-down-tray", "/imports")
         ]
       },
       %{

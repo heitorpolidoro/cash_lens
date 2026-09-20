@@ -12,6 +12,10 @@ config :cash_lens,
   generators: [timestamp_type: :utc_datetime, binary_id: true],
   pdf_converter: CashLens.Parsers.PDFConverter.SystemConverter
 
+# The monitored statement folder used by the import screen when the operator
+# has never saved one. Displayed and scanned, but only persisted on save.
+config :cash_lens, :default_import_root, "~/CashLens/extratos"
+
 # Configure the endpoint
 config :cash_lens, CashLensWeb.Endpoint,
   url: [host: "localhost"],

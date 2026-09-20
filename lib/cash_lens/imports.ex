@@ -83,6 +83,38 @@ defmodule CashLens.Imports do
   end
 
   @doc """
+  Persists the monitored root, writing the same setting key `import_root/1`
+  reads so the scanned folder and the `imported_files` path key can never
+  disagree.
+
+  The value is trimmed; a blank path is rejected with `:error` and nothing is
+  written.
+  """
+  def put_import_root(root) when is_binary(root) do
+    case String.trim(root) do
+      "" ->
+        :error
+
+      trimmed ->
+        Settings.put(@root_setting, trimmed)
+        {:ok, trimmed}
+    end
+  end
+
+  def put_import_root(_root), do: :error
+
+  @doc """
+  The monitored root to fall back to when no setting has been saved yet.
+
+  Expanded, so the screen shows an absolute path the operator can recognise.
+  """
+  def default_import_root do
+    :cash_lens
+    |> Application.get_env(:default_import_root, "~/CashLens/extratos")
+    |> Path.expand()
+  end
+
+  @doc """
   The `imported_files.path` key for `abs_path` under `root`.
 
   Returns a root-relative path when `root` is a non-blank binary and the file
