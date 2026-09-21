@@ -609,3 +609,30 @@ event, but the final parcel's card sensibly marks itself as closing the commitme
 instead, since it already sits in that month. The mock was right and the criterion
 was wrong — worth remembering that a criterion QA reads literally can be the
 defective half.
+
+## CL-18 — Previsão de Caixa — code review + QA (2026-09-21)
+
+- **The running-balance prominence test is weak** (`forecast_live_test.exs:127-136`):
+  it matches `"text-lg font-black"` against the whole page and never against the
+  amount on the same card, so it cannot catch the very inversion it is named for.
+  The requirement itself holds — per card the amount is `text-xs font-bold` and the
+  balance is `text-lg font-black` — but the test would not notice if that flipped.
+- **`ForecastChart` in `assets/js/app.js:16-80` is now dead code.** The Chart.js
+  trend card was removed to match the mock, so nothing carries the `phx-hook` and
+  `@chart_data` is gone. The `Chart` import must STAY — it is still used at
+  `app.js:363`. Left untouched deliberately: the file is outside this task's list.
+- The critical point on the ruler is matched by date, so two occurrences on the same
+  day both receive the badge (`forecast_live/index.ex:50-57`).
+- `min_by`'s sorter uses `!= :gt`, so it replaces on ties and returns the *last*
+  tied occurrence (`forecast.ex:241-246`).
+- `@horizon_days 365` in the LiveView duplicates `Forecast`'s
+  `@default_horizon_days`.
+
+**A spec-authoring mistake worth not repeating.** When round 5 corrected the sync
+copy (180 days rather than "6 meses", and scoping the no-change claim because
+`resync_item/1` does override manually edited items), the verbatim copy block was
+fixed but the matching Test Criteria line and expected result were not. The
+developer spotted the contradiction and followed the verbatim block, which was
+right — but QA reads `expected_results` alone and would have failed a correct
+implementation on the stale wording. Corrected before QA ran. When copy is
+specified in two places, both move together.

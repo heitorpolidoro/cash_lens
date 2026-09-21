@@ -717,4 +717,233 @@ defmodule CashLens.InstallmentsTest do
       assert Installments.suggest_commitment_patterns() == []
     end
   end
+
+  describe "account_installment_groups/2" do
+    test "returns exactly the groups whose parcels fall in the month for that account" do
+      card = account_fixture(%{is_credit_card: true})
+      other_card = account_fixture(%{is_credit_card: true})
+
+      due =
+        group(%{
+          description_pattern: "GROUPS_DUE",
+          installments: 3,
+          start_date: ~D[2026-06-01],
+          total_amount: Decimal.new("300.00")
+        })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: due.id,
+        date: ~D[2026-06-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      # Already finished before the requested month.
+      finished =
+        group(%{
+          description_pattern: "GROUPS_FINISHED",
+          installments: 2,
+          start_date: ~D[2026-01-01],
+          total_amount: Decimal.new("200.00")
+        })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: finished.id,
+        date: ~D[2026-01-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      # Due in the month, but on another account.
+      other =
+        group(%{
+          description_pattern: "GROUPS_OTHER_ACCOUNT",
+          installments: 3,
+          start_date: ~D[2026-06-01],
+          total_amount: Decimal.new("300.00")
+        })
+
+      transaction_fixture(%{
+        account_id: other_card.id,
+        installment_group_id: other.id,
+        date: ~D[2026-06-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      groups = Installments.account_installment_groups(card.id, ~D[2026-07-01])
+
+      assert Enum.map(groups, & &1.id) == [due.id]
+    end
+
+    test "the sum of the returned groups' parcel values equals account_installment_total/2" do
+      card = account_fixture(%{is_credit_card: true})
+
+      for {pattern, total, n} <- [{"SUM_A", "300.00", 3}, {"SUM_B", "1000.00", 3}] do
+        g =
+          group(%{
+            description_pattern: pattern,
+            installments: n,
+            start_date: ~D[2026-06-01],
+            total_amount: Decimal.new(total)
+          })
+
+        transaction_fixture(%{
+          account_id: card.id,
+          installment_group_id: g.id,
+          date: ~D[2026-06-01],
+          amount: Decimal.new("-10.00")
+        })
+      end
+
+      month = ~D[2026-07-01]
+
+      sum =
+        card.id
+        |> Installments.account_installment_groups(month)
+        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, Installments.parcel_value(&1)))
+
+      assert Decimal.equal?(sum, Installments.account_installment_total(card.id, month))
+    end
+
+    test "returns an empty list when nothing is due for the account in that month" do
+      card = account_fixture(%{is_credit_card: true})
+      assert Installments.account_installment_groups(card.id, ~D[2020-01-01]) == []
+    end
+  end
+
+  describe "parcel_value/1 and parcel_position/2" do
+    test "parcel_value rounds the quotient to two decimal places" do
+      g =
+        group(%{
+          description_pattern: "PV_ROUND",
+          installments: 3,
+          start_date: ~D[2026-06-01],
+          total_amount: Decimal.new("1000.00")
+        })
+
+      assert Decimal.equal?(Installments.parcel_value(g), Decimal.new("333.33"))
+    end
+
+    test "parcel_value is zero without a total amount" do
+      assert Decimal.equal?(Installments.parcel_value(%{total_amount: nil}), Decimal.new("0"))
+    end
+
+    test "parcel_position returns the 1-based parcel index inside the plan window" do
+      g =
+        group(%{
+          description_pattern: "PP",
+          installments: 4,
+          start_date: ~D[2026-06-15],
+          total_amount: Decimal.new("400.00")
+        })
+
+      assert Installments.parcel_position(g, ~D[2026-06-01]) == 1
+      assert Installments.parcel_position(g, ~D[2026-08-01]) == 3
+      assert Installments.parcel_position(g, ~D[2026-09-01]) == 4
+      assert Installments.parcel_position(g, ~D[2026-05-01]) == nil
+      assert Installments.parcel_position(g, ~D[2026-10-01]) == nil
+    end
+  end
+
+  describe "list_off_card_groups/0" do
+    setup do
+      %{
+        card: account_fixture(%{is_credit_card: true}),
+        checking: account_fixture(%{is_credit_card: false})
+      }
+    end
+
+    test "includes a group whose transactions are all off-card", %{checking: checking} do
+      g =
+        group(%{
+          description_pattern: "OFF_CARD",
+          installments: 3,
+          start_date: ~D[2026-06-01],
+          total_amount: Decimal.new("300.00")
+        })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        installment_group_id: g.id,
+        date: ~D[2026-06-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      assert g.id in Enum.map(Installments.list_off_card_groups(), & &1.id)
+    end
+
+    test "excludes a group with at least one credit-card transaction", %{
+      card: card,
+      checking: checking
+    } do
+      g =
+        group(%{
+          description_pattern: "MIXED",
+          installments: 3,
+          start_date: ~D[2026-06-01],
+          total_amount: Decimal.new("300.00")
+        })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        installment_group_id: g.id,
+        date: ~D[2026-06-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: g.id,
+        date: ~D[2026-07-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      refute g.id in Enum.map(Installments.list_off_card_groups(), & &1.id)
+    end
+
+    test "includes a group with no linked transactions at all" do
+      g = group(%{description_pattern: "NO_TXN", installments: 3, start_date: ~D[2026-06-01]})
+
+      assert g.id in Enum.map(Installments.list_off_card_groups(), & &1.id)
+    end
+
+    test "decides by the account, never by commitment_type", %{card: card, checking: checking} do
+      financing_on_card =
+        group(%{
+          description_pattern: "FIN_ON_CARD",
+          commitment_type: "financing",
+          installments: 3,
+          start_date: ~D[2026-06-01],
+          total_amount: Decimal.new("300.00")
+        })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: financing_on_card.id,
+        date: ~D[2026-06-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      card_type_off_card =
+        group(%{
+          description_pattern: "CARD_TYPE_OFF_CARD",
+          commitment_type: "credit_card",
+          installments: 3,
+          start_date: ~D[2026-06-01],
+          total_amount: Decimal.new("300.00")
+        })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        installment_group_id: card_type_off_card.id,
+        date: ~D[2026-06-01],
+        amount: Decimal.new("-100.00")
+      })
+
+      ids = Enum.map(Installments.list_off_card_groups(), & &1.id)
+
+      refute financing_on_card.id in ids
+      assert card_type_off_card.id in ids
+    end
+  end
 end

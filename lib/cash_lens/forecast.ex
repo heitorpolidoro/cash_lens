@@ -187,7 +187,8 @@ defmodule CashLens.Forecast do
       |> Enum.flat_map(&future_occurrences(&1, today, horizon_end))
 
     occurrences =
-      (recurring_occurrences ++ card_occurrences(today, horizon_end))
+      (recurring_occurrences ++
+         card_occurrences(today, horizon_end) ++ commitment_occurrences(today, horizon_end))
       |> Enum.sort_by(& &1.date, Date)
       |> with_running_balance(starting_balance)
 
@@ -211,6 +212,69 @@ defmodule CashLens.Forecast do
       nil -> starting_balance
       occ -> occ.balance_after
     end
+  end
+
+  @doc """
+  The occurrences of `projection` settling within `days` days from today.
+
+  The screen reads three different windows (30, 90 and the full horizon) out of
+  the *same* projection: they are date slices, not separate projections.
+  """
+  def occurrences_within(%{occurrences: occurrences}, days) do
+    limit = Date.add(Date.utc_today(), days)
+    Enum.filter(occurrences, &(Date.compare(&1.date, limit) != :gt))
+  end
+
+  @doc """
+  The occurrence leaving the lowest balance within `days` days, or `nil` when
+  nothing settles in that window.
+  """
+  def minimum_point(projection, days) do
+    projection
+    |> occurrences_within(days)
+    |> Enum.min_by(& &1.balance_after, &(Decimal.compare(&1, &2) != :gt), fn -> nil end)
+  end
+
+  @doc """
+  The projected balance at the end of the projection's horizon: the balance
+  after its last occurrence, or the starting balance when it has none.
+  """
+  def final_balance(%{starting_balance: starting_balance, occurrences: occurrences}) do
+    case List.last(occurrences) do
+      nil -> starting_balance
+      occ -> occ.balance_after
+    end
+  end
+
+  @doc """
+  The change of the projected final balance against the current balance, as a
+  signed whole percentage. `nil` when the starting balance is zero.
+  """
+  def projected_change_percent(%{starting_balance: starting_balance} = projection) do
+    if Decimal.equal?(starting_balance, 0) do
+      nil
+    else
+      projection
+      |> final_balance()
+      |> Decimal.sub(starting_balance)
+      |> Decimal.div(starting_balance)
+      |> Decimal.mult(100)
+      |> Decimal.round(0)
+    end
+  end
+
+  @doc """
+  Categories eligible for a hand-created recurring item: the ones that do not
+  have an item yet, minus the credit-card categories (card bills already enter
+  the projection through `card_occurrences/2`, so registering one would count
+  the same money twice). Ordered by name.
+  """
+  def list_categories_without_recurring_item do
+    taken = MapSet.new(list_recurring_items(), & &1.category_id)
+
+    Categories.list_categories()
+    |> Enum.reject(&(MapSet.member?(taken, &1.id) or credit_card_category?(&1)))
+    |> Enum.sort_by(& &1.name)
   end
 
   @doc """
@@ -319,15 +383,19 @@ defmodule CashLens.Forecast do
 
     case statement_for_month(account.id, month) do
       %Statement{payment_transaction_id: nil} = s ->
-        build_card_occurrence(account, s.due_date, statement_amount(s), :boleto)
+        build_card_occurrence(account, s.due_date, statement_amount(s), :boleto, nil)
 
       %Statement{} ->
         nil
 
       nil ->
         case estimate_for_month(account, month) do
-          nil -> nil
-          amount -> build_card_occurrence(account, date, amount, :estimado)
+          nil ->
+            nil
+
+          amount ->
+            groups = Installments.account_installment_groups(account.id, month)
+            build_card_occurrence(account, date, amount, :estimado, {month, groups})
         end
     end
   end
@@ -376,12 +444,91 @@ defmodule CashLens.Forecast do
     end
   end
 
-  defp build_card_occurrence(account, date, amount, origin) do
+  defp build_card_occurrence(account, date, amount, origin, installments) do
+    {total, groups} = installment_disclosure(installments)
+
     %{
       date: date,
       item: %{id: account.id, label: "Fatura #{account.name}", amount: amount, is_salary: false},
       balance_after: nil,
-      origin: origin
+      origin: origin,
+      installment_total: total,
+      installment_groups: groups
     }
   end
+
+  # A :boleto is a real imported statement: its amount is the statement's own
+  # total and no installment breakdown is computed for it.
+  defp installment_disclosure(nil), do: {Decimal.new("0"), []}
+
+  defp installment_disclosure({month, groups}) do
+    disclosed =
+      Enum.map(groups, fn group ->
+        %{
+          id: group.id,
+          description: group.description_pattern,
+          parcel_value: Installments.parcel_value(group),
+          parcel_number: Installments.parcel_position(group, month),
+          installments: group.installments
+        }
+      end)
+
+    total =
+      Enum.reduce(disclosed, Decimal.new("0"), fn g, acc -> Decimal.add(acc, g.parcel_value) end)
+
+    {total, disclosed}
+  end
+
+  @doc """
+  Temporary recurrences: one occurrence per parcel, inside the horizon, for every
+  commitment whose parcels are *not* already folded into a credit-card bill.
+
+  Membership comes from `Installments.list_off_card_groups/0`, which decides by
+  the account the parcels land on — the very fact that drives
+  `Installments.account_installment_total/2` on the card-bill side. Because
+  bill-inclusion is a strict subset of ruler-exclusion, a commitment can never be
+  counted on both sides, whatever its `commitment_type` says.
+  """
+  def commitment_occurrences(today, horizon_end) do
+    Installments.list_off_card_groups()
+    |> Enum.flat_map(&group_occurrences(&1, today, horizon_end))
+  end
+
+  defp group_occurrences(
+         %{start_date: %Date{} = start_date, installments: n} = group,
+         today,
+         horizon_end
+       )
+       when is_integer(n) and n >= 1 do
+    amount = group |> Installments.parcel_value() |> Decimal.negate()
+    ends_on = Installments.last_installment_date(group)
+
+    0..(n - 1)
+    |> Enum.map(&{&1 + 1, Installments.add_months(start_date, &1)})
+    |> Enum.filter(fn {_position, date} ->
+      Date.compare(date, today) != :lt and Date.compare(date, horizon_end) != :gt
+    end)
+    |> Enum.map(fn {position, date} ->
+      %{
+        date: date,
+        item: %{
+          id: group.id,
+          label: group.description_pattern,
+          amount: amount,
+          is_salary: false
+        },
+        balance_after: nil,
+        commitment: %{
+          group_id: group.id,
+          parcel_number: position,
+          installments: n,
+          ends_on: ends_on,
+          commitment_type: Installments.commitment_type(group)
+        }
+      }
+    end)
+  end
+
+  # coveralls-ignore-next-line — defensive: both fields are required by the changeset.
+  defp group_occurrences(_group, _today, _horizon_end), do: []
 end

@@ -6,6 +6,7 @@ defmodule CashLens.Installments do
   import Ecto.Query, warn: false
   alias CashLens.Repo
 
+  alias CashLens.Accounts.Account
   alias CashLens.Installments.InstallmentGroup
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.InstallmentDetector
@@ -27,6 +28,17 @@ defmodule CashLens.Installments do
   month-total helper used by `upcoming_installments/1`.
   """
   def account_installment_total(account_id, %Date{} = month) do
+    account_id
+    |> account_installment_groups(month)
+    |> Enum.reduce(Decimal.new("0"), fn g, acc -> Decimal.add(acc, parcel_value(g)) end)
+  end
+
+  @doc """
+  The installment groups behind `account_installment_total/2`: the groups that
+  touch `account_id` and whose plan bills a parcel in `month`. The sum of their
+  `parcel_value/1` is exactly what `account_installment_total/2` returns.
+  """
+  def account_installment_groups(account_id, %Date{} = month) do
     from(g in InstallmentGroup,
       join: t in assoc(g, :transactions),
       where: t.account_id == ^account_id,
@@ -35,7 +47,34 @@ defmodule CashLens.Installments do
     )
     |> Repo.all()
     |> Enum.filter(&parcel_due_in_month?(&1, month))
-    |> Enum.reduce(Decimal.new("0"), fn g, acc -> Decimal.add(acc, parcel_value(g)) end)
+  end
+
+  @doc """
+  The commitments whose parcels are *not* inside any credit-card bill: groups
+  with no linked transaction on an account flagged `is_credit_card`.
+
+  Membership is decided by where the money actually lands, not by
+  `commitment_type`, because `account_installment_total/2` — the function that
+  folds parcels into the credit-card bill estimate — selects groups by the
+  account of their transactions. Using the same fact on both sides makes it
+  impossible for a commitment to be counted twice. A group with no transaction
+  at all is included: contributing to no account's total, it is in no bill.
+  """
+  def list_off_card_groups do
+    on_card =
+      from(t in Transaction,
+        join: a in Account,
+        on: a.id == t.account_id,
+        where: parent_as(:group).id == t.installment_group_id and a.is_credit_card == true,
+        select: 1
+      )
+
+    from(g in InstallmentGroup,
+      as: :group,
+      where: not exists(subquery(on_card)),
+      order_by: [asc: g.start_date, asc: g.inserted_at]
+    )
+    |> Repo.all()
   end
 
   @doc """
@@ -214,14 +253,33 @@ defmodule CashLens.Installments do
 
   defp month_diff(from, to), do: to.year * 12 + to.month - (from.year * 12 + from.month)
 
-  defp parcel_value(%{total_amount: nil}), do: Decimal.new("0")
+  @doc """
+  The monthly parcel of a commitment: the total divided by the parcel count,
+  rounded to two decimal places. The rounding is part of the contract — callers
+  must not re-derive the raw quotient, or the same plan would show one figure on
+  the forecast ruler and another inside the credit-card bill disclosure.
+  """
+  def parcel_value(%{total_amount: nil}), do: Decimal.new("0")
 
-  defp parcel_value(%{total_amount: total, installments: n}) when n > 0 do
+  def parcel_value(%{total_amount: total, installments: n}) when n > 0 do
     Decimal.div(total, n) |> Decimal.round(2)
   end
 
   # coveralls-ignore-next-line — defensive fallthrough; installments is validated > 1.
-  defp parcel_value(_), do: Decimal.new("0")
+  def parcel_value(_), do: Decimal.new("0")
+
+  @doc """
+  The 1-based position of the parcel billing in `month`, or `nil` when `month`
+  falls outside the plan's window.
+  """
+  def parcel_position(%{start_date: %Date{} = start_date, installments: n}, %Date{} = month)
+      when is_integer(n) do
+    position = month_diff(month_start(start_date), month) + 1
+    if position >= 1 and position <= n, do: position, else: nil
+  end
+
+  # coveralls-ignore-next-line — defensive: start_date is required, so nil never occurs in practice.
+  def parcel_position(_group, _month), do: nil
 
   # coveralls-ignore-next-line — defensive: start_date is required, so nil never occurs in practice.
   defp parcel_due_in_month?(%{start_date: nil}, _month), do: false
