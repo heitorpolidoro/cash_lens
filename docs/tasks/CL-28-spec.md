@@ -71,11 +71,14 @@ npm dependencies resolved. The image is measurably smaller.
   the next reader does not repeat this investigation.
 - `docker-compose.yml` — delete the `- gemini_data:/root/.gemini` mount from the `app`
   service (line 42) and the `gemini_data:` entry from the `volumes:` block (line 48).
-  Change the `app` `command` so `assets/node_modules` is provisioned rather than assumed:
-  `npm --prefix assets install --no-audit --no-fund` runs between `mix deps.get` and
-  `mix phx.server`. Leave everything established by `ab72fa6` untouched — the `standalone`
-  profile on `db`, the profile-less `app` service, `required: false` on `depends_on`, and the
-  `DATABASE_HOST`/`DATABASE_PORT` passthrough must all survive unchanged.
+  **Leave the `app` `command` alone.** An earlier draft of this spec had it provision
+  `assets/node_modules` on every start. That was tried and reverted: `.:/app` is a bind
+  mount with no anonymous volume for `assets/node_modules`, so the install ran against the
+  host working tree, and `npm ci --omit=dev` deleted `playwright` — which
+  `scripts/extract_mercado_livre.js:5` loads by hard-coded path. Nothing provisions
+  `assets/node_modules` today and nothing does after this task either; that gap is
+  pre-existing, needs its own design decision (anonymous volume plus build-time install
+  versus a runtime install), and belongs in its own task. This one is a removal.
 
 **Order of operations.** Volume deletion is destructive and irreversible, so it comes last,
 after the app is proven healthy:
@@ -132,9 +135,9 @@ past step 3 while either mode is failing.
 ## Expected Results
 
 - [ ] `Dockerfile` contains no `@google/gemini-cli` install line and no `# Install Gemini CLI` comment.
-- [ ] `Dockerfile`'s `apk` line still installs `nodejs npm`, carrying a comment that states they are required because `assets/js/app.js` imports `chart.js`, `dompurify` and `flatpickr` from `assets/node_modules`.
+- [ ] `Dockerfile`'s `apk` line still installs `nodejs npm`, carrying a comment that states they are required because `assets/js/app.js` imports `chart.js`, `dompurify` and `flatpickr` from `assets/node_modules`, and that says `assets/node_modules` is gitignored and not provisioned automatically, so a fresh clone must run `npm install --prefix assets`.
 - [ ] `docker-compose.yml` has no `gemini_data:/root/.gemini` mount on the `app` service and no `gemini_data` entry in the `volumes:` block.
-- [ ] `docker-compose.yml`'s `app` command provisions assets deps (`npm ci --prefix assets --omit=dev`) before starting the server.
+- [ ] `docker-compose.yml`'s `app` command is unchanged (`mix deps.get && mix phx.server`): asset provisioning is explicitly out of scope for this removal, and `git diff` on that file shows only the two Gemini deletions.
 - [ ] `grep -ri 'gemini-cli\|/root/\.gemini\|gemini_data' .` excluding `_build`, `deps`,
       `node_modules`, `.git`, `.meridian` **and `docs/`** returns no matches. `docs/` must be
       excluded: this spec file itself quotes all three patterns, so without that exclusion the

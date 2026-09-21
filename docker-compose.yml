@@ -44,11 +44,9 @@ services:
       - .:/app
       - /app/_build
       - /app/deps
-      - gemini_data:/root/.gemini
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
-  gemini_data:
   cash_lens_pgdata:
