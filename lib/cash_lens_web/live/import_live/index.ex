@@ -12,6 +12,7 @@ defmodule CashLensWeb.ImportLive.Index do
   use CashLensWeb, :live_view
 
   alias CashLens.Imports
+  alias CashLens.Installments
   alias CashLens.Parsers.Ingestor
 
   @drop_accept ~w(.csv .pdf .ofx .txt)
@@ -632,10 +633,16 @@ defmodule CashLensWeb.ImportLive.Index do
   end
 
   @impl true
+  # Opening a folder inspection is an exit for whatever drop is staged, exactly
+  # as a drop replacing a folder inspection is: the drawer can only show one
+  # subject, so the other one's staging directory has to go with it.
   def handle_event("inspect", %{"path" => path}, socket) do
     case find_entry(socket, path) do
-      nil -> {:noreply, socket}
-      entry -> {:noreply, assign(socket, :inspect, build_inspection(entry))}
+      nil ->
+        {:noreply, socket}
+
+      entry ->
+        {:noreply, socket |> discard_drop() |> assign(:inspect, build_inspection(entry))}
     end
   end
 
@@ -767,12 +774,14 @@ defmodule CashLensWeb.ImportLive.Index do
 
     case Ingestor.import_file(account, entry.absolute_path, import_root: root) do
       {:ok, summary} ->
+        grouped = regroup_installments(summary)
+
         {:noreply,
          socket
          |> assign(:inspect, nil)
          |> assign_scan(root)
          |> assign_history()
-         |> put_flash(:info, imported_message(summary))}
+         |> put_flash(:info, imported_message(summary, grouped))}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Falha ao importar: #{reason}")}
@@ -909,11 +918,13 @@ defmodule CashLensWeb.ImportLive.Index do
 
     case result do
       {:ok, summary} ->
+        grouped = regroup_installments(summary)
+
         {:noreply,
          socket
          |> assign_scan(socket.assigns.root)
          |> assign_history()
-         |> put_flash(:info, imported_message(summary))}
+         |> put_flash(:info, imported_message(summary, grouped))}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Falha ao importar: #{reason}")}
@@ -997,9 +1008,29 @@ defmodule CashLensWeb.ImportLive.Index do
   defp upload_error_message(:too_many_files), do: "Solte um arquivo por vez."
   defp upload_error_message(error), do: "Falha no envio do arquivo: #{error}."
 
-  defp imported_message(summary) do
-    "#{summary.imported} transações importadas, #{Map.get(summary, :skipped, 0)} duplicadas ignoradas."
+  # Parity with the flows this screen replaced (the legacy modal and
+  # `DirectoryImporter`): both regrouped installments right after importing, so
+  # a statement confirmed here leaves no "PARC x/y" purchase ungrouped.
+  #
+  # Guarded on `imported > 0` because the scan is not free — it re-dates parcels
+  # and rebuilds the affected accounts' balance chains — and an import that
+  # wrote nothing has nothing to regroup.
+  defp regroup_installments(%{imported: imported}) when imported > 0,
+    do: Installments.scan_and_apply_all()
+
+  defp regroup_installments(_summary), do: 0
+
+  # `scan_and_apply_all/0` is **global**: it regroups every ungrouped
+  # transaction in the database, so `grouped` can exceed what this file
+  # contributed. The wording therefore never attributes the count to the
+  # imported file, and the clause is dropped entirely when nothing was grouped.
+  defp imported_message(summary, grouped) do
+    "#{summary.imported} transações importadas, #{Map.get(summary, :skipped, 0)} duplicadas ignoradas." <>
+      grouped_clause(grouped)
   end
+
+  defp grouped_clause(0), do: ""
+  defp grouped_clause(count), do: " • #{count} transações agrupadas em parcelamentos"
 
   defp row_badge_label(:new), do: "Nova"
   defp row_badge_label(:duplicate), do: "Duplicada"

@@ -1039,6 +1039,32 @@ defmodule CashLensWeb.ImportLiveTest do
       assert detection(view) =~ "OFX"
     end
 
+    test "inspecting a folder entry while a drop is open discards the drop", %{
+      conn: conn,
+      root: root,
+      sessions_before: before
+    } do
+      dir = account_folder(root, "bb")
+      write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      drop_file(view, "extrato.ofx", @ofx_sample)
+      assert [staged] = staged_dirs(before)
+
+      html =
+        view
+        |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+        |> render_click()
+
+      assert html =~ ~s(id="inspect-drawer")
+      assert view |> element("#inspect-path") |> render() =~ "bb/extrato.csv"
+      refute File.exists?(staged)
+      assert staged_dirs(before) == []
+      refute has_element?(view, "#drop-detection")
+      assert :sys.get_state(view.pid).socket.assigns.drop == nil
+    end
+
     test "mount sweeps stale session directories and keeps fresh ones", %{conn: conn} do
       stale = Path.join(Imports.drop_root(), "stale#{System.unique_integer([:positive])}")
       fresh = Path.join(Imports.drop_root(), "fresh#{System.unique_integer([:positive])}")
@@ -1068,6 +1094,161 @@ defmodule CashLensWeb.ImportLiveTest do
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
       assert new_sessions(before) == []
+    end
+  end
+
+  describe "installment regrouping after a confirmed import" do
+    alias CashLens.Imports.ImportRun
+    alias CashLens.Installments.InstallmentGroup
+    alias CashLens.Parsers.Ingestor
+    alias CashLens.Repo
+    alias CashLens.Transactions.Transaction
+
+    # An OFX carrying a single "PARC 03/10" purchase. OFX is used rather than
+    # the BB CSV because the CSV parser strips `dd/mm` runs out of descriptions,
+    # which would destroy the installment marker before it reaches the database.
+    # The posting date is old enough that the parcel's billing month
+    # (date + 2 months) is in the past, so the regrouping keeps the row.
+    @parc_ofx """
+    <OFX>
+    <STMTTRN>
+    <TRNTYPE>DEBIT</TRNTYPE>
+    <DTPOSTED>20260110120000</DTPOSTED>
+    <TRNAMT>-90.00</TRNAMT>
+    <MEMO>COMPRA LOJA PARCELADA PARC 03/10</MEMO>
+    </STMTTRN>
+    </OFX>
+    """
+
+    @grouped_clause " • 1 transações agrupadas em parcelamentos"
+
+    setup do
+      before = session_names()
+      on_exit(fn -> Enum.each(new_sessions(before), &File.rm_rf!/1) end)
+
+      ofx_account =
+        account_fixture(bank: "Itaú", name: "Conta OFX", parser_type: "standard_ofx")
+
+      {:ok, sessions_before: before, ofx_account: ofx_account}
+    end
+
+    defp ofx_account_folder(root) do
+      dir = Path.join(root, "itau")
+      File.mkdir_p!(dir)
+
+      File.write!(
+        Path.join(dir, ".account"),
+        "bank: Itaú\naccount: Conta OFX\nparser: standard_ofx\n"
+      )
+
+      dir
+    end
+
+    defp grouped_transactions do
+      Repo.all(from t in Transaction, where: not is_nil(t.installment_group_id))
+    end
+
+    test "confirming a folder entry groups its installment purchase", %{
+      conn: conn,
+      root: root
+    } do
+      dir = ofx_account_folder(root)
+      write_file(dir, "extrato.ofx", @parc_ofx)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="itau/extrato.ofx"] [data-role="inspect"]))
+      |> render_click()
+
+      html = view |> element("#confirm-import") |> render_click()
+
+      assert [group] = Repo.all(InstallmentGroup)
+      assert group.installments == 10
+      assert [transaction] = grouped_transactions()
+      assert transaction.installment_group_id == group.id
+
+      assert html =~ @grouped_clause
+    end
+
+    test "confirming a dropped file groups its installment purchase", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      drop_file(view, "extrato_parc.ofx", @parc_ofx)
+
+      html = view |> element("#confirm-import") |> render_click()
+
+      assert [group] = Repo.all(InstallmentGroup)
+      assert [transaction] = grouped_transactions()
+      assert transaction.installment_group_id == group.id
+
+      assert html =~ @grouped_clause
+    end
+
+    test "a confirm that imports nothing neither groups nor mentions parcelamentos", %{
+      conn: conn,
+      root: root,
+      ofx_account: ofx_account
+    } do
+      dir = ofx_account_folder(root)
+      file = write_file(dir, "extrato.ofx", @parc_ofx)
+
+      # Imported outside the LiveView, so the installment row is already in the
+      # database and still ungrouped: a scan running on the confirm below would
+      # grab it. That is what keeps the assertions here from being vacuous.
+      {:ok, _summary} = Ingestor.import_file(ofx_account, file, import_root: root)
+      assert grouped_transactions() == []
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="itau/extrato.ofx"] [data-role="inspect"]))
+      |> render_click()
+
+      assert view |> element("#preview-new-count") |> render() |> extract_count() == 0
+
+      html = view |> element("#confirm-import") |> render_click()
+
+      assert Repo.all(InstallmentGroup) == []
+      assert grouped_transactions() == []
+      assert html =~ "0 transações importadas"
+      refute html =~ "agrupadas em parcelamentos"
+    end
+
+    test "the drawer counters equal the import_runs row the confirm writes", %{
+      conn: conn,
+      root: root,
+      account: account
+    } do
+      dir = account_folder(root, "bb")
+      file = write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, %{imported: already}} = Ingestor.import_file(account, file, import_root: root)
+      assert already > 0
+
+      File.write!(file, @bb_sample <> "28/02/2026,1234,5678,COMPRA NOVA,321.654,-12.34,\n")
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      new_count = view |> element("#preview-new-count") |> render() |> extract_count()
+      skipped_count = view |> element("#preview-skipped-count") |> render() |> extract_count()
+
+      assert new_count == 1
+      assert skipped_count == already
+
+      # The direct import above already wrote a run of its own; only the one the
+      # confirm adds is compared against the drawer.
+      previous_run_ids = Repo.all(from r in ImportRun, select: r.id)
+
+      view |> element("#confirm-import") |> render_click()
+
+      assert [run] = Repo.all(from r in ImportRun, where: r.id not in ^previous_run_ids)
+      assert run.imported_count == new_count
+      assert run.skipped_count == skipped_count
     end
   end
 end

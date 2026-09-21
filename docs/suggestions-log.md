@@ -636,3 +636,87 @@ developer spotted the contradiction and followed the verbatim block, which was
 right — but QA reads `expected_results` alone and would have failed a correct
 implementation on the stale wording. Corrected before QA ran. When copy is
 specified in two places, both move together.
+
+## CL-8 — respec pós-split — spec review (2026-09-21)
+
+CL-8 came back to `backlog` after its seven children shipped, carrying the
+original seven expected results that described the whole feature. The respec's
+job was to find what genuinely remained. Review confirmed the scope is honest in
+both directions — nothing invented to justify the task, nothing real declared
+done — and that finding is worth recording, because a post-split respec can fail
+either way and inventing work costs an implementation, a review and a QA pass on
+nothing.
+
+What remained were two cross-child seams that no single child owned, which is
+exactly what belongs to a parent:
+
+- **`Installments.scan_and_apply_all/0` never runs after a confirmed import on
+  `/imports`.** It has three call sites — `directory_importer.ex:98`,
+  `admin_database_live.ex:153` and its own definition — none in
+  `import_live/index.ex`. This is CL-27's parity gap 1, deliberately deferred by
+  that removal-only task.
+- **The reverse staging leak.** `handle_event("inspect", …)` assigns `:inspect`
+  without calling `discard_drop/1`, unlike `close_inspect` and `handle_progress`,
+  so opening a folder inspection over an open drop drawer leaves the drop's
+  staging directory behind. Found by CL-25's QA.
+
+Correctly left OUT of CL-8 and still open as their own candidates: the one-shot
+folder-wide import from the UI, bulk multi-file upload (`max_entries: 1` is CL-25's
+design), and the fact that nothing provisions `assets/node_modules`. Those are new
+capability or build infrastructure, not integration seams.
+
+Two precision points fixed before the gate:
+- **`scan_and_apply_all/0` is global.** It regroups every ungrouped transaction in
+  the database, so its return can exceed what the current import contributed. Copy
+  attributing the count to the imported file would be false whenever older
+  ungrouped rows exist. The flash clause is now fixed wording, omitted at zero, so
+  the criteria are exact string assertions.
+- **The regrouping is not free**: it re-dates parcels and rebuilds account balances,
+  and this puts that work inside the confirm handler.
+
+Also settled: the original criterion "Forçar Download/Atualizar do Drive" is
+satisfied by the existing rescan. There is no Google Drive API integration
+anywhere and none was ever built — the two mentions in `lib/` are prose, and the
+monitored folder is a locally-synced Drive mount that the Drive client keeps
+current.
+
+## CL-8 — costuras de integração — code review + QA (2026-09-21)
+
+### A real data-corruption defect, found in passing — deserves its own task
+
+**`CSVParser.extract_metadata_and_clean/2` (`csv_parser.ex:190`) lets any `dd/mm`
+run inside a description hijack the transaction's date.** Verified by execution
+against a 2026-09-21 base date:
+
+- `"COMPRA LOJA PARC 03/10"` → date **2026-10-03**, description `"COMPRA LOJA PARC"`
+- `"UBER 15/03 SAO PAULO"`   → date **2026-03-15**, six months into the past
+
+Two losses at once: the date is silently relocated, and the matching text is
+stripped from the description.
+
+**Scope: `bb_csv` only.** The single call site is `csv_parser.ex:173`, inside
+`do_parse_row/3`, whose only caller is `parse_bb_row/2` (`:144`). `parse_bradesco_row/1`
+(`:63`) and `parse_mercado_pago_row/1` (`:289`) never reach it. An initial review
+claim that all three CSV parsers were affected was wrong; QA traced the call site
+and the narrower reading was confirmed.
+
+It interacts with CL-8: the defect erases the `PARC n/m` marker from BB statements,
+so the installment regrouping CL-8 just wired into the import path can never fire
+for a BB CSV import. Pre-existing and independent — CL-8's own fixtures use an OFX
+`<MEMO>`, which does not route through `CSVParser`, so the seam is exercised
+against real production code rather than around the defect.
+
+### Other notes
+
+- `index.ex:1033` renders ` • 1 transações agrupadas` — plural with a singular
+  count. The wording is spec-pinned so it was left alone; worth fixing when the
+  copy is next revisited.
+- `scan_and_apply_all/0` now runs **synchronously inside the confirm handler** and
+  scales with the whole database's ungrouped backlog, re-running
+  `rebuild_account_balances/1` per affected account. This is parity with the flows
+  CL-27 removed, so not a regression, but it is a click that can stall on a large
+  database. An Oban job is the fix if it starts to bite.
+- Worth recording as method: this diff's tests were mutation-verified six ways,
+  and the disjoint failures (breaking the folder arm killed only the folder test,
+  breaking the drop arm only the drop test) are what proved the two arms are
+  independently covered rather than one test passing through shared code.
