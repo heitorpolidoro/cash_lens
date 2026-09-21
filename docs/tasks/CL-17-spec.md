@@ -48,7 +48,7 @@ Asserted literals must match the mock copy exactly. `test/cash_lens_web/live/aut
 - Creating, editing and deleting a bulk-ignore pattern through the modal all work, and the pattern's delete control carries a `data-confirm` guard; an invalid regex is rejected with the changeset error instead of being saved.
 - The regex tester returns the matching-rule verdict ("Corresponde à regra:") followed by the pattern's own source text (not its `description`) for a description covered by a registered pattern, and the keep verdict ("Nenhum padrão de exclusão casou.") for one that is not. The test fixture uses a pattern whose `pattern` and `description` differ, so the verdict cannot pass with the wrong field.
 - A bulk-ignore pattern row renders its `pattern` and its `description` and nothing else: the row's text is refuted against "Aplicado" (no provenance line).
-- `mix test test/cash_lens_web/live/automation_live/index_test.exs` passes (from the host, `.env` points `DATABASE_HOST` at the Docker-only `db`, so run it as `DATABASE_HOST=localhost DATABASE_PORT=54321 mix test ...`).
+- `docker compose exec app mix test test/cash_lens_web/live/automation_live/index_test.exs` passes. Postgres is reachable on the compose network only, so the suite runs inside the app container.
 - No NEW credo findings are introduced in the files this task touches (the repository already carries pre-existing `credo --strict` findings in untouched files, so a clean `mix quality_check` is not a valid gate), and `mix format --check-formatted` is clean on those files.
 
 ## Expected Results
@@ -60,7 +60,7 @@ Asserted literals must match the mock copy exactly. `test/cash_lens_web/live/aut
 - [ ] Rules of both kinds are created and edited through a LiveView modal; neither of the old fixed side forms remains
 - [ ] On the exclusions tab the header button opens the exclusion form (fields `pattern` and `description`), never the transfer form, and each pattern row's edit action opens that same modal pre-filled with the row's values
 - [ ] Editing an existing bulk-ignore pattern persists the change (new behavior, backed by `update_bulk_ignore_pattern/2`); the delete control of a pattern and of a transfer rule alike is guarded by a `data-confirm` confirmation
-- [ ] No new credo findings in the files this task touches and `mix format --check-formatted` is clean on those files, and the consolidated `test/cash_lens_web/live/automation_live/index_test.exs` suite passes (run from the host with `DATABASE_HOST=localhost DATABASE_PORT=54321 mix test`)
+- [ ] No new credo findings in the files this task touches and `mix format --check-formatted` is clean on those files, and the consolidated `test/cash_lens_web/live/automation_live/index_test.exs` suite passes (run with `docker compose exec app mix test`)
 
 ## Out of Scope
 - Database migrations, including any `active` flag for transfer rules.

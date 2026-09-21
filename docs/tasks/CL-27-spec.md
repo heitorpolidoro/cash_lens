@@ -242,7 +242,7 @@ documents under `docs/superpowers/**` still mention both component modules and
 - [ ] `docs/suggestions-log.md` records that the `priv/settings.json` pollution
       (entry at `:234`) is resolved by the deletion of `batch_import_modal_component_test.exs`,
       and adds the installment-rescan parity gap as a follow-up
-- [ ] `DATABASE_HOST=localhost DATABASE_PORT=54321 mix test` passes with 0 failures across the
+- [ ] `docker compose exec app mix test` passes with 0 failures across the
       whole project
 - [ ] `mix format --check-formatted` is clean, `mix compile --warnings-as-errors` succeeds, and
       `mix credo` reports no NEW findings in the files this task touches (pre-existing findings

@@ -185,3 +185,333 @@
 - `scan/1` is not silent — it inherits `maybe_warn_skipped_dir/2`'s warnings from the reused traversal, which the later `/imports` LiveView will emit on every load.
 - Symlinked roots are not resolved by `Path.expand/1` (not reachable in production today).
 - Extracting a `status_for(summary)` would let the `"warning"` branch be unit-tested directly; end-to-end it needs `prepare_transaction_entry/5` to raise.
+- (CL-16 round 4) `Forecast.sync_all/0` only materialises an item once history reaches `@min_occurrences` (`forecast.ex:53-59`), so a newly-marked Fixo category enters the forecast only after enough history and a sync; the hint's present tense is a slight simplification.
+- (CL-16 round 4) The tree-side Fixo hint lives only in a `title` tooltip, invisible to touch and keyboard-only users; the modal caption covers discoverability, but a visible caption or `aria-describedby` would be better in a later pass.
+
+## CL-17 — spec review round 3 (2026-09-20)
+
+- **Dead action buttons in mocks are a recurring defect class.** The operator
+  found the exclusion rows' `Editar` did nothing; the spec reviewer then found
+  the transfer cards' `Excluir` had the same problem one tab over. Both were
+  fixed in `CL-17-mock.html`. Worth a habit: before a mock goes to the operator,
+  every rendered control should either be wired or visibly inert. A mock that
+  presents a live-looking button that does nothing costs a full review round.
+
+## CL-18 — spec review round 3 (2026-09-20)
+
+- **Mock lacks a `:boleto` card row.** The spec says only `:estimado` card
+  occurrences carry the "dos quais R$ X são parcelas" disclosure, because a real
+  imported boleto's amount is the statement's own total and never passes through
+  `estimate_for_month/2`. The mock demonstrates the disclosure present but never
+  the case where it is correctly absent, so a reader cannot see the distinction.
+  Worth a row when the screen is built.
+- **"Visible scrollbar" is not a mechanically verifiable assertion on macOS**
+  (overlay scrollbars). Where a test needs to pin scrollability, assert the
+  absence of a `scrollbar-hide` utility on the strip instead of the presence of
+  a scrollbar.
+- **Installments are disclosed inside the card bill, never promoted to their own
+  ruler rows.** Doing the latter without reducing the bill estimate by the same
+  amount double-counts the money and corrupts every subsequent "Saldo após",
+  since `with_running_balance/2` sums occurrences in order. If a future task
+  wants per-installment rows, the bill estimate must shrink in the same change,
+  with an explicit non-duplication test.
+
+## CL-22 — Criar CashLens.Parsers.FormatDetector — spec review (2026-09-20)
+
+- **C3's gloss on `CSVParser.normalize_header/1` omits its final `[^a-z]` strip step.**
+  Worth completing the parenthetical when the module is written, so the predicate
+  in the spec and the real normalisation cannot drift.
+- **Some Bradesco fixture texts carry neither P3 marker and land on `parser_type: nil`.**
+  That is correct behaviour, not a bug — the detector declines rather than guesses.
+  Note it in the module `@moduledoc` so a future reader does not "fix" it.
+- **The `.pdf` fixture in `test/support/fixtures/files/` is not a real PDF** — 35 bytes
+  of plain text with no `%PDF-` magic, a stub for the mocked converter. It is valid
+  input for the text path but can never back magic-byte detection. If a real PDF
+  fixture is ever needed, it has to be added.
+
+## CL-23 — Criar rota /imports — spec review (2026-09-20)
+
+- **`priv/settings.json` is polluted by an existing test.**
+  `batch_import_modal_component_test.exs:143` persists a `batchclose_<n>` tmp path
+  through `batch_import_modal_component.ex:58` and never restores it, so a full
+  `mix test` leaves the developer's monitored folder pointing at a deleted temp
+  directory. The file is gitignored, so nothing flags it. Worth its own task:
+  give that component test the same capture/`on_exit` restore CL-23 specifies.
+- CL-23 Decision 4's rationale was wrong and was corrected in review:
+  `DirectoryImporter` always passes `import_root: root_path`, so batch imports key
+  rows relative to the typed path, not the setting.
+- `layout_navigation_test.exs` will now mount `/imports` and scan the developer's
+  real monitored root — it is not the unset-root case the spec assumed. Worth
+  pinning that test to a temp root when the screen is built.
+- `hero-arrow-down-tray` is not used anywhere in `lib/` yet; verify it renders
+  before relying on it.
+
+## CL-24 — Pre-write Inspection em /imports — spec review (2026-09-20)
+
+- **Mock/spec copy drift** on the empty-state text and on the drawer chrome
+  (`<aside>` slide-over in the mock vs the bound `<.modal>` component in the spec).
+  Reconcile when the screen is built so the implementer does not have to guess
+  which one is authoritative.
+- **A note for future dispatches:** review agents that try to run `mix test` fail
+  against `localhost:5432`. This project's Postgres is on port **54321**
+  (`DATABASE_HOST=localhost DATABASE_PORT=54321 mix test`), because `.env` sets
+  `DATABASE_HOST=db`, which only resolves inside Docker. Worth stating in every
+  dispatch that may run tests.
+
+## CL-25 — Dropzone universal em /imports — spec review (2026-09-20)
+
+- **`:too_many_files` is not named among the `@uploads.drop.errors` sources**, and with
+  `auto_upload: true` a `cancel_upload` does not clear it. Worth handling explicitly
+  when the screen is built, or the operator hits a stuck error state.
+- **The 65-char path budget interacts with the known `varchar(255)` bug.** The
+  `"<content_hash>/"` prefix is a fixed 65 characters, so a dropped filename longer
+  than ~190 characters is silently truncated by `imported_files.path`
+  (`add :path, :string`). This is the same silent-loss defect already recorded for
+  CL-21; the dropzone makes it reachable through a second path.
+- **Mock copy diverges** from the spec's no-selection hint
+  (`Escolha a conta desta importação.`). Reconcile when building.
+- **An OFX credit-card body dropped as `.csv` gets no `credit_card_statements` row**,
+  because `statement_meta/2` switches on extension rather than on detected format.
+  Detection fixes the parser choice but not the statement-metadata branch.
+
+## CL-26 — Histórico de importações em /imports — spec review (2026-09-20)
+
+- **`ran_at` is `null: false` and required**, so the `ran_at desc, inserted_at desc`
+  ordering has no nil case to handle. Noted so nobody adds defensive code for it.
+- **Test 7's fallback does not literally satisfy expected result 8.** Driving the
+  panel via `import_file/3` plus a `"rescan"` is not "an import confirmed through
+  the screen". If CL-24's confirm handler is absent when CL-26 is built, flag that
+  expected result rather than ticking it against the weaker path.
+- **The `warning` secondary line `[data-role="run-failed"]` has no expected result
+  or test criterion.** Either give it one or drop it, so it does not ship untested.
+
+## CL-27 — Remover modais legados de importação — spec review (2026-09-20)
+
+Three capabilities are lost when the legacy import modals are deleted. All three are
+named in the CL-27 spec rather than deleted silently, and all three are the operator's
+call at the gate:
+
+1. **Automatic installment grouping after a single-file import.**
+   `import_modal_component.ex:129` calls `Installments.scan_and_apply_all/0` after its
+   uploads, and `directory_importer.ex:98` does the same for folder imports. The
+   `/imports` confirm path calls `Ingestor.import_file/3` directly and does not run it,
+   so an imported file leaves installments ungrouped until the Admin → Database
+   re-scan or `mix cash_lens.import`. Follow-up: run it after a confirmed import on
+   `/imports`. Deliberately NOT done in CL-27, which is a removal task.
+2. **One-shot folder-wide import of every account.** Still available via
+   `mix cash_lens.import <path>`, but no longer from the UI.
+3. **Bulk multi-file upload in one action.** The legacy modal declared
+   `max_entries: 100`; CL-25's dropzone sets `max_entries: 1` by design (one detection,
+   one inspection, one confirmation per file). The largest of the three in daily effort.
+   Raising it belongs to CL-25's design, not to CL-27.
+
+Also: the `confirm_create_accounts` account-creation path leaves the UI with the modals;
+it remains covered by `mix cash_lens.import` with `create_missing: true`.
+
+## CL-28 — Remove the Gemini CLI leftovers — spec review (2026-09-20)
+
+Two of this task's original board premises were false, both disproved with evidence,
+and the spec now says the opposite:
+
+1. **`nodejs npm` must STAY in the image.** The board assumed assets use only the
+   esbuild/tailwind Elixir wrappers. They do not: `assets/js/app.js` imports
+   `chart.js/auto`, `dompurify` and `flatpickr` from `assets/node_modules`, esbuild
+   runs with `cd: assets` and no `--external:` for them, and no `npm install` exists
+   anywhere in the repo. Removing node/npm would have broken the asset build. The
+   Dockerfile should carry a comment saying why they are there, so this is not
+   re-attempted.
+2. **`cash_lens_gemini_data` is empty** — no `oauth_creds.json`, so there is no live
+   Google OAuth credential to revoke. The volume removal is ordinary disk cleanup,
+   not credential disposal. `workspace_gemini_data` does not exist at all.
+
+Remaining notes:
+- `rm -rf assets/node_modules` inside the container deletes the HOST directory through
+  the bind mount. The rollback text calling this "no persistent state" is wrong.
+- The image-size criterion cites two baseline numbers (disk usage and content size)
+  without saying which is compared; name one command.
+
+## CL-18 — Previsão de Caixa — spec review round 4 (2026-09-20)
+
+- **The disabled create action's explanation mechanism is unspecified.** The spec says
+  the disabled state "carries the explanation"; the mock implements it as a `title`
+  tooltip. Name the mechanism so it is not left to the implementer — and note a
+  `title` tooltip is invisible on touch and to some screen readers.
+- **The sync-survival expected result would be easier for QA to verify** if it named
+  the fixture inline (a fixed category whose history suggests values different from
+  the ones typed), rather than relying on the test-criteria section.
+
+## CL-23 — rota /imports — code review + QA (2026-09-20)
+
+- **`Reescanear` discards an unsaved typed path.** `assign_scan/2`
+  (`lib/cash_lens_web/live/import_live/index.ex:198`) unconditionally does
+  `assign(:path_input, root)`, so a path the operator typed but has not saved is
+  replaced by the saved root when they press rescan. Reproduced by QA in the live
+  view. Judged non-blocking by both code review and QA — nothing is persisted or
+  corrupted and the field resets to a truthful value — but it is a real UX wart with
+  a two-line fix: preserve `:path_input` when it differs from the saved root.
+- `test/cash_lens_web/components/layouts_test.exs:59` asserts a hardcoded nav-entry
+  count (`== 16`, bumped from 15 by this task). Asserting the actual path list would
+  fail with a readable diff instead of `16 != 15`, and would stop breaking on every
+  nav change.
+- `Imports.put_import_root/1` returns a bare `:error`; `{:error, :blank}` is more
+  idiomatic for a context function.
+- `validate_path` and the `@using_default?` hint copy are not directly asserted in
+  the new suite.
+
+## CL-24 — Pre-write Inspection — code review + QA (2026-09-20)
+
+Two shipped tests pass vacuously. The BEHAVIOUR is correct in both cases —
+QA verified each independently against real data — but the tests would not
+catch a regression, which is the point of having them:
+
+- **The LiveView no-write test's `credit_card_statements` leg is vacuous.** Its
+  fixture is not a credit-card account, so the count is 0→0 and the assertion
+  would pass even if the dry run started writing statements. QA proved the
+  guarantee separately with a real `is_credit_card: true` account (0 before, 0
+  with the drawer open, 1 only after confirming) and confirmed
+  `maybe_create_statement/4` sits structurally inside the non-dry-run arm. Give
+  the test a credit-card variant so the four-table assertion means something.
+- **The truncation test cannot distinguish the two definitions of N.** The footer
+  `mostrando 200 de N linhas` must use the full preview length (new + duplicate).
+  QA verified this with a mixed 100-new/150-duplicate file (N = 250, not 100),
+  but the shipped test would pass under either definition.
+- `import_live_test.exs:268` asserts `=~ "0"` for `#preview-skipped-count`; the
+  existing `extract_count/1` helper is precise.
+- `import_live_test.exs:437` still refutes `id="inspection-modal"`, an id CL-24
+  never used — that scope refutation is now vacuous too.
+- `imported_message/1` uses `Map.get(summary, :skipped, 0)` where `summary.skipped`
+  always exists.
+
+## CL-26 — Histórico de importações — code review + QA (2026-09-20)
+
+- `run_account_label(nil)` clause at `import_live/index.ex:668` is unreachable —
+  the template's `:if={run.account}` already owns the nil case.
+- The renamed "no dropzone is rendered" test still also refutes
+  `id="inspection-modal"`, an id that is stale since CL-24 shipped `#inspect-drawer`.
+  The name under-describes what it asserts, and the stale half refutes nothing.
+
+## CL-25 — Dropzone universal — code review + QA (2026-09-20)
+
+- **The reverse staging leak.** Spec review closed the "a drop replaces a drop"
+  direction. The opposite direction remains: opening a CL-24 folder inspection
+  while a drop drawer is open replaces `@inspect` without discarding `@drop`, so
+  the drop's staging directory survives — including past closing the folder drawer,
+  since `@drop` stays assigned. QA reproduced it and confirmed `terminate/2` does
+  reclaim it. Non-blocking (no DB row affected, the stale drop can never be
+  confirmed, bounded by `terminate/2` and the 24h sweep), but it is the same class
+  of bug as the one already fixed, and the symmetric fix is small.
+- **The `"no compatible account"` test never asserts the staging directory existed**
+  before asserting it is gone. QA added the positive assertion and verified the
+  behaviour is correct, but as shipped the test would not catch a regression that
+  stops staging altogether — only one that stops cleaning up.
+- `handle_event("validate_drop", …)` could cancel preflight-rejected entries so the
+  single upload slot self-heals without needing a `Dispensar` click.
+- A `stage_drop/3` I/O failure is reported to the operator as "Formato não
+  reconhecido", which is misleading, and leaves the partially created hash directory
+  to the sweep.
+- `drop_upload_errors/1` is computed three times per render; an assign would be cleaner.
+
+## CL-27 — Remoção dos modais legados — code review + QA (2026-09-20)
+
+Two further losses that the spec's three-gap parity table did NOT name, both
+found during implementation review rather than spec review:
+
+4. **The batch modal's inline `update_cycle` due-day shortcut is gone.** The
+   closing day / due day of a card remain editable in the account form, so the
+   capability survives, but the one-click path from the import flow does not.
+5. **`DirectoryImporter.Result.cycle_warnings`** (`directory_importer.ex:55`) is
+   still produced and still unit-tested, but now has no consumer anywhere in
+   `lib/` — the deleted batch modal was its only reader. Either surface it on
+   `/imports` or drop the field; leaving a computed-but-unread warning is how
+   a real signal goes unnoticed.
+
+Coverage note: QA read all 23 deleted tests individually. Every one asserted
+against the two deleted components. The two that also reached still-shipping
+code keep independent coverage (`ingestor_test.exs` and
+`directory_importer_test.exs` for the bb_csv save path;
+`directory_importer_test.exs:246-280` for `cycle_divergences/2`). The
+`:task_start_fn` hook the third exercised now has zero references in `lib/`, so
+that test died with its code. No regression net was silently dropped.
+
+## CL-16 — Redesenho de /categories — code review + QA (2026-09-20)
+
+- **A parent-id cycle hangs `/categories` — pre-existing, app-wide, worth its own task.**
+  With `A.parent_id = B` and `B.parent_id = A`, loading the page never returns
+  (QA measured `:TIMED_OUT_HUNG` at 15s): it spins, with no raise and no stack
+  overflow. The cause is the unguarded parent-chain walk in
+  `Categories.link_parents/2` (`categories.ex:85`), reached from
+  `list_categories/1`, which runs BEFORE CL-16's newly guarded
+  `group_by_parent/1` (that one returns in milliseconds and drops cyclic rows).
+  `full_name/1` (`category.ex:74`) walks unguarded too, though it terminated in
+  QA's case. Not blocking CL-16 — the diff leaves `link_parents/2` untouched and
+  no UI path can create a cycle — but the defect affects every caller, and a
+  hang is worse than a hidden row. A depth cap or a visited-set guard is small.
+- **A flattened deep descendant shows only its own name at child indentation**
+  (`category_live/index.ex:281`), implying its root is its parent. `full_name/1`
+  for rows whose `parent_id != root.id` would tell the truth about the hierarchy.
+- **`?parent_id=` on `:new` still accepts a subcategory** as a parent option
+  (`form_component.ex:68`), so "roots only" is not literally true of the query-string
+  path. Harmless now that deep rows stay reachable, but it is the same hole the
+  round-1 finding closed in the select.
+
+## CL-17 — Central de Automações — code review + QA (2026-09-20)
+
+- **The reapply tests depend on an unasserted insertion-order invariant.** The
+  singular/plural `reapply_message/1` tests require the transaction to be inserted
+  BEFORE the rule — create the rule first and the ingest-time applier categorises
+  it, so the reapply delta is zero and the test legitimately fails. That fact is
+  in a comment, not an assertion. Asserting the pre-state (transaction
+  uncategorised) before clicking reapply would make the invariant self-explaining
+  to whoever next touches the test.
+- **No test pins the new href** at `lib/cash_lens_web/live/transaction_live/index.html.heex:116`,
+  unlike its `transfer_live` counterpart, so that link can silently rot back to
+  the legacy path.
+- The spec named `layouts/app.html.heex` for the nav entry; it actually lives in
+  `layouts.ex` / `nav_groups/1`. Corrected in the spec during this task.
+- `layouts_test.exs` asserts a hardcoded nav-entry count, which has now moved
+  twice in one session (15 → 16 by CL-23, 16 → 15 by CL-17). Asserting the path
+  list instead would stop it breaking on every nav edit and would fail with a
+  readable diff.
+
+## Correction — the dev environment moved twice (2026-09-21)
+
+**The test command recorded in the CL-24 entry above is obsolete.** It is left in
+place because this file is append-only, but do not follow it. The environment
+changed twice on 2026-09-21:
+
+1. `refactor(dev-env): run against a bundled Postgres only` removed poli-runner
+   mode and `poli-runner.yml`. The shared `poli-postgres` on host port **54321**
+   is no longer what this project uses, so any instruction naming that port is
+   wrong.
+2. `refactor(dev-env): keep Postgres inside the compose network` stopped
+   publishing the database port at all. Postgres listens on 5432 on the compose
+   network only, so host-side `mix` cannot reach it either.
+
+**The command is now:**
+
+```sh
+docker compose exec app mix test
+```
+
+`./run` remains the way to exercise the suite from the host: it starts its own
+Postgres on the same named volume and publishes the port for as long as it runs.
+
+Two things this surfaced, both fixed in that second commit:
+
+- **The app image was stale**, running Elixir 1.16.3 / OTP 26 while the Dockerfile
+  and the host were on 1.18.4 / OTP 28. Beyond the nuisance of host and container
+  overwriting each other's `mix.lock` (Mix 1.16 does not record the `depth: 1` that
+  `mix.exs` declares for heroicons), tests in the container were not exercising the
+  version that ships. `docker compose build app` fixed it — worth checking after any
+  Dockerfile change.
+- **A test that cannot pass as root.** `omits an unreadable file without raising`
+  chmods a file to `0o000` and expects the scan to skip it; root ignores permission
+  bits, and the app container runs as root. Tagged `:requires_unprivileged_user`
+  and excluded automatically when the suite runs privileged. The host run still
+  exercises it.
+
+The spec files under `docs/tasks/` were corrected in place rather than annotated,
+since they guide work that has not happened yet. CL-28's spec additionally carried
+an acceptance criterion requiring `poli-runner start cash_lens`, which nothing can
+satisfy now that `poli-runner.yml` is deleted; it was replaced with a `./run`
+criterion.
