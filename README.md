@@ -31,42 +31,15 @@
 
 ## Running locally
 
-The app comes up the same way with or without [poli-runner](../polidoro-runner/README.md) —
-the runner only decides *which* Postgres it talks to.
-
-Either way, step one:
-
-```sh
-cp .env.example .env
-```
-
-Compose reads `.env` in every subcommand, so without it `docker compose up` starts the app
-with no database and `docker compose stop` exits `0` without stopping anything.
-
-### With its own Postgres (the default)
+`cp .env.example .env` first, then:
 
 ```sh
 docker compose up
 ```
 
-`.env` activates the `standalone` profile: a bundled Postgres on `:5432`, in a volume of its
-own.
-
-### Under poli-runner
-
-```sh
-poli-runner start cash_lens
-```
-
-The runner keeps the bundled `db` down and supplies the connection variables itself. What it
-points the app at is declared in `poli-runner.yml`, not here. Nothing about this is
-runner-only — by hand it is the same thing:
-
-```sh
-COMPOSE_PROFILES=poli-runner DATABASE_HOST=<host> DATABASE_PORT=<port> docker compose up
-```
-
-To use the runner but keep the bundled database, add `--no-deps`.
+That starts the app on [`localhost:4444`](http://localhost:4444) together with its own
+Postgres on `:5432`. The database lives in the Docker named volume `cash_lens_pgdata`;
+`docker compose down -v` drops it.
 
 ## Running with Elixir directly
 

@@ -1,22 +1,21 @@
-# Two modes, one file — see "Making a compose repo runner-ready" in polidoro-runner/README.md.
+# Local development stack: the app plus its own Postgres.
 #
-#   standalone     COMPOSE_PROFILES=standalone (the default, from .env) — this repo starts
-#                  its own Postgres on :5432 and the app talks to it over the compose network.
-#   poli-runner    COMPOSE_PROFILES=poli-runner (injected by the runner) — `db` stays down and
-#                  DATABASE_HOST/PORT come from the runner, which decides what this app
-#                  connects to. That target is declared in poli-runner.yml, not here.
+# `cp .env.example .env` first — the app reads secrets from it.
 #
-# `cp .env.example .env` is step one either way: Compose reads .env in every subcommand.
+# The database lives in the named volume `cash_lens_pgdata`, managed by Docker
+# rather than bind-mounted into the repo or into the workspace: a bind mount would
+# put database files in the working tree, and a shared directory outside it is how
+# two projects end up fighting over one data dir. `docker compose down -v` is the
+# deliberate way to drop it.
 services:
   db:
-    profiles: [standalone]      # bundled DB — omitted in poli-runner mode
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: cash_lens
     ports:
-      - "5432:5432"             # published for native runs (./run)
+      - "5432:5432"             # published so ./run can reach it from the host
     volumes:
       - cash_lens_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,16 +24,13 @@ services:
       timeout: 5s
       retries: 10
 
-  app:                          # no profile: always starts, always stops
+  app:
     build: .
     command: /bin/sh -c "mix deps.get && mix phx.server"
     ports:
       - "4444:4444"
     env_file:
       - dev.env
-    environment:              # passthrough: .env in standalone, the runner in poli-runner mode
-      - DATABASE_HOST           # config/dev.exs reads these; DATABASE_URL is prod-only
-      - DATABASE_PORT
     volumes:
       - .:/app
       - /app/_build
@@ -43,7 +39,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-        required: false         # without this, an inactive profile invalidates the project
+
 volumes:
   gemini_data:
   cash_lens_pgdata:
