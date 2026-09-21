@@ -569,3 +569,43 @@ cannot feed one either way. The confusing part is that the lookalike case does
 work: a financing debited monthly from a current account is an ordinary
 transaction in a non-card account, so a Fixo category picks it up. That is why
 the mock's `Financiamento do Veículo` is a fixed category and not a parcelamento.
+
+## CL-18 — Previsão de Caixa — spec review round 6 (2026-09-21)
+
+Round 6 exceeded the pipeline's five-round cap. That was the operator's explicit
+decision, taken with the reason in view: the cap exists to break agent-versus-agent
+loops, and rounds 4–6 were the operator iterating on their own design while the
+automated review approved each time. Recording it so the override is visible.
+
+The addition was "temporary recurrences" for installment commitments. What it
+turned into is worth keeping:
+
+- **The membership rule is the origin of the money, not the label.** A commitment
+  is a temporary recurrence iff none of its transactions sits on a credit-card
+  account — the same fact that decides whether `account_installment_total/2` folds
+  it into a card bill. Deciding by `commitment_type` instead would let a mistyped
+  row be counted twice. With this rule, bill-inclusion is a **strict subset** of
+  ruler-exclusion, so double counting is structurally impossible; the worst case is
+  a commitment shown nowhere, never one shown twice.
+- **The parcel value must come from `Installments.parcel_value/1`**, which rounds
+  the quotient to two decimals. The first draft said `total_amount / installments`.
+  For a non-divisible plan those differ (1000/3 → 333.3333… vs 333.33), which would
+  give the ruler a different amount, a different `Saldo após` chain, and a different
+  figure from the one the card-bill disclosure shows for the same group. It would
+  also have failed QA against a *correct* implementation.
+- **The rule is a deliberate superset.** `card_accounts/0` also requires
+  `not is_closed`, `closing_day` and `due_day`, so a commitment on a closed or
+  unconfigured card is in no bill and on no ruler — invisible. Pre-existing, not a
+  regression, recorded so it is not read as one.
+- **`is_contemplated` changes nothing.** It is written by the consórcio form and
+  read in exactly one display line; no projection code touches it. Contemplation
+  draws the credit letter, but the parcels continue unchanged until the plan ends.
+- **This addition displays nothing against today's data.** The database holds 73
+  installment groups, all `credit_card`, all on card accounts — zero `financing`,
+  zero `consorcio`. It starts paying off when such a commitment is first recorded.
+
+One process note: an expected result demanded the end month on *every* temporary
+event, but the final parcel's card sensibly marks itself as closing the commitment
+instead, since it already sits in that month. The mock was right and the criterion
+was wrong — worth remembering that a criterion QA reads literally can be the
+defective half.

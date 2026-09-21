@@ -113,7 +113,8 @@
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <h2 class="text-sm font-bold text-slate-900 uppercase tracking-wider text-xs">Régua Temporal de Liquidez (Próximos 90 Dias)</h2>
-          <p class="text-xs text-slate-500">Acompanhe dia a dia o impacto dos vencimentos recorrentes e das faturas de cartão no saldo em conta. Role para o lado para ver mais adiante.</p>
+          <p class="text-xs text-slate-500">Acompanhe dia a dia o impacto dos vencimentos recorrentes, das faturas de cartão e das recorrências temporárias no saldo em conta. Role para o lado para ver mais adiante.</p>
+          <p class="text-[11px] text-slate-500 mt-1"><span class="inline-block w-2 h-2 rounded-full bg-sky-400 align-middle"></span> <strong>Recorrência temporária</strong>: financiamento ou consórcio pago fora do cartão — tem fim conhecido e mostra a posição da parcela. Parcelas de cartão não aparecem aqui: elas já estão dentro da fatura.</p>
         </div>
         <span class="text-xs font-semibold text-slate-500">Ordenado por data de liquidação</span>
       </div>
@@ -214,16 +215,21 @@
             </div>
           </div>
 
-          <div class="w-[198px] shrink-0 border-slate-200 bg-slate-50 rounded-2xl border p-3 space-y-2 hover:bg-blue-50/40 hover:border-blue-200 transition">
+          <div class="w-[198px] shrink-0 border-sky-200 bg-sky-50/50 rounded-2xl border p-3 space-y-2 hover:bg-sky-50 transition">
             <div class="flex items-center justify-between">
               <span class="text-xs font-black text-slate-900">08 Out</span>
               <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
             </div>
             <div class="space-y-0.5">
-              <span class="text-xs font-bold text-slate-800 block truncate" title="Financiamento do Veículo">Financiamento do Veículo</span>
+              <div class="flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-sky-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-width="2"/><path stroke-width="2" stroke-linecap="round" d="M12 7v5l3 2"/></svg>
+                <span class="text-xs font-bold text-slate-800 truncate" title="Financiamento Imóvel (Caixa)">Financiamento Imóvel (Caixa)</span>
+              </div>
+              <span class="inline-block text-[10px] font-extrabold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full border border-sky-200">Recorrência temporária</span>
               <span class="text-xs font-bold text-rose-600">- R$ 1.480,00</span>
+              <span class="block text-[10px] font-semibold text-sky-800">Parcela 47/48 • termina em 11/2026</span>
             </div>
-            <div class="pt-2 border-t border-slate-200/60">
+            <div class="pt-2 border-t border-sky-200/60">
               <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Saldo após</span>
               <strong class="block text-lg font-black text-slate-900 leading-tight">R$ 54.409,96</strong>
             </div>
@@ -359,16 +365,22 @@
             </div>
           </div>
 
-          <div class="w-[198px] shrink-0 border-slate-200 bg-slate-50 rounded-2xl border p-3 space-y-2 hover:bg-blue-50/40 hover:border-blue-200 transition">
+          <div class="w-[198px] shrink-0 border-sky-200 bg-sky-50/50 rounded-2xl border p-3 space-y-2 hover:bg-sky-50 transition">
             <div class="flex items-center justify-between">
               <span class="text-xs font-black text-slate-900">08 Nov</span>
               <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
             </div>
             <div class="space-y-0.5">
-              <span class="text-xs font-bold text-slate-800 block truncate" title="Financiamento do Veículo">Financiamento do Veículo</span>
+              <div class="flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-sky-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-width="2"/><path stroke-width="2" stroke-linecap="round" d="M12 7v5l3 2"/></svg>
+                <span class="text-xs font-bold text-slate-800 truncate" title="Financiamento Imóvel (Caixa)">Financiamento Imóvel (Caixa)</span>
+              </div>
+              <span class="inline-block text-[10px] font-extrabold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full border border-sky-200">Recorrência temporária</span>
               <span class="text-xs font-bold text-rose-600">- R$ 1.480,00</span>
+              <span class="block text-[10px] font-semibold text-sky-800">Parcela 48/48 • encerra o compromisso</span>
+              <span class="inline-block text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">Última parcela</span>
             </div>
-            <div class="pt-2 border-t border-slate-200/60">
+            <div class="pt-2 border-t border-sky-200/60">
               <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Saldo após</span>
               <strong class="block text-lg font-black text-slate-900 leading-tight">R$ 58.059,96</strong>
             </div>
@@ -474,6 +486,8 @@
             </div>
           </div>
 
+          <!-- Dezembro nao tem card do financiamento: apos a ultima parcela (48/48 em 08 Nov)
+               nenhuma ocorrencia e gerada, e o saldo deixa de ser reduzido por ela. -->
           <div class="w-[198px] shrink-0 border-violet-200 bg-violet-50/50 rounded-2xl border p-3 space-y-2 hover:bg-violet-50 transition">
             <div class="flex items-center justify-between">
               <span class="text-xs font-black text-slate-900">10 Dez</span>
@@ -712,7 +726,7 @@
           </div>
         </div>
 
-        <!-- Item: Financiamento do Veículo -->
+        <!-- Item: Seguro Auto & Residencial (item recorrente cadastrado, nao e um compromisso) -->
         <div class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 transition">
           <div class="flex items-center gap-4">
             <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 font-black text-xs flex flex-col items-center justify-center leading-none">
@@ -721,17 +735,17 @@
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <span class="text-sm font-bold text-slate-900">Financiamento do Veículo</span>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">Parcela Fixa</span>
+                <span class="text-sm font-bold text-slate-900">Seguro Auto &amp; Residencial</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">Conta Fixa</span>
               </div>
-              <span class="text-xs text-slate-500">Categoria: Transporte / Financiamento</span>
+              <span class="text-xs text-slate-500">Categoria: Seguros &amp; Proteção</span>
             </div>
           </div>
 
           <div class="flex items-center gap-6 self-end sm:self-center">
             <span class="text-sm font-black text-rose-600">- R$ 1.480,00</span>
             <div class="flex items-center gap-2">
-              <button onclick="openEditModal('edit', 'Financiamento')" class="text-xs font-bold text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition">Editar</button>
+              <button onclick="openEditModal('edit', 'Seguro')" class="text-xs font-bold text-slate-600 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition">Editar</button>
               <label class="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" checked class="sr-only peer">
                 <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
