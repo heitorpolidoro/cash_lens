@@ -232,4 +232,77 @@ defmodule CashLens.CategoriesTest do
       assert Categories.group_by_parent([child]) == []
     end
   end
+
+  describe "cyclic parent_id data" do
+    import CashLens.CategoriesFixtures
+    import Ecto.Query
+    alias CashLens.Categories.Category
+
+    # No UI path can create a cycle, but nothing in the database prevents one,
+    # and an unguarded ancestry walk does not fail on it — it never returns.
+    # These run under a timeout so a regression reports a hang instead of
+    # wedging the suite.
+    defp within(timeout_ms, fun) do
+      task = Task.async(fun)
+
+      case Task.yield(task, timeout_ms) || Task.shutdown(task, :brutal_kill) do
+        {:ok, result} -> result
+        nil -> flunk("hung for more than #{timeout_ms}ms instead of returning")
+      end
+    end
+
+    defp make_cycle do
+      a = category_fixture(%{name: "Cycle A"})
+      b = category_fixture(%{name: "Cycle B", parent_id: a.id})
+
+      {1, _} =
+        CashLens.Repo.update_all(
+          from(c in Category, where: c.id == ^a.id),
+          set: [parent_id: b.id]
+        )
+
+      {a, b}
+    end
+
+    test "list_categories/1 terminates and truncates the ancestry at the cycle" do
+      {a, b} = make_cycle()
+
+      categories = within(5_000, fn -> Categories.list_categories() end)
+
+      by_id = Map.new(categories, &{&1.id, &1})
+      assert Map.has_key?(by_id, a.id)
+      assert Map.has_key?(by_id, b.id)
+
+      # The chain is cut where it would repeat, so the structure is finite and
+      # every category is still returned rather than dropped.
+      assert depth(by_id[a.id]) <= 3
+      assert depth(by_id[b.id]) <= 3
+    end
+
+    test "full_name/1 terminates on a category loaded from cyclic data" do
+      {a, _b} = make_cycle()
+
+      categories = within(5_000, fn -> Categories.list_categories() end)
+      cyclic = Enum.find(categories, &(&1.id == a.id))
+
+      name = within(5_000, fn -> Category.full_name(cyclic) end)
+
+      assert is_binary(name)
+      assert name =~ "Cycle A"
+    end
+
+    test "group_by_parent/1 terminates on cyclic data" do
+      make_cycle()
+
+      categories = within(5_000, fn -> Categories.list_categories() end)
+      tree = within(5_000, fn -> Categories.group_by_parent(categories) end)
+
+      # Neither cyclic category has a top-level ancestor, so neither is a root
+      # and neither is nested — but the call returns.
+      assert is_list(tree)
+    end
+
+    defp depth(%Category{parent: %Category{} = parent}), do: 1 + depth(parent)
+    defp depth(%Category{}), do: 1
+  end
 end

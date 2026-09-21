@@ -84,15 +84,30 @@ defmodule CashLens.Categories do
     end
   end
 
-  defp link_parents(category, map) do
-    case category.parent_id do
-      nil ->
+  defp link_parents(category, map), do: link_parents(category, map, MapSet.new())
+
+  # Builds the nested `parent` chain. `seen` guards against a cycle in
+  # `parent_id`: no UI path can create one, but nothing in the database
+  # prevents it, and an unguarded walk here does not fail on a cycle — it never
+  # returns, because each step allocates another level of a chain that has no
+  # end. The chain is cut where it would repeat, which leaves the ancestry
+  # truncated but keeps every category loadable, so a cycle can still be seen
+  # and repaired from the UI. `group_by_parent/1` guards the same way.
+  defp link_parents(category, map, seen) do
+    cond do
+      MapSet.member?(seen, category.id) ->
         %{category | parent: nil}
 
-      parent_id ->
-        case Map.get(map, parent_id) do
-          nil -> %{category | parent: nil}
-          parent -> %{category | parent: link_parents(parent, map)}
+      is_nil(category.parent_id) ->
+        %{category | parent: nil}
+
+      true ->
+        case Map.get(map, category.parent_id) do
+          nil ->
+            %{category | parent: nil}
+
+          parent ->
+            %{category | parent: link_parents(parent, map, MapSet.put(seen, category.id))}
         end
     end
   end
