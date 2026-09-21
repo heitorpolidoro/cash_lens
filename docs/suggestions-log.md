@@ -515,3 +515,57 @@ since they guide work that has not happened yet. CL-28's spec additionally carri
 an acceptance criterion requiring `poli-runner start cash_lens`, which nothing can
 satisfy now that `poli-runner.yml` is deleted; it was replaced with a `./run`
 criterion.
+
+## CL-28 — Remove the Gemini CLI leftovers — code review + QA (2026-09-21)
+
+- **Nothing provisions `assets/node_modules`, and the fix is not trivial.** It is
+  gitignored, so a fresh clone cannot build the bundle until someone runs
+  `npm install --prefix assets`. CL-28 tried to close this by adding an install to
+  the compose `app` command and **it broke the host**: `.:/app` is a bind mount with
+  no anonymous volume for `assets/node_modules`, so the install ran against the
+  working tree, and `npm ci --omit=dev` deleted `playwright`. Reverted and repaired.
+  The real fix needs a design decision — an anonymous volume for
+  `/app/assets/node_modules` plus a build-time `npm ci` in the Dockerfile (the
+  pattern the repo already uses for `mix.exs`/`mix.lock`), versus a runtime install
+  — and deserves its own task with its own review.
+- **`scripts/extract_mercado_livre.js:5` hard-codes
+  `require('../assets/node_modules/playwright')`.** That relative reach into another
+  directory's `node_modules` is what made the above fatal rather than merely
+  annoying, and it will break again for any tooling that prunes that tree. The
+  underlying oddity is that `playwright` is declared in `assets/package.json` while
+  its only consumer lives in `scripts/`.
+- A process note worth keeping: the developer's round-1 usage grep filtered to
+  `*.ex,*.exs,*.sh,*.yml,*.md,*.json` and therefore never looked at `*.js`, which is
+  exactly where the consumer was. When checking whether something is safe to remove,
+  the file-type filter is the assumption most likely to hide the answer.
+
+## CL-18 — Previsão de Caixa — spec review round 5 (2026-09-21)
+
+The operator asked three questions rather than requesting changes. Two of the
+answers became on-screen copy, following the CL-16 precedent. Review then caught
+that the first draft of that copy was inaccurate in three ways — worth recording,
+because copy that explains behaviour is worse than none when it is wrong:
+
+- **"Itens editados à mão nunca são alterados" was absolute and false.**
+  `Forecast.resync_item/1`, reached from the per-item `Ressincronizar com
+  Histórico` action, deliberately overrides a `manually_edited` item and clears
+  the flag. The claim is true only of `sync_all/0`, and is now scoped to it.
+- **"últimos 6 meses" is not what the code does.** The window is
+  `-30 * @history_months` = 180 days, which is not six calendar months.
+- **The label did not match the screen it points at.** The copy said `Fixas`
+  while `/categories` ships the flag as `Fixo (Contas Essenciais)` after CL-16.
+  An instruction to go and mark something is only actionable if it names the
+  control the operator will actually see.
+
+One more worth a footnote in any future work on this: `median/1` returns the
+**lower** middle value on an even-sized list (`Enum.at(list, div(length - 1, 2))`),
+so with exactly two transactions the earlier day wins. It is not an average, and
+it should not be "corrected" into one.
+
+The third question — whether new installment purchases enter automatically — is
+answered No, structurally: installment groups never become recurring items, and
+`suggest_for_category/1` filters `a.is_credit_card == false`, so a card purchase
+cannot feed one either way. The confusing part is that the lookalike case does
+work: a financing debited monthly from a current account is an ordinary
+transaction in a non-card account, so a Fixo category picks it up. That is why
+the mock's `Financiamento do Veículo` is a fixed category and not a parcelamento.
