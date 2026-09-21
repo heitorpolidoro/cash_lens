@@ -1,8 +1,25 @@
 #!/usr/bin/env bash
-# Run the app natively (no app container), against this repo's own Postgres.
+# Run the app natively on the host, against the same database the compose stack
+# uses.
 #
 #   ./run         start the Phoenix server
 #   ./run --iex   start it inside an IEx shell
+#
+# Why this script exists at all: docker-compose.yml deliberately does not publish
+# Postgres to the host, so nothing outside the compose network can reach it. A
+# native `mix phx.server` therefore has no database — unless something publishes
+# the port for as long as the native process needs it. That is this script's job.
+#
+# It starts its own Postgres container on the SAME named volume the compose `db`
+# service uses, so the data is identical either way: what you import through the
+# container is there when you run natively, and vice versa. The port is published
+# only while this script runs, and the container is removed when it exits.
+#
+# Two Postgres processes must never open the same data directory at once, so the
+# compose `db` is stopped first. Postgres's own postmaster.pid lock inside the
+# volume is the backstop if that is ever circumvented — the second one refuses to
+# start rather than corrupting anything — but the explicit stop is what keeps the
+# situation from arising.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -13,24 +30,78 @@ case "${1:-}" in
   *)      echo "usage: ./run [--iex]" >&2; exit 2 ;;
 esac
 
-# Capture caller overrides first: .env below targets the compose network ("db"),
-# which is not reachable from the host.
-_host="${DATABASE_HOST:-}"; _port="${DATABASE_PORT:-}"; _name="${DATABASE_NAME:-}"
+PG_IMAGE="postgres:16-alpine"
+PG_CONTAINER="cash_lens-db-native"
+PG_VOLUME="$(docker compose config --format json \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["name"] + "_cash_lens_pgdata")')"
+HOST_PORT="${DATABASE_PORT:-5432}"
 
-echo "🚀 Starting Postgres (docker compose service 'db')..."
-docker compose up -d --wait db
-echo "✅ Postgres is ready!"
+_cleaned=false
+cleanup() {
+  # INT/TERM run this and then fall through to EXIT, so guard against running twice.
+  [ "$_cleaned" = true ] && return
+  _cleaned=true
+  echo "🧹 Stopping the native Postgres container..."
+  docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
+  echo "   The compose stack is still down. Bring it back with: docker compose up -d"
+}
+trap cleanup EXIT INT TERM
+
+# The compose app would clash on port 4444 with the native server, and the
+# compose db would clash on the data directory. Both stop for the duration.
+echo "⏹  Stopping the compose app and db (they share the port and the volume)..."
+docker compose stop app db >/dev/null 2>&1 || true
+
+# A leftover container from a killed run would hold both the port and the volume.
+docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
+
+echo "🐘 Starting Postgres on volume $PG_VOLUME, published at localhost:$HOST_PORT..."
+docker run -d --rm \
+  --name "$PG_CONTAINER" \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=cash_lens \
+  -p "$HOST_PORT:5432" \
+  -v "$PG_VOLUME:/var/lib/postgresql/data" \
+  --health-cmd 'pg_isready -U postgres' \
+  --health-interval 2s \
+  --health-timeout 5s \
+  --health-retries 15 \
+  "$PG_IMAGE" >/dev/null
+
+echo -n "⏳ Waiting for Postgres to accept connections"
+for _ in $(seq 1 30); do
+  if [ "$(docker inspect -f '{{.State.Health.Status}}' "$PG_CONTAINER" 2>/dev/null)" = "healthy" ]; then
+    echo " — ready."
+    break
+  fi
+  echo -n "."
+  sleep 1
+done
+
+if [ "$(docker inspect -f '{{.State.Health.Status}}' "$PG_CONTAINER" 2>/dev/null)" != "healthy" ]; then
+  echo
+  echo "❌ Postgres did not become healthy. Its logs:" >&2
+  docker logs --tail 30 "$PG_CONTAINER" >&2 || true
+  exit 1
+fi
+
+# Capture caller overrides before sourcing .env, which targets the compose
+# network host ("db") — not reachable from here.
+_host="${DATABASE_HOST:-}"; _port="${DATABASE_PORT:-}"; _name="${DATABASE_NAME:-}"
 
 if [ -f .env ]; then set -a; . ./.env; set +a; fi
 
 export DATABASE_HOST="${_host:-localhost}"
-export DATABASE_PORT="${_port:-5432}"
+export DATABASE_PORT="${_port:-$HOST_PORT}"
 export DATABASE_NAME="${_name:-cash_lens}"
 export PORT="${PORT:-4444}"
 
-echo "💻 Starting Phoenix application locally..."
+echo "💻 Starting Phoenix natively on port $PORT..."
+# Deliberately not `exec`: exec replaces this shell, which would discard the
+# EXIT trap and leave the Postgres container running after the server stops.
 if [ "$iex_mode" = true ]; then
-  exec iex -S mix phx.server
+  iex -S mix phx.server
 else
-  exec mix phx.server
+  mix phx.server
 fi

@@ -7,6 +7,15 @@
 # put database files in the working tree, and a shared directory outside it is how
 # two projects end up fighting over one data dir. `docker compose down -v` is the
 # deliberate way to drop it.
+#
+# Postgres listens on 5432 inside the compose network only — the port is
+# deliberately not published to the host. Nothing outside these two containers
+# can reach the database, and the port cannot clash with another Postgres on the
+# machine. The consequence is that host-side tooling cannot connect either:
+# run mix inside the app container.
+#
+#   docker compose exec app mix test
+#   docker compose exec app iex -S mix
 services:
   db:
     image: postgres:16-alpine
@@ -14,8 +23,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: cash_lens
-    ports:
-      - "5432:5432"             # published so ./run can reach it from the host
+    # No `ports:` — internal to the compose network by design. Services on the
+    # same network reach each other on any port without publishing.
     volumes:
       - cash_lens_pgdata:/var/lib/postgresql/data
     healthcheck:

@@ -38,23 +38,45 @@ docker compose up
 ```
 
 That starts the app on [`localhost:4444`](http://localhost:4444) together with its own
-Postgres on `:5432`. The database lives in the Docker named volume `cash_lens_pgdata`;
-`docker compose down -v` drops it.
+Postgres, which listens on `5432` **inside the compose network only** — the port is not
+published, so nothing on the host can reach the database. The data lives in the Docker
+named volume `cash_lens_pgdata`; `docker compose down -v` drops it.
+
+Because the port is not published, host-side `mix` cannot connect. Run it in the container:
+
+```sh
+docker compose exec app mix test
+docker compose exec app iex -S mix
+```
 
 ## Running with Elixir directly
 
-`./run` starts this repo's Postgres (`docker compose up -d --wait db`) and then the Phoenix
-server on the host, pointed at `localhost:5432`:
+`./run` runs the Phoenix server natively on the host, against the same data:
 
 ```sh
 ./run          # mix phx.server
 ./run --iex    # inside an IEx shell
 ```
 
+It starts its own Postgres container on the **same named volume** the compose `db` uses, so
+what you import through the container is there when you run natively and vice versa. The
+port is published only while `./run` is running, and the container is removed when it exits.
+
+The compose `app` and `db` are stopped first: the app would clash on port 4444, and two
+Postgres processes must never open one data directory. Bring them back with
+`docker compose up -d`.
+
 `DATABASE_HOST`, `DATABASE_PORT` and `DATABASE_NAME` set in the environment override the
 defaults. Run `mix setup` once first, to install dependencies.
 
 Either way the app is at [`localhost:4444`](http://localhost:4444).
+
+### A note on the test suite
+
+The app container runs as root, and root ignores file permission bits. One test asserts the
+importer skips a file it cannot read, which cannot be true for root, so it is tagged
+`:requires_unprivileged_user` and excluded automatically when the suite runs privileged.
+Running the suite on the host exercises it for real.
 
 Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
 

@@ -151,6 +151,7 @@ defmodule CashLens.ImportsTest do
       assert Enum.map(entries, & &1.path) == ["bb/extrato.csv"]
     end
 
+    @tag :requires_unprivileged_user
     test "omits an unreadable file without raising", %{root: root} do
       dir = account_folder(root, "bb")
       write_file(dir, "extrato.csv", @bb_sample)
