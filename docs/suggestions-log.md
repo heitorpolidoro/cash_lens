@@ -821,3 +821,52 @@ statement balance and lets `BalanceAdjuster` compute the difference. For an
 account linked to Pluggy with a `pluggy_balance`, that adjustment still drives
 the monthly history and the charts, but the dashboard's Saldo Atual card comes
 from Pluggy and ignores it.
+
+## CL-29 — parser do extrato PDF do Mercado Pago — spec (2026-09-22)
+
+The operator's Mercado Pago checking-account statements moved from hand-made CSVs
+(their word: "gambiarra") to real PDFs. 20 samples, 01/2025–08/2026, 407 transactions.
+What the spec rounds established is worth keeping, because most of it contradicts
+what the first pass believed:
+
+- **Descriptions are vertically centred around the transaction line.** A long one
+  occupies lines ABOVE and BELOW; a short one sits on the line; and a third shape
+  puts a fragment *between the date and the operation ID* with continuation on both
+  sides. That third shape is the dangerous one — ignoring the middle fragment yields
+  a description that looks plausible and is wrong.
+- **Final measured shapes, after noise stripping** (the only count that means
+  anything): `(0,0)` 381, `(1,1)` 22 — 4 of them with an inline fragment — `(2,2)` 4.
+  26 multi-line across 13 of 20 files. **Max span 4 continuation lines, all symmetric.**
+- **Two earlier counts were wrong, and one was mine.** I reported "up to 5 lines" and
+  asymmetric "3+1 / 2+3" shapes; my measurement crossed block boundaries and absorbed a
+  neighbour's line. A phantom `(1,0)` shape was the `1/2` page marker sharing a block
+  with `14-11-2025 Rendimentos`. There is no `(1,0)`.
+- **The form feed must be stripped as a CHARACTER, never as a line.** In
+  `pdf_260922100902.pdf` it is prefixed to a transaction line itself
+  (`"\x0c   14-11-2025   Rendimentos ..."`), so dropping lines containing `\f` deletes
+  that transaction — one row in 407, R$ 0,04, invisible by eye. Caught only by the
+  balance-chain oracle, which is the best argument for having the oracle. Reviewer
+  reproduced it: simulating the wrong rule deletes exactly that row and nothing else.
+- **The operation ID is NOT unique and must not become a dedup key.**
+  `101754796278` appears on 08-02-2025 at R$ -48,51 and on 15-03-2025 at R$ 18,63 —
+  a purchase and its refund sharing an order id. An earlier draft proposed it as a key;
+  it would have silently discarded the refund.
+- **Noise must be stripped positionally, never by content match.** One transaction's
+  description continuation is the account holder's own name, which also appears in the
+  document header (`02-02-2026`, `Transferência Pix enviada Heitor Luis Polidoro`).
+
+Two process notes:
+
+- **`:real_statements` must be excluded UNCONDITIONALLY**, not the way
+  `:requires_unprivileged_user` is. That tag is dropped only when `euid == 0`, so it is
+  excluded in the container and RUNS on the host — copying the condition would make the
+  opt-in test run on every host run and fail for anyone without `CASH_LENS_MP_PDF_DIR`.
+- **The Drive folder and the test runner are in different worlds**, a direct consequence
+  of two changes made earlier the same day: the container deliberately does not mount
+  Drive, and Postgres is not published to the host. The suite CAN run on the host, but
+  only while `./run` is up. That precondition is now stated inside the expected result
+  itself, because QA reads nothing else.
+
+Also cleaned up: the `live_preview_switch_test.exs` I committed in 94225af added 2 credo
+findings (nested modules not aliased), taking the baseline from 23 to 25, while that
+commit claimed none were added. Fixed; back to 23.
