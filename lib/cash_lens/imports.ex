@@ -49,7 +49,8 @@ defmodule CashLens.Imports do
   @doc """
   Compares the monitored root on disk against what has already been imported.
 
-  Returns `{:ok, entries}` sorted by `path`, or `{:error, :not_a_directory}`
+  Returns `{:ok, entries}` sorted by **status first** — `:new`, then `:updated`,
+  then `:synced` — and by `path` within each status, or `{:error, :not_a_directory}`
   when `root` is not a directory. Each entry is a map with the keys `:path`,
   `:absolute_path`, `:account_dir`, `:bank`, `:account`, `:status`,
   `:content_hash`, `:mtime` and `:last_imported_at`, where `:status` is:
@@ -483,8 +484,17 @@ defmodule CashLens.Imports do
 
     measured
     |> Enum.map(&classify_entry(&1, recorded))
-    |> Enum.sort_by(& &1.path)
+    |> Enum.sort_by(&{status_rank(&1.status), &1.path})
   end
+
+  # Status leads the ordering so the files that still need something are at the
+  # top: never imported first, then changed on disk since the last import, then
+  # the ones already in step. Within a status the path keeps the list stable and
+  # groups each account's files together.
+  defp status_rank(:new), do: 0
+  defp status_rank(:updated), do: 1
+  defp status_rank(:synced), do: 2
+  defp status_rank(_other), do: 3
 
   defp measure_account_dir(dir, root) do
     with {:ok, attrs} <- AccountFile.read(dir),

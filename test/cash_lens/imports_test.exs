@@ -115,6 +115,34 @@ defmodule CashLens.ImportsTest do
       assert entry.content_hash == recorded.content_hash
     end
 
+    # Status leads the order so whatever still needs doing sits at the top; the
+    # path only breaks ties. Names are chosen so alphabetical order alone would
+    # produce the opposite sequence, which is what makes this test falsifiable.
+    test "orders by status first — new, then updated, then synced — and by path within one",
+         %{root: root, account: account} do
+      dir = account_folder(root, "bb")
+
+      synced = write_file(dir, "a_synced.csv", @bb_sample)
+      updated = write_file(dir, "b_updated.csv", @bb_sample)
+
+      assert {:ok, _} = Ingestor.import_file(account, synced, import_root: root)
+      assert {:ok, _} = Ingestor.import_file(account, updated, import_root: root)
+
+      File.touch!(updated, System.os_time(:second) + 3600)
+
+      write_file(dir, "z_new_second.csv", @bb_sample)
+      write_file(dir, "c_new_first.csv", @bb_sample)
+
+      assert {:ok, entries} = Imports.scan(root)
+
+      assert Enum.map(entries, &{&1.status, &1.path}) == [
+               {:new, "bb/c_new_first.csv"},
+               {:new, "bb/z_new_second.csv"},
+               {:updated, "bb/b_updated.csv"},
+               {:synced, "bb/a_synced.csv"}
+             ]
+    end
+
     test "recognises a row recorded under its absolute path", %{root: root, account: account} do
       dir = account_folder(root, "bb")
       path = write_file(dir, "extrato.csv", @bb_sample)
