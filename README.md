@@ -71,6 +71,20 @@ defaults. Run `mix setup` once first, to install dependencies.
 
 Either way the app is at [`localhost:4444`](http://localhost:4444).
 
+### Importing from a Google Drive folder
+
+The monitored statement folder normally lives in a Google Drive CloudStorage
+directory. **Import from it with `./run`, not from the container.**
+
+Drive stores those files as placeholders that macOS materialises on demand
+through the FileProvider framework. A Docker bind mount cannot trigger that
+materialisation, so inside the container the directory lists but reading a
+statement fails with an I/O error — sometimes on the first read and not the
+second, which is more confusing than failing outright. The folder is therefore
+deliberately not mounted into the app container.
+
+Running natively, the app reads the folder directly and the whole flow works.
+
 ### A note on the test suite
 
 The app container runs as root, and root ignores file permission bits. One test asserts the

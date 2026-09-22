@@ -44,6 +44,13 @@ services:
       - .:/app
       - /app/_build
       - /app/deps
+      # The monitored statement folder is deliberately NOT mounted here. It lives
+      # in a Google Drive CloudStorage directory, whose files are placeholders
+      # that macOS materialises on demand through the FileProvider framework.
+      # A Docker bind mount cannot trigger that materialisation: the directory
+      # lists, and reading an unmaterialised statement fails with EIO — sometimes
+      # on the first read and not the second, which is worse than failing
+      # outright. Importing from that folder runs natively: ./run
     depends_on:
       db:
         condition: service_healthy

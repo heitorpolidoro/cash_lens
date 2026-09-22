@@ -720,3 +720,35 @@ against real production code rather than around the defect.
   and the disjoint failures (breaking the folder arm killed only the folder test,
   breaking the drop arm only the drop test) are what proved the two arms are
   independently covered rather than one test passing through shared code.
+
+## /imports cannot read a Google Drive folder from the container (2026-09-22)
+
+The operator hit `Pasta não encontrada` on `/imports` for a real, populated
+Drive folder. Two separate things, and the second is the one that decides the
+answer.
+
+**1. The container could not see the path.** `/imports` runs in `cash_lens-app-1`,
+which has no bind mount for `/Users`, so the folder genuinely did not exist from
+where the app was standing. The error was correct.
+
+**2. Mounting it does not fix it.** With a read-only bind mount at the same
+absolute path, the directory lists and the account folders resolve — and reading
+a statement fails with **EIO**. Google Drive's CloudStorage files are placeholders
+that macOS materialises on demand through the FileProvider framework, and a Docker
+bind mount cannot trigger that. Observed directly: a `.account` read failed with
+`eio` on one attempt and succeeded on the next, while
+`extrato_bb-cc-2026-03.csv` failed outright. Intermittent read failure behind a
+directory that lists is worse than the honest "folder not found", so the mount was
+reverted rather than shipped.
+
+**The answer is `./run`**, which runs the app natively where the FileProvider works.
+Verified: `Imports.scan/1` returns 51 files across the six resolved account folders.
+Documented in the README and in a comment where the mount would have gone, so the
+next person does not re-add it.
+
+**A mistake worth recording:** the first attempt put
+`IMPORT_ROOT=/path with spaces` unquoted into `.env`. Compose tolerates that, but
+`./run` does `set -a; . ./.env`, so the unquoted spaces broke it
+(`./.env: line 7: Drive/Banco: No such file or directory`) — the script died before
+starting Phoenix. `.env` here is read by two consumers with different parsing
+rules; a value with spaces must be quoted for the shell one.
