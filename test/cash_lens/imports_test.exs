@@ -419,4 +419,46 @@ defmodule CashLens.ImportsTest do
       assert {:error, :ambiguous} = Imports.account_for_entry(entry)
     end
   end
+
+  describe "put_import_root/1 normalisation" do
+    setup do
+      previous = CashLens.Settings.get("last_batch_import_path", "")
+      on_exit(fn -> CashLens.Settings.put("last_batch_import_path", previous) end)
+      :ok
+    end
+
+    # A path pasted from a terminal, a document or a chat message arrives quoted
+    # often enough to matter, and a Google Drive root almost always contains a
+    # space ("My Drive"), which is exactly when people quote. Stored verbatim the
+    # quotes become part of the path and the folder never resolves, while the
+    # screen displays something that looks correct.
+    test "strips one surrounding pair of double quotes" do
+      assert {:ok, "/Users/me/My Drive/Banco"} =
+               Imports.put_import_root(~s("/Users/me/My Drive/Banco"))
+
+      assert Imports.import_root([]) == "/Users/me/My Drive/Banco"
+    end
+
+    test "strips one surrounding pair of single quotes" do
+      assert {:ok, "/Users/me/My Drive/Banco"} =
+               Imports.put_import_root("'/Users/me/My Drive/Banco'")
+    end
+
+    test "trims space hidden outside and inside the quotes" do
+      assert {:ok, "/Users/me/Banco"} = Imports.put_import_root(~s(  "  /Users/me/Banco  "  ))
+    end
+
+    test "leaves an unquoted path untouched, spaces and all" do
+      assert {:ok, "/Users/me/My Drive/Banco"} =
+               Imports.put_import_root("/Users/me/My Drive/Banco")
+    end
+
+    test "leaves an unmatched leading quote alone rather than corrupting the path" do
+      assert {:ok, ~s("/Users/me/Banco)} = Imports.put_import_root(~s("/Users/me/Banco))
+    end
+
+    test "a quoted blank string is still rejected" do
+      assert :error = Imports.put_import_root(~s("   "))
+    end
+  end
 end

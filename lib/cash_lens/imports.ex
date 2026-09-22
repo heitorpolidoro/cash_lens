@@ -99,13 +99,36 @@ defmodule CashLens.Imports do
   written.
   """
   def put_import_root(root) when is_binary(root) do
-    case String.trim(root) do
+    case unquote_path(root) do
       "" ->
         :error
 
       trimmed ->
         Settings.put(@root_setting, trimmed)
         {:ok, trimmed}
+    end
+  end
+
+  # A path pasted from a terminal, a document or a chat message often arrives
+  # wrapped in quotes, especially when it contains spaces — and this one usually
+  # does, since a Google Drive mount lives under "My Drive". Stored verbatim the
+  # quotes become part of the path, so the folder never resolves and the screen
+  # reports it missing while showing a path that looks exactly right. Strip one
+  # matching pair, then trim again in case the quotes hid surrounding space.
+  defp unquote_path(root) do
+    trimmed = String.trim(root)
+
+    case trimmed do
+      <<?", rest::binary>> -> unwrap_quote(rest, ?")
+      <<?', rest::binary>> -> unwrap_quote(rest, ?')
+      _ -> trimmed
+    end
+  end
+
+  defp unwrap_quote(rest, quote_char) do
+    case String.last(rest) do
+      <<^quote_char>> -> rest |> String.slice(0..-2//1) |> String.trim()
+      _ -> <<quote_char>> <> rest
     end
   end
 

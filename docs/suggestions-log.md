@@ -752,3 +752,34 @@ next person does not re-add it.
 (`./.env: line 7: Drive/Banco: No such file or directory`) — the script died before
 starting Phoenix. `.env` here is read by two consumers with different parsing
 rules; a value with spaces must be quoted for the shell one.
+
+## Um caminho colado entre aspas era guardado com as aspas (2026-09-22)
+
+The operator pasted the monitored folder path wrapped in double quotes — the way
+it appeared in a chat message — and `/imports` kept reporting `Pasta não
+encontrada` while displaying a path that looked exactly right. The stored value
+was literally `"\"/Users/.../My Drive/Banco\""`: the quotes were part of the path.
+
+`Imports.put_import_root/1` only did `String.trim/1`, so anything non-blank was
+persisted verbatim. It now strips one matching surrounding pair of single or
+double quotes and trims again, leaving an unquoted path and an unmatched leading
+quote untouched. Six tests cover it; mutation-verified (bypassing the new step
+produces four failures).
+
+Worth noting why this is not an edge case: a Google Drive root almost always
+contains a space (`My Drive`), and a path with spaces is exactly the kind people
+quote when copying from a terminal, a document or a message. The failure mode was
+also unusually confusing — the screen echoed back a path that read as correct.
+
+**Two process notes from the same fix:**
+
+- **I introduced a name collision.** The new helper was first written as
+  `normalize_root/1`, a name already taken by a private function that
+  `import_root/1` and `relative_path/2` depend on and that accepts `nil`. The
+  suite caught it immediately (`String.trim/1` given `nil` in two unrelated
+  tests). Renamed to `unquote_path/1`. Grep for the name before adding a private
+  helper to a 560-line module.
+- **The container was still serving :4444** while this was being diagnosed, which
+  masked the question: the containerised app cannot read the Drive folder at all
+  (see the preceding entry), so the quoted path was only one of two reasons it
+  failed. Both had to go.
