@@ -12,6 +12,13 @@ config :cash_lens,
   generators: [timestamp_type: :utc_datetime, binary_id: true],
   pdf_converter: CashLens.Parsers.PDFConverter.SystemConverter
 
+# The Pluggy live preview — the temporary, not-yet-imported transactions that
+# appear alongside real ones. Set to false to keep them off every screen; the
+# cache is then never started and the app runs on persisted data alone. This
+# does not disable Pluggy itself: account balances synced from Pluggy still
+# feed "Saldo Atual", since those are read from the database, not this cache.
+config :cash_lens, :pluggy_live_preview_enabled, false
+
 # The monitored statement folder used by the import screen when the operator
 # has never saved one. Displayed and scanned, but only persisted on save.
 config :cash_lens, :default_import_root, "~/CashLens/extratos"

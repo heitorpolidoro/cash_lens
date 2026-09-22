@@ -783,3 +783,41 @@ also unusually confusing — the screen echoed back a path that read as correct.
   masked the question: the containerised app cannot read the Drive folder at all
   (see the preceding entry), so the quoted path was only one of two reasons it
   failed. Both had to go.
+
+## Desligar o preview ao vivo do Pluggy (2026-09-22)
+
+The operator was still seeing Pluggy's temporary, not-yet-imported transactions
+and expected them gone. Worth recording what was actually true, since it was not
+what either of us assumed:
+
+- The earlier request had been to drop live entries from **Receitas/Despesas on
+  the dashboard**, and that had been done. The dashboard was clean.
+- **`/transactions` was never part of that conversation** and still merged them:
+  263 live rows in the stream, and they were added to the screen's own total via
+  `add_live_summary/2`. That is where the operator was seeing them.
+
+Turned off by a config switch (`:pluggy_live_preview_enabled`, now `false`) that
+simply does not start `LivePreviewCache`. Two properties make that sufficient,
+and both were verified rather than assumed:
+
+- Every reader already goes through a `safe_cache/2` that catches the exit from
+  calling an absent process and falls back to no entries — that path existed for
+  the test environment, where the cache is likewise never started.
+- The one non-read caller, `refresh_now/1`, is a `GenServer.cast`, which returns
+  `:ok` against a missing server instead of exiting. Had it been a `call`, the
+  switch would have crashed two LiveViews instead of quietly disabling a feature.
+  Three tests now pin both properties, so a future change from cast to call is
+  caught here rather than by a broken screen.
+
+**`pluggy_balance` is deliberately NOT affected.** It is read from
+`pluggy_account_links` in the database, not from the cache, so "Saldo Atual"
+still shows the bank's own figure (verified unchanged at R$ 26.461,63 with 6
+linked accounts). If the operator later wants Saldo Atual back on the accounting
+balance, that is a separate decision.
+
+Related answer worth keeping: an account's balance is adjusted at **`/balances`**
+("Saldos Contábeis"), per account and per month, via a modal that takes the real
+statement balance and lets `BalanceAdjuster` compute the difference. For an
+account linked to Pluggy with a `pluggy_balance`, that adjustment still drives
+the monthly history and the charts, but the dashboard's Saldo Atual card comes
+from Pluggy and ignores it.
