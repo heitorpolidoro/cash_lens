@@ -109,6 +109,34 @@ Key architectural facts:
 | CI | GitHub Actions (`.github/workflows/`) |
 | Containerization | Docker (`Dockerfile`, `docker-compose.yml`) |
 
+### Running the app and the tests — read this before running either
+
+There are two ways to reach the database, and **they must never overlap**:
+
+- `docker compose exec app mix test` — the container suite. Needs the compose
+  stack up, which means the compose `db` is running on the `cash_lens_pgdata`
+  volume.
+- `./run` — the app natively on the host. It stops the compose `db` and starts
+  its own Postgres on **that same volume**, publishing port 5432.
+
+Starting the second while the first is live puts **two postmasters on one data
+directory**. Postgres cannot defend itself here: its `postmaster.pid` lock
+stores a PID, and each container has its own PID namespace, so the second
+instance decides the lock is stale and starts anyway. The two then recycle each
+other's WAL segments while both write `pg_control`, and the cluster dies with
+`PANIC: could not locate a valid checkpoint record`.
+
+This happened on 2026-09-22 and required a `pg_resetwal` recovery. `./run` now
+refuses to start when another running container holds the volume, but **nothing
+guards the other direction**: bringing the compose stack up while `./run` is
+live is still silently destructive.
+
+So: **before running the container suite, check for a live `./run`** —
+`docker ps --filter name=cash_lens-db-native` — and stop it first. Note that a
+`./run` whose terminal was closed leaves an orphan: the script traps INT/TERM
+and EXIT but not HUP, so it can survive as a child of init with its Postgres
+still holding the volume. `pgrep -f 'bash ./run'` finds it.
+
 Mix aliases worth knowing (`mix.exs`):
 - `mix setup` — deps, DB, assets, all in one.
 - `mix precommit` / `mix quality_check` — DB setup + compile with warnings-as-errors +

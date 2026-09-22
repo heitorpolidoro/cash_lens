@@ -16,10 +16,23 @@
 # only while this script runs, and the container is removed when it exits.
 #
 # Two Postgres processes must never open the same data directory at once, so the
-# compose `db` is stopped first. Postgres's own postmaster.pid lock inside the
-# volume is the backstop if that is ever circumvented — the second one refuses to
-# start rather than corrupting anything — but the explicit stop is what keeps the
-# situation from arising.
+# compose `db` is stopped first, and the script then REFUSES TO START if any
+# running container still holds the volume.
+#
+# That check is not belt-and-braces; it is the only real protection. Postgres's
+# own postmaster.pid lock does not work here: the lock stores a PID, and each
+# container has its own PID namespace, so a second Postgres reads the lock, looks
+# for that PID among its own processes, does not find it, concludes the lock is
+# stale, and starts anyway. Two postmasters then recycle each other's WAL
+# segments while both write pg_control, and the cluster is corrupted — it comes
+# back as `PANIC: could not locate a valid checkpoint record`, because the
+# segment pg_control points at has been recycled out from under it. That is not
+# hypothetical; it happened on 2026-09-22 and cost a pg_resetwal recovery.
+#
+# The remaining hazard this script CANNOT close: `docker compose up -d` started
+# from another terminal WHILE this script is running starts the compose `db` on
+# the same volume, and nothing here will see it. Do not do that. To run the
+# container test suite, stop this script first.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -37,15 +50,23 @@ PG_VOLUME="$(docker compose config --format json \
 HOST_PORT="${DATABASE_PORT:-5432}"
 
 _cleaned=false
+_pg_started=false
 cleanup() {
   # INT/TERM run this and then fall through to EXIT, so guard against running twice.
   [ "$_cleaned" = true ] && return
   _cleaned=true
-  echo "🧹 Stopping the native Postgres container..."
-  docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
+  # Bailing out before the container was ever started must not claim to stop it.
+  if [ "$_pg_started" = true ]; then
+    echo "🧹 Stopping the native Postgres container..."
+    docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
+  fi
   echo "   The compose stack is still down. Bring it back with: docker compose up -d"
 }
-trap cleanup EXIT INT TERM
+# HUP matters as much as INT and TERM: closing the terminal sends it, and an
+# untrapped HUP kills the script outright without running the EXIT trap. That is
+# how a run survives as an orphan child of init with its Postgres still holding
+# the volume — the exact state that let a second postmaster corrupt the cluster.
+trap cleanup EXIT INT TERM HUP
 
 # The compose app would clash on port 4444 with the native server, and the
 # compose db would clash on the data directory. Both stop for the duration.
@@ -55,8 +76,26 @@ docker compose stop app db >/dev/null 2>&1 || true
 # A leftover container from a killed run would hold both the port and the volume.
 docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
 
+# Nothing else may hold the volume. `docker ps --filter volume=` asks the daemon
+# which running containers mount it, which is the one question that is actually
+# authoritative here — unlike postmaster.pid, it does not depend on PID
+# namespaces, and it catches a container this script does not know about.
+holders="$(docker ps --filter "volume=$PG_VOLUME" --format '{{.Names}}')"
+if [ -n "$holders" ]; then
+  echo "❌ Refusing to start: these running containers still hold $PG_VOLUME:" >&2
+  echo "$holders" | sed 's/^/     /' >&2
+  echo >&2
+  echo "   Starting a second Postgres on that volume corrupts the cluster." >&2
+  echo "   Stop them first, then run this script again." >&2
+  exit 1
+fi
+
 echo "🐘 Starting Postgres on volume $PG_VOLUME, published at localhost:$HOST_PORT..."
-docker run -d --rm \
+# Deliberately not `--rm`: a container that exits on its own would be removed
+# instantly, and the failure branch below would have nothing left to read logs
+# from — it would report "No such container" instead of the PANIC that actually
+# explains the failure. The cleanup trap removes the container instead.
+docker run -d \
   --name "$PG_CONTAINER" \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
@@ -68,11 +107,17 @@ docker run -d --rm \
   --health-timeout 5s \
   --health-retries 15 \
   "$PG_IMAGE" >/dev/null
+_pg_started=true
 
 echo -n "⏳ Waiting for Postgres to accept connections"
 for _ in $(seq 1 30); do
   if [ "$(docker inspect -f '{{.State.Health.Status}}' "$PG_CONTAINER" 2>/dev/null)" = "healthy" ]; then
     echo " — ready."
+    break
+  fi
+  # A container that has already exited will never become healthy. Waiting out
+  # the full 30 seconds only delays the logs that say why it died.
+  if [ "$(docker inspect -f '{{.State.Status}}' "$PG_CONTAINER" 2>/dev/null)" = "exited" ]; then
     break
   fi
   echo -n "."
