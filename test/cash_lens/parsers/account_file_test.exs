@@ -64,6 +64,36 @@ defmodule CashLens.Parsers.AccountFileTest do
       assert :ok = AccountFile.validate_parser(%{parser: "ourocard_txt"})
     end
 
+    test "validate_parser accepts mercado_pago_pdf" do
+      assert "mercado_pago_pdf" in AccountFile.valid_parsers()
+
+      assert AccountFile.validate_parser(%{
+               bank: "Mercado Pago",
+               account: "Conta Corrente",
+               parser: "mercado_pago_pdf"
+             }) == :ok
+    end
+
+    test "parses a .account body declaring parser: mercado_pago_pdf" do
+      content = """
+      bank: Mercado Pago
+      account: Conta Corrente
+      parser: mercado_pago_pdf
+      credit_card: false
+      """
+
+      assert {:ok, account} = AccountFile.parse(content)
+
+      assert account == %{
+               bank: "Mercado Pago",
+               account: "Conta Corrente",
+               parser: "mercado_pago_pdf",
+               credit_card: false
+             }
+
+      assert AccountFile.validate_parser(account) == :ok
+    end
+
     test "validate_parser accepts mercadopago_cartao_pdf" do
       assert AccountFile.validate_parser(%{
                bank: "Mercado Pago",

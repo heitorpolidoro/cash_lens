@@ -1,0 +1,35 @@
+                                                                                 EXTRATO DE CONTA
+                                                                                      Heitor Luis Polidoro
+                                                    CPF/CNPJ: 00000000000 Agência: 1 Conta: 00000000000
+                                                                    Periodo: De 01-02-2025 al 31-03-2025
+
+
+
+
+                                      Entradas: R$ 18,63
+ Saldo inicial: R$ 244,95                                                       Saldo final: R$ 215,07
+                                      Saidas: R$ -48,51
+
+
+
+
+                                      DETALHE DOS MOVIMENTOS
+
+Data          Descrição                    ID da operação                   Valor                Saldo
+
+
+              Compra de 2 produtos
+08-02-2025                                 101754796278                  R$ -48,51           R$ 196,44
+              Mercado Livre
+
+
+              Reembolso Compra de 2
+15-03-2025                                 101754796278                   R$ 18,63           R$ 215,07
+              produtos
+
+
+
+
+Data de geração: 15-06-2026
+                                                                                                                                1/1
+

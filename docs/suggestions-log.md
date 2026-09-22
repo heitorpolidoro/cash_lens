@@ -870,3 +870,54 @@ Two process notes:
 Also cleaned up: the `live_preview_switch_test.exs` I committed in 94225af added 2 credo
 findings (nested modules not aliased), taking the baseline from 23 to 25, while that
 commit claimed none were added. Fixed; back to 23.
+
+## [CL-29] Criar parser do extrato PDF da conta corrente Mercado Pago — 2026-09-22
+
+- `mercado_pago_pdf_parser.ex:87` — if `DETALHE DOS MOVIMENTOS` is absent,
+  `drop_while/2` consumes the whole stream and `parse/2` returns `[]` silently.
+  That is the same "content disappears without a signal" failure mode the
+  zero-transaction-block raise exists to prevent, one level up. The detector
+  makes it unreachable in production today, but a `raise` (or at least a
+  `Logger.warning`) when the marker is missing would close the gap for the cost
+  of three lines. Non-blocking.
+- `mercado_pago_pdf_parser_test.exs:239` — `assert message =~ "sem linha de
+  movimento"` reads at a glance like an assertion that the *raise message* is
+  Portuguese; it is actually fixture text echoed back. Worth also asserting the
+  English `"block with no transaction line"` so the test pins both halves and
+  the intent is unambiguous.
+- `ingestor_test.exs:672-682` — the second half of
+  `"expected_extensions/1 offers only PDFs to a mercado_pago_pdf folder"`
+  re-implements `Path.extname/1` filtering inside the test rather than calling
+  the production folder-scanning path, so it largely asserts that `Enum.filter`
+  works. The first line of that test (`== [".pdf"]`) already carries the real
+  contract. Harmless, but it is the one place where an assertion does not earn
+  its keep.
+- `docs/tasks/CL-29-spec.md:186-188` still describes the fixtures as having
+  "operation IDs and monetary values replaced by invented ones", which deviation
+  (a) knowingly reverses. Consider a one-line spec amendment so the document
+  matches what was shipped and the next reader does not read the fixtures as a
+  violation.
+- `transaction_blocks/1` is public solely so the corpus test can assert
+  structural properties. This is documented in its `@doc` and is the honest
+  choice over reaching into private functions, but it does widen the module's
+  public surface for a test-only consumer. Fine as is; flagging only so the
+  decision stays visible.
+
+## [CL-29] Criar parser do extrato PDF da conta corrente Mercado Pago — 2026-09-22
+
+- `transaction_blocks/1` is public solely so the opt-in corpus test can assert
+  structural properties (shape distribution, page-break containment). That is
+  documented in the `@doc`, which is the right mitigation, but it does widen the
+  module's production surface for a test-only need. If the API ever needs
+  tightening, `@doc false` plus a `@moduledoc`-level note, or moving the shape
+  helpers into the test with a private re-implementation, would keep the
+  contract narrower. Non-blocking — the current form is documented and honest
+  about why it exists.
+- `parse/2` uses a default argument (`_format \\ :mercado_pago_conta`) on an
+  `@impl true` callback, which also defines an unused `parse/1` arity. Harmless
+  and consistent with how the module is called, but the default is never
+  exercised; dropping it would make the behaviour contract exactly one arity.
+- The four committed multi-page/shape fixtures encode the account holder's real
+  name. That is deliberate and load-bearing for result 6 (the content-collision
+  case), so it should stay — worth noting only so a future cleanup pass does not
+  "anonymise" it and silently destroy the test's point.

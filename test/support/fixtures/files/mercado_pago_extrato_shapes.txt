@@ -1,0 +1,67 @@
+                                                                                 EXTRATO DE CONTA
+                                                                                      Heitor Luis Polidoro
+                                                    CPF/CNPJ: 00000000000 Agência: 1 Conta: 00000000000
+                                                                    Periodo: De 01-02-2025 al 28-02-2026
+
+
+
+
+                                      Entradas: R$ 1.099,15
+ Saldo inicial: R$ 244,95                                                       Saldo final: R$ 1.045,98
+                                      Saidas: R$ -298,12
+
+
+
+
+                                      DETALHE DOS MOVIMENTOS
+
+Data          Descrição                    ID da operação                   Valor                Saldo
+
+
+
+05-02-2025    Rendimentos                  1726751323194                  R$ 0,06            R$ 245,01
+
+
+
+06-02-2025    Rendimentos                  1726793381608                   R$ 0,09           R$ 245,10
+
+
+              Compra de 2 produtos
+08-02-2025                                 101754796278                  R$ -48,51           R$ 196,59
+              Mercado Livre
+
+
+              Compra de Soprador De Ar Pó
+              Potente Computador
+21-03-2025                                 105896764502                 R$ -186,62             R$ 9,97
+              Notebook 110v/220v Mercado
+              Livre
+
+
+              Reembolso Compra de 9
+25-03-2025                                 103603093883               R$ 1.099,00          R$ 1.108,97
+              produtos
+
+
+              Compra de Multímetro Digital
+12-04-2025    Automotivo C/ Iluminação Bip 108252319490                 R$ -42,99          R$ 1.065,98
+              Profissional Bekcommerce...
+
+
+              Transferência Pix enviada
+02-02-2026                                 143869767019                 R$ -20,00          R$ 1.045,98
+              Heitor Luis Polidoro
+
+
+
+
+Data de geração: 15-06-2026
+
+Você tem alguma dúvida? Conte com o nosso Portal de ajuda para encontrar informações sobre nossos produtos e serviços. Se deseja falar com
+o nosso SAC, ligue para 0800 637 7246. Você precisará de um código de atendimento para nos contatar. Se já nos contatou e precisa de ajuda
+da ouvidoria, ligue para 0800 688 4365 com o protocolo do primeiro atendimento.
+
+Mercado Pago Instituição de Pagamento Ltda. CNPJ n.º 10.573.521/0001-91. Av. das Nações Unidas, nº 3.003, Bonfim, Osasco SP - CEP 06233-
+903. Encontre nossos canais de consulta em:www.mercadopago.com.br
+                                                                                                                                1/1
+

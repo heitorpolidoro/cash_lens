@@ -2,10 +2,12 @@ defmodule CashLens.Parsers.IngestorTest do
   use CashLens.DataCase, async: false
   import Mox
   alias CashLens.Parsers.Ingestor
+  alias CashLens.Parsers.MercadoPagoPDFParser
 
   setup :verify_on_exit!
 
   @bb_sample "test/support/fixtures/files/bb_sample.csv"
+  @mercado_pago_extrato "test/support/fixtures/files/mercado_pago_extrato_shapes.txt"
 
   describe "parse/2" do
     test "dispatches to bb_csv parser" do
@@ -39,6 +41,19 @@ defmodule CashLens.Parsers.IngestorTest do
       [tx] = Ingestor.parse(content, "ourocard_ofx")
       assert tx.description == "VALE EVENTOS SAO PAULO BR"
       assert tx.amount == Decimal.new("-66.00")
+    end
+
+    test "parse/2 routes mercado_pago_pdf to the MercadoPagoPDFParser" do
+      content = File.read!(@mercado_pago_extrato)
+      transactions = Ingestor.parse(content, "mercado_pago_pdf")
+
+      assert transactions ==
+               MercadoPagoPDFParser.parse(content, :mercado_pago_conta)
+
+      assert length(transactions) == 7
+      assert Enum.at(transactions, 2).date == ~D[2025-02-08]
+      assert Enum.at(transactions, 2).description == "Compra de 2 produtos Mercado Livre"
+      assert Decimal.equal?(Enum.at(transactions, 2).amount, Decimal.new("-48.51"))
     end
 
     test "returns error for unknown parser" do
@@ -183,6 +198,49 @@ defmodule CashLens.Parsers.IngestorTest do
       # pdftotext will fail, returning the original content
       assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
       File.rm!(file_path)
+    end
+
+    test "the operation id is not a dedup key: two rows sharing one id both persist" do
+      # 101754796278 carries both 08-02-2025 / R$ -48,51 and 15-03-2025 / R$ 18,63
+      # (a purchase and its refund sharing an order id). Dedup stays keyed on
+      # date + description + amount, so neither row shadows the other.
+      account = account_fixture(parser_type: "mercado_pago_pdf")
+      file_path = "test/support/fixtures/files/mp_shared_id_#{account.id}.pdf"
+
+      content =
+        File.read!("test/support/fixtures/files/mercado_pago_extrato_shared_operation_id.txt")
+
+      File.write!(file_path, content)
+      on_exit(fn -> File.rm(file_path) end)
+
+      expect(CashLens.Parsers.PDFConverterMock, :convert, fn ^file_path -> {:ok, content} end)
+
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, file_path)
+
+      rows =
+        CashLens.Transactions.Transaction
+        |> CashLens.Repo.all()
+        |> Enum.sort_by(& &1.date, Date)
+
+      assert Enum.map(rows, & &1.date) == [~D[2025-02-08], ~D[2025-03-15]]
+
+      assert Enum.map(rows, & &1.description) == [
+               "Compra de 2 produtos Mercado Livre",
+               "Reembolso Compra de 2 produtos"
+             ]
+
+      assert Enum.map(rows, &Decimal.to_string(&1.amount, :normal)) == ["-48.51", "18.63"]
+    end
+
+    test "prepare_content/3 sends a mercado_pago_pdf file through the PDF converter" do
+      account = account_fixture(parser_type: "mercado_pago_pdf")
+      file_path = "test/support/fixtures/files/mp_prepare_#{account.id}.pdf"
+      File.write!(file_path, "%PDF-1.4 binary")
+      on_exit(fn -> File.rm(file_path) end)
+
+      expect(CashLens.Parsers.PDFConverterMock, :convert, fn ^file_path -> {:ok, "extracted"} end)
+
+      assert Ingestor.prepare_content("%PDF-1.4 binary", account, file_path) == "extracted"
     end
 
     test "imports CSV with no transactions" do
@@ -608,6 +666,20 @@ defmodule CashLens.Parsers.IngestorTest do
 
     test "maps pdf parser to .pdf" do
       assert Ingestor.expected_extensions("sem_parar_pdf") == [".pdf"]
+    end
+
+    test "expected_extensions/1 offers only PDFs to a mercado_pago_pdf folder" do
+      assert Ingestor.expected_extensions("mercado_pago_pdf") == [".pdf"]
+
+      # A Mercado Pago folder holds both the legacy monthly CSVs and the PDFs.
+      # With parser: mercado_pago_pdf declared, the guard makes the CSVs inert.
+      files = ["2025-01.csv", "pdf_260922100712.pdf", "2025-02.csv", "pdf_260922100732.pdf"]
+      extensions = Ingestor.expected_extensions("mercado_pago_pdf")
+
+      assert Enum.filter(files, &(Path.extname(&1) in extensions)) == [
+               "pdf_260922100712.pdf",
+               "pdf_260922100732.pdf"
+             ]
     end
 
     test "expected_extensions/1 recognizes mercadopago_cartao_pdf as a PDF parser" do

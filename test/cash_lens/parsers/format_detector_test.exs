@@ -66,6 +66,24 @@ defmodule CashLens.Parsers.FormatDetectorTest do
   @ourocard_header_only "Vencimento : 16.07.2026\nTotal da fatura : R$ 1,00"
 
   # Text lifted from test/cash_lens/parsers/pdf_parser_test.exs:8.
+  # Head of the pdftotext -layout output of a Mercado Pago checking-account
+  # statement, with the identity numbers replaced by invented ones.
+  @mercado_pago_extrato_text """
+                                                                 EXTRATO DE CONTA
+                                                                      Heitor Luis Polidoro
+                                    CPF/CNPJ: 00000000000 Agência: 1 Conta: 00000000000
+                                                    Periodo: De 01-02-2025 al 28-02-2025
+
+                      Entradas: R$ 0,06
+   Saldo inicial: R$ 244,95                                     Saldo final: R$ 245,01
+
+                      DETALHE DOS MOVIMENTOS
+
+  Data          Descrição                    ID da operação                   Valor                Saldo
+
+  05-02-2025    Rendimentos                  1726751323194                  R$ 0,06            R$ 245,01
+  """
+
   @sem_parar_text """
   Extrato Mensal de Utilização
   Plano Contratado: SEM PARAR 10/12/25 R$ 58,17
@@ -269,6 +287,46 @@ defmodule CashLens.Parsers.FormatDetectorTest do
                {:ok, %{format: :pdf, parser_type: nil, account_hint: nil}}
     end
 
+    test "P2: text containing DETALHE DOS MOVIMENTOS detects as mercado_pago_pdf" do
+      assert FormatDetector.detect("", text: @mercado_pago_extrato_text) ==
+               {:ok,
+                %{
+                  format: :pdf,
+                  parser_type: "mercado_pago_pdf",
+                  account_hint: %{
+                    bank: "Mercado Pago",
+                    credit_card: false,
+                    account_identifier: nil
+                  }
+                }}
+    end
+
+    test "detectable_parsers/0 includes mercado_pago_pdf" do
+      assert "mercado_pago_pdf" in FormatDetector.detectable_parsers()
+    end
+
+    test "the new P2 probe leaves the CL-22 probe order intact" do
+      # The account-statement probe sits between sem_parar_pdf and the two card
+      # probes, whose relative order is what keeps a Mercado Pago fatura carrying
+      # "Total da fatura de <mês>" out of the Bradesco bucket.
+      refute String.contains?(@mercado_pago_extrato_text, "Total a pagar")
+      refute String.contains?(@mercado_pago_extrato_text, "Total da fatura")
+      refute String.contains?(@mercado_pago_extrato_text, "Plano Contratado")
+
+      refute String.contains?(@mercado_pago_pdf_text, "DETALHE DOS MOVIMENTOS")
+      refute String.contains?(@bradesco_pdf_text, "DETALHE DOS MOVIMENTOS")
+      refute String.contains?(@sem_parar_text, "DETALHE DOS MOVIMENTOS")
+
+      assert {:ok, %{parser_type: "sem_parar_pdf"}} =
+               FormatDetector.detect("", text: @sem_parar_text)
+
+      assert {:ok, %{parser_type: "mercadopago_cartao_pdf"}} =
+               FormatDetector.detect("", text: @mercado_pago_pdf_text)
+
+      assert {:ok, %{parser_type: "bradesco_cartao_pdf"}} =
+               FormatDetector.detect("", text: @bradesco_pdf_text)
+    end
+
     test "P1: text containing Plano Contratado detects as sem_parar_pdf" do
       assert {:ok, verdict} = FormatDetector.detect("", text: @sem_parar_text)
 
@@ -425,7 +483,8 @@ defmodule CashLens.Parsers.FormatDetectorTest do
         {"%PDF-1.4", []},
         {"", [text: @sem_parar_text]},
         {"", [text: @mercado_pago_pdf_text]},
-        {"", [text: @bradesco_pdf_text]}
+        {"", [text: @bradesco_pdf_text]},
+        {"", [text: @mercado_pago_extrato_text]}
       ]
 
       valid = AccountFile.valid_parsers()

@@ -29,22 +29,30 @@ defmodule CashLens.Parsers.FormatDetector do
   semicolons a naive CSV probe would accept; Ourocard TXT precedes CSV for the same
   reason.
 
-  ### PDF-text probes (total order P1 → P2 → P3)
+  ### PDF-text probes (total order P1 → P2 → P3 → P4)
 
-  The order between these three is itself normative, because their markers overlap
+  The order between these four is itself normative, because their markers overlap
   in real documents.
 
   * **P1 — `"sem_parar_pdf"`**: text contains `Plano Contratado`.
-  * **P2 — `"mercadopago_cartao_pdf"`**: text contains `Total a pagar` or
+  * **P2 — `"mercado_pago_pdf"`**: text contains `DETALHE DOS MOVIMENTOS`, the
+    section title of the Mercado Pago checking-account statement.
+  * **P3 — `"mercadopago_cartao_pdf"`**: text contains `Total a pagar` or
     `Movimentações na fatura`.
-  * **P3 — `"bradesco_cartao_pdf"`**: text contains `Total da fatura` or
+  * **P4 — `"bradesco_cartao_pdf"`**: text contains `Total da fatura` or
     `Bradesco Cartões`.
 
-  P3's markers also appear in real Mercado Pago faturas, which carry
+  P4's markers also appear in real Mercado Pago faturas, which carry
   `Total da fatura de <mês>` (the same collision `PDFParser` documents when it
-  routes total extraction by `Total a pagar`). P3 is therefore reachable only after
-  P2 has been evaluated and failed — that ordering, not the marker itself, is what
-  keeps a Mercado Pago fatura out of the Bradesco bucket.
+  routes total extraction by `Total a pagar`). P4 is therefore reachable only after
+  P3 has been evaluated and failed — that ordering, not the marker itself, is what
+  keeps a Mercado Pago fatura out of the Bradesco bucket. Inserting the
+  account-statement probe as P2 shifts the two card probes to P3/P4 but leaves
+  their relative order, and therefore that verdict, untouched: none of P1/P3/P4's
+  markers occurs in any checking-account statement, and `DETALHE DOS MOVIMENTOS`
+  occurs in no fatura, so the probes are disjoint. P2 is placed ahead of the fatura
+  probes as the defensive choice, should a future statement layout ever gain a
+  generic `Total a pagar` string.
 
   ### Ourocard TXT probe
 
@@ -122,7 +130,7 @@ defmodule CashLens.Parsers.FormatDetector do
 
   @detectable_parsers ~w(
     bb_csv bradesco_csv mercado_pago_csv standard_ofx ourocard_txt
-    sem_parar_pdf bradesco_cartao_pdf mercadopago_cartao_pdf
+    sem_parar_pdf bradesco_cartao_pdf mercadopago_cartao_pdf mercado_pago_pdf
   )
 
   # Compile-time guarantee that the vocabulary above is a subset of the one the
@@ -182,11 +190,14 @@ defmodule CashLens.Parsers.FormatDetector do
     end
   end
 
-  # P1 → P2 → P3. The order is normative: see the moduledoc.
+  # P1 → P2 → P3 → P4. The order is normative: see the moduledoc.
   defp pdf_text_parser(text) do
     cond do
       String.contains?(text, "Plano Contratado") ->
         {"sem_parar_pdf", "Sem Parar", false}
+
+      String.contains?(text, "DETALHE DOS MOVIMENTOS") ->
+        {"mercado_pago_pdf", "Mercado Pago", false}
 
       String.contains?(text, ["Total a pagar", "Movimentações na fatura"]) ->
         {"mercadopago_cartao_pdf", "Mercado Pago", true}

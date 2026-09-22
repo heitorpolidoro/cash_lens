@@ -9,9 +9,15 @@ euid =
     _ -> nil
   end
 
-exclusions = if euid == 0, do: [exclude: [:requires_unprivileged_user]], else: []
+privileged_exclusions = if euid == 0, do: [:requires_unprivileged_user], else: []
 
-ExUnit.start(exclusions)
+# :real_statements is excluded UNCONDITIONALLY, unlike :requires_unprivileged_user
+# above. The two tags are excluded for different reasons: that one is about
+# privilege, this one is about opt-in. :real_statements reads the operator's
+# Google Drive folder through CASH_LENS_MP_PDF_DIR, which the container does not
+# mount and which no other machine has, so it must stay off by default even on
+# the host. Run it with `mix test --include real_statements`.
+ExUnit.start(exclude: [:real_statements | privileged_exclusions])
 Mox.defmock(CashLens.Parsers.PDFConverterMock, for: CashLens.Parsers.PDFConverter)
 Mox.defmock(CashLens.Transactions.RepoMock, for: CashLens.Transactions.RepoBehaviour)
 Ecto.Adapters.SQL.Sandbox.mode(CashLens.Repo, :manual)

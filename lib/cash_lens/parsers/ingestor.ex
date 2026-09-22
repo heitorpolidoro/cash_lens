@@ -6,6 +6,7 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Accounting
   alias CashLens.Imports
   alias CashLens.Parsers.CSVParser
+  alias CashLens.Parsers.MercadoPagoPDFParser
   alias CashLens.Parsers.OFXParser
   alias CashLens.Parsers.OurocardTXTParser
   alias CashLens.Parsers.PDFParser
@@ -15,6 +16,15 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Transactions.TransferRuleApplier
   alias Ecto.UUID
   import Ecto.Query, only: [from: 2]
+
+  # Parser types whose input is always a PDF, so the text must be extracted by
+  # PDFConverter even when the file on disk is not named `.pdf`.
+  @pdf_only_parsers [
+    "sem_parar_pdf",
+    "bradesco_cartao_pdf",
+    "mercadopago_cartao_pdf",
+    "mercado_pago_pdf"
+  ]
 
   @doc """
   Parses the content based on the provided parser_type.
@@ -32,6 +42,10 @@ defmodule CashLens.Parsers.Ingestor do
       "mercado_pago_csv" ->
         Logger.info("Using Mercado Pago CSV Parser")
         CSVParser.parse(content, :mercado_pago_csv)
+
+      "mercado_pago_pdf" ->
+        Logger.info("Using Mercado Pago Conta PDF Parser")
+        MercadoPagoPDFParser.parse(content, :mercado_pago_conta)
 
       "sem_parar_pdf" ->
         Logger.info("Using Sem Parar PDF Parser")
@@ -70,7 +84,7 @@ defmodule CashLens.Parsers.Ingestor do
     case parser_type do
       t when t in ["bradesco_csv", "bb_csv", "mercado_pago_csv"] -> [".csv"]
       t when t in ["ourocard_ofx", "standard_ofx"] -> [".ofx"]
-      t when t in ["sem_parar_pdf", "bradesco_cartao_pdf", "mercadopago_cartao_pdf"] -> [".pdf"]
+      t when t in @pdf_only_parsers -> [".pdf"]
       "ourocard_txt" -> [".txt"]
       _ -> []
     end
@@ -222,7 +236,7 @@ defmodule CashLens.Parsers.Ingestor do
   """
   def prepare_content(content, account, file_path) do
     if String.ends_with?(file_path, ".pdf") or
-         account.parser_type in ["sem_parar_pdf", "bradesco_cartao_pdf", "mercadopago_cartao_pdf"] do
+         account.parser_type in @pdf_only_parsers do
       converter = Application.get_env(:cash_lens, :pdf_converter)
 
       case converter.convert(file_path) do
