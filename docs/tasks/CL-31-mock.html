@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>CL-31 — Fechamento do Mês (regime de caixa)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+<div class="max-w-5xl mx-auto py-8 px-4 space-y-6">
+
+  <div class="flex items-center justify-between gap-4 pb-2 border-b border-slate-200">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Fechamento do Mês</h1>
+      <!-- NEW: states the basis the screen reports on -->
+      <p class="text-xs text-slate-500 mt-0.5">
+        Regime de caixa: apenas contas correntes. Compras no cartão entram pelo
+        <strong>pagamento da fatura</strong>, não uma a uma.
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="setState('after')" id="btn-after"
+        class="border font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm">Depois (CL-31)</button>
+      <button onclick="setState('before')" id="btn-before"
+        class="border font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm">Antes (hoje)</button>
+    </div>
+  </div>
+
+  <div class="text-sm font-bold text-slate-700">Setembro / 2026</div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Saldo de Abertura</span>
+      <div class="text-2xl font-black text-blue-600 mt-2">R$ 41.322,90</div>
+      <div class="text-xs text-slate-400 mt-1">Total em 01/09/2026</div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <span class="text-xs font-bold uppercase tracking-wider text-teal-600">Receitas</span>
+      <div class="text-2xl font-black text-teal-600 mt-2" id="kpi-income">R$ 37.167,83</div>
+      <div class="text-xs text-slate-400 mt-1" id="kpi-income-note">Contas correntes</div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <span class="text-xs font-bold uppercase tracking-wider text-rose-600">Despesas</span>
+      <div class="text-2xl font-black text-rose-600 mt-2" id="kpi-expense">R$ 40.006,17</div>
+      <div class="text-xs text-slate-400 mt-1" id="kpi-expense-note">Saídas de caixa</div>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Resultado</span>
+      <div class="text-2xl font-black mt-2" id="kpi-net">-R$ 2.838,34</div>
+      <div class="text-xs text-slate-400 mt-1" id="kpi-net-note">Déficit</div>
+    </div>
+  </div>
+
+  <div id="banner" class="hidden rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs p-3">
+    Estado <strong>antes</strong> de CL-31: 42 lançamentos, R$ 25.076,48 — compras no cartão contadas
+    por categoria e pagamento da fatura escondido. O dashboard mostrava R$ 40.006,17 para o mesmo mês.
+  </div>
+
+  <!-- Layout preserved from month_panel.ex single_view/1: the two category tables are
+       stacked FULL WIDTH, one below the other. They are never side-by-side columns. -->
+  <div class="space-y-6">
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+      <div class="px-5 py-3 border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-teal-600">Receitas por categoria</div>
+      <table class="w-full text-sm"><tbody id="income-rows"></tbody></table>
+    </div>
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+      <div class="px-5 py-3 border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-rose-600">Despesas por categoria</div>
+      <table class="w-full text-sm"><tbody id="expense-rows"></tbody></table>
+    </div>
+  </div>
+
+  <p class="text-xs text-slate-400">
+    Números medidos no banco de desenvolvimento em 2026-09-23 (base 83a2532).
+    Clique na linha "Cartão de Crédito" para ver o detalhamento — ele lista apenas
+    lançamentos de contas correntes.
+  </p>
+</div>
+
+<script>
+const AFTER = {
+  income: [["Salário",35000.00],["APRASVI",2167.25],["Rendimento",0.58]],
+  expense: [["Cartão de Crédito",14975.19],["Saúde",7054.94],["Financiamento",4996.07],["Outros",3306.59],
+    ["Educação",2633.80],["Consórcio",1410.32],["Empréstimo",1115.33],["Carro",786.44],["Compras",619.40],
+    ["Casa",545.00],["Condomínio",461.39],["Pets",400.00],["Pedágio",373.16],["Luz",244.97],
+    ["Internet + Celular",241.99],["Imposto",231.27],["Tarifa",230.12],["Cuidados Pessoais",185.00],
+    ["Água",73.20],["Gás",47.48],["Celular",43.96],["Mercado",15.75],["Plantas",14.80]],
+  kpi: {income:"R$ 37.167,83", expense:"R$ 40.006,17", net:"-R$ 2.838,34", netNote:"Déficit",
+        incomeNote:"Contas correntes", expenseNote:"Saídas de caixa"}
+};
+const BEFORE = {
+  income: [["Salário",35000.00],["APRASVI",2167.25],["Anuidade",45.50],["Rendimento",0.58]],
+  expense: [["Saúde",7054.94],["Financiamento",4996.07],["Outros",3306.59],["Educação",2633.80],
+    ["Consórcio",1410.32],["Empréstimo",1115.33],["Carro",786.44],["Compras",619.40],["Casa",545.00],
+    ["Condomínio",461.39],["Pets",400.00],["Pedágio",373.16],["Luz",244.97],["Internet + Celular",241.99],
+    ["Imposto",231.27],["Tarifa",230.12],["Cuidados Pessoais",185.00],["Anuidade",45.50],["Água",73.20],
+    ["Gás",47.48],["Celular",43.96],["Mercado",15.75],["Plantas",14.80]],
+  kpi: {income:"R$ 37.213,33", expense:"R$ 25.076,48", net:"R$ 12.136,85", netNote:"Superávit",
+        incomeNote:"Todas as contas", expenseNote:"Regime de competência"}
+};
+const DRILL = [
+  ["16/09/2026","Pagto cartão crédito - VISA INFINITE","Conta Corrente","-R$ 14.018,20"],
+  ["16/09/2026","GASTOS CARTAO DE CREDITO","Conta Corrente","-R$ 956,99"]
+];
+const money = v => "R$ " + v.toLocaleString("pt-BR",{minimumFractionDigits:2, maximumFractionDigits:2});
+
+function rowsHtml(rows, tone, drillable) {
+  const total = rows.reduce((a,[,v]) => a+v, 0);
+  return rows.map(([name,value]) => {
+    const pct = (value/total*100).toFixed(1);
+    const isDrill = drillable && name === "Cartão de Crédito";
+    return `<tr class="border-b border-slate-50 ${isDrill ? "cursor-pointer hover:bg-slate-50" : ""}"
+        ${isDrill ? 'onclick="toggleDrill()"' : ""}>
+      <td class="px-5 py-2.5 font-medium">${isDrill ? '<span class="text-blue-600 font-bold">▸ </span>' : ""}${name}</td>
+      <td class="px-3 py-2.5 text-right text-xs text-slate-400">${pct}%</td>
+      <td class="px-5 py-2.5 text-right font-bold ${tone}">${money(value)}</td></tr>` +
+      (isDrill ? `<tr id="drill" class="hidden"><td colspan="3" class="px-5 pb-3 bg-slate-50">
+        <table class="w-full text-xs">${DRILL.map(d=>`<tr>
+          <td class="py-1 text-slate-500">${d[0]}</td><td class="py-1">${d[1]}</td>
+          <td class="py-1 text-slate-500">${d[2]}</td>
+          <td class="py-1 text-right font-bold text-rose-600">${d[3]}</td></tr>`).join("")}</table>
+        <p class="text-[11px] text-slate-400 mt-1">Somente contas correntes.</p></td></tr>` : "");
+  }).join("");
+}
+function toggleDrill(){ document.getElementById("drill").classList.toggle("hidden"); }
+function setState(state) {
+  const d = state === "after" ? AFTER : BEFORE;
+  document.getElementById("income-rows").innerHTML = rowsHtml(d.income, "text-teal-600", false);
+  document.getElementById("expense-rows").innerHTML = rowsHtml(d.expense, "text-rose-600", state === "after");
+  document.getElementById("kpi-income").textContent = d.kpi.income;
+  document.getElementById("kpi-expense").textContent = d.kpi.expense;
+  document.getElementById("kpi-net").textContent = d.kpi.net;
+  document.getElementById("kpi-net").className = "text-2xl font-black mt-2 " + (state==="after" ? "text-rose-600" : "text-teal-600");
+  document.getElementById("kpi-net-note").textContent = d.kpi.netNote;
+  document.getElementById("kpi-income-note").textContent = d.kpi.incomeNote;
+  document.getElementById("kpi-expense-note").textContent = d.kpi.expenseNote;
+  document.getElementById("banner").classList.toggle("hidden", state === "after");
+  const on = "bg-blue-50 text-blue-700 border-blue-200", off = "bg-white text-slate-700 border-slate-200";
+  document.getElementById("btn-after").className = "border font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm " + (state==="after"?on:off);
+  document.getElementById("btn-before").className = "border font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm " + (state==="before"?on:off);
+}
+setState("after");
+</script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CL-35 — Saldos Contábeis em dois blocos</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  body { background: #f6f7fb; }
+  .cell-num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body class="text-slate-800">
+<div class="max-w-6xl mx-auto py-8 px-4 space-y-6">
+
+  <header>
+    <h1 class="text-2xl font-black">Histórico de Saldos</h1>
+    <p class="text-sm text-slate-500">Fechamento contábil e conciliação mês a mês por conta.</p>
+    <p class="text-[11px] mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 inline-block">
+      Mockup CL-35 — dois blocos separados, sem TOTAL CONSOLIDADO.
+    </p>
+  </header>
+
+  <!-- Filters: one bar for the whole screen, feeding both blocks -->
+  <div id="balance-filters" class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Ano</label>
+        <select class="border border-slate-300 rounded-lg text-sm px-2 py-1.5"><option>2026</option></select>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Mês</label>
+        <select class="border border-slate-300 rounded-lg text-sm px-2 py-1.5"><option>Setembro</option></select>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Conta</label>
+        <select id="account-filter" class="border border-slate-300 rounded-lg text-sm px-2 py-1.5" onchange="applyScenario(this.value)">
+          <option value="all">Todas as contas</option>
+          <option value="cards">Nubank (cartão)</option>
+          <option value="cash">Itaú (conta)</option>
+          <option value="none">Conta sem lançamentos</option>
+        </select>
+      </div>
+      <button class="text-sm rounded-xl px-3 py-1.5 text-slate-600 hover:bg-slate-100" onclick="applyScenario('all')">Limpar Filtros</button>
+    </div>
+    <p class="text-[11px] text-slate-500 mt-3">
+      Cenários: use o filtro de conta para ver um bloco sumir por completo (grupo vazio é omitido).
+    </p>
+  </div>
+
+  <p class="text-xs text-slate-500 px-1">
+    Clique em qualquer linha para abrir o extrato da conta. Clique no lápis para ajustar o saldo final sem abrir o extrato.
+  </p>
+
+  <!-- BLOCK 1: cash accounts -->
+  <section id="balances-cash" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="flex items-center gap-2 px-4 pt-4 pb-2">
+      <i data-lucide="landmark" class="w-4 h-4 text-slate-500"></i>
+      <h2 id="balances-cash-title" class="font-black text-sm">Contas</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead class="bg-slate-100/70">
+          <tr class="text-left">
+            <th class="w-48 px-3 py-2">Conta</th>
+            <th class="w-28 px-3 py-2">Período</th>
+            <th class="px-3 py-2 cell-num">Saldo Inicial</th>
+            <th class="px-3 py-2 cell-num text-emerald-600">Receitas</th>
+            <th class="px-3 py-2 cell-num text-rose-600">Despesas</th>
+            <th class="px-3 py-2 cell-num text-sky-600">Transf. Entrada</th>
+            <th class="px-3 py-2 cell-num text-amber-600">Transf. Saída</th>
+            <th class="px-3 py-2 cell-num font-black">Saldo Final</th>
+            <th class="w-8"></th>
+          </tr>
+        </thead>
+        <tbody id="cash-rows"></tbody>
+        <tfoot class="bg-indigo-50/60 border-t-2 border-slate-300 font-black">
+          <tr id="balances-totals-cash">
+            <td class="px-3 py-2 uppercase tracking-wider text-[11px]" id="totals-cash-label"></td>
+            <td></td>
+            <td class="px-3 py-2 cell-num" id="tc-initial"></td>
+            <td class="px-3 py-2 cell-num text-emerald-600" id="tc-income"></td>
+            <td class="px-3 py-2 cell-num text-rose-600" id="tc-expenses"></td>
+            <td class="px-3 py-2 cell-num text-sky-600" id="tc-tin"></td>
+            <td class="px-3 py-2 cell-num text-amber-600" id="tc-tout"></td>
+            <td class="px-3 py-2 cell-num text-indigo-700 text-sm bg-indigo-100/70" id="tc-final"></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+
+  <!-- BLOCK 2: credit cards -->
+  <section id="balances-cards" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="flex items-center gap-2 px-4 pt-4 pb-2">
+      <i data-lucide="credit-card" class="w-4 h-4 text-slate-500"></i>
+      <h2 id="balances-cards-title" class="font-black text-sm">Cartões de Crédito</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead class="bg-slate-100/70">
+          <tr class="text-left">
+            <th class="w-48 px-3 py-2">Conta</th>
+            <th class="w-28 px-3 py-2">Período</th>
+            <th class="px-3 py-2 cell-num">Saldo Inicial</th>
+            <th class="px-3 py-2 cell-num text-emerald-600">Receitas</th>
+            <th class="px-3 py-2 cell-num text-rose-600">Despesas</th>
+            <th class="px-3 py-2 cell-num text-sky-600">Transf. Entrada</th>
+            <th class="px-3 py-2 cell-num text-amber-600">Transf. Saída</th>
+            <th class="px-3 py-2 cell-num font-black">Saldo Final</th>
+            <th class="w-8"></th>
+          </tr>
+        </thead>
+        <tbody id="card-rows"></tbody>
+        <tfoot class="bg-indigo-50/60 border-t-2 border-slate-300 font-black">
+          <tr id="balances-totals-cards">
+            <td class="px-3 py-2 uppercase tracking-wider text-[11px]" id="totals-cards-label"></td>
+            <td></td>
+            <td class="px-3 py-2 cell-num" id="td-initial"></td>
+            <td class="px-3 py-2 cell-num text-emerald-600" id="td-income"></td>
+            <td class="px-3 py-2 cell-num text-rose-600" id="td-expenses"></td>
+            <td class="px-3 py-2 cell-num text-sky-600" id="td-tin"></td>
+            <td class="px-3 py-2 cell-num text-amber-600" id="td-tout"></td>
+            <td class="px-3 py-2 cell-num text-indigo-700 text-sm bg-indigo-100/70" id="td-final"></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+
+  <p id="balances-empty" class="hidden text-sm text-slate-500 bg-white rounded-2xl border border-slate-200 p-6 text-center">
+    Nenhum saldo encontrado para os filtros selecionados.
+  </p>
+
+</div>
+
+<script>
+// Mock data mirrors the dev database for 2026-09 (totals: cash 19.720,28 / cards -5.237,42).
+const BALANCES = [
+  { id: 1, account: "Itaú",            card: false, period: "Set / 2026", initial: 8200.10,  income: 15200.00, expenses: 12980.55, tin: 20000.00, tout: 20000.00, final: 10419.55 },
+  { id: 2, account: "Nubank Conta",    card: false, period: "Set / 2026", initial: 5310.42,  income: 9000.00,  expenses: 10120.30, tin: 10000.00, tout: 10000.00, final: 4190.12 },
+  { id: 3, account: "Banco do Brasil", card: false, period: "Set / 2026", initial: 4000.00,  income: 6200.00,  expenses: 7300.11,  tin: 5640.41,  tout: 5640.41,  final: 2899.89 },
+  { id: 4, account: "Caixa",           card: false, period: "Set / 2026", initial: 3048.10,  income: 4767.83,  expenses: 5605.21,  tin: 3000.00,  tout: 3000.00,  final: 2210.72 },
+  { id: 5, account: "Conta excluída",  card: false, period: "Set / 2026", initial: 1000.00,  income: 1000.00,  expenses: 2000.00,  tin: 1500.00,  tout: 1500.00,  final: 0.00 },
+  { id: 6, account: "Poupança",        card: false, period: "Set / 2026", initial: 1000.00,  income: 1000.00,  expenses: 2000.00,  tin: 1500.00,  tout: 1500.00,  final: 0.00 },
+  { id: 7, account: "Nubank",          card: true,  period: "Set / 2026", initial: -2100.00, income: 45.50,    expenses: 45.50,    tin: 0, tout: 0, final: -2100.00 },
+  { id: 8, account: "Ourocard",        card: true,  period: "Set / 2026", initial: -1600.42, income: 0,        expenses: 0,        tin: 0, tout: 0, final: -1600.42 },
+  { id: 9, account: "Itaú Card",       card: true,  period: "Set / 2026", initial: -1000.00, income: 0,        expenses: 0,        tin: 0, tout: 0, final: -1000.00 },
+  { id: 10, account: "Mercado Pago",   card: true,  period: "Set / 2026", initial: -537.00,  income: 0,        expenses: 0,        tin: 0, tout: 0, final: -537.00 }
+];
+
+const brl = (v) =>
+  "R$ " + (v < 0 ? "-" : "") + Math.abs(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function rowHtml(b) {
+  return `
+  <tr id="balances-${b.id}" class="border-b border-slate-100 hover:bg-slate-50 cursor-pointer group">
+    <td class="px-3 py-2">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-full bg-indigo-500 text-white grid place-items-center font-bold text-[10px] uppercase">
+          ${b.account.slice(0, 2)}
+        </div>
+        <span class="font-bold truncate max-w-[130px]">${b.account}</span>
+      </div>
+    </td>
+    <td class="px-3 py-2 font-semibold text-slate-500">${b.period}</td>
+    <td class="px-3 py-2 cell-num text-slate-500">${brl(b.initial)}</td>
+    <td class="px-3 py-2 cell-num text-emerald-600 font-medium">${brl(b.income)}</td>
+    <td class="px-3 py-2 cell-num text-rose-600 font-medium">-${brl(b.expenses)}</td>
+    <td class="px-3 py-2 cell-num text-sky-600">${b.tin ? brl(b.tin) : "—"}</td>
+    <td class="px-3 py-2 cell-num text-amber-600">${b.tout ? "-" + brl(b.tout) : "—"}</td>
+    <td class="px-3 py-2 cell-num font-black bg-slate-50">
+      <span class="inline-flex items-center gap-2 justify-end w-full">
+        ${brl(b.final)}
+        <button class="text-slate-400 hover:text-slate-700" title="Ajustar saldo desta conta">
+          <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+        </button>
+      </span>
+    </td>
+    <td class="px-2 text-slate-300 group-hover:text-slate-600"><i data-lucide="chevron-right" class="w-4 h-4"></i></td>
+  </tr>`;
+}
+
+function sum(rows, key) { return rows.reduce((a, r) => a + r[key], 0); }
+
+function renderBlock(rows, prefix, labelId, labelText, noun) {
+  document.getElementById(prefix === "tc" ? "cash-rows" : "card-rows").innerHTML = rows.map(rowHtml).join("");
+  document.getElementById(labelId).textContent = `${labelText} (${rows.length} ${noun})`;
+  document.getElementById(prefix + "-initial").textContent = brl(sum(rows, "initial"));
+  document.getElementById(prefix + "-income").textContent = brl(sum(rows, "income"));
+  document.getElementById(prefix + "-expenses").textContent = "-" + brl(sum(rows, "expenses"));
+  document.getElementById(prefix + "-tin").textContent = brl(sum(rows, "tin"));
+  document.getElementById(prefix + "-tout").textContent = "-" + brl(sum(rows, "tout"));
+  document.getElementById(prefix + "-final").textContent = brl(sum(rows, "final"));
+}
+
+function applyScenario(scenario) {
+  let visible = BALANCES;
+  if (scenario === "cards") visible = BALANCES.filter((b) => b.card);
+  if (scenario === "cash") visible = BALANCES.filter((b) => !b.card && b.account === "Itaú");
+  if (scenario === "none") visible = [];
+
+  const cash = visible.filter((b) => !b.card);
+  const cards = visible.filter((b) => b.card);
+
+  // An empty group is omitted from the screen entirely — heading, table and total.
+  document.getElementById("balances-cash").classList.toggle("hidden", cash.length === 0);
+  document.getElementById("balances-cards").classList.toggle("hidden", cards.length === 0);
+  document.getElementById("balances-empty").classList.toggle("hidden", visible.length > 0);
+
+  if (cash.length) renderBlock(cash, "tc", "totals-cash-label", "TOTAL EM CONTAS", "contas");
+  if (cards.length) renderBlock(cards, "td", "totals-cards-label", "TOTAL EM CARTÕES", "cartões");
+
+  lucide.createIcons();
+}
+
+applyScenario("all");
+</script>
+</body>
+</html>
