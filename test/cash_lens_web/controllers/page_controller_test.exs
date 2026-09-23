@@ -58,8 +58,22 @@ defmodule CashLensWeb.PageControllerTest do
       conn = get(conn, ~p"/")
       html = html_response(conn, 200)
 
-      assert html =~ "R$ 812,34"
-      refute html =~ "R$ 500,00"
+      # Scoped to the Saldo Atual card, which is what this test is about. A
+      # page-wide refutation of the persisted 500,00 would now fail for an
+      # innocent reason: the month-by-month table legitimately shows that
+      # same figure as the month's closing balance.
+      saldo_atual =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#kpi-saldo-atual")
+        |> LazyHTML.text()
+
+      assert saldo_atual =~ "R$ 812,34"
+      refute saldo_atual =~ "R$ 500,00"
+
+      # 782,34 is pluggy_balance plus the live entry -- the double-count this
+      # guards against. It is not a legitimate figure anywhere on the page,
+      # so this one stays page-wide.
       refute html =~ "R$ 782,34"
     end
 
@@ -313,7 +327,7 @@ defmodule CashLensWeb.PageControllerTest do
       assert html =~ "R$ 750,00"
     end
 
-    test "drops the 12-month history table and the fixed/variable category charts", %{conn: conn} do
+    test "drops the trailing totals and the fixed/variable category charts", %{conn: conn} do
       account = account_fixture()
       today = Date.utc_today()
 
@@ -321,7 +335,6 @@ defmodule CashLensWeb.PageControllerTest do
 
       html = conn |> get(~p"/") |> html_response(200)
 
-      refute html =~ "Histórico Mensal"
       refute html =~ "Balanço 3 meses"
       refute html =~ "Balanço 6 meses"
       refute html =~ "Balanço 12 meses"
@@ -329,6 +342,37 @@ defmodule CashLensWeb.PageControllerTest do
       refute html =~ "variableChart"
       refute html =~ "Custo de Vida"
       refute html =~ "Estilo de Vida"
+    end
+
+    test "the month-by-month table lists 12 months, newest first, with the month's own figures",
+         %{conn: conn} do
+      account = account_fixture()
+      today = Date.utc_today()
+
+      # No balance_fixture on purpose: creating a transaction replaces the
+      # month's balance row outright, recomputing initial_balance from
+      # account.balance, so any figure seeded here would be discarded.
+      transaction_fixture(%{account_id: account.id, amount: "200.00", date: today})
+      transaction_fixture(%{account_id: account.id, amount: "-75.00", date: today})
+
+      html = conn |> get(~p"/") |> html_response(200)
+      doc = LazyHTML.from_fragment(html)
+
+      rows = LazyHTML.query(doc, "#monthly-balance-table tbody tr")
+      assert Enum.count(rows) == 12
+
+      current =
+        rows |> Enum.at(0) |> LazyHTML.text() |> String.replace(~r/\s+/, " ") |> String.trim()
+
+      # Newest month first, so row 0 is the current one.
+      assert current =~ CashLensWeb.Formatters.month_label(today.month)
+      assert current =~ "#{today.year}"
+      # Receitas 200, Despesas 75, Balanço 125, and the closing balance:
+      # account_fixture's base balance 120,50 + 200 - 75 = 245,50.
+      assert current =~ "R$ 200,00"
+      assert current =~ "R$ 75,00"
+      assert current =~ "R$ 125,00"
+      assert current =~ "R$ 245,50"
     end
 
     test "chart data holds the last 12 real months ending in the current one, with no projections",
@@ -359,7 +403,10 @@ defmodule CashLensWeb.PageControllerTest do
             :monthly_balance,
             :summary_month,
             :chart_data,
-            :accounts
+            :accounts,
+            # The month-by-month table renders this series directly; the chart
+            # gets the same data as encoded JSON in :chart_data.
+            :historical
           ] do
         assert Map.has_key?(conn.assigns, key)
       end
@@ -367,7 +414,6 @@ defmodule CashLensWeb.PageControllerTest do
       for key <- [
             :fixed_data,
             :variable_data,
-            :historical,
             :trailing_balance_3m,
             :trailing_balance_6m,
             :trailing_balance_12m,

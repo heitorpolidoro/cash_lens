@@ -111,7 +111,8 @@ defmodule CashLensWeb.PageController do
       monthly_balance: Decimal.sub(current_total_balance, initial_balance_total),
       accounts: accounts_with_data,
       summary_month: month_name,
-      chart_data: chart_data
+      chart_data: chart_data,
+      historical: historical
     )
   end
 

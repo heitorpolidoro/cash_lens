@@ -18,7 +18,7 @@
   
 <!-- KPI Cards -->
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+    <div id="kpi-saldo-atual" class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
       <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Saldo Atual</span>
       <div class="text-2xl font-black text-blue-600 mt-2">{format_currency(@total_balance)}</div>
       <div class="text-xs text-slate-400 mt-1">Soma das contas ativas</div>
@@ -74,6 +74,56 @@
       </div>
       <div class="w-full h-80 pt-2">
         <canvas id="balanceChart" data-history={@chart_data}></canvas>
+      </div>
+      
+<!--
+        The same series the chart above draws, as exact figures. The chart
+        answers "which way is this going"; the table answers "how much,
+        in that month". Most recent month first, because that is the one
+        being read.
+      -->
+      <div class="overflow-x-auto border-t border-slate-100 pt-4">
+        <table id="monthly-balance-table" class="w-full text-sm">
+          <thead>
+            <tr class="text-xs font-black uppercase tracking-wider text-slate-500">
+              <th class="text-left pb-2 font-black">Mês</th>
+              <th class="text-right pb-2 font-black">Receitas</th>
+              <th class="text-right pb-2 font-black">Despesas</th>
+              <th class="text-right pb-2 font-black">Balanço</th>
+              <th class="text-right pb-2 font-black">Saldo Final</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              :for={item <- Enum.reverse(@historical)}
+              class="border-t border-slate-100 hover:bg-slate-50"
+            >
+              <td class="py-2">
+                <.link
+                  navigate={~p"/months/#{item.year}/#{item.month}"}
+                  class="font-bold text-slate-900 hover:underline"
+                >
+                  {month_label(item.month)} {item.year}
+                </.link>
+              </td>
+              <td class="py-2 text-right text-emerald-600 tabular-nums">
+                {format_currency(item.income)}
+              </td>
+              <td class="py-2 text-right text-rose-600 tabular-nums">
+                {format_currency(item.expenses)}
+              </td>
+              <td class={[
+                "py-2 text-right font-black tabular-nums",
+                if(item.balance >= 0, do: "text-emerald-600", else: "text-rose-600")
+              ]}>
+                {format_currency(item.balance)}
+              </td>
+              <td class="py-2 text-right font-bold text-slate-900 tabular-nums">
+                {format_currency(item.final_balance)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
