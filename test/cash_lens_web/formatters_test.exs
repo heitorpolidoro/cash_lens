@@ -1,5 +1,7 @@
 defmodule CashLensWeb.FormattersTest do
   use CashLensWeb.ConnCase, async: false
+  alias CashLens.Parsers.AccountFile
+  alias CashLensWeb.AccountLive.FormComponent
   alias CashLensWeb.Formatters
 
   describe "format_currency/1" do
@@ -119,6 +121,32 @@ defmodule CashLensWeb.FormattersTest do
     test "returns default for unknown types" do
       assert Formatters.translate_parser_type("unknown") == "Não configurado"
       assert Formatters.translate_parser_type(nil) == "Não configurado"
+    end
+
+    test "every registered parser has a label" do
+      # Falling through to "Não configurado" is indistinguishable from an
+      # account with no parser at all, so a parser registered in the parsers
+      # layer but missing here reads as broken even though it works.
+      unlabelled =
+        Enum.filter(
+          AccountFile.valid_parsers(),
+          &(Formatters.translate_parser_type(&1) == "Não configurado")
+        )
+
+      assert unlabelled == [],
+             "these registered parsers have no label: #{inspect(unlabelled)}"
+    end
+
+    test "every registered parser can be selected in the account form" do
+      offered =
+        FormComponent.parser_options()
+        |> Enum.map(fn {_label, value} -> value end)
+        |> MapSet.new()
+
+      missing = Enum.reject(AccountFile.valid_parsers(), &(&1 in offered))
+
+      assert missing == [],
+             "these registered parsers cannot be chosen in the form: #{inspect(missing)}"
     end
   end
 end

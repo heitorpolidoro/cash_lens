@@ -23,10 +23,23 @@ defmodule CashLensWeb.AccountLive.FormComponent do
     {"Mercado Pago Cartão (PDF)", "mercadopago_cartao_pdf"},
     {"Banco do Brasil (CSV)", "bb_csv"},
     {"Mercado Pago (CSV)", "mercado_pago_csv"},
+    {"Mercado Pago (PDF)", "mercado_pago_pdf"},
     {"Ourocard (OFX)", "ourocard_ofx"},
+    {"Ourocard (TXT)", "ourocard_txt"},
     {"Sem Parar (PDF)", "sem_parar_pdf"},
     {"OFX Padrão", "standard_ofx"}
   ]
+
+  @doc """
+  The parser choices offered by the account form.
+
+  Public so a test can assert this list stays in step with
+  `CashLens.Parsers.AccountFile.valid_parsers/0`. A parser registered in the
+  parsers layer but missing here cannot be selected for an account at all,
+  which is how `mercado_pago_pdf` and `ourocard_txt` were both unreachable
+  from the UI while being perfectly functional underneath.
+  """
+  def parser_options, do: @parser_options
 
   @color_presets [
     {"Nubank", "#820ad1"},
