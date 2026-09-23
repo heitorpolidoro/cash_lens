@@ -4,6 +4,7 @@ defmodule CashLens.Transactions do
   """
 
   import Ecto.Query, warn: false
+  alias CashLens.Accounts.Scopes
   alias CashLens.Categories
   alias CashLens.Categories.Category
   alias CashLens.CreditCards.Matcher, as: CreditCardMatcher
@@ -465,7 +466,8 @@ defmodule CashLens.Transactions do
 
   @doc """
   Calculates monthly totals for income (positive) and expenses (negative), ignoring transfers.
-  Considers only bank accounts (is_credit_card: false) unless a specific account_id filter is passed.
+  Considers only the cash-accounts scope (`CashLens.Accounts.Scopes`) unless a specific
+  account_id filter is passed.
   Includes credit-card bill payments (cartao-de-credito) on bank accounts as cash expenses.
   """
   def get_monthly_summary(date \\ nil, filters \\ %{}) do
@@ -628,10 +630,7 @@ defmodule CashLens.Transactions do
   defp apply_summary_account_filter(query, filters) do
     case Map.get(filters, "account_id") || Map.get(filters, :account_id) do
       account_id when account_id in [nil, ""] ->
-        from(t in query,
-          join: a in assoc(t, :account),
-          where: a.is_credit_card == false
-        )
+        Scopes.cash_accounts_only(query)
 
       account_id ->
         where(query, [t], t.account_id == ^account_id)
@@ -649,16 +648,16 @@ defmodule CashLens.Transactions do
 
   @doc """
   Returns pure income and expenses history grouped by month, excluding transfers.
-  Considers only bank accounts (is_credit_card: false).
+  Considers only the cash-accounts scope (`CashLens.Accounts.Scopes`).
   """
   def get_historical_summary(opts \\ []) do
     limit = Keyword.get(opts, :limit)
 
+    cash_transactions = Scopes.cash_accounts_only(Transaction)
+
     query =
-      from t in Transaction,
-        join: a in assoc(t, :account),
+      from t in cash_transactions,
         left_join: c in assoc(t, :category),
-        where: a.is_credit_card == false,
         where: is_nil(c.id) or c.id not in ^excluded_cash_summary_category_ids(),
         where: is_nil(t.reimbursement_link_key),
         group_by: [
@@ -1285,6 +1284,7 @@ defmodule CashLens.Transactions do
 
     from(a in Transaction,
       join: acct_a in assoc(a, :account),
+      as: :acct_a,
       join: b in Transaction,
       on:
         fragment("ABS(? - ?) <= ?", a.date, b.date, ^window) and
@@ -1292,14 +1292,16 @@ defmodule CashLens.Transactions do
           a.account_id != b.account_id and
           a.id < b.id,
       join: acct_b in assoc(b, :account),
+      as: :acct_b,
       where: is_nil(a.transfer_key) and is_nil(b.transfer_key),
       where:
         (is_nil(a.category_id) or a.category_id == ^transfer_cat_id) and
           (is_nil(b.category_id) or b.category_id == ^transfer_cat_id),
-      where: not acct_a.is_credit_card and not acct_b.is_credit_card,
       order_by: [desc: a.date],
       select: {a, b}
     )
+    |> Scopes.cash_account_binding(:acct_a)
+    |> Scopes.cash_account_binding(:acct_b)
   end
 
   # Greedily keeps the best candidate pair for each transaction: the closest
@@ -1347,14 +1349,13 @@ defmodule CashLens.Transactions do
         |> Enum.flat_map(fn {out, inc} -> [out.id, inc.id] end)
 
       from(t in Transaction,
-        join: acct in assoc(t, :account),
         where: is_nil(t.transfer_key),
         where: t.category_id == ^transfer_cat.id,
         where: t.id not in ^suggested_ids,
-        where: not acct.is_credit_card,
         order_by: [desc: t.date],
         preload: [:account, :category]
       )
+      |> Scopes.cash_accounts_only()
       |> Repo.all()
     end
   end
@@ -1374,15 +1375,14 @@ defmodule CashLens.Transactions do
     opposite_sign = if Decimal.negative?(transaction.amount), do: :positive, else: :negative
 
     from(t in Transaction,
-      join: acct in assoc(t, :account),
       where: t.id != ^transaction.id,
       where: t.account_id != ^transaction.account_id,
       where: is_nil(t.transfer_key),
       where: is_nil(t.category_id) or t.category_id == ^transfer_cat_id,
-      where: not acct.is_credit_card,
       where: fragment("ABS(? - ?) <= ?", t.date, ^transaction.date, ^@transfer_link_window_days),
       preload: [:account]
     )
+    |> Scopes.cash_accounts_only()
     |> Repo.all()
     |> Enum.filter(&matching_sign?(&1.amount, opposite_sign))
     |> Enum.map(fn candidate ->

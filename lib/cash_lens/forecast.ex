@@ -7,7 +7,7 @@ defmodule CashLens.Forecast do
   import Ecto.Query, warn: false
   alias CashLens.Repo
   alias CashLens.Forecast.RecurringItem
-  alias CashLens.Accounts.Account
+  alias CashLens.Accounts.Scopes
   alias CashLens.Categories
   alias CashLens.Categories.Category
   alias CashLens.Transactions.Transaction
@@ -33,7 +33,8 @@ defmodule CashLens.Forecast do
 
   @doc """
   Derives a {day_of_month, amount} suggestion for a fixed category from its
-  transaction history (non-credit-card accounts only, last 6 months).
+  transaction history (the `CashLens.Accounts.Scopes` cash-accounts scope only,
+  last 6 months).
   Returns `:insufficient_history` when fewer than 2 occurrences exist.
   """
   def suggest_for_category(%Category{} = category) do
@@ -41,13 +42,10 @@ defmodule CashLens.Forecast do
 
     rows =
       from(t in Transaction,
-        join: a in Account,
-        on: a.id == t.account_id,
-        where:
-          t.category_id == ^category.id and a.is_credit_card == false and
-            t.date >= ^since,
+        where: t.category_id == ^category.id and t.date >= ^since,
         select: %{date: t.date, amount: t.amount}
       )
+      |> Scopes.cash_accounts_only()
       |> Repo.all()
 
     if length(rows) < @min_occurrences do

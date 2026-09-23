@@ -966,3 +966,55 @@ commit claimed none were added. Fixed; back to 23.
 - The measurements doc's "How these numbers were taken" section states `./run` was live and the compose stack deliberately not started; at verification time the situation is the reverse (compose up, `./run` down). The numbers remain internally consistent and the criteria do not pin the harness, but a one-line note about which environment a future re-measurement should use would prevent someone re-running the harness against the wrong postmaster.
 - `docs/tasks/CL-30-measurements.md` cites `index.html.heex:821` as the old call site; line numbers drift. Quoting the removed expression instead of the line number would age better.
 - The "Buscando sugestão..." placeholder renders for every unopened row (`installment_suggestion == :not_loaded`) inside the dropdown content. It is invisible until the menu opens, so this is cosmetic only, but a brief spinner-free empty state would avoid a flash of that text on slow replies.
+
+## [CL-33] Introduce a cash-accounts scope for the global screens — 2026-09-23
+
+- Drop the "returns hits only inside `suggest_for_category/1`" exclusivity
+  clause from the forecast half of criterion 2, or exempt comment and `@doc`
+  lines from it. Criterion 3 already forbids `Scopes.` in the card-bill code,
+  which is the containment that matters; the surviving clause can only fail a
+  correct implementation that chooses to mention the scope in the
+  `suggest_for_category/1` docstring. Not worth a revision round on its own —
+  fold it in if the spec is touched again for another reason.
+- If QA for CL-33 is ever run in a later session rather than immediately after
+  implementation, re-check that
+  `.meridian/reports/CL-33-in_progress-1.md` still exists before relying on
+  criteria 5 and 12; `.meridian/` is gitignored and pruned to the 50 most
+  recent files.
+- Consider having the implementer note, in the task report, the pre-change
+  `grep -c "is_credit_card" lib/cash_lens/forecast.ex` value of 3 alongside the
+  post-change 2. It makes criterion 7's expected figure self-evidently a
+  consequence of removing exactly one predicate rather than a bare constant.
+
+## [CL-33] Introduce a cash-accounts scope for the global screens — 2026-09-23
+
+1. `lib/cash_lens/transactions.ex:469` and `:651` — consider "Considers only cash
+   accounts, i.e. accounts that are not credit cards (see
+   `CashLens.Accounts.Scopes`)". The current wording satisfies the criterion but
+   tells a reader of the function less than the sentence it replaced.
+2. `lib/cash_lens/accounts/scopes.ex:41-54` — the `@doc` for
+   `cash_accounts_only/1` could state that the join alias is fixed
+   (`:cash_scope_account`) and that applying it twice to the same query raises.
+   The failure is loud, so this is documentation, not a fix.
+3. `test/cash_lens/installments_scope_guard_test.exs` — `Installments.list_off_card_groups/0`
+   is the other Installments query whose meaning a leaked scope would invert (its
+   subquery asserts `a.is_credit_card == true`), and nothing guards it. The spec's
+   test criteria did not require it; worth a follow-up alongside CL-31/34/35,
+   which are the tasks that will actually be tempted to spread the scope.
+4. `test/cash_lens/accounts/scopes_test.exs:17-22` — the exclusion test would also
+   pass against a scope returning nothing. Adding a bank-account control row to
+   that same test would make it self-falsifying instead of relying on its siblings.
+
+## [CL-33] Introduce a cash-accounts scope for the global screens — 2026-09-23
+
+- `cash_accounts_only/1` always adds an `:inner` join under the fixed binding
+  name `:cash_scope_account`. Calling it twice on the same query would raise on
+  the duplicate alias. That is fine for every current call site (each calls it
+  once, and the two-binding case correctly uses `cash_account_binding/2`), but a
+  one-line note in the `@doc` saying the function is not idempotent would save a
+  future caller a confusing compile error.
+- `test/cash_lens/forecast_scope_guard_test.exs` derives its fixture from
+  `Date.utc_today()`. It is correct today and around month boundaries as written,
+  but a frozen date would make it fully deterministic and immune to a future
+  calendar-edge surprise. Not blocking — the `:estimado` branch is forced by
+  construction, not by luck of the date.
