@@ -1004,17 +1004,17 @@ defmodule CashLens.TransactionsTest do
         })
 
       market = other_category()
-      card = account_fixture(%{is_credit_card: true})
+      checking = account_fixture(%{is_credit_card: false})
 
       transaction_fixture(%{
-        account_id: card.id,
+        account_id: checking.id,
         category_id: pagamento.id,
         amount: "14391.19",
         date: ~D[2026-06-16]
       })
 
       transaction_fixture(%{
-        account_id: card.id,
+        account_id: checking.id,
         category_id: market.id,
         amount: "10.00",
         date: ~D[2026-06-12]
@@ -1040,7 +1040,7 @@ defmodule CashLens.TransactionsTest do
     defp cc_category2,
       do: category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
 
-    test "get_month_category_breakdown/2 hides the parent and shows the children's own categories" do
+    test "get_month_category_breakdown/2 keeps a parent whose only children sit on card accounts" do
       cc = cc_category2()
       uber_cat = category_fixture(%{name: "Transporte", slug: "transporte"})
       checking = account_fixture(%{is_credit_card: false})
@@ -1068,11 +1068,13 @@ defmodule CashLens.TransactionsTest do
 
       breakdown = Transactions.get_month_category_breakdown(2026, 2)
 
-      refute Enum.any?(breakdown, &(&1.category_id == cc.id))
-      assert Enum.any?(breakdown, &(&1.category_id == uber_cat.id))
+      # The bill payment is the only cash movement of the pair, so it is the one
+      # that must be reported; its card-side child is invisible on this screen.
+      assert Enum.any?(breakdown, &(&1.category_id == cc.id))
+      refute Enum.any?(breakdown, &(&1.category_id == uber_cat.id))
     end
 
-    test "a Cartão de Crédito transaction with no children is excluded from the breakdown" do
+    test "a Cartão de Crédito transaction with no children is reported as a cash expense" do
       cc = cc_category2()
       checking = account_fixture(%{is_credit_card: false})
 
@@ -1084,7 +1086,8 @@ defmodule CashLens.TransactionsTest do
       })
 
       breakdown = Transactions.get_month_category_breakdown(2026, 2)
-      refute Enum.any?(breakdown, &(&1.category_id == cc.id))
+      assert [row] = Enum.filter(breakdown, &(&1.category_id == cc.id))
+      assert Decimal.equal?(row.total, Decimal.new("100.00"))
     end
 
     test "get_historical_category_summary/1 excludes parents with children" do
@@ -1118,6 +1121,251 @@ defmodule CashLens.TransactionsTest do
 
       refute "Cartão de Crédito" in category_names
       assert "Transporte" in category_names
+    end
+  end
+
+  describe "month breakdowns are a cash-basis view" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    defp cash_basis_cc_category,
+      do: category_fixture(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+
+    test "neither breakdown reports categorized transactions on credit-card accounts" do
+      card = account_fixture(%{is_credit_card: true})
+      market = category_fixture(%{name: "Mercado", slug: "mercado"})
+      salary = category_fixture(%{name: "Salário", slug: "salario"})
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: market.id,
+        amount: "-100.00",
+        date: ~D[2026-02-10]
+      })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: salary.id,
+        amount: "100.00",
+        date: ~D[2026-02-11]
+      })
+
+      refute Enum.any?(
+               Transactions.get_month_category_breakdown(2026, 2),
+               &(&1.category_id == market.id)
+             )
+
+      refute Enum.any?(
+               Transactions.get_month_income_breakdown(2026, 2),
+               &(&1.category_id == salary.id)
+             )
+    end
+
+    test "neither Uncategorized subquery reports transactions on credit-card accounts" do
+      card = account_fixture(%{is_credit_card: true})
+
+      transaction_fixture(%{account_id: card.id, amount: "-100.00", date: ~D[2026-02-10]})
+      transaction_fixture(%{account_id: card.id, amount: "100.00", date: ~D[2026-02-11]})
+
+      refute Enum.any?(
+               Transactions.get_month_category_breakdown(2026, 2),
+               &(&1.name == "Uncategorized")
+             )
+
+      refute Enum.any?(
+               Transactions.get_month_income_breakdown(2026, 2),
+               &(&1.name == "Uncategorized")
+             )
+    end
+
+    test "expenses report the card bill payment but never transfers or initial values" do
+      checking = account_fixture(%{is_credit_card: false})
+      cc = cash_basis_cc_category()
+      transfer = category_fixture(%{name: "Transferência", slug: "transfer"})
+
+      transfer_child =
+        category_fixture(%{
+          name: "Transferência Pix",
+          slug: "transfer-pix",
+          parent_id: transfer.id
+        })
+
+      initial = category_fixture(%{name: "Saldo Inicial", slug: "initial_value"})
+
+      initial_child =
+        category_fixture(%{
+          name: "Abertura",
+          slug: "initial_value-abertura",
+          parent_id: initial.id
+        })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-100.00",
+        date: ~D[2026-02-10]
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: transfer_child.id,
+        amount: "-50.00",
+        date: ~D[2026-02-11]
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: initial_child.id,
+        amount: "-25.00",
+        date: ~D[2026-02-12]
+      })
+
+      breakdown = Transactions.get_month_category_breakdown(2026, 2)
+
+      assert [row] = Enum.filter(breakdown, &(&1.category_id == cc.id))
+      assert Decimal.equal?(row.total, Decimal.new("100.00"))
+      refute Enum.any?(breakdown, &(&1.category_id == transfer.id))
+      refute Enum.any?(breakdown, &(&1.category_id == initial.id))
+    end
+
+    test "income still drops a cartao-de-credito credit landing on a cash account" do
+      checking = account_fixture(%{is_credit_card: false})
+      cc = cash_basis_cc_category()
+      salary = category_fixture(%{name: "Salário", slug: "salario"})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "900.00",
+        date: ~D[2026-02-10]
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: salary.id,
+        amount: "100.00",
+        date: ~D[2026-02-11]
+      })
+
+      breakdown = Transactions.get_month_income_breakdown(2026, 2)
+
+      refute Enum.any?(breakdown, &(&1.category_id == cc.id))
+      assert Enum.any?(breakdown, &(&1.category_id == salary.id))
+    end
+
+    test "get_historical_category_summary/1 still excludes cartao-de-credito spending" do
+      checking = account_fixture(%{is_credit_card: false})
+      cc = cash_basis_cc_category()
+
+      _ourocard =
+        category_fixture(%{
+          name: "Ourocard",
+          slug: "cartao-de-credito-ourocard",
+          parent_id: cc.id
+        })
+
+      market = category_fixture(%{name: "Mercado", slug: "mercado"})
+
+      # A lone bill payment: nothing points its parent_transaction_id at it.
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: cc.id,
+        amount: "-100.00",
+        date: ~D[2026-02-10]
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: market.id,
+        amount: "-40.00",
+        date: ~D[2026-02-11]
+      })
+
+      names =
+        Transactions.get_historical_category_summary()
+        |> Enum.flat_map(fn month -> Enum.map(month.categories, & &1.name) end)
+
+      assert "Mercado" in names
+      refute "Cartão de Crédito" in names
+      refute "Ourocard" in names
+    end
+
+    test "a cash-account parent with at least one cash-account child stays hidden" do
+      checking = account_fixture(%{is_credit_card: false})
+      other_checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+      lump = category_fixture(%{name: "Lote", slug: "lote"})
+      market = category_fixture(%{name: "Mercado", slug: "mercado"})
+
+      parent =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: lump.id,
+          amount: "-100.00",
+          date: ~D[2026-02-10]
+        })
+
+      cash_child =
+        transaction_fixture(%{
+          account_id: other_checking.id,
+          category_id: market.id,
+          amount: "-60.00",
+          date: ~D[2026-02-10]
+        })
+
+      card_child =
+        transaction_fixture(%{
+          account_id: card.id,
+          category_id: market.id,
+          amount: "-40.00",
+          date: ~D[2026-02-10]
+        })
+
+      {2, _} =
+        from(t in Transaction, where: t.id in ^[cash_child.id, card_child.id])
+        |> Repo.update_all(set: [parent_transaction_id: parent.id])
+
+      breakdown = Transactions.get_month_category_breakdown(2026, 2)
+
+      refute Enum.any?(breakdown, &(&1.category_id == lump.id))
+      assert [row] = Enum.filter(breakdown, &(&1.category_id == market.id))
+      assert Decimal.equal?(row.total, Decimal.new("60.00"))
+    end
+
+    test "list_all_transactions/1 drops credit-card accounts only when asked to" do
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+      market = category_fixture(%{name: "Mercado", slug: "mercado"})
+
+      cash_tx =
+        transaction_fixture(%{
+          account_id: checking.id,
+          category_id: market.id,
+          amount: "-60.00",
+          date: ~D[2026-02-10]
+        })
+
+      card_tx =
+        transaction_fixture(%{
+          account_id: card.id,
+          category_id: market.id,
+          amount: "-40.00",
+          date: ~D[2026-02-10]
+        })
+
+      unfiltered_ids =
+        %{"category_id" => market.id} |> Transactions.list_all_transactions() |> Enum.map(& &1.id)
+
+      assert cash_tx.id in unfiltered_ids
+      assert card_tx.id in unfiltered_ids
+
+      filtered_ids =
+        %{"category_id" => market.id, "cash_accounts_only" => true}
+        |> Transactions.list_all_transactions()
+        |> Enum.map(& &1.id)
+
+      assert cash_tx.id in filtered_ids
+      refute card_tx.id in filtered_ids
     end
   end
 

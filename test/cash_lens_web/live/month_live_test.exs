@@ -115,7 +115,7 @@ defmodule CashLensWeb.MonthLiveTest do
       assert html =~ "width: 100"
     end
 
-    test "category percentages are taken against a total that includes credit-card spending", %{
+    test "category percentages are taken against the cash-account total", %{
       conn: conn,
       expense_cat: expense_cat
     } do
@@ -141,20 +141,16 @@ defmodule CashLensWeb.MonthLiveTest do
 
       {:ok, _live, html} = live(conn, ~p"/months/2026/3")
 
-      # Mercado = 120,00 (bank, from setup) + 1.000,00 (card) = 1.120,00 and
-      # Transporte = 880,00, so the month's expenses total 2.000,00: the KPI card
-      # must equal the sum of the rows, and each row's share must be taken
-      # against that same total (56% / 44%), never against a bank-only total.
-      assert html =~ "R$ 2.000,00"
-      assert html =~ "56.0%"
-      assert html =~ "44.0%"
-      refute html =~ "112.0%"
-      refute html =~ "88.0%"
+      # The card purchase never counts on its own here: Mercado = 120,00 (bank,
+      # from setup) and Transporte = 880,00 total 1.000,00, so the KPI card must
+      # equal the sum of the rows and the shares are 12% / 88%.
+      assert html =~ "R$ 1.000,00"
+      assert html =~ "12.0%"
+      assert html =~ "88.0%"
+      refute html =~ "R$ 2.000,00"
     end
 
-    test "income percentages are taken against a total that includes credit-card entries", %{
-      conn: conn
-    } do
+    test "income percentages ignore credit-card entries", %{conn: conn} do
       card = account_fixture(%{is_credit_card: true})
       refund_cat = category_fixture(%{name: "Estorno", slug: "estorno", type: "variable"})
 
@@ -168,12 +164,19 @@ defmodule CashLensWeb.MonthLiveTest do
 
       {:ok, _live, html} = live(conn, ~p"/months/2026/3")
 
-      # Renda = 500,00 (bank, from setup) plus Estorno = 100,00 (card) totals
-      # 600,00: 83,3% and 16,7%, not 100% / 20% off a bank-only 500,00.
-      assert html =~ "R$ 600,00"
-      assert html =~ "83.3%"
-      assert html =~ "16.7%"
-      refute html =~ "20.0%"
+      # Only Renda = 500,00 (bank, from setup) is cash income; the card-side
+      # credit is not, so the total stays 500,00 at 100%.
+      assert html =~ "R$ 500,00"
+      assert html =~ "100.0%"
+      refute html =~ "R$ 600,00"
+      refute html =~ "Estorno"
+    end
+
+    test "states the cash basis under the page title", %{conn: conn} do
+      {:ok, _live, html} = live(conn, ~p"/months/2026/3")
+
+      assert html =~ "Regime de caixa"
+      assert html =~ "pagamento da fatura"
     end
 
     test "renders empty-state messages for a month with no data", %{conn: conn} do
@@ -221,6 +224,29 @@ defmodule CashLensWeb.MonthLiveTest do
 
       html = live |> element(selector) |> render_click()
       refute html =~ "Compra mercado"
+    end
+
+    test "an expanded expense row lists no credit-card-account transaction", %{
+      conn: conn,
+      expense_cat: cat
+    } do
+      card = account_fixture(%{is_credit_card: true})
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: cat.id,
+        amount: "-777.00",
+        date: ~D[2026-03-11],
+        description: "Mercado no cartao"
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/months/2026/3")
+
+      html =
+        live |> element("tr[phx-value-category_id='debit:#{cat.id}']") |> render_click()
+
+      assert html =~ "Compra mercado"
+      refute html =~ "Mercado no cartao"
     end
 
     test "toggle_category expands an income row", %{conn: conn, income_cat: cat} do
@@ -457,7 +483,7 @@ defmodule CashLensWeb.MonthLiveTest do
       assert analysis_row =~ "+R$ 120,00"
     end
 
-    test "comparison percentages use a total that includes credit-card spending", %{
+    test "comparison percentages use the cash-account total", %{
       conn: conn,
       expense_cat: expense_cat
     } do
@@ -484,18 +510,18 @@ defmodule CashLensWeb.MonthLiveTest do
       {:ok, live, html} = live(conn, ~p"/months/2026/3?compare_year=2026&compare_month=2")
 
       # Same arrangement as the single-month regression, seen from the analysed
-      # side of a comparison: 1.120,00 of 2.000,00 is 56%, not 112% of a
-      # bank-only 1.000,00.
+      # side of a comparison: the card purchase is out, so Mercado is 120,00 of
+      # the month's 1.000,00 and Transporte carries the remaining 88%.
       analysis_row = live |> element("#analysis-expense-row-#{expense_cat.id}") |> render()
-      assert analysis_row =~ "R$ 1.120,00"
-      assert analysis_row =~ "56.0%"
-      refute analysis_row =~ "112.0%"
+      assert analysis_row =~ "R$ 120,00"
+      assert analysis_row =~ "12.0%"
 
       transport_row = live |> element("#analysis-expense-row-#{transport.id}") |> render()
-      assert transport_row =~ "44.0%"
+      assert transport_row =~ "88.0%"
 
       # The panel's own "Total Gastos" line agrees with the rows above it.
-      assert html =~ "R$ 2.000,00"
+      assert html =~ "R$ 1.000,00"
+      refute html =~ "R$ 2.000,00"
     end
 
     test "a category with no movement in either month is not listed at all", %{

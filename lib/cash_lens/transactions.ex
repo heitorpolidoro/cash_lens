@@ -266,9 +266,18 @@ defmodule CashLens.Transactions do
     |> filter_by_type(filters["type"])
     |> filter_by_reimbursement_status(filters["reimbursement_status"])
     |> filter_unmatched_transfers(filters["unmatched_transfers"])
+    |> filter_cash_accounts_only(filters["cash_accounts_only"])
     |> order_by_date(sort_order)
     |> Repo.all()
   end
+
+  # Opt-in: only callers that report a cash-basis universe (the month closing
+  # screen drill-down) pass this key, so every other caller keeps seeing the
+  # credit-card accounts.
+  defp filter_cash_accounts_only(query, flag) when flag in [true, "true"],
+    do: Scopes.cash_accounts_only(query)
+
+  defp filter_cash_accounts_only(query, _flag), do: query
 
   defp filter_unmatched_transfers(query, "true") do
     where(query, [t], t.transfer_key |> is_nil())
@@ -492,7 +501,12 @@ defmodule CashLens.Transactions do
 
   @doc """
   Returns spending broken down by top-level category for a given month/year.
-  Excludes transfers, initial values, and reimbursed transactions.
+
+  Cash basis: only accounts with `is_credit_card == false` are considered, so a
+  card purchase is never counted on its own — it reaches the month through the
+  bill payment, which rolls up into a single "Cartão de Crédito" row. Transfers,
+  initial values and reimbursed transactions stay excluded.
+
   Returns list of maps: %{name: str, category_id: binary, type: str, total: Decimal}
   sorted by total descending.
   """
@@ -507,8 +521,10 @@ defmodule CashLens.Transactions do
         left_join: g in assoc(p, :parent),
         where: t.date >= ^first and t.date <= ^last,
         where: t.amount < 0,
-        # Transfers and credit-card payments are not spending categories, so exclude them.
-        where: c.id not in ^excluded_report_category_ids(),
+        # Transfers and opening balances are not spending. Credit-card bill
+        # payments ARE, on this cash-basis screen: they are the cash leaving the
+        # current account for the purchases the card already carried.
+        where: c.id not in ^excluded_cash_summary_category_ids(),
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
@@ -523,7 +539,8 @@ defmodule CashLens.Transactions do
         having: sum(t.amount) < 0,
         order_by: [asc: sum(t.amount)]
       )
-      |> exclude_transactions_with_children()
+      |> Scopes.cash_accounts_only()
+      |> exclude_transactions_with_cash_children()
       |> Repo.all()
       |> Enum.map(fn row -> %{row | total: Decimal.abs(row.total)} end)
 
@@ -535,6 +552,7 @@ defmodule CashLens.Transactions do
         where: is_nil(t.reimbursement_link_key),
         select: sum(fragment("ABS(?)", t.amount))
       )
+      |> Scopes.cash_accounts_only()
       |> Repo.one()
 
     if is_nil(uncategorized_total) or Decimal.eq?(uncategorized_total, Decimal.new("0")) do
@@ -549,7 +567,12 @@ defmodule CashLens.Transactions do
 
   @doc """
   Returns income broken down by top-level category for a given month/year.
-  Mirrors `get_month_category_breakdown/2` but for net-positive (income) categories.
+
+  Mirrors `get_month_category_breakdown/2` but for net-positive (income)
+  categories, and on the same cash basis: only accounts with
+  `is_credit_card == false` count. The whole `cartao-de-credito` subtree stays
+  excluded here — a credit in it is the mirror of a bill payment, never income.
+
   Returns list of maps: %{name, category_id, type, total} sorted by total descending.
   """
   def get_month_income_breakdown(year, month) when is_integer(year) and is_integer(month) do
@@ -578,6 +601,7 @@ defmodule CashLens.Transactions do
         having: sum(t.amount) > 0,
         order_by: [desc: sum(t.amount)]
       )
+      |> Scopes.cash_accounts_only()
       |> Repo.all()
 
     uncategorized_total =
@@ -588,6 +612,7 @@ defmodule CashLens.Transactions do
         where: is_nil(t.reimbursement_link_key),
         select: sum(t.amount)
       )
+      |> Scopes.cash_accounts_only()
       |> Repo.one()
 
     if is_nil(uncategorized_total) or Decimal.eq?(uncategorized_total, Decimal.new("0")) do
@@ -770,6 +795,24 @@ defmodule CashLens.Transactions do
         distinct: true,
         select: c.parent_transaction_id
       )
+
+    where(query, [t], t.id not in subquery(linked_parent_ids))
+  end
+
+  # Cash-basis variant of `exclude_transactions_with_children/1`, used only by
+  # `get_month_category_breakdown/2`. On that screen the children sitting on
+  # credit-card accounts are invisible, so hiding their parent would drop the
+  # amount from the month altogether — the card bill payment is exactly such a
+  # parent. A parent is therefore hidden only when at least one of its children
+  # is itself on a cash account and thus already reported here.
+  defp exclude_transactions_with_cash_children(query) do
+    linked_parent_ids =
+      from(c in Transaction,
+        where: not is_nil(c.parent_transaction_id),
+        distinct: true,
+        select: c.parent_transaction_id
+      )
+      |> Scopes.cash_accounts_only()
 
     where(query, [t], t.id not in subquery(linked_parent_ids))
   end

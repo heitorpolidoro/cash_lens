@@ -93,6 +93,9 @@ defmodule CashLensWeb.MonthLive.Show do
     Transactions.list_all_transactions(%{
       "category_id" => category_id,
       "type" => type,
+      # The rows above count cash accounts only, so the drill-down must list the
+      # very transactions that produced the total it hangs under.
+      "cash_accounts_only" => true,
       "month" => to_string(single.month),
       "year" => to_string(single.year),
       "sort_order" => "asc"
@@ -233,19 +236,19 @@ defmodule CashLensWeb.MonthLive.Show do
     end)
   end
 
-  # This screen reports one transaction universe and one only: the operational
-  # month as the category breakdowns see it — every account, credit cards
-  # included, minus transfers and card payments (which are settlement, not
-  # spending, and would double-count the purchases they pay for).
+  # This screen reports one transaction universe and one only: the month on a
+  # cash basis, as the category breakdowns see it — accounts with
+  # `is_credit_card == false`, minus transfers and opening balances. A card
+  # purchase is not a cash movement and never appears on its own; it reaches the
+  # month through the bill payment, which rolls up into a single
+  # "Cartão de Crédito" expense row.
   #
   # So both `Receitas`/`Despesas` totals are summed straight from the rows of
   # `get_month_income_breakdown/2` and `get_month_category_breakdown/2` rather
-  # than read from `Transactions.get_monthly_summary/1`, whose `account_id`
-  # filter restricts it to `is_credit_card == false` and therefore answers a
-  # different question. Deriving the total from the same rows the table prints
-  # is what keeps `% do total` a true share: the denominator is by construction
-  # the sum of the numerators, so the rows always add up to the KPI card above
-  # them and no percentage can exceed 100%.
+  # than read from `Transactions.get_monthly_summary/1`. Deriving the total from
+  # the same rows the table prints is what keeps `% do total` a true share: the
+  # denominator is by construction the sum of the numerators, so the rows always
+  # add up to the KPI card above them and no percentage can exceed 100%.
   #
   # `opening_balance`/`final_balance` are deliberately NOT part of this universe
   # — see `consolidated_balances/2`, they are a cash position, not a flow.
@@ -369,6 +372,10 @@ defmodule CashLensWeb.MonthLive.Show do
           <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Fechamento do Mês</h1>
           <p class="text-xs text-slate-500 mt-0.5">
             Demonstrativo de receitas e gastos por categoria
+          </p>
+          <p class="text-xs text-slate-500 mt-1 max-w-2xl">
+            Regime de caixa: apenas contas correntes. As compras no cartão não aparecem uma a uma —
+            elas entram pelo <strong class="font-semibold">pagamento da fatura</strong>.
           </p>
         </div>
 
