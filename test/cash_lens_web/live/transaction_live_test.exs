@@ -414,8 +414,12 @@ defmodule CashLensWeb.TransactionLiveTest do
       conn: conn,
       account: account
     } do
+      card = account_fixture(%{is_credit_card: true})
+
       transaction_fixture(%{account_id: account.id, description: "Mercado", amount: "-30.00"})
       transaction_fixture(%{account_id: account.id, description: "Mercado", amount: "90.00"})
+      transaction_fixture(%{account_id: card.id, description: "Mercado", amount: "-70.00"})
+      transaction_fixture(%{account_id: card.id, description: "Mercado", amount: "20.00"})
 
       {:ok, live, _html} = live(conn, ~p"/transactions")
 
@@ -429,6 +433,65 @@ defmodule CashLensWeb.TransactionLiveTest do
       assert html =~ "Entradas"
       assert html =~ "Saídas"
       assert html =~ "Balanço Líquido"
+
+      cash_html = live |> element("#filter-summary-cash") |> render()
+      assert cash_html =~ "EM CONTAS"
+      assert cash_html =~ "Entradas"
+      assert cash_html =~ "Saídas"
+      assert cash_html =~ "Balanço Líquido"
+      assert cash_html =~ "R$ 90,00"
+      assert cash_html =~ "R$ 30,00"
+      assert cash_html =~ "R$ 60,00"
+
+      cards_html = live |> element("#filter-summary-cards") |> render()
+      assert cards_html =~ "EM CARTÕES"
+      assert cards_html =~ "Gastos"
+      assert cards_html =~ "Créditos"
+      assert cards_html =~ "Estornos e pagamentos de fatura — não são receita"
+      refute cards_html =~ "Balanço Líquido"
+      refute cards_html =~ "Entradas"
+      assert cards_html =~ "R$ 70,00"
+      assert cards_html =~ "R$ 20,00"
+
+      # Nothing on the strip adds the two sides (90 + 20, or 30 + 70).
+      refute html =~ "R$ 110,00"
+      refute html =~ "R$ 100,00"
+    end
+
+    test "omits the card group when the filter matches only cash rows", %{
+      conn: conn,
+      account: account
+    } do
+      card = account_fixture(%{is_credit_card: true})
+      transaction_fixture(%{account_id: account.id, description: "Mercado", amount: "-30.00"})
+      transaction_fixture(%{account_id: card.id, description: "Padaria", amount: "-70.00"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      live
+      |> form("#transaction-filters", %{"search" => "Mercado"})
+      |> render_change()
+
+      assert has_element?(live, "#filter-summary-cash")
+      refute has_element?(live, "#filter-summary-cards")
+    end
+
+    test "omits the cash group when the filter matches only credit-card rows", %{
+      conn: conn,
+      account: account
+    } do
+      card = account_fixture(%{is_credit_card: true})
+      transaction_fixture(%{account_id: account.id, description: "Mercado", amount: "-30.00"})
+      transaction_fixture(%{account_id: card.id, description: "Padaria", amount: "-70.00"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      live
+      |> form("#transaction-filters", %{"account_id" => card.id})
+      |> render_change()
+
+      assert has_element?(live, "#filter-summary-cards")
+      refute has_element?(live, "#filter-summary-cash")
     end
 
     test "infinite scroll appends the next page without duplicating or skipping rows", %{

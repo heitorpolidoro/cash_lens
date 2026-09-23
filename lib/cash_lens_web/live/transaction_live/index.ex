@@ -43,7 +43,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:auto_categorizing, false)
      |> assign(:filtered_count, nil)
      |> assign(:filters_active?, false)
-     |> assign(:summary, %{income: Decimal.new("0"), expenses: Decimal.new("0")})
+     |> assign(:summary, Transactions.empty_filtered_summary())
      |> assign(:pluggy_error, nil)
      |> assign(:live_entries, [])
      |> assign(:transfer_pairs, %{})
@@ -1162,23 +1162,50 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   defp add_live_summary(socket, []), do: socket
 
+  # A live entry carries an `account_id` but no `is_credit_card`, so its own
+  # account decides which group it joins — cards when the account is a credit
+  # card, cash otherwise (including when the account cannot be resolved, the
+  # same default `Transactions.get_filtered_summary/1` applies). The entry also
+  # bumps its group's `count`, without which a filter matching only live
+  # entries would leave the group at zero rows and the template would omit it,
+  # hiding figures whose rows are visible in the table right below.
   defp add_live_summary(socket, live_entries) do
-    live_income =
-      live_entries
+    card_account_ids = card_account_ids(socket.assigns.accounts)
+
+    grouped =
+      Enum.group_by(live_entries, fn entry ->
+        if MapSet.member?(card_account_ids, entry.account_id), do: :cards, else: :cash
+      end)
+
+    update(socket, :summary, fn summary ->
+      Enum.reduce(grouped, summary, fn {group, entries}, acc ->
+        Map.update!(acc, group, &add_entries_to_group(&1, entries))
+      end)
+    end)
+  end
+
+  defp card_account_ids(accounts) do
+    accounts
+    |> Enum.filter(& &1.is_credit_card)
+    |> MapSet.new(& &1.id)
+  end
+
+  defp add_entries_to_group(group, entries) do
+    income =
+      entries
       |> Enum.filter(&Decimal.positive?(&1.amount))
       |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, &1.amount))
 
-    live_expenses =
-      live_entries
+    expenses =
+      entries
       |> Enum.filter(&Decimal.negative?(&1.amount))
       |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, Decimal.abs(&1.amount)))
 
-    update(socket, :summary, fn summary ->
-      %{
-        income: Decimal.add(summary.income, live_income),
-        expenses: Decimal.add(summary.expenses, live_expenses)
-      }
-    end)
+    %{
+      income: Decimal.add(group.income, income),
+      expenses: Decimal.add(group.expenses, expenses),
+      count: group.count + length(entries)
+    }
   end
 
   # Filters a live entry cannot structurally satisfy (category, reimbursement

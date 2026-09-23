@@ -847,7 +847,8 @@ defmodule CashLens.TransactionsTest do
       })
 
       summary = Transactions.get_filtered_summary(%{})
-      assert Decimal.equal?(summary.expenses, Decimal.new("500.00"))
+      assert Decimal.equal?(summary.cards.expenses, Decimal.new("500.00"))
+      assert Decimal.equal?(summary.cash.expenses, Decimal.new("0"))
     end
 
     test "get_monthly_summary/2 includes Cartão de Crédito payments on bank accounts and excludes credit card accounts" do
@@ -1610,6 +1611,87 @@ defmodule CashLens.TransactionsTest do
 
       assert "Farmácia" in descriptions
       refute "Consulta reembolsada" in descriptions
+    end
+  end
+
+  describe "get_filtered_summary/1 splits cash from card figures" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    defp market_category, do: category_fixture(%{name: "Mercado CL34", slug: "mercado-cl34"})
+
+    test "puts cash rows and card rows in their own group, summing neither into the other" do
+      market = market_category()
+      checking = account_fixture(%{is_credit_card: false})
+      card = account_fixture(%{is_credit_card: true})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: market.id,
+        amount: "100.00",
+        date: ~D[2026-04-10]
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: market.id,
+        amount: "-40.00",
+        date: ~D[2026-04-11]
+      })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: market.id,
+        amount: "-70.00",
+        date: ~D[2026-04-12]
+      })
+
+      transaction_fixture(%{
+        account_id: card.id,
+        category_id: market.id,
+        amount: "25.00",
+        date: ~D[2026-04-13]
+      })
+
+      summary = Transactions.get_filtered_summary(%{"month" => "4", "year" => "2026"})
+
+      assert summary |> Map.keys() |> Enum.sort() == [:cards, :cash]
+
+      assert Decimal.equal?(summary.cash.income, Decimal.new("100.00"))
+      assert Decimal.equal?(summary.cash.expenses, Decimal.new("40.00"))
+      assert summary.cash.count == 2
+
+      assert Decimal.equal?(summary.cards.income, Decimal.new("25.00"))
+      assert Decimal.equal?(summary.cards.expenses, Decimal.new("70.00"))
+      assert summary.cards.count == 2
+
+      # No figure is the sum of both sides.
+      refute Decimal.equal?(summary.cash.income, Decimal.new("125.00"))
+      refute Decimal.equal?(summary.cash.expenses, Decimal.new("110.00"))
+      refute Decimal.equal?(summary.cards.income, Decimal.new("125.00"))
+      refute Decimal.equal?(summary.cards.expenses, Decimal.new("110.00"))
+    end
+
+    test "returns both groups even when one side has no matching rows" do
+      market = market_category()
+      checking = account_fixture(%{is_credit_card: false})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: market.id,
+        amount: "-15.00",
+        date: ~D[2026-05-10]
+      })
+
+      summary = Transactions.get_filtered_summary(%{"month" => "5", "year" => "2026"})
+
+      assert summary.cash.count == 1
+      assert Decimal.equal?(summary.cash.expenses, Decimal.new("15.00"))
+      assert Decimal.equal?(summary.cash.income, Decimal.new("0"))
+
+      assert summary.cards.count == 0
+      assert Decimal.equal?(summary.cards.income, Decimal.new("0"))
+      assert Decimal.equal?(summary.cards.expenses, Decimal.new("0"))
     end
   end
 end

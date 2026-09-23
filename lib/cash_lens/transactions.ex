@@ -110,8 +110,19 @@ defmodule CashLens.Transactions do
   def get_bulk_ignore_pattern!(id), do: Repo.get!(BulkIgnorePattern, id)
 
   @doc """
-  Returns income and expenses totals for the given filters.
-  Returns %{income: Decimal, expenses: Decimal}.
+  Returns the filtered income and expenses totals, split by account kind.
+
+  Returns
+  `%{cash: %{income: Decimal, expenses: Decimal, count: integer},
+     cards: %{income: Decimal, expenses: Decimal, count: integer}}`.
+  A row belongs to `:cards` when its account's `is_credit_card` is `true`, and
+  to `:cash` otherwise. Both keys are always present, zeroed when a side has no
+  matching rows, so callers never pattern-match on a missing key.
+
+  This function is deliberately **not** scoped to cash accounts: it backs the
+  `/transactions` list, which shows every account. Mixing the two kinds into a
+  single total is what the split prevents — a credit-card account's positive
+  amounts are refunds and bill settlements, not income.
   """
   def get_filtered_summary(filters \\ %{}) do
     base =
@@ -133,21 +144,41 @@ defmodule CashLens.Transactions do
       |> filter_by_reimbursement_status(filters["reimbursement_status"])
       |> filter_unmatched_transfers(filters["unmatched_transfers"])
       |> exclude_transfer_category()
-      |> select([t], %{amount: t.amount})
+      |> join(:left, [t], a in assoc(t, :account), as: :summary_account)
+      |> select([t, summary_account: a], %{amount: t.amount, is_credit_card: a.is_credit_card})
 
-    result =
-      from(row in subquery(base),
-        select: %{
-          income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", row.amount, row.amount)),
-          expenses:
-            sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", row.amount, row.amount))
-        }
-      )
-      |> Repo.one()
+    from(row in subquery(base),
+      group_by: row.is_credit_card,
+      select: %{
+        is_credit_card: row.is_credit_card,
+        income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", row.amount, row.amount)),
+        expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", row.amount, row.amount)),
+        count: fragment("COUNT(*)")
+      }
+    )
+    |> Repo.all()
+    |> Enum.reduce(empty_filtered_summary(), fn row, acc ->
+      group = if row.is_credit_card == true, do: :cards, else: :cash
+      Map.update!(acc, group, &add_to_summary_group(&1, row))
+    end)
+  end
 
+  @doc """
+  The zeroed shape `get_filtered_summary/1` returns, with both groups present.
+  """
+  def empty_filtered_summary do
+    %{cash: empty_summary_group(), cards: empty_summary_group()}
+  end
+
+  defp empty_summary_group do
+    %{income: Decimal.new("0"), expenses: Decimal.new("0"), count: 0}
+  end
+
+  defp add_to_summary_group(group, row) do
     %{
-      income: (result && result.income) || Decimal.new("0"),
-      expenses: (result && result.expenses) || Decimal.new("0")
+      income: Decimal.add(group.income, row.income || Decimal.new("0")),
+      expenses: Decimal.add(group.expenses, row.expenses || Decimal.new("0")),
+      count: group.count + row.count
     }
   end
 

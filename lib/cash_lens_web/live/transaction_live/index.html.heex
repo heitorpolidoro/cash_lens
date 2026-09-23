@@ -247,26 +247,62 @@
       </div>
     </div>
 
-    <div class="flex items-center gap-6 font-mono text-xs">
-      <div>
-        <span class="text-[10px] font-bold uppercase opacity-50 block">Entradas</span>
-        <span class="font-black text-sm text-success">{format_currency(@summary.income)}</span>
-      </div>
-      <div class="border-l border-base-200 pl-6">
-        <span class="text-[10px] font-bold uppercase opacity-50 block">Saídas</span>
-        <span class="font-black text-sm text-error">{format_currency(@summary.expenses)}</span>
-      </div>
-      <div class="border-l border-base-200 pl-6">
-        <span class="text-[10px] font-bold uppercase opacity-50 block">Balanço Líquido</span>
-        <span class={[
-          "font-black text-sm",
-          if(Decimal.gte?(@summary.income, @summary.expenses),
-            do: "text-success",
-            else: "text-error"
-          )
-        ]}>
-          {format_currency(Decimal.sub(@summary.income, @summary.expenses))}
+    <div class="flex flex-wrap items-start gap-8 font-mono text-xs">
+      <div :if={@summary.cash.count > 0} id="filter-summary-cash">
+        <span class="text-[10px] font-black uppercase tracking-wide opacity-60 block mb-1">
+          EM CONTAS
         </span>
+        <div class="flex items-center gap-6">
+          <div>
+            <span class="text-[10px] font-bold uppercase opacity-50 block">Entradas</span>
+            <span class="font-black text-sm text-success">
+              {format_currency(@summary.cash.income)}
+            </span>
+          </div>
+          <div class="border-l border-base-200 pl-6">
+            <span class="text-[10px] font-bold uppercase opacity-50 block">Saídas</span>
+            <span class="font-black text-sm text-error">
+              {format_currency(@summary.cash.expenses)}
+            </span>
+          </div>
+          <div class="border-l border-base-200 pl-6">
+            <span class="text-[10px] font-bold uppercase opacity-50 block">Balanço Líquido</span>
+            <span class={[
+              "font-black text-sm",
+              if(Decimal.gte?(@summary.cash.income, @summary.cash.expenses),
+                do: "text-success",
+                else: "text-error"
+              )
+            ]}>
+              {format_currency(Decimal.sub(@summary.cash.income, @summary.cash.expenses))}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        :if={@summary.cards.count > 0}
+        id="filter-summary-cards"
+        class="md:border-l md:border-base-200 md:pl-8"
+      >
+        <span class="text-[10px] font-black uppercase tracking-wide opacity-60 block mb-1">
+          EM CARTÕES
+        </span>
+        <div class="flex items-center gap-6">
+          <div>
+            <span class="text-[10px] font-bold uppercase opacity-50 block">Gastos</span>
+            <span class="font-black text-sm text-error">
+              {format_currency(@summary.cards.expenses)}
+            </span>
+          </div>
+          <div
+            class="border-l border-base-200 pl-6"
+            title="Estornos e pagamentos de fatura — não são receita"
+          >
+            <span class="text-[10px] font-bold uppercase opacity-50 block">Créditos</span>
+            <span class="font-black text-sm">{format_currency(@summary.cards.income)}</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>

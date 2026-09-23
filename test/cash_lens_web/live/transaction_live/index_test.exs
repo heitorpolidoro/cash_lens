@@ -214,6 +214,91 @@ defmodule CashLensWeb.TransactionLive.IndexTest do
       assert html =~ "R$ 35,00"
     end
 
+    test "a live entry on a cash account is summed into the EM CONTAS group", %{conn: conn} do
+      account = account_fixture(%{is_credit_card: false})
+
+      transaction_fixture(
+        account_id: account.id,
+        description: "TESTE-CASH persistida",
+        amount: "-10.00",
+        date: ~D[2026-08-05]
+      )
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-cash-1",
+        account_id: account.id,
+        date: ~D[2026-08-06],
+        description: "TESTE-CASH live",
+        amount: Decimal.new("-25.00")
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [entry]})
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+      render_patch(live, ~p"/transactions?search=TESTE-CASH")
+
+      cash_html = live |> element("#filter-summary-cash") |> render()
+      assert cash_html =~ "EM CONTAS"
+      # The persisted R$ 10,00 plus the live entry's R$ 25,00.
+      assert cash_html =~ "R$ 35,00"
+      refute has_element?(live, "#filter-summary-cards")
+    end
+
+    test "a live entry on a credit-card account is summed into the EM CARTÕES group", %{
+      conn: conn
+    } do
+      card = account_fixture(%{is_credit_card: true})
+
+      transaction_fixture(
+        account_id: card.id,
+        description: "TESTE-CARD persistida",
+        amount: "-10.00",
+        date: ~D[2026-08-05]
+      )
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-card-1",
+        account_id: card.id,
+        date: ~D[2026-08-06],
+        description: "TESTE-CARD live",
+        amount: Decimal.new("-25.00")
+      }
+
+      FakeLivePreviewCache.set_entries(%{card.id => [entry]})
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+      render_patch(live, ~p"/transactions?search=TESTE-CARD")
+
+      cards_html = live |> element("#filter-summary-cards") |> render()
+      assert cards_html =~ "EM CARTÕES"
+      # The persisted R$ 10,00 plus the live entry's R$ 25,00.
+      assert cards_html =~ "R$ 35,00"
+      refute has_element?(live, "#filter-summary-cash")
+    end
+
+    test "a live entry alone keeps its group on screen", %{conn: conn} do
+      account = account_fixture(%{is_credit_card: false})
+
+      entry = %CashLens.Pluggy.LivePreview.Entry{
+        id: "pluggy-preview-alone-1",
+        account_id: account.id,
+        date: ~D[2026-08-06],
+        description: "TESTE-SOZINHA live",
+        amount: Decimal.new("-25.00")
+      }
+
+      FakeLivePreviewCache.set_entries(%{account.id => [entry]})
+      FakeLivePreviewCache.set_status({:ok, DateTime.utc_now()})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+      render_patch(live, ~p"/transactions?search=TESTE-SOZINHA")
+
+      cash_html = live |> element("#filter-summary-cash") |> render()
+      assert cash_html =~ "R$ 25,00"
+    end
+
     test "live entries do not leak into a different month's view", %{conn: conn} do
       account = account_fixture()
       today = Date.utc_today()

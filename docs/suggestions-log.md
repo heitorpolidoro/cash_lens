@@ -1288,3 +1288,12 @@ commit claimed none were added. Fixed; back to 23.
 ## [CL-32] Stop counting reimbursement pairs (QA) — 2026-09-23
 
 - The dev-data reconciliation in criteria 5 and 6 rests on the two legs of each 2025-08 pair being near-equal but not equal (32177.46 credits vs 31277.46 debits, a 900.00 asymmetry across 7 pairs). That is consistent with partial reimbursements and is not a defect in this change, but if the intent is that a linked pair always nets to zero, a data-integrity check or a report of asymmetric pairs would surface any mis-linked rows that this exclusion now hides from both KPI cards. Non-blocking, and out of scope for CL-32.
+
+## [CL-34] Split the transactions summary into cash and card figures (QA) — 2026-09-23
+
+- Deep links to `/transactions` in the shape the period select emits do not activate the filter on
+  a fresh load: `normalize_period/2` runs only on the `apply_filters` event, so
+  `/transactions?period=2026-06` renders unfiltered and without the summary strip, while
+  `?year=&month=` works. Pre-existing and untouched by CL-34, but it means a URL copied out of the
+  screen's own control does not reproduce the screen. Worth its own task if deep links are meant to
+  be shareable. Non-blocking.
