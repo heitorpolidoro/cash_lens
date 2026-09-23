@@ -63,6 +63,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:pending_count, Transactions.count_pending_transactions())
      |> assign(:statement_health, Transactions.statement_health())
      |> assign(:installment_groups, CashLens.Installments.list_installment_groups())
+     |> assign(:installment_suggestions, %{})
      |> assign_transfer_category_id()}
   end
 
@@ -194,8 +195,22 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
+  def handle_event("load_installment_suggestion", %{"id" => id}, socket) do
+    tx = annotate_one(Transactions.get_transaction!(id))
+
+    {suggestion, memo} =
+      resolve_installment_suggestion(socket.assigns.installment_suggestions, id, tx)
+
+    {:noreply,
+     socket
+     |> assign(:installment_suggestions, memo)
+     |> stream_insert(:transactions, %{tx | installment_suggestion: suggestion})}
+  end
+
+  @impl true
   def handle_event("link_installment", %{"id" => id, "group_id" => group_id}, socket) do
     tx = Transactions.get_transaction!(id)
+    socket = forget_installment_suggestion(socket, id)
     group = CashLens.Installments.get_group_with_progress(group_id)
 
     case Transactions.update_transaction(tx, %{
@@ -220,6 +235,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("unlink_installment", %{"id" => id}, socket) do
     tx = Transactions.get_transaction!(id)
+    socket = forget_installment_suggestion(socket, id)
 
     {:ok, updated_tx} =
       Transactions.update_transaction(tx, %{
@@ -907,6 +923,25 @@ defmodule CashLensWeb.TransactionLive.Index do
       Transactions.list_transactions(%{"search" => tx.description})
       |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id))
     end
+  end
+
+  # The memo keeps `nil` results too, so a transaction with nothing to suggest
+  # is not re-queried every time its menu is opened.
+  defp resolve_installment_suggestion(memo, id, tx) do
+    case Map.fetch(memo, id) do
+      {:ok, cached} ->
+        {cached, memo}
+
+      :error ->
+        suggestion = Transactions.suggest_installment_link(tx)
+        {suggestion, Map.put(memo, id, suggestion)}
+    end
+  end
+
+  # Linking or unlinking changes what the suggestion would be, so the memo entry
+  # is dropped and the next menu open resolves it again.
+  defp forget_installment_suggestion(socket, id) do
+    update(socket, :installment_suggestions, &Map.delete(&1, id))
   end
 
   # Single-row convenience over CategorySuggester.annotate/1 and PluggyMatcher.annotate/2

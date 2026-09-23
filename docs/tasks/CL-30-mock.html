@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CL-30 — On-demand installment suggestion</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-100 p-8 font-sans text-slate-800">
+<h1 class="text-xl font-bold mb-1">CL-30 — Installment menu resolved on demand</h1>
+<p class="text-sm text-slate-600 mb-6">The row renders with no query. Clicking the group button pushes
+<code class="bg-slate-200 px-1 rounded">load_installment_suggestion</code>; the menu shows a placeholder,
+then the resolved suggestion (or none).</p>
+
+<div class="bg-white rounded-lg shadow border border-slate-200 overflow-visible">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+      <tr><th class="text-left p-3">Date</th><th class="text-left p-3">Description</th>
+      <th class="text-right p-3">Amount</th><th class="text-right p-3 w-32">Ações</th></tr>
+    </thead>
+    <tbody id="rows" class="divide-y divide-slate-100"></tbody>
+  </table>
+</div>
+
+<p class="text-xs text-slate-500 mt-4">Row 1 matches an in-progress group (suggestion). Row 2 matches a
+completed group (no suggestion). Row 3 matches nothing (no suggestion). Row 2 and 3 fall straight to the
+plain group list. Re-opening a menu is instant: the suggestion is memoized.</p>
+
+<script>
+const groups = ["NETFLIX PARC", "MAGALU SOFA", "PASSAGEM GOL"];
+const rows = [
+  { id: 1, date: "12/09", desc: "NETFLIX PARC 03/12", amount: "-55,90",
+    suggestion: { name: "NETFLIX PARC", next: 3, total: 12 } },
+  { id: 2, date: "10/09", desc: "MAGALU SOFA PARC 10/10", amount: "-289,00", suggestion: null },
+  { id: 3, date: "09/09", desc: "PADARIA DO ZE", amount: "-18,40", suggestion: null },
+];
+const state = {}; // id -> "idle" | "loading" | "loaded"
+rows.forEach(r => state[r.id] = "idle");
+const cache = {};
+
+function menuBody(r) {
+  const s = state[r.id];
+  let head = "";
+  if (s === "loading") {
+    head = `<li class="px-3 py-2 text-xs italic text-slate-400 flex items-center gap-2">
+      <span class="w-3 h-3 border-2 border-slate-300 border-t-transparent rounded-full animate-spin"></span>
+      Buscando sugestão…</li>`;
+  } else if (s === "loaded" && cache[r.id]) {
+    const g = cache[r.id];
+    head = `<li class="border-b border-slate-200 mb-1 pb-1">
+      <button class="w-full text-left px-3 py-2 rounded bg-indigo-50 text-indigo-700 font-black animate-pulse text-xs">
+        ✨ Vincular a ${g.name}? (${g.next}/${g.total})</button></li>`;
+  }
+  const list = groups.map(g => `<li><button class="w-full text-left px-3 py-2 rounded hover:bg-slate-100 text-xs">${g}</button></li>`).join("");
+  return head + list;
+}
+
+function render() {
+  document.getElementById("rows").innerHTML = rows.map(r => `
+    <tr>
+      <td class="p-3 text-slate-500">${r.date}</td>
+      <td class="p-3 font-medium">${r.desc}</td>
+      <td class="p-3 text-right tabular-nums text-rose-600">${r.amount}</td>
+      <td class="p-3 text-right relative">
+        <button data-id="${r.id}" class="group-btn px-2 py-1 rounded hover:bg-slate-100 ${state[r.id]==="idle"?"opacity-40":"text-indigo-600"}">▤</button>
+        <ul data-menu="${r.id}" class="${state[r.id]==="idle"?"hidden":""} absolute right-3 z-10 mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-xl p-2 text-left">
+          ${menuBody(r)}
+        </ul>
+      </td>
+    </tr>`).join("");
+
+  document.querySelectorAll(".group-btn").forEach(b => b.addEventListener("click", e => {
+    e.stopPropagation();
+    const id = Number(b.dataset.id);
+    if (state[id] !== "idle") { state[id] = "idle"; render(); return; }
+    rows.forEach(r => state[r.id] = "idle");
+    if (cache[id] !== undefined) { state[id] = "loaded"; render(); return; }
+    state[id] = "loading"; render();
+    setTimeout(() => {
+      cache[id] = rows.find(r => r.id === id).suggestion;
+      state[id] = "loaded"; render();
+    }, 550);
+  }));
+}
+document.addEventListener("click", () => { rows.forEach(r => state[r.id] = "idle"); render(); });
+render();
+</script>
+</body>
+</html>

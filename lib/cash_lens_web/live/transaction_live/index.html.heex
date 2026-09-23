@@ -790,7 +790,11 @@
                     <div class="dropdown dropdown-end">
                       <div class="tooltip tooltip-left" data-tip="Grupo de Parcelamento">
                         <button
+                          id={"installment-menu-#{transaction.id}"}
                           tabindex="0"
+                          type="button"
+                          phx-click="load_installment_suggestion"
+                          phx-value-id={transaction.id}
                           class={[
                             "btn btn-ghost btn-xs px-1",
                             if(transaction.installment_group_id,
@@ -817,17 +821,30 @@
                             </button>
                           </li>
                         <% else %>
-                          <% suggestion =
-                            CashLens.Transactions.suggest_installment_link(transaction) %>
-                          <li :if={suggestion} class="border-b border-base-200 mb-1 pb-1">
+                          <%!--
+                            The suggestion is resolved by the LiveView when this
+                            menu is opened, never per row at render time.
+                          --%>
+                          <li
+                            :if={transaction.installment_suggestion == :not_loaded}
+                            class="border-b border-base-200 mb-1 pb-1"
+                          >
+                            <span class="text-[10px] opacity-50 italic">
+                              Buscando sugestão...
+                            </span>
+                          </li>
+                          <li
+                            :if={is_map(transaction.installment_suggestion)}
+                            class="border-b border-base-200 mb-1 pb-1"
+                          >
                             <button
                               phx-click="link_installment"
                               phx-value-id={transaction.id}
-                              phx-value-group_id={suggestion.group_id}
+                              phx-value-group_id={transaction.installment_suggestion.group_id}
                               class="bg-primary/10 text-primary font-black animate-pulse"
                             >
                               <.icon name="hero-sparkles" class="size-4" />
-                              Vincular a {suggestion.group_name}? ({suggestion.next_installment}/{suggestion.total_installments})
+                              Vincular a {transaction.installment_suggestion.group_name}? ({transaction.installment_suggestion.next_installment}/{transaction.installment_suggestion.total_installments})
                             </button>
                           </li>
                           <li :for={group <- @installment_groups}>

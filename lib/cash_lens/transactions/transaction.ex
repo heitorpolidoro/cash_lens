@@ -29,6 +29,11 @@ defmodule CashLens.Transactions.Transaction do
     # (normalized) descriptions were categorized in the past. Filled by
     # CategorySuggester.annotate/1; never persisted.
     field :suggested_category, :map, virtual: true
+    # Virtual: the installment-group link suggestion for this row, resolved on
+    # demand when the row's installment menu is opened (never during a plain
+    # render) by CashLensWeb.TransactionLive.Index. `:not_loaded` means "not
+    # asked for yet", `nil` means "asked for, nothing to suggest".
+    field :installment_suggestion, :any, virtual: true, default: :not_loaded
     field :notes, :string
     field :pluggy_category, :string
     field :source, :string

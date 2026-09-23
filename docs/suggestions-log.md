@@ -921,3 +921,48 @@ commit claimed none were added. Fixed; back to 23.
   name. That is deliberate and load-bearing for result 6 (the content-collision
   case), so it should stay — worth noting only so a future cleanup pass does not
   "anonymise" it and silently destroy the test's point.
+
+## [CL-30] Speed up the transactions screen by removing per-row work from render — 2026-09-23
+
+- Expected results 7 and 8 pin the base as the literal hash `a84f268`. If the branch
+  is ever rebased onto a newer `master`, that hash stays valid as a reachable commit
+  (the range just widens to include anything pulled in), but the table and the
+  `app.js` diff could then pick up unrelated files. Not blocking — it only makes the
+  criteria stricter, never laxer — but implementing on a branch cut directly from
+  `a84f268` and not rebasing before QA keeps the ranges tight.
+- The spec's note about the DaisyUI focus-based dropdown possibly closing across a
+  `stream_insert` row patch (lines 55-61) asks for the chosen approach to be recorded
+  in the measurements doc, but no expected result checks that record. It is a design
+  note rather than an acceptance criterion, so this is fine as-is; just be aware QA
+  will not catch its omission.
+- Expected result 6 fixes the "after" bar as "lower than 24.3 ms" with no margin. A
+  median-of-7 run that lands at 24.2 ms would pass while representing no real win.
+  Naming a target (the design removes ~150 queries per 50 rows, so a large drop is
+  expected) would be a stronger gate, but the current wording is still mechanically
+  decidable, so it is not blocking.
+
+## [CL-30] Speed up the transactions screen by removing per-row work from render — 2026-09-23
+
+- `index.ex:940` — consider clearing the whole memo (`assign(:installment_suggestions, %{})`)
+  in `link_installment` / `unlink_installment` instead of deleting one key. A group's
+  `paid_count` changes when *any* of its parcels is linked, so sibling transactions' memoized
+  `next_installment` can be one behind after a link. Not a regression (the old render-time code
+  left the same stale label in the DOM, since unrelated stream rows are not re-rendered) and
+  not what the spec asked for, but the whole-memo reset costs one line and at most one
+  re-query per row, and removes the staleness class entirely.
+- `index.ex:196` — on a memo *hit* the handler still runs `get_transaction!/1` plus
+  `annotate_one/1` (category-suggester and pluggy-matcher queries) before the `stream_insert`.
+  Those are not `installment_groups` queries so the memoization test is right to pass, but the
+  second open of a menu is not as free as "memoized" suggests. Only worth doing something about
+  if menu-opening ever shows up in a profile; the current shape is the simpler code and the row
+  does need to be re-streamed to carry the suggestion.
+- `index_installment_suggestion_test.exs:104` — the zero-query test drives the re-render through
+  `render_click(live, "clear_filters", %{})`. That works, but it couples the assertion to an
+  unrelated event's behaviour; if `clear_filters` ever stops forcing a full stream reset the
+  test would keep passing while testing less. A comment naming *why* `clear_filters` is the
+  chosen re-render trigger (it resets the stream) would keep that intent from eroding.
+
+## [CL-30] Speed up the transactions screen by removing per-row work from render — 2026-09-23
+- The measurements doc's "How these numbers were taken" section states `./run` was live and the compose stack deliberately not started; at verification time the situation is the reverse (compose up, `./run` down). The numbers remain internally consistent and the criteria do not pin the harness, but a one-line note about which environment a future re-measurement should use would prevent someone re-running the harness against the wrong postmaster.
+- `docs/tasks/CL-30-measurements.md` cites `index.html.heex:821` as the old call site; line numbers drift. Quoting the removed expression instead of the line number would age better.
+- The "Buscando sugestão..." placeholder renders for every unopened row (`installment_suggestion == :not_loaded`) inside the dropdown content. It is invisible until the menu opens, so this is cosmetic only, but a brief spinner-free empty state would avoid a flash of that text on slow replies.
