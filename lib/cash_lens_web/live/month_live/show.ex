@@ -96,6 +96,9 @@ defmodule CashLensWeb.MonthLive.Show do
       # The rows above count cash accounts only, so the drill-down must list the
       # very transactions that produced the total it hangs under.
       "cash_accounts_only" => true,
+      # The rows also drop both legs of every reimbursement pair, so the
+      # expansion must drop them too or it would not add up to its header.
+      "exclude_reimbursement_linked" => true,
       "month" => to_string(single.month),
       "year" => to_string(single.year),
       "sort_order" => "asc"

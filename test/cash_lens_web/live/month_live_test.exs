@@ -249,6 +249,29 @@ defmodule CashLensWeb.MonthLiveTest do
       refute html =~ "Mercado no cartao"
     end
 
+    test "an expanded category row omits the reimbursement-linked transactions", %{
+      conn: conn,
+      acc: acc,
+      expense_cat: cat
+    } do
+      transaction_fixture(%{
+        account_id: acc.id,
+        category_id: cat.id,
+        amount: "-333.00",
+        date: ~D[2026-03-13],
+        description: "Mercado reembolsado",
+        reimbursement_link_key: Ecto.UUID.generate()
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/months/2026/3")
+
+      html =
+        live |> element("tr[phx-value-category_id='debit:#{cat.id}']") |> render_click()
+
+      assert html =~ "Compra mercado"
+      refute html =~ "Mercado reembolsado"
+    end
+
     test "toggle_category expands an income row", %{conn: conn, income_cat: cat} do
       {:ok, live, _html} = live(conn, ~p"/months/2026/3")
 

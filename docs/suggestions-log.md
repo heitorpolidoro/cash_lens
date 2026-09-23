@@ -1018,3 +1018,273 @@ commit claimed none were added. Fixed; back to 23.
   but a frozen date would make it fully deterministic and immune to a future
   calendar-edge surprise. Not blocking — the `:estimado` branch is forced by
   construction, not by luck of the date.
+
+## [CL-31] Make the month closing screen a cash-basis view — 2026-09-23
+
+- Criterion 7's absolute money figures are measured against a dev database the
+  operator keeps importing into; a back-dated import invalidates them without any
+  implementation defect. Consider leading with the invariant ("the month
+  breakdown total equals the same month's entry in `get_historical_summary/1`,
+  and a `Cartão de Crédito` row equal to that month's bill payments is present")
+  and treating the absolutes as the values measured at spec time, to be
+  re-measured if dev data moved.
+- Criterion 6 leaves the new filter key's literal name to the implementer. Naming
+  it in the spec (e.g. `"cash_accounts_only" => "true"`) costs nothing and keeps
+  the LiveView call site and any future caller consistent.
+- `excluded_cash_summary_category_ids/0` is named for the cash *summary*, and
+  `get_month_category_breakdown/2` becomes a second, differently-shaped consumer.
+  Reusing it is correct — the set is exactly right and duplicating it would be
+  worse — but a future reader may read the name as "this function belongs to the
+  summaries". A one-line comment update on the helper naming its new consumer
+  would prevent that, and is already permitted by Files-touched's "update both
+  function docstrings" latitude.
+- Files-touched requires `excluded_report_category_ids/0` byte-for-byte while
+  criterion 8 forgives comment edits on it. Harmless (the criterion is the looser
+  gate), but aligning the two wordings removes a needless question at QA time.
+
+## [CL-33 follow-up] Wrong function name in Accounts.Scopes moduledoc — 2026-09-23
+- `lib/cash_lens/accounts/scopes.ex` names `CashLens.Accounts.list_credit_card_accounts/0`
+  in its moduledoc. That function does not exist; the real one is
+  `CashLens.Accounts.list_credit_cards/1` (`list_bank_accounts/0` in the same
+  sentence is fine, it has a default arg). Harmless at runtime, but it already
+  propagated: the first CL-34 spec copied the wrong name into an acceptance
+  criterion, which would have failed a correct implementation with
+  UndefinedFunctionError. Found by the CL-34 spec review.
+
+## [CL-34] Restrict the Extrato Geral screen to cash accounts — 2026-09-23
+
+- **Restrict-by-default remains the architecturally better answer, and this is the gate
+  to say so.** My round-1 position stands unchanged. The decision this task implements
+  is that global screens must not show card rows; an opt-in key makes the safe
+  behaviour the one every future caller has to remember to ask for. Every new global
+  screen is one forgotten key away from silently regressing, and nothing in the test
+  suite would catch it. The defensible counter is real and is the reason I am not
+  blocking: `list_transactions/3` and `count_transactions/1` are genuinely shared with
+  the JSON API, the reimbursement screens and the reimbursement-link component, all of
+  which must keep seeing card rows, and inverting the default would touch all of them
+  in a task scoped to one screen. If the operator accepts the opt-in seam, the
+  follow-up worth filing is a narrow one: give the screen-facing callers their own
+  function (or make the key's absence an explicit `:all_accounts` opt-out) so the
+  default stops being "unrestricted by silence".
+- Criterion 1 could hand QA the check instead of the property: e.g. state that
+  `list_all_transactions/1` spans from its `def` to the next top-level definition and
+  that no `@@` hunk range in `git diff --cached -U0 -- lib/cash_lens/transactions.ex`
+  may intersect it. Adding `*.ex diff=elixir` to `.gitattributes` would also put the
+  function name directly in the hunk header for every future task — worth doing as
+  repository hygiene, out of scope here.
+- Criterion 8's "this task's test files" would be tighter as an explicit allow-list
+  (`test/cash_lens/transactions_test.exs` and any file under
+  `test/cash_lens_web/live/transaction_live/`), matching the precision of the lib-file
+  half of the same criterion.
+- Criterion 2 leaves the filter map shape implicit; naming `"date_from"` / `"date_to"`
+  would remove the one inference step QA has to make.
+- Criterion 3's unkeyed-vs-joined-SQL comparison holds only while no transaction has a
+  null `account_id` (verified: 0 today). If that ever changes, the criterion would fail
+  a correct implementation. A one-line note would make the assumption explicit.
+- The moduledoc of `lib/cash_lens/accounts/scopes.ex` still names
+  `CashLens.Accounts.list_credit_card_accounts/0`, which does not exist. Correctly out
+  of scope for CL-34, but it has now misled one spec and will mislead the next — worth
+  a trivial follow-up.
+
+## [CL-35] Restrict the Saldos Contábeis screen to cash accounts — 2026-09-23
+
+- Criterion 4's second substring, `"— veja a tela de"`, is contiguous only if the
+  implementer keeps the text up to the `<a>` on a single source line, as the mock does.
+  I confirmed by rendering both shapes that HEEx preserves a source newline plus indent
+  verbatim, so markup wrapped right after the em dash would render
+  `"aqui —\n  veja a tela de"` and fail the literal check despite being a correct
+  implementation. `mix format` and the mock both push toward the passing shape, so this
+  is a hazard rather than a defect — not worth a revision round. If the criterion is
+  ever touched again, extending the spec's existing "one uninterrupted text node"
+  requirement (spec:66-68) to cover the run through `de` would close it outright.
+- Criterion 6 dereferences `element["account"]["id"]`. `serialize/1` emits
+  `account: nil` when the preload is absent, which would raise rather than fail cleanly.
+  Harmless here — the sandboxed test owns only its two fixture rows, both with accounts —
+  but writing the assertion over `get_in(el, ["account", "id"])` would degrade to a
+  readable failure instead of a `nil["account"]` crash.
+- Criterion 11 scopes credo to the four `lib/` files and leaves the three test files
+  unchecked. Consistent with the measured baseline and correct as written; noting only
+  that new test code ships without a style gate.
+
+## [CL-34] Restrict the Extrato Geral screen to cash accounts (restrict-by-default) — 2026-09-23
+
+- **Criterion 8's "uninterrupted text" versus the HEEx formatter.** The mock
+  (`docs/tasks/CL-34-mock.html:26-27`) wraps the phrase across a source line
+  break: `Compras no cartão de crédito não` / `aparecem aqui`. Rendered HTML then
+  contains a newline mid-phrase, and `mix format --check-formatted` (criterion 15)
+  will reflow long text inside the `<p>` back to that shape. Nothing here fails a
+  correct implementation *if* the test normalises whitespace before asserting —
+  which is what I would do — but the developer should be aware that a naive
+  `render(view) =~ "Compras no cartão de crédito não aparecem aqui"` may fail on
+  formatting alone. Suggest the test assert against
+  `String.replace(html, ~r/\s+/, " ")`, and that QA read the criterion that way.
+- **No criterion covers the `matches_filters?/3` account check** that the Approach
+  requires. An implementation that skips it passes all 16 results while a
+  transaction re-assigned to a card account from the transaction form stays in
+  the stream until reload. The blast radius is one transient row from the user's
+  own action — `/transactions` subscribes only to `"categories"` (index.ex:16)
+  and the `:transaction_saved` messages originate from this screen's own
+  components, so there is no cross-screen PubSub path that could surface card
+  rows. Not worth a revision round, but a cheap criterion would be: "a LiveView
+  test on /transactions moves a visible transaction to a credit-card account and
+  asserts its description is absent from the rendered page without a reload."
+- **Criterion 1's grep half is already true today.** `grep -n "Scopes\."
+  lib/cash_lens/transactions.ex` returns 4 pre-existing hits (lines 633, 656,
+  1358, 1385), so that half of the criterion cannot fail. The `git diff --cached`
+  half carries all the weight; QA should judge on it.
+- **Criterion 4 phrases `get_filtered_summary/1` as excluding "the card row".**
+  That function returns `%{income:, expenses:}`, not rows; the test must assert
+  the card transaction's amount is absent from the totals. Verifiable, just
+  loosely worded.
+- **Ordering with CL-35 on `scopes.ex`.** The two edits can land in either order
+  without a code conflict (both are moduledoc prose, no code change), but if
+  CL-35 lands first with a sentence already naming both contexts, CL-34 may have
+  nothing left to add and `scopes.ex` would be absent from its staged diff.
+  Criterion 13's "lists only:" reads as an upper bound, so an absent file is not
+  a violation, and criterion 12 asserts file *state*, which an unchanged file can
+  satisfy. Worth QA knowing so an absent `scopes.ex` hunk is not treated as a
+  miss. Criterion 12's "no code change, only moduledoc text" is verifiable by
+  reading the staged hunks for that file.
+- **Stale moduledoc reference.** `scopes.ex` currently names
+  `CashLens.Accounts.list_credit_card_accounts/0`, which does not exist (the real
+  function is `list_credit_cards/1`). The spec already notes this and correctly
+  keeps fixing it out of scope; since this task edits that moduledoc anyway,
+  correcting the name in the same hunk would be nearly free.
+
+## [CL-35] Split the consolidated total into cash and card debt — 2026-09-23
+
+- Portuguese pluralisation of the footer counts (`1 conta` / `1 cartão` vs
+  `1 contas` / `1 cartões`) is a real defect, but it predates this task
+  (index.ex:157 already says `{@totals.count} contas` unconditionally) and it
+  affects labels beyond this footer. Track it as its own small task rather than
+  widening this diff; if the operator would rather have it now, the cleanest
+  amendment is to change criterion 2 and 3 to assert the count digit and the
+  element id separately from the noun, e.g. assert the cash row matches
+  `~r/TOTAL EM CONTAS \(1 contas?\)/`, so a correctly pluralised implementation
+  and the current wording both pass.
+- Criterion 3 says "in one and the same month" without naming which month. The
+  `/balances` mount defaults the filter to the current month/year
+  (index.ex:277–282), so the fixtures must be inserted at `Date.utc_today()` for
+  the rows to appear — as the existing test at balance_live_test.exs:82 already
+  does. A wrong choice makes the test fail loudly rather than pass falsely, so
+  this is not blocking, but naming the current month in the criterion would save
+  a debugging cycle.
+- Criterion 9 refers to `CashLens.Accounting.list_balances/3`; the call site uses
+  the default-argument form `list_balances(filters)`. `def list_balances(filters
+  \\ %{}, page \\ 1, page_size \\ 20)` does generate /3, so the reference is
+  correct, but /1 is what `/balances` actually calls — worth keeping in mind when
+  reading the criterion.
+- The card footer keeping the stored negative sign is the right call and the
+  spec argues it well (the footer must agree with the column above it). If the
+  operator later prefers a positive "amount owed", that is a label-and-sign
+  change to make deliberately, not a detail to slip in during implementation.
+
+## [CL-34] Split the transactions summary into cash and card figures — 2026-09-23
+
+- Criterion 9's fourth check, `git diff --cached -U0 -- lib/cash_lens/transactions.ex
+  | grep "^-" | grep "Scopes.cash_accounts_only"`, treats a moved or reformatted
+  line as a deletion. The exposure is narrow (only an edit to lines 633/656/1358/1385
+  can produce it, and those regions are out of scope), so it does not block — but a
+  future revision of this pattern could be made move-proof by requiring that any such
+  `-` line also appear as a `+` line in the same diff, or simply by comparing
+  `grep -c` before and after.
+- Criterion 9's first check fails on any *added* line containing the literal
+  `cash_accounts_only`, including a prose `@doc` line. The spec asks the new `@doc`
+  to state the function is "deliberately **not** scoped to cash accounts"
+  (spec:134-136); an implementer who phrases that as "not `Scopes.cash_accounts_only`"
+  trips the check. Worth a one-line note in the spec telling the implementer to phrase
+  that doc sentence without the literal identifier.
+- Criterion 3's psql query has no account-kind-independent guard against the live
+  preview contributing to the rendered figures. It happens to be safe today because
+  `pluggy_live_preview_enabled` is `false` (config.exs:20), so the strip shows DB rows
+  only — but if the operator re-enables the preview before QA runs, the browser figures
+  and the query will diverge. A parenthetical "(with the Pluggy live preview disabled,
+  as it is by default)" would make the criterion self-contained.
+
+## [CL-32] Stop counting reimbursement pairs on the month closing screen — 2026-09-23
+
+- Criterion 6: say explicitly that the 2026-09 observable is read **after**
+  this task's change is applied. The pre-change, pre-CL-31 value is 25076.48,
+  R$ 45,50 from the 25030.98 branch, so a QA who samples the observable too
+  early would report "any other pair" on a correct implementation.
+- Criterion 8 / the drill-down: if CL-31 has landed, `load_row_transactions/2`
+  must pass the new reimbursement key **in addition to** CL-31's cash-accounts
+  key. The Approach's "remove nothing CL-31 added" is written about the two
+  breakdown functions; an explicit clause in criterion 8 would make the
+  requirement local instead of relying on CL-31's own suite test.
+- Name the new filter key in the spec (e.g. `"exclude_reimbursed"`). Criterion
+  9 currently says "the new key" / "the exclusion key", which is verifiable
+  only by reading the test the same task wrote; a fixed name also documents
+  that it is not CL-31's key.
+- `reimbursement_link_key` is typed `Ecto.UUID`
+  (`lib/cash_lens/transactions/transaction.ex:14`), so the new fixtures must
+  set a valid UUID — an arbitrary string will fail the cast rather than the
+  assertion, which is a confusing failure mode to debug.
+- Criterion 10 names only `live_preview.ex` and `category_suggester.ex` as
+  dirty-but-unrelated. The tree also carries modifications to
+  `test/cash_lens/pluggy/live_preview_test.exs`,
+  `test/support/fixtures/credit_cards_fixtures.ex`, `docs/suggestions-log.md`
+  and deletions under `.gemini/`, plus `CLAUDE.md` and `GEMINI.md`. The
+  closed whitelist already excludes all of them, so this is cosmetic — but
+  naming the whole dirty set would make the criterion self-evidently safe.
+
+## [CL-31] Make the month closing screen a cash-basis view — 2026-09-23
+- `lib/cash_lens/transactions.ex:809-819` — `exclude_transactions_with_cash_children/1` is a
+  near-verbatim copy of `exclude_transactions_with_children/1:793-803`, differing only by the
+  `|> Scopes.cash_accounts_only()` pipe. A single private builder taking the scoped/unscoped
+  subquery (or `exclude_transactions_with_children(query, subquery)`) would remove the
+  duplication. Non-blocking: the duplication is 8 lines, the comment above each explains why two
+  variants exist, and keeping them separate is arguably what protects
+  `query_historical_category_totals/0` from a future edit meant for the month screen. Deliberate
+  duplication with a stated reason is acceptable here.
+- `lib/cash_lens/transactions.ex:277-280` — `filter_cash_accounts_only/2` accepts both `true` and
+  `"true"` while the only caller passes the boolean. Harmless (it mirrors the string-keyed filter
+  map convention of the neighbouring filters) but the string arm is currently untested and
+  unexercised; the test only covers `true` and the absent key.
+
+
+## [CL-31] Make the month closing screen a cash-basis view — 2026-09-23
+
+- The `index_coverage_test.exs:170` failure listed as "known" in the acceptance criteria no longer reproduces (file passes clean in isolation and in the full run). Worth removing it from the project's known-failures list so it does not mask a real regression later.
+- `exclude_transactions_with_children/1` and `exclude_transactions_with_cash_children/1` now differ by a single scope call. A shared private builder taking the scope as an argument would make the divergence explicit and harder to re-merge accidentally — the same class of mistake criterion 4 guards against.
+
+## [CL-35] Group the balances screen into cash and card blocks — 2026-09-23
+
+- `expected_results[4]` compares the cash total against
+  `... where not a.is_credit_card`, which is an inner join and therefore
+  excludes any orphan balance — while the UI, per the Classification rule,
+  renders orphan rows *inside* the cash block and includes them in its total.
+  With 0 orphans on the dev database the two agree today, and
+  `expected_results[1]`'s count uses the un-joined `balances` table, which is
+  right. If an orphan balance ever appears, criterion 5's cash half would fail a
+  correct implementation. Worth remembering at QA time; not worth a revision
+  round now.
+- `expected_results[7]` ("when the account filter selects a credit-card
+  account... contains neither ... nor the heading text `Contas` as a block
+  title") leans on the qualifier "as a block title" to avoid colliding with the
+  word "Contas" elsewhere on the page (sidebar/nav, filter labels). The id
+  checks in the same criterion (`balances-cash`, `balances-totals-cash`) already
+  carry the assertion unambiguously, so the prose clause is redundant rather
+  than harmful. It could be dropped or restated as "no element with id
+  `balances-cash-title`" in a later pass.
+- The `N contas` / `N cartões` labels count rows, not distinct accounts, so a
+  multi-month filter reads e.g. "2 contas" for one account. The spec names this
+  as pre-existing and puts it Out of Scope, which is the right call; noting it
+  so it is not rediscovered as a defect during QA of this task.
+
+## [CL-32] Stop counting reimbursement pairs on the month closing screen — 2026-09-23
+- `filter_out_reimbursement_linked/2` and `filter_cash_accounts_only/2` now share an identical
+  `when flag in [true, "true"]` guard and catch-all shape. Two occurrences is below the threshold
+  where I would ask for an extraction, but if a third opt-in flag arrives, a small
+  `truthy?/1` helper would be worth it. Non-blocking.
+- The equality that is the *point* of this task — month screen totals equalling
+  `get_historical_summary/1` for the same month — is currently pinned only by the dev-database
+  figures in the spec (32765.42 / 45297.00 for 2025-08), not by any automated test. A fixture-level
+  test asserting `sum(get_month_category_breakdown(y, m)) == get_historical_summary()[{y,m}].expenses`
+  for a synthetic month containing a reimbursement pair would make that invariant regression-proof
+  and would catch a future divergence in either direction. Non-blocking, and arguably better placed
+  as its own follow-up than bolted onto this diff.
+
+## [CL-32] Stop counting reimbursement pairs (QA) — 2026-09-23
+
+- The dev-data reconciliation in criteria 5 and 6 rests on the two legs of each 2025-08 pair being near-equal but not equal (32177.46 credits vs 31277.46 debits, a 900.00 asymmetry across 7 pairs). That is consistent with partial reimbursements and is not a defect in this change, but if the intent is that a linked pair always nets to zero, a data-integrity check or a report of asymmetric pairs would surface any mis-linked rows that this exclusion now hides from both KPI cards. Non-blocking, and out of scope for CL-32.

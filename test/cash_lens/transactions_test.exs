@@ -1457,4 +1457,159 @@ defmodule CashLens.TransactionsTest do
       assert Transactions.get_reimbursement_pairs([]) == %{}
     end
   end
+
+  describe "month breakdowns exclude reimbursement pairs" do
+    import CashLens.AccountsFixtures
+    import CashLens.CategoriesFixtures
+
+    test "get_month_category_breakdown/2 skips transactions carrying a reimbursement_link_key" do
+      checking = account_fixture(%{is_credit_card: false})
+      health = category_fixture(%{name: "Saúde", slug: "saude"})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: health.id,
+        amount: "-300.00",
+        date: ~D[2026-04-10],
+        description: "Consulta reembolsada",
+        reimbursement_link_key: Ecto.UUID.generate()
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: health.id,
+        amount: "-80.00",
+        date: ~D[2026-04-11],
+        description: "Farmácia"
+      })
+
+      breakdown = Transactions.get_month_category_breakdown(2026, 4)
+
+      assert [row] = Enum.filter(breakdown, &(&1.category_id == health.id))
+      assert Decimal.equal?(row.total, Decimal.new("80.00"))
+    end
+
+    test "get_month_income_breakdown/2 skips transactions carrying a reimbursement_link_key" do
+      checking = account_fixture(%{is_credit_card: false})
+      refunds = category_fixture(%{name: "Reembolsos", slug: "reembolsos"})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: refunds.id,
+        amount: "300.00",
+        date: ~D[2026-04-12],
+        description: "Reembolso consulta",
+        reimbursement_link_key: Ecto.UUID.generate()
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: refunds.id,
+        amount: "45.00",
+        date: ~D[2026-04-13],
+        description: "Estorno avulso"
+      })
+
+      breakdown = Transactions.get_month_income_breakdown(2026, 4)
+
+      assert [row] = Enum.filter(breakdown, &(&1.category_id == refunds.id))
+      assert Decimal.equal?(row.total, Decimal.new("45.00"))
+    end
+
+    test "the month breakdowns keep transactions with a reimbursement_status but no reimbursement_link_key" do
+      checking = account_fixture(%{is_credit_card: false})
+      health = category_fixture(%{name: "Saúde", slug: "saude"})
+      refunds = category_fixture(%{name: "Reembolsos", slug: "reembolsos"})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: health.id,
+        amount: "-210.00",
+        date: ~D[2026-04-14],
+        description: "Consulta aguardando reembolso",
+        reimbursement_status: "pending",
+        reimbursement_link_key: nil
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: refunds.id,
+        amount: "60.00",
+        date: ~D[2026-04-15],
+        description: "Credito aguardando conciliacao",
+        reimbursement_status: "pending",
+        reimbursement_link_key: nil
+      })
+
+      assert [expense_row] =
+               Transactions.get_month_category_breakdown(2026, 4)
+               |> Enum.filter(&(&1.category_id == health.id))
+
+      assert Decimal.equal?(expense_row.total, Decimal.new("210.00"))
+
+      assert [income_row] =
+               Transactions.get_month_income_breakdown(2026, 4)
+               |> Enum.filter(&(&1.category_id == refunds.id))
+
+      assert Decimal.equal?(income_row.total, Decimal.new("60.00"))
+    end
+
+    test "list_all_transactions/1 still returns reimbursement-linked transactions when the exclusion key is absent" do
+      checking = account_fixture(%{is_credit_card: false})
+      health = category_fixture(%{name: "Saúde", slug: "saude"})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: health.id,
+        amount: "-300.00",
+        date: ~D[2026-04-10],
+        description: "Consulta reembolsada",
+        reimbursement_link_key: Ecto.UUID.generate()
+      })
+
+      descriptions =
+        Transactions.list_all_transactions(%{
+          "category_id" => health.id,
+          "month" => "4",
+          "year" => "2026"
+        })
+        |> Enum.map(& &1.description)
+
+      assert "Consulta reembolsada" in descriptions
+    end
+
+    test "list_all_transactions/1 drops reimbursement-linked transactions when the exclusion key is passed" do
+      checking = account_fixture(%{is_credit_card: false})
+      health = category_fixture(%{name: "Saúde", slug: "saude"})
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: health.id,
+        amount: "-300.00",
+        date: ~D[2026-04-10],
+        description: "Consulta reembolsada",
+        reimbursement_link_key: Ecto.UUID.generate()
+      })
+
+      transaction_fixture(%{
+        account_id: checking.id,
+        category_id: health.id,
+        amount: "-80.00",
+        date: ~D[2026-04-11],
+        description: "Farmácia"
+      })
+
+      descriptions =
+        Transactions.list_all_transactions(%{
+          "category_id" => health.id,
+          "month" => "4",
+          "year" => "2026",
+          "exclude_reimbursement_linked" => true
+        })
+        |> Enum.map(& &1.description)
+
+      assert "Farmácia" in descriptions
+      refute "Consulta reembolsada" in descriptions
+    end
+  end
 end

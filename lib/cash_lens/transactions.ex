@@ -267,9 +267,19 @@ defmodule CashLens.Transactions do
     |> filter_by_reimbursement_status(filters["reimbursement_status"])
     |> filter_unmatched_transfers(filters["unmatched_transfers"])
     |> filter_cash_accounts_only(filters["cash_accounts_only"])
+    |> filter_out_reimbursement_linked(filters["exclude_reimbursement_linked"])
     |> order_by_date(sort_order)
     |> Repo.all()
   end
+
+  # Opt-in: only the month closing screen drill-down passes this key, because
+  # its totals no longer count reimbursement pairs and the expansion must add up
+  # to the row it hangs under. The transactions screen omits the key and keeps
+  # seeing both legs.
+  defp filter_out_reimbursement_linked(query, flag) when flag in [true, "true"],
+    do: where(query, [t], is_nil(t.reimbursement_link_key))
+
+  defp filter_out_reimbursement_linked(query, _flag), do: query
 
   # Opt-in: only callers that report a cash-basis universe (the month closing
   # screen drill-down) pass this key, so every other caller keeps seeing the
@@ -504,8 +514,10 @@ defmodule CashLens.Transactions do
 
   Cash basis: only accounts with `is_credit_card == false` are considered, so a
   card purchase is never counted on its own — it reaches the month through the
-  bill payment, which rolls up into a single "Cartão de Crédito" row. Transfers,
-  initial values and reimbursed transactions stay excluded.
+  bill payment, which rolls up into a single "Cartão de Crédito" row. Transfers
+  and initial values stay excluded, and so does every transaction carrying a
+  `reimbursement_link_key` — both legs of a reimbursement pair cancel out, as
+  `get_historical_summary/1` already assumes.
 
   Returns list of maps: %{name: str, category_id: binary, type: str, total: Decimal}
   sorted by total descending.
@@ -525,6 +537,10 @@ defmodule CashLens.Transactions do
         # payments ARE, on this cash-basis screen: they are the cash leaving the
         # current account for the purchases the card already carried.
         where: c.id not in ^excluded_cash_summary_category_ids(),
+        # A reimbursed expense and the credit that repays it cancel out, so
+        # neither leg is spending. Only a link key marks an actual pair: an
+        # expense merely flagged as awaiting a reimbursement still counts.
+        where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
@@ -571,7 +587,9 @@ defmodule CashLens.Transactions do
   Mirrors `get_month_category_breakdown/2` but for net-positive (income)
   categories, and on the same cash basis: only accounts with
   `is_credit_card == false` count. The whole `cartao-de-credito` subtree stays
-  excluded here — a credit in it is the mirror of a bill payment, never income.
+  excluded here — a credit in it is the mirror of a bill payment, never income —
+  and so does every transaction carrying a `reimbursement_link_key`, whose
+  credit leg only gives back what the paired expense took out.
 
   Returns list of maps: %{name, category_id, type, total} sorted by total descending.
   """
@@ -587,6 +605,10 @@ defmodule CashLens.Transactions do
         where: t.date >= ^first and t.date <= ^last,
         where: t.amount > 0,
         where: c.id not in ^excluded_report_category_ids(),
+        # The credit leg of a reimbursement is not income: it gives back money
+        # an expense of the same pair already took out. Only a link key marks an
+        # actual pair (see `get_month_category_breakdown/2`).
+        where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("COALESCE(?, ?, ?)", g.name, p.name, c.name),
           fragment("COALESCE(?, ?, ?)", g.id, p.id, c.id),
