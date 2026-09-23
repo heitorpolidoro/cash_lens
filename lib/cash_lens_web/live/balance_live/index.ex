@@ -73,103 +73,35 @@ defmodule CashLensWeb.BalanceLive.Index do
         final sem abrir o extrato.
       </p>
 
-      <div class="overflow-x-auto bg-base-100 rounded-2xl border border-base-300 shadow-sm">
-        <table class="table w-full text-xs">
-          <thead class="bg-base-200/50">
-            <tr>
-              <th class="w-48">Conta</th>
-              <th class="w-28">Período</th>
-              <th class="text-right">Saldo Inicial</th>
-              <th class="text-right text-success">Receitas</th>
-              <th class="text-right text-error">Despesas</th>
-              <th class="text-right text-info">Transf. Entrada</th>
-              <th class="text-right text-warning">Transf. Saída</th>
-              <th class="text-right font-black">Saldo Final</th>
-              <th class="w-8"></th>
-            </tr>
-          </thead>
-          <tbody id="balances" phx-update="stream">
-            <tr
-              :for={{id, balance} <- @streams.balances}
-              id={id}
-              phx-click="open_statement"
-              phx-value-account_id={balance.account_id}
-              phx-value-year={balance.year}
-              phx-value-month={balance.month}
-              class="hover group border-b border-base-200 cursor-pointer"
-            >
-              <td>
-                <div class="flex items-center gap-3">
-                  <div class="avatar placeholder text-[10px]">
-                    <div class="w-8 rounded-full bg-base-300">
-                      <%= if balance.account && balance.account.icon && balance.account.icon != "" do %>
-                        <img src={balance.account.icon} />
-                      <% else %>
-                        <div class="flex items-center justify-center h-full w-full bg-primary text-primary-content font-bold uppercase">
-                          {account_initials(balance.account)}
-                        </div>
-                      <% end %>
-                    </div>
-                  </div>
-                  <span class="font-bold truncate max-w-[120px]">
-                    {if balance.account, do: balance.account.name, else: "Conta excluída"}
-                  </span>
-                </div>
-              </td>
-              <td class="font-semibold opacity-70">
-                {month_abbreviation(balance.month)} / {balance.year}
-              </td>
-              <td class="text-right opacity-70">{format_currency(balance.initial_balance)}</td>
-              <td class="text-right text-success font-medium">{format_currency(balance.income)}</td>
-              <td class="text-right text-error font-medium">-{format_currency(balance.expenses)}</td>
-              <td class="text-right text-info/80">
-                {format_transfer(balance.transfers_in)}
-              </td>
-              <td class="text-right text-warning/80">
-                {format_transfer(balance.transfers_out)}
-              </td>
-              <td class="text-right font-black bg-base-200/30">
-                <div class="flex items-center justify-end gap-2">
-                  <span>{format_currency(balance.final_balance)}</span>
-                  <%!-- LiveView dispatches only the innermost phx-click binding, so this button
-                        never triggers the row's "open_statement" navigation. --%>
-                  <button
-                    type="button"
-                    phx-click="open_adjust"
-                    phx-value-account_id={balance.account_id}
-                    phx-value-year={balance.year}
-                    phx-value-month={balance.month}
-                    class="btn btn-ghost btn-xs px-1"
-                    title="Ajustar saldo desta conta"
-                  >
-                    <.icon name="hero-pencil" class="size-3.5" />
-                  </button>
-                </div>
-              </td>
-              <td class="text-right opacity-30 group-hover:opacity-100">
-                <.icon name="hero-chevron-right" class="size-4" />
-              </td>
-            </tr>
-          </tbody>
-          <tfoot class="bg-primary/5 border-t-2 border-base-300 font-black">
-            <tr id="balances-totals">
-              <td class="uppercase tracking-wider text-[11px]">
-                TOTAL CONSOLIDADO ({@totals.count} contas)
-              </td>
-              <td></td>
-              <td class="text-right">{format_currency(@totals.initial_balance)}</td>
-              <td class="text-right text-success">{format_currency(@totals.income)}</td>
-              <td class="text-right text-error">-{format_currency(@totals.expenses)}</td>
-              <td class="text-right text-info">{format_currency(@totals.transfers_in)}</td>
-              <td class="text-right text-warning">-{format_currency(@totals.transfers_out)}</td>
-              <td class="text-right text-primary text-sm bg-primary/10">
-                {format_currency(@totals.final_balance)}
-              </td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+      <.balance_group
+        :if={@cash_balances != []}
+        group="cash"
+        title="Contas"
+        icon="hero-banknotes"
+        total_label="TOTAL EM CONTAS"
+        total_noun="contas"
+        balances={@cash_balances}
+        totals={@totals.cash}
+      />
+
+      <.balance_group
+        :if={@card_balances != []}
+        group="cards"
+        title="Cartões de Crédito"
+        icon="hero-credit-card"
+        total_label="TOTAL EM CARTÕES"
+        total_noun="cartões"
+        balances={@card_balances}
+        totals={@totals.cards}
+      />
+
+      <p
+        :if={@cash_balances == [] and @card_balances == []}
+        id="balances-empty"
+        class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 text-center text-sm opacity-70"
+      >
+        Nenhum saldo encontrado para os filtros selecionados.
+      </p>
     </div>
 
     <.modal
@@ -270,6 +202,120 @@ defmodule CashLensWeb.BalanceLive.Index do
         </.form>
       </div>
     </.modal>
+    """
+  end
+
+  # Renders one self-contained block: heading, the rows of the group and the
+  # totals row that sums exactly those rows. Both groups share this markup so
+  # the columns stay identical and aligned.
+  defp balance_group(assigns) do
+    ~H"""
+    <div
+      id={"balances-#{@group}"}
+      class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden"
+    >
+      <div class="flex items-center gap-2 px-4 pt-4 pb-2">
+        <.icon name={@icon} class="size-4 opacity-60" />
+        <h2 id={"balances-#{@group}-title"} class="font-black text-sm">{@title}</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="table w-full text-xs">
+          <thead class="bg-base-200/50">
+            <tr>
+              <th class="w-48">Conta</th>
+              <th class="w-28">Período</th>
+              <th class="text-right">Saldo Inicial</th>
+              <th class="text-right text-success">Receitas</th>
+              <th class="text-right text-error">Despesas</th>
+              <th class="text-right text-info">Transf. Entrada</th>
+              <th class="text-right text-warning">Transf. Saída</th>
+              <th class="text-right font-black">Saldo Final</th>
+              <th class="w-8"></th>
+            </tr>
+          </thead>
+          <tbody id={"balances-#{@group}-rows"}>
+            <tr
+              :for={balance <- @balances}
+              id={"balances-#{balance.id}"}
+              phx-click="open_statement"
+              phx-value-account_id={balance.account_id}
+              phx-value-year={balance.year}
+              phx-value-month={balance.month}
+              class="hover group border-b border-base-200 cursor-pointer"
+            >
+              <td>
+                <div class="flex items-center gap-3">
+                  <div class="avatar placeholder text-[10px]">
+                    <div class="w-8 rounded-full bg-base-300">
+                      <%= if balance.account && balance.account.icon && balance.account.icon != "" do %>
+                        <img src={balance.account.icon} />
+                      <% else %>
+                        <div class="flex items-center justify-center h-full w-full bg-primary text-primary-content font-bold uppercase">
+                          {account_initials(balance.account)}
+                        </div>
+                      <% end %>
+                    </div>
+                  </div>
+                  <span class="font-bold truncate max-w-[120px]">
+                    {if balance.account, do: balance.account.name, else: "Conta excluída"}
+                  </span>
+                </div>
+              </td>
+              <td class="font-semibold opacity-70">
+                {month_abbreviation(balance.month)} / {balance.year}
+              </td>
+              <td class="text-right opacity-70">{format_currency(balance.initial_balance)}</td>
+              <td class="text-right text-success font-medium">{format_currency(balance.income)}</td>
+              <td class="text-right text-error font-medium">-{format_currency(balance.expenses)}</td>
+              <td class="text-right text-info/80">
+                {format_transfer(balance.transfers_in)}
+              </td>
+              <td class="text-right text-warning/80">
+                {format_transfer(balance.transfers_out)}
+              </td>
+              <td class="text-right font-black bg-base-200/30">
+                <div class="flex items-center justify-end gap-2">
+                  <span>{format_currency(balance.final_balance)}</span>
+                  <%!-- LiveView dispatches only the innermost phx-click binding, so this button
+                        never triggers the row's "open_statement" navigation. --%>
+                  <button
+                    type="button"
+                    phx-click="open_adjust"
+                    phx-value-account_id={balance.account_id}
+                    phx-value-year={balance.year}
+                    phx-value-month={balance.month}
+                    class="btn btn-ghost btn-xs px-1"
+                    title="Ajustar saldo desta conta"
+                  >
+                    <.icon name="hero-pencil" class="size-3.5" />
+                  </button>
+                </div>
+              </td>
+              <td class="text-right opacity-30 group-hover:opacity-100">
+                <.icon name="hero-chevron-right" class="size-4" />
+              </td>
+            </tr>
+          </tbody>
+          <tfoot class="bg-primary/5 border-t-2 border-base-300 font-black">
+            <tr id={"balances-totals-#{@group}"}>
+              <td class="uppercase tracking-wider text-[11px]">
+                {@total_label} ({@totals.count} {@total_noun})
+              </td>
+              <td></td>
+              <td class="text-right">{format_currency(@totals.initial_balance)}</td>
+              <td class="text-right text-success">{format_currency(@totals.income)}</td>
+              <td class="text-right text-error">-{format_currency(@totals.expenses)}</td>
+              <td class="text-right text-info">{format_currency(@totals.transfers_in)}</td>
+              <td class="text-right text-warning">-{format_currency(@totals.transfers_out)}</td>
+              <td class="text-right text-primary text-sm bg-primary/10">
+                {format_currency(@totals.final_balance)}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
     """
   end
 
@@ -455,12 +501,24 @@ defmodule CashLensWeb.BalanceLive.Index do
   end
 
   defp load_balances(socket, filters) do
-    balances = Accounting.list_balances(filters)
+    {card_balances, cash_balances} =
+      filters
+      |> Accounting.list_balances()
+      |> Enum.split_with(&credit_card?/1)
 
     socket
-    |> assign(:totals, calculate_totals(balances))
-    |> stream(:balances, balances, reset: true)
+    |> assign(:cash_balances, cash_balances)
+    |> assign(:card_balances, card_balances)
+    |> assign(:totals, %{
+      cash: calculate_totals(cash_balances),
+      cards: calculate_totals(card_balances)
+    })
   end
+
+  # A balance whose account was deleted is listed with the cash accounts: there
+  # is no evidence it ever belonged to a credit card.
+  defp credit_card?(%{account: %{is_credit_card: true}}), do: true
+  defp credit_card?(_balance), do: false
 
   defp calculate_totals(balances) do
     Enum.reduce(balances, empty_totals(), fn balance, totals ->

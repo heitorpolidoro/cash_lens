@@ -1297,3 +1297,22 @@ commit claimed none were added. Fixed; back to 23.
   `?year=&month=` works. Pre-existing and untouched by CL-34, but it means a URL copied out of the
   screen's own control does not reproduce the screen. Worth its own task if deep links are meant to
   be shareable. Non-blocking.
+
+## [CL-35] Split the consolidated total on Saldos Contabeis (QA) — 2026-09-23
+
+- The totals labels pluralise unconditionally: filtering to a single account renders
+  `TOTAL EM CONTAS (1 contas)` / `TOTAL EM CARTÕES (1 cartões)`. Both strings are frozen verbatim by
+  the spec and pinned by the expected results, so the delivered behaviour is correct; a follow-up
+  could make the noun agree with the count. Non-blocking.
+- `calculate_totals/1` now runs twice per render over two disjoint lists. A single reduce producing
+  both accumulators would halve the traversal. Immaterial at the current page size of 20; worth
+  revisiting only if the page ever grows. Non-blocking.
+- Dropping `phx-update="stream"` means both tables are re-sent on every filter change. Intended for
+  this screen, which has no pagination control, but worth remembering if pagination is added later.
+- Expected result 15 was unsatisfiable as written: it required `grep -n "is_credit_card"
+  lib/cash_lens/accounting.ex` to be empty, but that file has carried one such reference since commit
+  `1924ee0` — line 403, inside `get_historical_balances/1`, not `list_balances/3`. The criterion's
+  intent (no cash-account restriction added to `list_balances/3`) was verified and holds. The defect
+  class is a criterion that greps a whole file to assert something about one function; a criterion
+  should be scoped to the function it is about, and should be checked against the current tree at
+  authoring time.

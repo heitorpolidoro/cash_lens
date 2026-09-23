@@ -1,6 +1,7 @@
 defmodule CashLensWeb.BalanceLiveTest do
   use CashLensWeb.ConnCase, async: false
 
+  import Ecto.Query, only: [from: 2]
   import Phoenix.LiveViewTest
   import CashLens.AccountingFixtures
   import CashLens.AccountsFixtures
@@ -77,59 +78,232 @@ defmodule CashLensWeb.BalanceLiveTest do
     end
   end
 
-  describe "consolidated totals" do
-    test "renders a tfoot row summing every visible column", %{conn: conn} do
-      today = Date.utc_today()
+  describe "grouped blocks and per-group totals" do
+    @column_headers [
+      "Conta",
+      "Período",
+      "Saldo Inicial",
+      "Receitas",
+      "Despesas",
+      "Transf. Entrada",
+      "Transf. Saída",
+      "Saldo Final"
+    ]
 
-      balance_fixture(%{
-        year: today.year,
-        month: today.month,
-        initial_balance: "100.00",
-        income: "50.00",
-        expenses: "20.00",
-        transfers_in: "10.00",
-        transfers_out: "5.00",
-        balance: "35.00",
-        final_balance: "135.00"
-      })
-
-      balance_fixture(%{
-        year: today.year,
-        month: today.month,
-        initial_balance: "200.00",
-        income: "71.00",
-        expenses: "32.00",
-        transfers_in: "43.00",
-        transfers_out: "7.00",
-        balance: "75.00",
-        final_balance: "275.00"
-      })
-
-      {:ok, index_live, _html} = live(conn, ~p"/balances")
-
-      totals = index_live |> element("#balances-totals") |> render()
-
-      assert totals =~ "TOTAL CONSOLIDADO"
-      assert totals =~ "2 contas"
-      # initial_balance: 100 + 200
-      assert totals =~ "R$ 300,00"
-      # income: 50 + 71
-      assert totals =~ "R$ 121,00"
-      # expenses: 20 + 32
-      assert totals =~ "R$ 52,00"
-      # transfers_in: 10 + 43
-      assert totals =~ "R$ 53,00"
-      # transfers_out: 5 + 7
-      assert totals =~ "R$ 12,00"
-      # final_balance: 135 + 275
-      assert totals =~ "R$ 410,00"
+    defp cash_account(attrs \\ %{}) do
+      account_fixture(Map.merge(%{is_credit_card: false}, attrs))
     end
 
-    test "renders zeroed totals when there are no balances", %{conn: conn} do
+    defp card_account(attrs \\ %{}) do
+      account_fixture(Map.merge(%{is_credit_card: true}, attrs))
+    end
+
+    defp current_balance(account, attrs) do
+      today = Date.utc_today()
+
+      attrs
+      |> Map.merge(%{account_id: account.id, year: today.year, month: today.month})
+      |> balance_fixture()
+    end
+
+    test "renders a Contas block and a Cartões de Crédito block with independent totals", %{
+      conn: conn
+    } do
+      first_cash =
+        current_balance(cash_account(), %{
+          initial_balance: "100.00",
+          income: "50.00",
+          expenses: "20.00",
+          transfers_in: "10.00",
+          transfers_out: "5.00",
+          balance: "35.00",
+          final_balance: "135.00"
+        })
+
+      second_cash =
+        current_balance(cash_account(), %{
+          initial_balance: "200.00",
+          income: "71.00",
+          expenses: "32.00",
+          transfers_in: "43.00",
+          transfers_out: "7.00",
+          balance: "75.00",
+          final_balance: "275.00"
+        })
+
+      card =
+        current_balance(card_account(), %{
+          initial_balance: "-300.00",
+          income: "45.50",
+          expenses: "45.50",
+          transfers_in: "1.00",
+          transfers_out: "2.00",
+          balance: "0.00",
+          final_balance: "-300.00"
+        })
+
+      {:ok, index_live, html} = live(conn, ~p"/balances")
+
+      assert has_element?(index_live, "#balances-cash")
+      assert has_element?(index_live, "#balances-cards")
+      assert index_live |> element("#balances-cash-title") |> render() =~ "Contas"
+      assert index_live |> element("#balances-cards-title") |> render() =~ "Cartões de Crédito"
+
+      # The cash block comes first in the HTML source.
+      assert :binary.match(html, "balances-cash") |> elem(0) <
+               :binary.match(html, "balances-cards") |> elem(0)
+
+      # Every row sits in exactly one block.
+      for balance <- [first_cash, second_cash] do
+        assert has_element?(index_live, "#balances-cash #balances-#{balance.id}")
+        refute has_element?(index_live, "#balances-cards #balances-#{balance.id}")
+      end
+
+      assert has_element?(index_live, "#balances-cards #balances-#{card.id}")
+      refute has_element?(index_live, "#balances-cash #balances-#{card.id}")
+
+      # Both blocks carry the same column headers.
+      for block <- ["#balances-cash", "#balances-cards"], header <- @column_headers do
+        assert index_live |> element("#{block} thead") |> render() =~ header
+      end
+
+      cash_totals = index_live |> element("#balances-totals-cash") |> render()
+
+      assert cash_totals =~ "TOTAL EM CONTAS (2 contas)"
+      # initial_balance: 100 + 200
+      assert cash_totals =~ "R$ 300,00"
+      # income: 50 + 71
+      assert cash_totals =~ "R$ 121,00"
+      # expenses: 20 + 32
+      assert cash_totals =~ "R$ 52,00"
+      # transfers_in: 10 + 43
+      assert cash_totals =~ "R$ 53,00"
+      # transfers_out: 5 + 7
+      assert cash_totals =~ "R$ 12,00"
+      # final_balance: 135 + 275
+      assert cash_totals =~ "R$ 410,00"
+      # The card row never leaks into the cash totals.
+      refute cash_totals =~ "45,50"
+
+      cards_totals = index_live |> element("#balances-totals-cards") |> render()
+
+      assert cards_totals =~ "TOTAL EM CARTÕES (1 cartões)"
+      assert cards_totals =~ "R$ -300,00"
+      assert cards_totals =~ "R$ 45,50"
+      assert cards_totals =~ "R$ 1,00"
+      assert cards_totals =~ "R$ 2,00"
+      # The cash rows never leak into the card totals.
+      refute cards_totals =~ "R$ 410,00"
+
+      # There is no consolidated total any more: only the two per-group rows.
+      refute has_element?(index_live, "#balances-totals")
+      refute html =~ "CONSOLIDADO"
+    end
+
+    test "omits the Contas block when every visible row is a credit card", %{conn: conn} do
+      today = Date.utc_today()
+      card = card_account()
+      current_balance(cash_account(), %{})
+      current_balance(card, %{})
+
       {:ok, index_live, _html} = live(conn, ~p"/balances")
 
-      totals = index_live |> element("#balances-totals") |> render()
-      assert totals =~ "R$ 0,00"
+      html =
+        index_live
+        |> form("#filter-form", %{
+          "year" => to_string(today.year),
+          "month" => to_string(today.month),
+          "account_id" => card.id
+        })
+        |> render_change()
+
+      assert has_element?(index_live, "#balances-cards")
+      assert has_element?(index_live, "#balances-totals-cards")
+      refute has_element?(index_live, "#balances-cash")
+      refute has_element?(index_live, "#balances-cash-title")
+      refute has_element?(index_live, "#balances-totals-cash")
+      refute html =~ "TOTAL EM CONTAS"
+      refute has_element?(index_live, "#balances-empty")
+    end
+
+    test "omits the Cartões de Crédito block when no visible row is a credit card", %{conn: conn} do
+      today = Date.utc_today()
+      cash = cash_account()
+      current_balance(cash, %{})
+      current_balance(card_account(), %{})
+
+      {:ok, index_live, _html} = live(conn, ~p"/balances")
+
+      html =
+        index_live
+        |> form("#filter-form", %{
+          "year" => to_string(today.year),
+          "month" => to_string(today.month),
+          "account_id" => cash.id
+        })
+        |> render_change()
+
+      assert has_element?(index_live, "#balances-cash")
+      assert has_element?(index_live, "#balances-totals-cash")
+      refute has_element?(index_live, "#balances-cards")
+      refute has_element?(index_live, "#balances-cards-title")
+      refute has_element?(index_live, "#balances-totals-cards")
+      refute html =~ "TOTAL EM CARTÕES"
+      refute has_element?(index_live, "#balances-empty")
+    end
+
+    test "keeps the card total negative, matching the rows above it", %{conn: conn} do
+      current_balance(card_account(), %{
+        initial_balance: "-2000.00",
+        income: "0.00",
+        expenses: "100.00",
+        balance: "-100.00",
+        final_balance: "-2100.00"
+      })
+
+      current_balance(card_account(), %{
+        initial_balance: "-3000.00",
+        income: "0.00",
+        expenses: "137.42",
+        balance: "-137.42",
+        final_balance: "-3137.42"
+      })
+
+      {:ok, index_live, _html} = live(conn, ~p"/balances")
+
+      cards_totals = index_live |> element("#balances-totals-cards") |> render()
+
+      assert cards_totals =~ "TOTAL EM CARTÕES (2 cartões)"
+      # final_balance: -2100.00 + -3137.42, keeping the stored sign.
+      assert cards_totals =~ "R$ -5.237,42"
+    end
+
+    test "renders the empty message when no balance matches the filters", %{conn: conn} do
+      {:ok, index_live, _html} = live(conn, ~p"/balances")
+
+      assert index_live |> element("#balances-empty") |> render() =~
+               "Nenhum saldo encontrado para os filtros selecionados."
+
+      refute has_element?(index_live, "#balances-cash")
+      refute has_element?(index_live, "#balances-cards")
+    end
+
+    test "groups a balance whose account was deleted with the cash accounts", %{conn: conn} do
+      balance = current_balance(cash_account(), %{})
+      current_balance(card_account(), %{})
+
+      {1, _} =
+        Repo.update_all(
+          from(b in CashLens.Accounting.Balance, where: b.id == ^balance.id),
+          set: [account_id: nil]
+        )
+
+      {:ok, index_live, _html} = live(conn, ~p"/balances")
+
+      assert index_live |> element("#balances-cash #balances-#{balance.id}") |> render() =~
+               "Conta excluída"
+
+      refute has_element?(index_live, "#balances-cards #balances-#{balance.id}")
     end
   end
 
