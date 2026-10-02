@@ -163,14 +163,35 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       %{conn: conn, statement: statement, purchase: purchase, bank: bank} = ctx
       category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
 
+      # Two exact payments: CreditCards.Matcher refuses to guess between them,
+      # so the statement stays unpaid and the banner is what offers the choice.
+      # A single exact payment would have been auto-linked on creation and the
+      # banner would never render -- and a near-miss amount is no longer
+      # announced as a detected payment at all.
       debit =
         transaction_fixture(%{
           account_id: bank.id,
           category_id: category.id,
-          amount: "99.50",
+          amount: "-100.00",
           date: ~D[2026-06-14],
           description: "PAGAMENTO FATURA NUBANK"
         })
+
+      transaction_fixture(%{
+        account_id: bank.id,
+        category_id: category.id,
+        amount: "-100.00",
+        date: ~D[2026-06-14],
+        description: "PAGAMENTO FATURA NUBANK II"
+      })
+
+      # The first payment was auto-linked the moment it landed. Undoing that is
+      # the operator action that puts the statement back in front of the
+      # banner, now with two candidates to choose between.
+      {:ok, _} =
+        CashLens.CreditCards.unlink_payment(
+          CashLens.Repo.get!(CashLens.CreditCards.Statement, statement.id)
+        )
 
       {:ok, view, html} = live(conn, ~p"/statements")
 

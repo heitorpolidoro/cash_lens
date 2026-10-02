@@ -449,10 +449,16 @@ defmodule CashLens.CreditCards do
 
   @doc """
   Payment transactions that could settle a statement, ranked nearest-match
-  first: smallest `|amount - total_a_pagar|`, tie-broken by the smallest
+  first: smallest `| |amount| - total_a_pagar |`, tie-broken by the smallest
   distance between the transaction date and the due date. Candidates are the
   transactions categorized as `cartao-de-credito`, on an account other than the
-  statement's, not already parented by another payment.
+  statement's, not already parented by another payment, and **not already
+  reconciled against some other statement**.
+
+  This is the full list behind "Vincular pagamento manualmente", so it is
+  deliberately permissive: being ranked first here does not make a candidate
+  good enough to be offered for one-click reconciliation. That judgement is
+  `suggest_payment/1`'s.
   """
   def payment_candidates(%Statement{} = statement) do
     case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
@@ -460,10 +466,17 @@ defmodule CashLens.CreditCards do
         []
 
       category ->
+        reconciled =
+          from(s in Statement,
+            where: not is_nil(s.payment_transaction_id),
+            select: s.payment_transaction_id
+          )
+
         from(t in Transaction,
           where: t.category_id == ^category.id,
           where: t.account_id != ^statement.account_id,
           where: is_nil(t.parent_transaction_id),
+          where: t.id not in subquery(reconciled),
           preload: [:account]
         )
         |> Repo.all()
@@ -471,27 +484,61 @@ defmodule CashLens.CreditCards do
     end
   end
 
+  # A payment leaves the current account, so its amount is negative while
+  # `total_a_pagar` is positive. Comparing them unsigned would make
+  # `|amount - total|` equal `|amount| + total`, which — `total` being fixed for
+  # a given statement — ranks by the SMALLEST payment rather than the closest
+  # one: the exact payment of a R$ 11.938,58 bill would lose to any smaller
+  # unrelated one. The magnitude is what has to be compared.
   defp candidate_rank(%Transaction{} = transaction, %Statement{} = statement) do
-    amount_diff =
-      case statement.total_a_pagar do
-        nil -> Decimal.new(0)
-        total -> Decimal.abs(Decimal.sub(transaction.amount, total))
-      end
-
-    date_diff =
-      case statement.due_date do
-        nil -> 0
-        due -> abs(Date.diff(transaction.date, due))
-      end
-
-    {Decimal.to_float(amount_diff), date_diff}
+    {amount_distance(transaction, statement), date_distance(transaction, statement)}
   end
 
+  defp amount_distance(%Transaction{} = transaction, %Statement{total_a_pagar: nil}),
+    do: transaction.amount |> Decimal.abs() |> Decimal.to_float()
+
+  defp amount_distance(%Transaction{} = transaction, %Statement{total_a_pagar: total}) do
+    transaction.amount
+    |> Decimal.abs()
+    |> Decimal.sub(total)
+    |> Decimal.abs()
+    |> Decimal.to_float()
+  end
+
+  defp date_distance(%Transaction{}, %Statement{due_date: nil}), do: 0
+
+  defp date_distance(%Transaction{} = transaction, %Statement{due_date: due}),
+    do: abs(Date.diff(transaction.date, due))
+
+  # How far from the due date a payment may sit and still be offered for
+  # one-click reconciliation.
+  @suggestion_window_days 10
+
   @doc """
-  The best payment candidate for a statement, or nil when there is none.
+  The payment to offer for one-click reconciliation, or `nil`.
+
+  Deliberately strict, because the suggestion is one click away from writing a
+  reconciliation: the amount must equal the statement's total exactly and the
+  payment must fall within #{@suggestion_window_days} days of the due date. A
+  statement with no total or no due date gets no suggestion at all.
+
+  Anything weaker is still reachable through "Vincular pagamento manualmente",
+  which lists every candidate. Showing a near-miss under the heading "Pagamento
+  Detectado no Extrato Bancário!" is worse than showing nothing — it invites a
+  confident click on a wrong match.
   """
+  def suggest_payment(%Statement{total_a_pagar: nil}), do: nil
+  def suggest_payment(%Statement{due_date: nil}), do: nil
+
   def suggest_payment(%Statement{} = statement) do
-    statement |> payment_candidates() |> List.first()
+    statement
+    |> payment_candidates()
+    |> Enum.find(&confident_match?(&1, statement))
+  end
+
+  defp confident_match?(%Transaction{} = transaction, %Statement{} = statement) do
+    Decimal.equal?(Decimal.abs(transaction.amount), statement.total_a_pagar) and
+      date_distance(transaction, statement) <= @suggestion_window_days
   end
 
   @doc """

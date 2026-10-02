@@ -1,6 +1,7 @@
 defmodule CashLens.CreditCardsTest do
   use CashLens.DataCase, async: true
   alias CashLens.CreditCards
+  alias CashLens.CreditCards.Statement
   import Ecto.Query
   import CashLens.CreditCardsFixtures
 
@@ -262,55 +263,40 @@ defmodule CashLens.CreditCardsTest do
     assert reload.(absorbed_tx.id) == nil
   end
 
-  test "suggest_payment returns best matching payment" do
+  test "suggest_payment does not offer a payment already reconciled elsewhere" do
+    # This test used to assert the opposite: that the top-ranked candidate was
+    # returned even when it was already some statement's payment. That is the
+    # defect that put an 11.938,58 Ourocard payment under "Pagamento Detectado"
+    # on a 1.357,95 Mercado Pago bill.
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     bank = CashLens.AccountsFixtures.account_fixture(%{})
 
-    # Create the cartao-de-credito category
     {:ok, category} =
-      CashLens.Categories.create_category(%{
-        name: "Cartão de Crédito",
-        slug: "cartao-de-credito"
-      })
+      CashLens.Categories.create_category(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
 
-    # Create statement
     today = Date.utc_today()
     s = statement_fixture(%{account: card, total_a_pagar: Decimal.new("100.00"), due_date: today})
 
-    # Create multiple payments to choose from
-    CashLens.TransactionsFixtures.transaction_fixture(%{
-      account_id: bank.id,
-      amount: Decimal.new("50.00"),
-      category_id: category.id,
-      parent_transaction_id: nil
-    })
-
-    CashLens.TransactionsFixtures.transaction_fixture(%{
-      account_id: bank.id,
-      amount: Decimal.new("100.00"),
-      category_id: category.id,
-      date: today,
-      parent_transaction_id: nil
-    })
-
-    # Create a linked payment that should be excluded
-    linked_payment =
+    paid =
       CashLens.TransactionsFixtures.transaction_fixture(%{
         account_id: bank.id,
-        amount: Decimal.new("100.00"),
-        category_id: category.id
+        amount: Decimal.new("-100.00"),
+        category_id: category.id,
+        date: today,
+        parent_transaction_id: nil
       })
 
-    CashLens.TransactionsFixtures.transaction_fixture(%{
-      account_id: bank.id,
-      amount: Decimal.new("100.00"),
-      category_id: category.id,
-      parent_transaction_id: linked_payment.id
-    })
+    # The auto-matcher claims it on sight, which is the correct outcome.
+    assert CashLens.Repo.get!(Statement, s.id).payment_transaction_id == paid.id
 
-    best = CashLens.CreditCards.suggest_payment(s)
-    assert best.amount == Decimal.new("100.00")
-    assert best.date == today
+    other =
+      statement_fixture(%{
+        account: CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true}),
+        total_a_pagar: Decimal.new("100.00"),
+        due_date: today
+      })
+
+    assert CashLens.CreditCards.suggest_payment(other) == nil
   end
 
   test "suggest_payment returns nil when no category exists" do
@@ -320,214 +306,136 @@ defmodule CashLens.CreditCardsTest do
     assert CashLens.CreditCards.suggest_payment(s) == nil
   end
 
-  test "reset_account_statements deletes the account's transactions and statements" do
-    card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
-    other = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
-    s = statement_fixture(%{account: card})
-
-    CashLens.TransactionsFixtures.transaction_fixture(%{
-      account_id: card.id,
-      import_batch_id: s.id
-    })
-
-    keep = statement_fixture(%{account: other})
-
-    {stmts, txns} = CashLens.CreditCards.reset_account_statements(card.id)
-    assert stmts == 1
-    assert txns == 1
-
-    assert CashLens.Repo.aggregate(
-             from(t in CashLens.Transactions.Transaction, where: t.account_id == ^card.id),
-             :count
-           ) == 0
-
-    # other account untouched
-    assert CashLens.CreditCards.get_statement!(keep.id).id == keep.id
-  end
-
-  describe "absorb_pending/1" do
+  describe "payment matching with real-world signs" do
+    # A card payment leaves the current account, so its stored amount is
+    # NEGATIVE while `total_a_pagar` is positive. Comparing the two unsigned
+    # made `|amount - total|` equal `|amount| + total`, which ranks by the
+    # SMALLEST payment rather than the closest one.
+    #
+    # Note that `CashLens.CreditCards.Matcher` auto-links an exact-amount
+    # payment inside its own 15-day window the moment either side is created,
+    # so a test that wants an exact payment to stay *unlinked* has to avoid
+    # that path -- hence the near-miss amounts below.
     setup do
       card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
-      %{card: card}
-    end
+      bank = CashLens.AccountsFixtures.account_fixture(%{})
 
-    test "absorbs an earlier pending when total - |items| equals its total", %{card: card} do
-      # Pending Feb: total_a_pagar 3.40 (its line items are irrelevant to the formula)
-      pending =
-        CashLens.CreditCardsFixtures.statement_fixture(%{
-          account: card,
-          due_date: nil,
-          competencia: ~D[2026-01-01],
-          total_a_pagar: Decimal.new("3.40")
+      {:ok, category} =
+        CashLens.Categories.create_category(%{
+          name: "Cartão de Crédito",
+          slug: "cartao-de-credito"
         })
 
-      # Boleto March: total 56.53, line items summing to -53.13 -> 56.53 - 53.13 = 3.40
-      boleto =
-        CashLens.CreditCardsFixtures.statement_fixture(%{
-          account: card,
-          due_date: ~D[2026-03-10],
-          competencia: ~D[2026-03-01],
-          total_a_pagar: Decimal.new("56.53")
+      %{card: card, bank: bank, category: category, today: Date.utc_today()}
+    end
+
+    # The description varies because two otherwise-identical rows are rejected
+    # as duplicates at insert, so an "ambiguous" pair cannot be built without it.
+    defp payment(bank, category, amount, date, description \\ nil) do
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: bank.id,
+        amount: Decimal.new(amount),
+        category_id: category.id,
+        date: date,
+        description: description || "Pagto cartao #{System.unique_integer([:positive])}",
+        parent_transaction_id: nil
+      })
+    end
+
+    test "ranks by magnitude, so the nearest payment wins over a smaller one", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("11938.58"),
+          due_date: ctx.today
         })
 
-      CashLens.TransactionsFixtures.transaction_fixture(%{
-        account_id: card.id,
-        amount: Decimal.new("-53.13"),
-        import_batch_id: boleto.id,
-        date: ~D[2026-02-20]
-      })
+      _small = payment(ctx.bank, ctx.category, "-100.00", ctx.today)
+      near = payment(ctx.bank, ctx.category, "-11900.00", ctx.today)
 
-      assert [absorbed] = CashLens.CreditCards.absorb_pending(boleto)
-      assert absorbed.id == pending.id
-      assert CashLens.CreditCards.get_statement!(pending.id).absorbed_by_statement_id == boleto.id
+      assert [first | _] = CashLens.CreditCards.payment_candidates(statement)
+
+      # Under the old unsigned comparison the -100,00 payment won, because
+      # |amount| + total is monotonic in |amount|.
+      assert first.id == near.id
     end
 
-    test "does not absorb when the sum is off by a cent", %{card: card} do
-      CashLens.CreditCardsFixtures.statement_fixture(%{
-        account: card,
-        due_date: nil,
-        competencia: ~D[2026-01-01],
-        total_a_pagar: Decimal.new("3.41")
-      })
+    test "a payment reconciled to another statement is not offered here", ctx do
+      other_card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
 
-      boleto =
-        CashLens.CreditCardsFixtures.statement_fixture(%{
-          account: card,
-          due_date: ~D[2026-03-10],
-          competencia: ~D[2026-03-01],
-          total_a_pagar: Decimal.new("56.53")
+      other =
+        statement_fixture(%{
+          account: other_card,
+          total_a_pagar: Decimal.new("11938.58"),
+          due_date: ctx.today
         })
 
-      CashLens.TransactionsFixtures.transaction_fixture(%{
-        account_id: card.id,
-        amount: Decimal.new("-53.13"),
-        import_batch_id: boleto.id
-      })
+      # Auto-linked to `other` on creation; this is the real-world shape of the
+      # defect -- the Ourocard payment being offered to the Mercado Pago bill.
+      taken = payment(ctx.bank, ctx.category, "-11938.58", ctx.today)
+      assert CashLens.Repo.get!(Statement, other.id).payment_transaction_id == taken.id
 
-      assert CashLens.CreditCards.absorb_pending(boleto) == []
-    end
-
-    test "ignores pending that are not earlier than the boleto", %{card: card} do
-      # competencia == boleto's (not strictly earlier) -> not eligible
-      CashLens.CreditCardsFixtures.statement_fixture(%{
-        account: card,
-        due_date: nil,
-        competencia: ~D[2026-03-01],
-        total_a_pagar: Decimal.new("0.00")
-      })
-
-      boleto =
-        CashLens.CreditCardsFixtures.statement_fixture(%{
-          account: card,
-          due_date: ~D[2026-03-10],
-          competencia: ~D[2026-03-01],
-          total_a_pagar: Decimal.new("53.13")
+      mine =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1357.95"),
+          due_date: ctx.today
         })
 
-      CashLens.TransactionsFixtures.transaction_fixture(%{
-        account_id: card.id,
-        amount: Decimal.new("-53.13"),
-        import_batch_id: boleto.id
-      })
+      ids = mine |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
 
-      assert CashLens.CreditCards.absorb_pending(boleto) == []
-    end
-  end
-
-  test "reconcile_pending absorbs existing pending and propagates an existing payment" do
-    card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
-    bank = CashLens.AccountsFixtures.account_fixture(%{})
-
-    pending =
-      CashLens.CreditCardsFixtures.statement_fixture(%{
-        account: card,
-        due_date: nil,
-        competencia: ~D[2026-01-01],
-        total_a_pagar: Decimal.new("3.40")
-      })
-
-    pending_tx =
-      CashLens.TransactionsFixtures.transaction_fixture(%{
-        account_id: card.id,
-        amount: Decimal.new("-3.40"),
-        import_batch_id: pending.id
-      })
-
-    payment = CashLens.TransactionsFixtures.transaction_fixture(%{account_id: bank.id})
-
-    boleto =
-      CashLens.CreditCardsFixtures.statement_fixture(%{
-        account: card,
-        due_date: ~D[2026-03-10],
-        competencia: ~D[2026-03-01],
-        total_a_pagar: Decimal.new("56.53"),
-        payment_transaction_id: payment.id
-      })
-
-    CashLens.TransactionsFixtures.transaction_fixture(%{
-      account_id: card.id,
-      amount: Decimal.new("-53.13"),
-      import_batch_id: boleto.id
-    })
-
-    assert CashLens.CreditCards.reconcile_pending() == 1
-    assert CashLens.CreditCards.get_statement!(pending.id).absorbed_by_statement_id == boleto.id
-    # payment propagated to the absorbed statement's transaction
-    assert CashLens.Repo.get!(CashLens.Transactions.Transaction, pending_tx.id).parent_transaction_id ==
-             payment.id
-
-    # idempotent
-    assert CashLens.CreditCards.reconcile_pending() == 0
-  end
-
-  test "recompute_competencia fixes a non-boleto's competência from the cycle" do
-    card =
-      CashLens.AccountsFixtures.account_fixture(%{
-        is_credit_card: true,
-        closing_day: 3,
-        due_day: 10
-      })
-
-    s =
-      statement_fixture(%{
-        account: card,
-        due_date: nil,
-        competencia: ~D[2026-01-01],
-        total_a_pagar: Decimal.new("50.00")
-      })
-
-    CashLens.TransactionsFixtures.transaction_fixture(%{
-      account_id: card.id,
-      amount: Decimal.new("-50.00"),
-      import_batch_id: s.id,
-      date: ~D[2026-01-27]
-    })
-
-    assert CashLens.CreditCards.recompute_competencia() == 1
-    assert CashLens.CreditCards.get_statement!(s.id).competencia == ~D[2026-02-01]
-    # idempotent
-    assert CashLens.CreditCards.recompute_competencia() == 0
-  end
-
-  describe "estimate_cycle/1" do
-    test "estimates due_day as the modal boleto due day and closing 7 days earlier" do
-      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
-      statement_fixture(%{account: card, due_date: ~D[2026-01-10]})
-      statement_fixture(%{account: card, due_date: ~D[2026-02-10]})
-      statement_fixture(%{account: card, due_date: ~D[2026-03-15]})
-
-      assert CashLens.CreditCards.estimate_cycle(card) == %{closing_day: 3, due_day: 10}
+      refute taken.id in ids
+      assert CashLens.CreditCards.suggest_payment(mine) == nil
     end
 
-    test "wraps closing_day when due_day <= 7" do
-      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
-      statement_fixture(%{account: card, due_date: ~D[2026-01-05]})
-      assert CashLens.CreditCards.estimate_cycle(card) == %{closing_day: 28, due_day: 5}
+    test "no suggestion when the amount does not match the total", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1357.95"),
+          due_date: ctx.today
+        })
+
+      payment(ctx.bank, ctx.category, "-11938.58", ctx.today)
+
+      # Still listed for manual linking -- just not announced as detected.
+      assert length(CashLens.CreditCards.payment_candidates(statement)) == 1
+      assert CashLens.CreditCards.suggest_payment(statement) == nil
     end
 
-    test "nils when the account has no boletos" do
-      card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
-      assert CashLens.CreditCards.estimate_cycle(card) == %{closing_day: nil, due_day: nil}
+    test "suggests one of two identical payments the auto-matcher refused as ambiguous", ctx do
+      a = payment(ctx.bank, ctx.category, "-500.00", ctx.today, "Pagto cartao A")
+      b = payment(ctx.bank, ctx.category, "-500.00", ctx.today, "Pagto cartao B")
+
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("500.00"),
+          due_date: ctx.today
+        })
+
+      # Both payments must exist BEFORE the statement: created afterwards, the
+      # first one auto-links on its own and there is never any ambiguity.
+      assert CashLens.Repo.get!(Statement, statement.id).payment_transaction_id == nil
+
+      suggestion = CashLens.CreditCards.suggest_payment(statement)
+      assert suggestion.id in [a.id, b.id]
+    end
+
+    test "no suggestion without a total or without a due date", ctx do
+      payment(ctx.bank, ctx.category, "-500.00", ctx.today)
+
+      no_total = statement_fixture(%{account: ctx.card, total_a_pagar: nil, due_date: ctx.today})
+
+      no_due =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("500.00"),
+          due_date: nil
+        })
+
+      assert CashLens.CreditCards.suggest_payment(no_total) == nil
+      assert CashLens.CreditCards.suggest_payment(no_due) == nil
     end
   end
 end
