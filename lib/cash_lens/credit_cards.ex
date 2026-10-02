@@ -535,13 +535,17 @@ defmodule CashLens.CreditCards do
   Transactions filed under the `cartao-de-credito` subtree that no statement
   points at, newest first.
 
-  Deliberately unfiltered beyond that: a row here is either a payment whose
-  bill was never imported, or something categorized as a card payment that is
-  not one — a credit sitting on a card account, say. Both are worth seeing, so
-  the account is carried along rather than used to exclude.
+  "Claims" means either relationship a statement can have with a transaction:
+  pointing at it as its payment (`payment_transaction_id`), or carrying it as
+  one of its own cycle lines (`import_batch_id`). A credit inside a card —
+  the "Pagamento da fatura de junho" line — is claimed by the second, and is
+  not an orphan at all: it is the receipt for a bill, printed on the next one.
 
-  Children of a reconciled payment (`parent_transaction_id`) are left out: they
-  are the bill's own lines, already accounted for by their parent.
+  Children of a reconciled payment (`parent_transaction_id`) are left out too,
+  being already accounted for by their parent.
+
+  What remains is the thing worth acting on: money that left an account as a
+  card payment and that no bill in the system accounts for.
   """
   def unlinked_card_payments do
     case credit_card_category_ids() do
@@ -558,6 +562,7 @@ defmodule CashLens.CreditCards do
         from(t in Transaction,
           where: t.category_id in ^category_ids,
           where: is_nil(t.parent_transaction_id),
+          where: is_nil(t.import_batch_id),
           where: t.id not in subquery(reconciled),
           order_by: [desc: t.date, desc: t.inserted_at],
           preload: [:account]

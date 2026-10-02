@@ -686,12 +686,29 @@ defmodule CashLens.CreditCardsTest do
       refute claimed.id in ids
     end
 
-    test "unlinked_card_payments keeps a mis-categorized credit on a card account", ctx do
-      stray = payment(ctx.card, ctx.category, "1412.10", ctx.today, "Credito no cartao")
+    test "a credit that is a line of some statement is not unlinked", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1357.95"),
+          due_date: ctx.today
+        })
+
+      # "Pagamento da fatura de junho/2026": the receipt for the previous bill,
+      # printed as a line of the next one. It belongs to that cycle.
+      receipt = payment(ctx.card, ctx.category, "1412.10", ctx.today, "Pagamento da fatura")
+
+      {:ok, _} =
+        CashLens.Transactions.update_transaction(receipt, %{import_batch_id: statement.id})
 
       ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
+      refute receipt.id in ids
+    end
 
-      # Not a payment, but filed as one -- the list exists partly to surface it.
+    test "a card credit belonging to no statement is still surfaced", ctx do
+      stray = payment(ctx.card, ctx.category, "1412.10", ctx.today, "Credito orfao")
+
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
       assert stray.id in ids
     end
 
