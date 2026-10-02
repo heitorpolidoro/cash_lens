@@ -531,6 +531,50 @@ defmodule CashLens.CreditCards do
     |> Enum.take(@candidate_limit)
   end
 
+  @doc """
+  Transactions filed under the `cartao-de-credito` subtree that no statement
+  points at, newest first.
+
+  Deliberately unfiltered beyond that: a row here is either a payment whose
+  bill was never imported, or something categorized as a card payment that is
+  not one — a credit sitting on a card account, say. Both are worth seeing, so
+  the account is carried along rather than used to exclude.
+
+  Children of a reconciled payment (`parent_transaction_id`) are left out: they
+  are the bill's own lines, already accounted for by their parent.
+  """
+  def unlinked_card_payments do
+    case credit_card_category_ids() do
+      [] ->
+        []
+
+      category_ids ->
+        reconciled =
+          from(s in Statement,
+            where: not is_nil(s.payment_transaction_id),
+            select: s.payment_transaction_id
+          )
+
+        from(t in Transaction,
+          where: t.category_id in ^category_ids,
+          where: is_nil(t.parent_transaction_id),
+          where: t.id not in subquery(reconciled),
+          order_by: [desc: t.date, desc: t.inserted_at],
+          preload: [:account]
+        )
+        |> Repo.all()
+    end
+  end
+
+  # The whole `cartao-de-credito` subtree, matching what
+  # `CashLens.CreditCards.Matcher` does.
+  defp credit_card_category_ids do
+    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+      nil -> []
+      category -> CashLens.Categories.get_category_ids_with_children(category.id)
+    end
+  end
+
   defp within_candidate_window(query, %Statement{due_date: nil}), do: query
 
   defp within_candidate_window(query, %Statement{due_date: due}) do

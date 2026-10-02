@@ -98,6 +98,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     |> assign(:card_groups, card_groups)
     |> assign(:metrics, CreditCards.hub_metrics(entries))
     |> assign(:suggestions, current_suggestions(card_groups))
+    |> assign(:unlinked_payments, CreditCards.unlinked_card_payments())
   end
 
   # The one-click reconcile block is offered for the cycle currently shown on
@@ -312,6 +313,58 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                 </.link>
               </div>
             </details>
+          </div>
+        </div>
+
+        <%!--
+          The inverse of the reconcile flow: everything filed as a card payment
+          that no statement claims. A row here is either a payment whose bill
+          was never imported, or something categorized as a card payment that
+          is not one — which is why the account is shown rather than filtered.
+        --%>
+        <div
+          id="unlinked-payments"
+          data-role="unlinked-payments"
+          class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden"
+        >
+          <div class="px-6 py-4 border-b border-base-300">
+            <h2 class="text-xs font-black uppercase tracking-wider">
+              Sem fatura vinculada ({length(@unlinked_payments)})
+            </h2>
+            <p class="text-[11px] opacity-50 mt-0.5">
+              Lançamentos na categoria Cartão de Crédito que nenhuma fatura reivindica.
+            </p>
+          </div>
+
+          <p
+            :if={@unlinked_payments == []}
+            class="px-6 py-4 text-sm opacity-40 italic"
+          >
+            Nenhum lançamento solto.
+          </p>
+
+          <div class="divide-y divide-base-200">
+            <div
+              :for={tx <- @unlinked_payments}
+              id={"unlinked-#{tx.id}"}
+              class="px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs"
+            >
+              <div class="min-w-0">
+                <p class="font-bold truncate">{tx.description}</p>
+                <p class="opacity-40">
+                  {format_date(tx.date)} · {tx.account && tx.account.name}
+                  <span :if={tx.account && tx.account.is_credit_card} class="text-warning font-bold">
+                    · conta de cartão
+                  </span>
+                </p>
+              </div>
+              <span class={[
+                "font-mono font-black whitespace-nowrap",
+                if(Decimal.negative?(tx.amount), do: "text-error", else: "text-success")
+              ]}>
+                {format_currency(tx.amount)}
+              </span>
+            </div>
           </div>
         </div>
       </div>

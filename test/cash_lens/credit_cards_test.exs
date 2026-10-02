@@ -512,7 +512,7 @@ defmodule CashLens.CreditCardsTest do
       assert CashLens.Repo.get!(Statement, statement.id).payment_transaction_id == exact.id
     end
 
-    test "payments are drawn from the whole cartao-de-credito subtree", ctx do
+    test "unlinked_card_payments reads the whole cartao-de-credito subtree", ctx do
       {:ok, child} =
         CashLens.Categories.create_category(%{
           name: "Ourocard",
@@ -520,16 +520,11 @@ defmodule CashLens.CreditCardsTest do
           parent_id: ctx.category.id
         })
 
-      statement =
-        statement_fixture(%{
-          account: ctx.card,
-          total_a_pagar: Decimal.new("777.00"),
-          due_date: ctx.today
-        })
+      # payment_candidates no longer filters by category at all, so the subtree
+      # only still matters here.
+      in_child = payment(ctx.bank, child, "-800.00", ctx.today, "Pagto Ourocard")
 
-      in_child = payment(ctx.bank, child, "-800.00", ctx.today)
-
-      ids = statement |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
       assert in_child.id in ids
     end
 
@@ -667,6 +662,46 @@ defmodule CashLens.CreditCardsTest do
 
       ids = statement |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
       refute transfer.id in ids
+    end
+
+    test "unlinked_card_payments lists what no statement claims", ctx do
+      {:ok, outros} = CashLens.Categories.create_category(%{name: "Outros", slug: "outros"})
+
+      loose = payment(ctx.bank, ctx.category, "-321.00", ctx.today, "Pagto solto")
+      _other_category = payment(ctx.bank, outros, "-99.00", ctx.today, "Nao e cartao")
+
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("777.00"),
+          due_date: ctx.today
+        })
+
+      claimed = payment(ctx.bank, ctx.category, "-777.00", ctx.today, "Pagto da fatura")
+      assert CashLens.Repo.get!(Statement, statement.id).payment_transaction_id == claimed.id
+
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
+
+      assert loose.id in ids
+      refute claimed.id in ids
+    end
+
+    test "unlinked_card_payments keeps a mis-categorized credit on a card account", ctx do
+      stray = payment(ctx.card, ctx.category, "1412.10", ctx.today, "Credito no cartao")
+
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
+
+      # Not a payment, but filed as one -- the list exists partly to surface it.
+      assert stray.id in ids
+    end
+
+    test "unlinked_card_payments ignores transactions outside the category", ctx do
+      {:ok, outros} = CashLens.Categories.create_category(%{name: "Outros", slug: "outros"})
+      not_card = payment(ctx.bank, outros, "-50.00", ctx.today, "Mercado")
+
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
+
+      refute not_card.id in ids
     end
 
     test "no suggestion without a total or without a due date", ctx do

@@ -140,6 +140,38 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
     end
   end
 
+  describe "unlinked payments" do
+    test "lists card-categorized transactions no statement claims", %{conn: conn} do
+      payment_category()
+      category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+      bank = account_fixture(%{name: "Itau Conta"})
+
+      loose =
+        transaction_fixture(%{
+          account_id: bank.id,
+          category_id: category.id,
+          amount: "-321.00",
+          date: ~D[2026-06-10],
+          description: "PAGTO SOLTO"
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/statements")
+
+      assert html =~ ~s(data-role="unlinked-payments")
+      assert html =~ "Sem fatura vinculada (1)"
+      assert html =~ ~s(id="unlinked-#{loose.id}")
+      assert html =~ "PAGTO SOLTO"
+    end
+
+    test "shows the empty state when everything is reconciled", %{conn: conn} do
+      payment_category()
+
+      {:ok, _view, html} = live(conn, ~p"/statements")
+
+      assert html =~ "Nenhum lançamento solto."
+    end
+  end
+
   describe "one-click reconciliation" do
     setup do
       payment_category()
