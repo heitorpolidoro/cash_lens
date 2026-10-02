@@ -420,10 +420,25 @@ defmodule CashLens.ForecastTest do
       assert Decimal.equal?(balance, "-1000.00")
     end
 
-    test "zero_date is nil when the balance never goes negative" do
+    test "zero_date is nil when the balance never reaches zero" do
       recurring_item_fixture(%{day_of_month: 15, amount: "-1.00"})
       projection = Forecast.project()
       assert projection.zero_date == nil
+    end
+
+    test "landing exactly on zero counts as the zero date" do
+      today = Date.utc_today()
+
+      # The setup's starting balance is 1000.00, so this lands the running
+      # balance on exactly 0.00 -- which is running out of money, not one cent
+      # short of it.
+      recurring_item_fixture(%{day_of_month: today.day, amount: "-1000.00"})
+
+      projection = Forecast.project()
+
+      assert %{date: ^today, balance_after: balance} = hd(projection.occurrences)
+      assert Decimal.equal?(balance, "0.00")
+      assert projection.zero_date == today
     end
   end
 

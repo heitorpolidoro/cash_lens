@@ -4,7 +4,6 @@ defmodule CashLensWeb.ForecastLive.Index do
   alias CashLens.Forecast
 
   @ruler_days 90
-  @minimum_days 30
   @horizon_days 365
 
   @impl true
@@ -39,11 +38,10 @@ defmodule CashLensWeb.ForecastLive.Index do
     |> assign(:projection, projection)
     |> assign(:ruler_occurrences, ruler_occurrences)
     |> assign(:critical_date, critical_date(ruler_occurrences))
-    |> assign(:minimum_point, Forecast.minimum_point(projection, @minimum_days))
+    |> assign(:bankruptcy, bankruptcy_status(projection.zero_date, today))
     |> assign(:income_date, income_date)
     |> assign(:income_balance, income_balance)
     |> assign(:final_balance, Forecast.final_balance(projection))
-    |> assign(:change_percent, Forecast.projected_change_percent(projection))
     |> assign(:candidate_categories, Forecast.list_categories_without_recurring_item())
   end
 
@@ -233,14 +231,6 @@ defmodule CashLensWeb.ForecastLive.Index do
 
   defp end_month(%Date{} = date), do: Calendar.strftime(date, "%m/%Y")
 
-  defp percent_label(percent) do
-    if Decimal.negative?(percent) do
-      "#{Decimal.to_string(percent)}%"
-    else
-      "+#{Decimal.to_string(percent)}%"
-    end
-  end
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -288,7 +278,7 @@ defmodule CashLensWeb.ForecastLive.Index do
       </div>
 
       <%!-- Three projection KPIs. No record count is displayed on this screen. --%>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div
           class="card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5"
           data-role="kpi-pre-salary"
@@ -312,62 +302,34 @@ defmodule CashLensWeb.ForecastLive.Index do
         </div>
 
         <div
-          class="card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5"
-          data-role="kpi-minimum"
+          class={["card border shadow-sm rounded-2xl p-5", bankruptcy_card_class(@bankruptcy)]}
+          data-role="kpi-bankruptcy"
+          data-severity={@bankruptcy.severity}
         >
-          <span class="text-[11px] font-black uppercase tracking-wider opacity-50">
-            Mínimo Projetado (30d)
+          <span class={[
+            "text-[11px] font-black uppercase tracking-wider",
+            if(@bankruptcy.severity == :critical, do: "opacity-80", else: "opacity-50")
+          ]}>
+            Projeção de Falência
           </span>
-          <div class="flex items-baseline justify-between mt-1">
-            <span class={[
-              "text-2xl font-black",
-              if(Decimal.negative?(minimum_balance(@minimum_point, @projection)),
-                do: "text-error",
-                else: "text-success"
-              )
-            ]}>
-              {format_currency(minimum_balance(@minimum_point, @projection))}
+          <div class="flex items-baseline justify-between gap-2 mt-1">
+            <span class={["text-2xl font-black", bankruptcy_figure_class(@bankruptcy)]}>
+              {if @bankruptcy.date,
+                do: format_date(@bankruptcy.date),
+                else: format_currency(@final_balance)}
             </span>
             <span class={[
               "badge badge-sm text-[10px] font-black",
-              if(Decimal.negative?(minimum_balance(@minimum_point, @projection)),
-                do: "badge-error",
-                else: "badge-success"
-              )
+              bankruptcy_badge_class(@bankruptcy)
             ]}>
-              {if Decimal.negative?(minimum_balance(@minimum_point, @projection)),
-                do: "Em risco",
-                else: "Seguro"}
+              {bankruptcy_badge_label(@bankruptcy)}
             </span>
           </div>
-          <span class="text-[11px] opacity-60 font-medium mt-1 block">
-            {if @minimum_point,
-              do: "Vale em #{format_date(@minimum_point.date)}",
-              else: "Sem lançamentos previstos nos próximos 30 dias"}
-          </span>
-        </div>
-
-        <div
-          class="card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-5"
-          data-role="kpi-twelve-months"
-        >
-          <span class="text-[11px] font-black uppercase tracking-wider opacity-50">
-            Projeção em 12 Meses
-          </span>
-          <div class="flex items-baseline justify-between mt-1">
-            <span class="text-2xl font-black">{format_currency(@final_balance)}</span>
-            <span
-              :if={@change_percent}
-              class={[
-                "text-xs font-bold",
-                if(Decimal.negative?(@change_percent), do: "text-error", else: "text-success")
-              ]}
-            >
-              {percent_label(@change_percent)}
-            </span>
-          </div>
-          <span class="text-[11px] opacity-60 font-medium mt-1 block">
-            Saldo projetado ao fim de 12 meses
+          <span class={[
+            "text-[11px] font-medium mt-1 block",
+            if(@bankruptcy.severity == :critical, do: "opacity-90", else: "opacity-60")
+          ]}>
+            {bankruptcy_caption(@bankruptcy)}
           </span>
         </div>
       </div>
@@ -787,8 +749,66 @@ defmodule CashLensWeb.ForecastLive.Index do
     Map.get(occ, :origin) == :estimado and Decimal.positive?(occ.installment_total)
   end
 
-  defp minimum_balance(nil, projection), do: projection.starting_balance
-  defp minimum_balance(point, _projection), do: point.balance_after
+  # How close the projection puts us to running out of money, over the whole
+  # 12-month horizon.
+  #
+  # The thresholds are inclusive at their lower end: 120 days away is already
+  # `:near`, not `:distant`, because "more than 120 days" does not include 120;
+  # 60 days is `:near` for the same reason. A date that is today or past (the
+  # balance is already at or below zero) yields a non-positive difference and
+  # lands in `:critical`.
+  @near_days 120
+  @critical_days 60
+
+  @doc """
+  Classifies how close the projection puts us to running out of money.
+
+  Public so the band boundaries can be asserted exactly. Driving them through a
+  whole projection would make the test depend on the day of the month it runs
+  on, since occurrences fall on a `day_of_month` rather than a chosen offset.
+  """
+  def bankruptcy_status(nil, _today), do: %{date: nil, days: nil, severity: :safe}
+
+  def bankruptcy_status(zero_date, today) do
+    days = Date.diff(zero_date, today)
+
+    severity =
+      cond do
+        days > @near_days -> :distant
+        days >= @critical_days -> :near
+        true -> :critical
+      end
+
+    %{date: zero_date, days: days, severity: severity}
+  end
+
+  defp bankruptcy_card_class(%{severity: :critical}),
+    do: "bg-error border-error text-error-content"
+
+  defp bankruptcy_card_class(_), do: "bg-base-100 border-base-300"
+
+  defp bankruptcy_figure_class(%{severity: :safe}), do: "text-success"
+  defp bankruptcy_figure_class(%{severity: :distant}), do: "text-warning"
+  defp bankruptcy_figure_class(%{severity: :near}), do: "text-error"
+  defp bankruptcy_figure_class(%{severity: :critical}), do: "text-error-content"
+
+  defp bankruptcy_badge_class(%{severity: :safe}), do: "badge-success"
+  defp bankruptcy_badge_class(%{severity: :distant}), do: "badge-warning"
+  defp bankruptcy_badge_class(%{severity: :near}), do: "badge-error"
+  defp bankruptcy_badge_class(%{severity: :critical}), do: "badge-neutral"
+
+  defp bankruptcy_badge_label(%{severity: :safe}), do: "Seguro"
+  defp bankruptcy_badge_label(%{severity: :distant}), do: "Atenção"
+  defp bankruptcy_badge_label(%{severity: :near}), do: "Em risco"
+  defp bankruptcy_badge_label(%{severity: :critical}), do: "Crítico"
+
+  defp bankruptcy_caption(%{severity: :safe}), do: "Não zera em 12 meses"
+
+  defp bankruptcy_caption(%{days: days}) when days <= 0,
+    do: "Saldo já está zerado ou negativo"
+
+  defp bankruptcy_caption(%{days: 1}), do: "Saldo zera em 1 dia"
+  defp bankruptcy_caption(%{days: days}), do: "Saldo zera em #{days} dias"
 
   defp ruler_card_class(occ, critical_date) do
     cond do

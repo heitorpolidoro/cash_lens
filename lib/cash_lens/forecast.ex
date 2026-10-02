@@ -190,9 +190,11 @@ defmodule CashLens.Forecast do
       |> Enum.sort_by(& &1.date, Date)
       |> with_running_balance(starting_balance)
 
+    # Running out of money is reaching zero, not passing it: a balance of
+    # exactly 0,00 buys nothing, so it counts. The field is named for that.
     zero_date =
       occurrences
-      |> Enum.find(&Decimal.negative?(&1.balance_after))
+      |> Enum.find(&(Decimal.compare(&1.balance_after, 0) != :gt))
       |> case do
         nil -> nil
         occ -> occ.date

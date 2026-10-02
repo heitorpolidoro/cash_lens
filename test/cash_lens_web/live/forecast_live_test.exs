@@ -9,6 +9,7 @@ defmodule CashLensWeb.ForecastLiveTest do
   import CashLensWeb.Formatters
 
   alias CashLens.Forecast
+  alias CashLensWeb.ForecastLive.Index
 
   # Counts how many times a marker appears in the rendered HTML. Simpler and more
   # readable here than parsing the document for a handful of data-role markers.
@@ -41,52 +42,95 @@ defmodule CashLensWeb.ForecastLiveTest do
       assert html =~ "Saldo Pré-Salário"
       assert scoped(view, "[data-role='kpi-pre-salary']") =~ format_currency(pre_salary)
 
-      assert html =~ "Mínimo Projetado (30d)"
-      assert scoped(view, "[data-role='kpi-minimum']") =~ format_currency(minimum.balance_after)
-      assert scoped(view, "[data-role='kpi-minimum']") =~ "Seguro"
+      # The projection never reaches zero here, so the bankruptcy card falls
+      # back to the 12-month figure.
+      assert html =~ "Projeção de Falência"
+      refute html =~ "Mínimo Projetado"
+      refute html =~ "Projeção em 12 Meses"
 
-      assert html =~ "Projeção em 12 Meses"
-
-      assert scoped(view, "[data-role='kpi-twelve-months']") =~
-               format_currency(Forecast.final_balance(Forecast.project(365)))
+      card = scoped(view, "[data-role='kpi-bankruptcy']")
+      assert card =~ format_currency(Forecast.final_balance(Forecast.project(365)))
+      assert card =~ "Não zera em 12 meses"
+      assert card =~ "Seguro"
+      assert minimum
     end
 
-    test "the minimum badge reads Em risco when the projected minimum is negative", %{conn: conn} do
+    test "shows the zero date, not a balance, when the projection runs out", %{conn: conn} do
       account_fixture(%{balance: "100.00"})
       today = Date.utc_today()
       recurring_item_fixture(%{day_of_month: today.day, amount: "-5000.00"})
 
-      {:ok, view, _html} = live(conn, ~p"/forecast")
-
-      kpi = scoped(view, "[data-role='kpi-minimum']")
-      assert kpi =~ "Em risco"
-      refute kpi =~ "Seguro"
-    end
-
-    test "the 12-month card carries the signed percentage change against the current balance", %{
-      conn: conn
-    } do
-      account_fixture(%{balance: "10000.00"})
-      recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-100.00"})
-
-      percent = Forecast.projected_change_percent(Forecast.project(365))
-      assert Decimal.negative?(percent)
+      zero_date = Forecast.project().zero_date
+      assert zero_date
 
       {:ok, view, _html} = live(conn, ~p"/forecast")
 
-      assert scoped(view, "[data-role='kpi-twelve-months']") =~ "#{Decimal.to_string(percent)}%"
+      card = scoped(view, "[data-role='kpi-bankruptcy']")
+      assert card =~ format_date(zero_date)
+      refute card =~ "Não zera em 12 meses"
+      refute card =~ "Seguro"
     end
 
-    test "the KPI row has exactly three cards and no record count anywhere", %{conn: conn} do
+    test "a zero date inside 60 days paints the whole card red", %{conn: conn} do
+      account_fixture(%{balance: "100.00"})
+      recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-5000.00"})
+
+      {:ok, view, _html} = live(conn, ~p"/forecast")
+
+      card = scoped(view, "[data-role='kpi-bankruptcy']")
+      assert card =~ ~s(data-severity="critical")
+      # The fill is what distinguishes this band from the plain red one.
+      assert card =~ "bg-error"
+    end
+
+    test "the KPI row has exactly two cards and no record count anywhere", %{conn: conn} do
       account_fixture(%{balance: "10000.00"})
       recurring_item_fixture(%{})
 
       {:ok, _view, html} = live(conn, ~p"/forecast")
 
-      assert count(html, "data-role=\"kpi-") == 3
-      assert html =~ "md:grid-cols-3"
+      assert count(html, "data-role=\"kpi-") == 2
+      assert html =~ "md:grid-cols-2"
       refute html =~ "Recorrências Ativas"
       refute html =~ "configuradas"
+    end
+  end
+
+  # The bands are asserted on the classifier rather than through a projection:
+  # occurrences land on a day_of_month, so the distance to the zero date would
+  # depend on the day the suite happens to run.
+  describe "bankruptcy severity bands" do
+    setup do
+      %{today: ~D[2026-01-01]}
+    end
+
+    test "no zero date in the horizon is safe", %{today: today} do
+      assert %{severity: :safe, date: nil, days: nil} = Index.bankruptcy_status(nil, today)
+    end
+
+    test "more than 120 days away is distant", %{today: today} do
+      assert %{severity: :distant, days: 121} =
+               Index.bankruptcy_status(Date.add(today, 121), today)
+    end
+
+    test "exactly 120 days away is already near, not distant", %{today: today} do
+      assert %{severity: :near, days: 120} = Index.bankruptcy_status(Date.add(today, 120), today)
+    end
+
+    test "exactly 60 days away is still near, not critical", %{today: today} do
+      assert %{severity: :near, days: 60} = Index.bankruptcy_status(Date.add(today, 60), today)
+    end
+
+    test "fewer than 60 days away is critical", %{today: today} do
+      assert %{severity: :critical, days: 59} =
+               Index.bankruptcy_status(Date.add(today, 59), today)
+    end
+
+    test "a zero date already reached or passed is critical", %{today: today} do
+      assert %{severity: :critical, days: 0} = Index.bankruptcy_status(today, today)
+
+      assert %{severity: :critical, days: -5} =
+               Index.bankruptcy_status(Date.add(today, -5), today)
     end
   end
 
@@ -135,7 +179,10 @@ defmodule CashLensWeb.ForecastLiveTest do
       assert html =~ "data-role=\"ruler-amount\""
     end
 
-    test "the 30-day KPI ignores a lower balance that only happens after day 30", %{conn: conn} do
+    test "the KPI sees a shortfall that only happens well after 30 days", %{conn: conn} do
+      # 10000 draining at 500 a month only reaches zero around month 20 -- far
+      # outside the 30-day window the card used to be limited to, and outside
+      # the 90-day ruler too.
       account_fixture(%{balance: "10000.00"})
       recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-500.00"})
 
@@ -147,12 +194,14 @@ defmodule CashLensWeb.ForecastLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/forecast")
 
-      kpi = scoped(view, "[data-role='kpi-minimum']")
-      assert kpi =~ "30d"
-      assert kpi =~ format_currency(min_30.balance_after)
-      refute kpi =~ format_currency(min_90.balance_after)
+      card = scoped(view, "[data-role='kpi-bankruptcy']")
 
-      # ...while the later, lower occurrence is on the ruler.
+      # Neither window's minimum is the headline any more; the card speaks for
+      # the whole 12-month horizon.
+      refute card =~ format_currency(min_30.balance_after)
+      refute card =~ format_currency(min_90.balance_after)
+
+      # ...while the 90-day occurrence is still on the ruler.
       assert scoped(view, "[data-role='ruler']") =~ format_currency(min_90.balance_after)
     end
 
