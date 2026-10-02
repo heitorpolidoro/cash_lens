@@ -13,6 +13,48 @@ const liveSocket = new LiveSocket("/live", Socket, {
   params: {_csrf_token: csrfToken},
   hooks: {
     ...colocatedHooks,
+    // Enter fires a modal's primary action, mirroring Escape closing it.
+    //
+    // The target button opts in with `data-modal-default`; it is never inferred
+    // from a class. Several modals carry `btn-primary` on inline row actions
+    // that are not the modal's primary action at all, and destructive
+    // confirmations are deliberately left unmarked so a stray Enter cannot
+    // delete anything.
+    ModalEnter: {
+      mounted() {
+        this.onKeyDown = (event) => {
+          if (event.key !== "Enter" || event.isComposing) return;
+          if (!this.el.classList.contains("modal-open")) return;
+
+          // Enter keeps inserting a newline in free text; only the explicit
+          // Cmd/Ctrl+Enter reaches the primary action from there.
+          const target = event.target;
+          const inFreeText =
+            target instanceof Element &&
+            (target.closest("textarea") || target.closest("[contenteditable='true']"));
+          const withModifier = event.metaKey || event.ctrlKey;
+
+          if (inFreeText && !withModifier) return;
+          if (event.altKey || event.shiftKey) return;
+
+          const button = this.el.querySelector("[data-modal-default]");
+          if (!button) return;
+          if (button.disabled || button.getAttribute("aria-disabled") === "true") return;
+
+          event.preventDefault();
+          button.click();
+        };
+
+        // One listener, on window: a single keydown bubbling to both the modal
+        // and window would otherwise click the button twice. Listening on
+        // window alone also catches Enter while nothing inside the modal holds
+        // focus, which is the state a freshly opened modal is in.
+        window.addEventListener("keydown", this.onKeyDown);
+      },
+      destroyed() {
+        window.removeEventListener("keydown", this.onKeyDown);
+      }
+    },
     ForecastChart: {
       mounted() {
         this.initChart();

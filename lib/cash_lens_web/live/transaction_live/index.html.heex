@@ -1103,6 +1103,7 @@
         <div class="flex flex-col sm:flex-row gap-3">
           <button
             type="submit"
+            data-modal-default
             class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
           >
             Salvar Notas
@@ -1296,6 +1297,7 @@
       <div class="flex flex-col sm:flex-row gap-3">
         <button
           phx-click="apply_bulk_category"
+          data-modal-default
           class="btn btn-primary btn-lg flex-1 rounded-2xl shadow-lg shadow-primary/20"
           disabled={MapSet.size(@bulk_selected_ids) == 0}
         >

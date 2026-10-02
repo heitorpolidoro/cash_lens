@@ -341,6 +341,7 @@ defmodule CashLensWeb.CoreComponents do
     <div
       id={@id}
       class={["modal", @show && "modal-open"]}
+      phx-hook="ModalEnter"
       phx-window-keydown={@on_cancel}
       phx-key="escape"
     >

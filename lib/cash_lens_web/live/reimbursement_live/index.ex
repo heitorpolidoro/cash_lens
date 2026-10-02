@@ -782,6 +782,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
           <button
             type="button"
             phx-click="confirm_link"
+            data-modal-default
             disabled={MapSet.size(@selected_credit_ids) == 0}
             class="btn btn-success btn-sm rounded-xl font-black disabled:opacity-30"
           >
