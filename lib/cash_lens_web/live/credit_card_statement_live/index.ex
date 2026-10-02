@@ -13,6 +13,9 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
      |> assign(:selected, nil)
      |> assign(:suggestion, nil)
      |> assign(:candidates, [])
+     |> assign(:search, "")
+     |> assign(:card_filter, "")
+     |> assign(:status_filter, "")
      |> load_statements()}
   end
 
@@ -30,6 +33,24 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   end
 
   @impl true
+  def handle_event("filter", params, socket) do
+    {:noreply,
+     socket
+     |> assign(:search, params["search"] || "")
+     |> assign(:card_filter, params["card"] || "")
+     |> assign(:status_filter, params["status"] || "")
+     |> apply_filters()}
+  end
+
+  def handle_event("clear_filters", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:search, "")
+     |> assign(:card_filter, "")
+     |> assign(:status_filter, "")
+     |> apply_filters()}
+  end
+
   def handle_event("link", %{"payment-id" => payment_id} = params, socket) do
     statement = target_statement(socket, params)
 
@@ -95,10 +116,57 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     card_groups = CreditCards.group_by_card(entries)
 
     socket
-    |> assign(:card_groups, card_groups)
+    |> assign(:entries, entries)
     |> assign(:metrics, CreditCards.hub_metrics(entries))
+    |> assign(:gaps, CreditCards.statement_gaps(entries))
+    |> assign(
+      :cards,
+      entries |> Enum.map(& &1.account) |> Enum.uniq_by(& &1.id) |> Enum.sort_by(& &1.name)
+    )
     |> assign(:suggestions, current_suggestions(card_groups))
     |> assign(:unlinked_payments, CreditCards.unlinked_card_payments())
+    |> apply_filters()
+  end
+
+  # The table is filtered in memory: the whole statement list is already loaded
+  # for the metrics and the gap scan, and it is tens of rows, not thousands.
+  defp apply_filters(socket) do
+    assign(
+      socket,
+      :visible_entries,
+      Enum.filter(socket.assigns.entries, &matches?(&1, socket.assigns))
+    )
+  end
+
+  defp matches?(entry, assigns) do
+    matches_card?(entry, assigns.card_filter) and
+      matches_status?(entry, assigns.status_filter) and
+      matches_search?(entry, assigns.search)
+  end
+
+  defp matches_card?(_entry, ""), do: true
+  defp matches_card?(entry, card_id), do: entry.account.id == card_id
+
+  defp matches_status?(_entry, ""), do: true
+  defp matches_status?(entry, status), do: to_string(entry.lifecycle) == status
+
+  defp matches_search?(_entry, term) when term in [nil, ""], do: true
+
+  defp matches_search?(entry, term) do
+    needle = String.downcase(String.trim(term))
+
+    [
+      entry.account.name,
+      entry.account.bank,
+      entry.statement.source_file,
+      format_competencia(entry.statement.competencia),
+      entry.statement.due_date && Date.to_string(entry.statement.due_date),
+      entry.amount && Decimal.to_string(entry.amount),
+      entry.payment && entry.payment.description,
+      entry.payment && Decimal.to_string(entry.payment.amount)
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.any?(&String.contains?(String.downcase(to_string(&1)), needle))
   end
 
   # The one-click reconcile block is offered for the cycle currently shown on
@@ -191,128 +259,150 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
           </div>
         </div>
 
-        <div :if={@card_groups == []} class="px-6 py-12 text-center opacity-40 text-sm">
-          Nenhuma fatura encontrada.
+        <%!--
+          Gaps worth acting on. Only two signals, both unambiguous: a month
+          with no statement inside a card's own range, and a closed statement
+          whose due date passed unpaid.
+        --%>
+        <div
+          :if={@gaps.missing_months != [] or @gaps.overdue != []}
+          data-role="statement-gaps"
+          class="bg-warning/10 border border-warning/40 rounded-2xl px-6 py-4 space-y-2"
+        >
+          <h2 class="text-xs font-black uppercase tracking-wider">Lacunas</h2>
+
+          <p :if={@gaps.missing_months != []} class="text-xs" data-role="gap-missing">
+            <span class="font-bold">Sem fatura importada:</span>
+            {Enum.map_join(@gaps.missing_months, " · ", fn m ->
+              "#{m.account.name} #{format_competencia(m.competencia)}"
+            end)}
+          </p>
+
+          <p :if={@gaps.overdue != []} class="text-xs" data-role="gap-overdue">
+            <span class="font-bold">Vencida sem pagamento:</span>
+            {Enum.map_join(@gaps.overdue, " · ", fn e ->
+              "#{e.account.name} #{format_competencia(e.statement.competencia)} (#{format_currency(e.amount)})"
+            end)}
+          </p>
         </div>
 
-        <div class="space-y-4">
-          <div
-            :for={group <- @card_groups}
-            class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-6 space-y-4"
-          >
-            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-200 pb-4">
-              <div>
-                <h2 class="font-black text-base">{group.account.name}</h2>
-                <p class="text-xs opacity-40">
-                  {group.account.bank}
-                  <span :if={group.account.closing_day && group.account.due_day}>
-                    · Fechamento dia {group.account.closing_day} · Vencimento dia {group.account.due_day}
-                  </span>
-                </p>
-              </div>
-              <.badge lifecycle={group.current.lifecycle} />
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
-              <div>
-                <span class="opacity-40 block font-semibold">Competência</span>
-                <span class="font-bold text-sm">
-                  {format_competencia(group.current.statement.competencia)}
-                </span>
-              </div>
-              <div>
-                <span class="opacity-40 block font-semibold">Vencimento</span>
-                <span class="font-bold text-sm">
-                  {format_date(group.current.statement.due_date)}
-                  <span :if={is_nil(group.current.statement.due_date)}>Sem vencimento</span>
-                </span>
-              </div>
-              <div>
-                <span class="opacity-40 block font-semibold">
-                  {if group.current.lifecycle == :open, do: "Total Parcial", else: "Total da Fatura"}
-                </span>
-                <span class="font-mono font-black text-base">
-                  {format_currency(group.current.amount)}
-                </span>
-              </div>
-              <div class="flex items-center sm:justify-end">
-                <.link
-                  patch={~p"/statements?id=#{group.current.statement.id}"}
-                  class="btn btn-sm btn-ghost"
-                >
-                  Ver {group.current.line_count} lançamentos do ciclo
-                </.link>
-              </div>
-            </div>
-
-            <div
-              :if={@suggestions[group.current.statement.id]}
-              id={"reconcile-#{group.current.statement.id}"}
-              class="rounded-xl bg-warning/10 border border-warning/40 p-4 flex flex-wrap items-center justify-between gap-3"
-            >
-              <div>
-                <p class="text-sm font-bold">Pagamento Detectado no Extrato Bancário!</p>
-                <p class="text-xs opacity-70">
-                  {@suggestions[group.current.statement.id].description} · {format_date(
-                    @suggestions[group.current.statement.id].date
-                  )} · {@suggestions[group.current.statement.id].account &&
-                    @suggestions[group.current.statement.id].account.name} ·
-                  <span class="font-mono font-bold">
-                    {format_currency(@suggestions[group.current.statement.id].amount)}
-                  </span>
-                </p>
-              </div>
+        <div
+          data-role="statements-table"
+          class="bg-base-100 rounded-2xl border border-base-300 shadow-sm overflow-hidden"
+        >
+          <div class="px-6 py-4 border-b border-base-300 space-y-3">
+            <div class="flex items-baseline justify-between gap-3">
+              <h2 class="text-xs font-black uppercase tracking-wider">
+                Faturas ({length(@visible_entries)}<span :if={
+                  length(@visible_entries) != length(@entries)
+                }> de {length(@entries)}</span>)
+              </h2>
               <button
-                class="btn btn-warning btn-sm"
-                phx-click="link"
-                phx-value-payment-id={@suggestions[group.current.statement.id].id}
-                phx-value-statement-id={group.current.statement.id}
+                :if={@search != "" or @card_filter != "" or @status_filter != ""}
+                type="button"
+                phx-click="clear_filters"
+                class="btn btn-ghost btn-xs"
               >
-                <.icon name="hero-link" class="size-4" /> Conciliar Pagamento em 1 Clique
+                Limpar filtros
               </button>
             </div>
 
-            <div
-              :if={
-                group.current.lifecycle == :closed and
-                  is_nil(@suggestions[group.current.statement.id])
-              }
-              class="border-t border-base-200 pt-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <p class="text-xs opacity-50 italic">
-                Nenhum débito bancário compatível encontrado — a fatura segue como Fechada.
-              </p>
-              <.link
-                patch={~p"/statements?id=#{group.current.statement.id}"}
-                class="btn btn-outline btn-xs"
-              >
-                Vincular pagamento manualmente
-              </.link>
-            </div>
+            <form phx-change="filter" phx-submit="filter" class="flex flex-wrap gap-2">
+              <input
+                type="text"
+                name="search"
+                value={@search}
+                phx-debounce="200"
+                placeholder="Buscar por cartão, competência, valor, pagamento..."
+                class="input input-bordered input-sm flex-1 min-w-[16rem]"
+              />
+              <select name="card" class="select select-bordered select-sm">
+                <option value="">Todos os cartões</option>
+                <option :for={card <- @cards} value={card.id} selected={@card_filter == card.id}>
+                  {card.name}
+                </option>
+              </select>
+              <select name="status" class="select select-bordered select-sm">
+                <option value="">Todos os status</option>
+                <option value="open" selected={@status_filter == "open"}>Aberta</option>
+                <option value="closed" selected={@status_filter == "closed"}>Fechada</option>
+                <option value="paid" selected={@status_filter == "paid"}>Paga</option>
+                <option value="absorbed" selected={@status_filter == "absorbed"}>Incorporada</option>
+              </select>
+            </form>
+          </div>
 
-            <details :if={group.history != []} class="border-t border-base-200 pt-3">
-              <summary class="text-xs font-bold opacity-60 cursor-pointer">
-                Histórico por competência ({statement_count_label(length(group.history))})
-              </summary>
-              <div class="mt-3 divide-y divide-base-200 text-xs">
-                <.link
-                  :for={entry <- group.history}
-                  patch={~p"/statements?id=#{entry.statement.id}"}
-                  class="py-2 px-2 flex flex-wrap items-center justify-between gap-2 hover:bg-base-200 rounded-lg"
+          <p
+            :if={@visible_entries == []}
+            class="px-6 py-10 text-center text-sm opacity-40 italic"
+          >
+            Nenhuma fatura corresponde ao filtro.
+          </p>
+
+          <div class="overflow-x-auto">
+            <table :if={@visible_entries != []} class="table table-sm">
+              <thead>
+                <tr class="text-[10px] uppercase">
+                  <th>Cartão</th>
+                  <th>Competência</th>
+                  <th>Vencimento</th>
+                  <th class="text-right">Total</th>
+                  <th class="text-right">Linhas</th>
+                  <th>Status</th>
+                  <th>Pagamento</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  :for={entry <- @visible_entries}
+                  id={"statement-row-#{entry.statement.id}"}
+                  class="hover cursor-pointer"
+                  phx-click={JS.patch(~p"/statements?id=#{entry.statement.id}")}
                 >
-                  <span class="font-semibold">
+                  <td class="font-bold whitespace-nowrap">{entry.account.name}</td>
+                  <td class="whitespace-nowrap">
                     {format_competencia(entry.statement.competencia)}
-                  </span>
-                  <span class="opacity-40">
-                    {if entry.statement.due_date,
-                      do: "Venceu #{format_date(entry.statement.due_date)}",
-                      else: "Sem vencimento"}
-                  </span>
-                  <span class="font-mono font-bold">{format_currency(entry.amount)}</span>
-                  <.badge lifecycle={entry.lifecycle} />
-                </.link>
-              </div>
-            </details>
+                  </td>
+                  <td class="whitespace-nowrap opacity-60">
+                    {if entry.statement.due_date, do: format_date(entry.statement.due_date), else: "—"}
+                  </td>
+                  <td class="text-right font-mono font-bold whitespace-nowrap">
+                    {format_currency(entry.amount)}
+                  </td>
+                  <td class="text-right opacity-50">{entry.line_count}</td>
+                  <td><.badge lifecycle={entry.lifecycle} /></td>
+                  <td class="text-xs">
+                    <div :if={entry.payment} class="whitespace-nowrap">
+                      <span class="font-mono font-bold">
+                        {format_currency(entry.payment.amount)}
+                      </span>
+                      <span class="opacity-40">
+                        · {format_date(entry.payment.date)}
+                      </span>
+                      <p class="opacity-40 truncate max-w-[18rem]">
+                        {entry.payment.description}
+                      </p>
+                    </div>
+                    <div :if={is_nil(entry.payment)} class="flex items-center gap-2">
+                      <button
+                        :if={@suggestions[entry.statement.id]}
+                        type="button"
+                        phx-click="link"
+                        phx-value-payment-id={@suggestions[entry.statement.id].id}
+                        phx-value-statement-id={entry.statement.id}
+                        class="btn btn-warning btn-xs"
+                        title={"#{@suggestions[entry.statement.id].description} · #{format_currency(@suggestions[entry.statement.id].amount)}"}
+                      >
+                        <.icon name="hero-link" class="size-3" /> Conciliar
+                      </button>
+                      <span :if={is_nil(@suggestions[entry.statement.id])} class="opacity-30 italic">
+                        —
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 

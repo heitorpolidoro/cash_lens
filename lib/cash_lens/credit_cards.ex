@@ -269,7 +269,7 @@ defmodule CashLens.CreditCards do
   def list_statements do
     statements =
       from(s in Statement,
-        preload: [:account, :absorbed_by],
+        preload: [:account, :absorbed_by, :payment_transaction],
         order_by: [desc_nulls_last: s.competencia, desc_nulls_last: s.due_date]
       )
       |> Repo.all()
@@ -294,9 +294,60 @@ defmodule CashLens.CreditCards do
         status: statement_status(s, line_total),
         lifecycle: lifecycle_status(s),
         amount: s.total_a_pagar || line_total,
+        payment: s.payment_transaction,
         absorbed_into: s.absorbed_by && s.absorbed_by.competencia
       }
     end)
+  end
+
+  @doc """
+  Gaps worth acting on, over the statement entries given.
+
+  Two signals only, both unambiguous:
+
+    * `:missing_months` — competências with no statement, between each card's
+      first and last. A card is only checked inside its own range, so a card
+      that simply started later is never reported.
+    * `:overdue` — closed statements whose due date has passed with no payment
+      linked.
+
+  Deliberately NOT reported: a statement whose total does not equal the sum of
+  its lines. A cycle's credits are the previous bill's payment, so the honest
+  equation needs the previous balance, which is not stored — checking without
+  it flags almost every statement.
+  """
+  def statement_gaps(entries, today \\ Date.utc_today()) do
+    %{
+      missing_months: missing_months(entries),
+      overdue:
+        entries
+        |> Enum.filter(fn e ->
+          e.lifecycle == :closed and e.statement.due_date != nil and
+            Date.compare(e.statement.due_date, today) == :lt
+        end)
+        |> Enum.sort_by(& &1.statement.due_date, Date)
+    }
+  end
+
+  defp missing_months(entries) do
+    entries
+    |> Enum.reject(&is_nil(&1.statement.competencia))
+    |> Enum.group_by(& &1.account)
+    |> Enum.flat_map(fn {account, group} ->
+      present = MapSet.new(group, & &1.statement.competencia)
+      {first, last} = Enum.min_max_by(group, & &1.statement.competencia, Date)
+
+      first.statement.competencia
+      |> months_through(last.statement.competencia)
+      |> Enum.reject(&MapSet.member?(present, &1))
+      |> Enum.map(&%{account: account, competencia: &1})
+    end)
+    |> Enum.sort_by(&{&1.account.name, &1.competencia}, :asc)
+  end
+
+  defp months_through(from, to) do
+    Stream.iterate(from, fn d -> d |> Date.end_of_month() |> Date.add(1) end)
+    |> Enum.take_while(&(Date.compare(&1, to) != :gt))
   end
 
   @doc """

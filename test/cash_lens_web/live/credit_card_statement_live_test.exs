@@ -140,6 +140,137 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
     end
   end
 
+  describe "statements table" do
+    setup do
+      payment_category()
+      nubank = card_account("Nubank")
+      itau = card_account("Itau Card")
+
+      a =
+        statement_fixture(%{
+          account: nubank,
+          total_a_pagar: Decimal.new("100.00"),
+          competencia: ~D[2026-05-01],
+          due_date: ~D[2026-05-15]
+        })
+
+      b =
+        statement_fixture(%{
+          account: itau,
+          total_a_pagar: Decimal.new("250.00"),
+          competencia: ~D[2026-06-01],
+          due_date: ~D[2026-06-15]
+        })
+
+      %{nubank: nubank, itau: itau, a: a, b: b}
+    end
+
+    test "lists every statement as a row", %{conn: conn, a: a, b: b} do
+      {:ok, _view, html} = live(conn, ~p"/statements")
+
+      assert html =~ ~s(data-role="statements-table")
+      assert html =~ ~s(id="statement-row-#{a.id}")
+      assert html =~ ~s(id="statement-row-#{b.id}")
+    end
+
+    test "search narrows the table by card name", %{conn: conn, a: a, b: b} do
+      {:ok, view, _html} = live(conn, ~p"/statements")
+
+      html = view |> form("form[phx-change='filter']", %{search: "Itau"}) |> render_change()
+
+      assert html =~ ~s(id="statement-row-#{b.id}")
+      refute html =~ ~s(id="statement-row-#{a.id}")
+    end
+
+    test "search finds a statement by its amount", %{conn: conn, a: a, b: b} do
+      {:ok, view, _html} = live(conn, ~p"/statements")
+
+      html = view |> form("form[phx-change='filter']", %{search: "250.00"}) |> render_change()
+
+      assert html =~ ~s(id="statement-row-#{b.id}")
+      refute html =~ ~s(id="statement-row-#{a.id}")
+    end
+
+    test "the card filter restricts to one card", %{conn: conn, a: a, b: b, nubank: nubank} do
+      {:ok, view, _html} = live(conn, ~p"/statements")
+
+      html = view |> form("form[phx-change='filter']", %{card: nubank.id}) |> render_change()
+
+      assert html =~ ~s(id="statement-row-#{a.id}")
+      refute html =~ ~s(id="statement-row-#{b.id}")
+    end
+
+    test "clearing the filters brings every row back", %{conn: conn, a: a, b: b} do
+      {:ok, view, _html} = live(conn, ~p"/statements")
+
+      view |> form("form[phx-change='filter']", %{search: "Itau"}) |> render_change()
+      html = view |> element("button[phx-click='clear_filters']") |> render_click()
+
+      assert html =~ ~s(id="statement-row-#{a.id}")
+      assert html =~ ~s(id="statement-row-#{b.id}")
+    end
+
+    test "a reconciled statement shows its payment in the row", %{conn: conn, a: a} do
+      bank = account_fixture(%{name: "Conta"})
+      category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      payment =
+        transaction_fixture(%{
+          account_id: bank.id,
+          category_id: category.id,
+          amount: "-100.00",
+          date: ~D[2026-05-15],
+          description: "PAGTO FATURA NUBANK"
+        })
+
+      assert Repo.get!(Statement, a.id).payment_transaction_id == payment.id
+
+      {:ok, _view, html} = live(conn, ~p"/statements")
+
+      # Visible without opening the statement -- the whole point of the column.
+      assert html =~ "PAGTO FATURA NUBANK"
+    end
+  end
+
+  describe "gaps" do
+    test "reports a competência with no statement inside a card's range", %{conn: conn} do
+      payment_category()
+      card = card_account("Nubank")
+
+      for comp <- [~D[2026-01-01], ~D[2026-03-01]] do
+        statement_fixture(%{
+          account: card,
+          total_a_pagar: Decimal.new("10.00"),
+          competencia: comp,
+          due_date: Date.add(comp, 14)
+        })
+      end
+
+      {:ok, _view, html} = live(conn, ~p"/statements")
+
+      assert html =~ ~s(data-role="gap-missing")
+      assert html =~ "Fev/26"
+    end
+
+    test "says nothing when the months are contiguous", %{conn: conn} do
+      payment_category()
+      card = card_account("Nubank")
+
+      for comp <- [~D[2026-01-01], ~D[2026-02-01]] do
+        statement_fixture(%{
+          account: card,
+          total_a_pagar: Decimal.new("10.00"),
+          competencia: comp,
+          due_date: Date.add(comp, 14)
+        })
+      end
+
+      {:ok, _view, html} = live(conn, ~p"/statements")
+
+      refute html =~ ~s(data-role="gap-missing")
+    end
+  end
+
   describe "unlinked payments" do
     test "lists card-categorized transactions no statement claims", %{conn: conn} do
       payment_category()
@@ -227,16 +358,16 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       {:ok, view, html} = live(conn, ~p"/statements")
 
-      assert html =~ "Pagamento Detectado no Extrato Bancário"
+      # The overview is a table now: the suggestion is a Conciliar button on
+      # the statement's row, carrying the candidate in its title.
       assert html =~ "PAGAMENTO FATURA NUBANK"
 
       html =
         view
-        |> element("#reconcile-#{statement.id} button")
+        |> element("#statement-row-#{statement.id} button[phx-click='link']")
         |> render_click()
 
       assert html =~ "Paga e Conciliada"
-      refute html =~ "Pagamento Detectado no Extrato Bancário"
 
       assert Repo.get!(Statement, statement.id).payment_transaction_id == debit.id
       assert Repo.get!(Transaction, purchase.id).parent_transaction_id == debit.id
@@ -273,8 +404,8 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       refute html =~ "Pagamento Detectado no Extrato Bancário"
       assert html =~ "Fechada (Aguardando Pagamento)"
-      assert html =~ "Nenhum débito bancário compatível encontrado"
-      assert html =~ "Vincular pagamento manualmente"
+      # With no candidate there is nothing to offer on the row either.
+      refute html =~ "#statement-row-#{statement.id} button[phx-click='link']"
 
       {:ok, _view, detail} = live(conn, ~p"/statements?id=#{statement.id}")
 
@@ -348,15 +479,14 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
         installment_number: 3
       })
 
-      {:ok, view, html} = live(conn, ~p"/statements")
+      {:ok, _view, html} = live(conn, ~p"/statements")
 
-      assert html =~ "Histórico por competência"
+      # Every competência is a row in the table; there is no collapsed history.
+      assert html =~ ~s(data-role="statements-table")
       assert html =~ CashLensWeb.Formatters.format_competencia(older.competencia)
+      assert html =~ ~s(id="statement-row-#{older.id}")
 
-      detail =
-        view
-        |> element(~s{a[href="/statements?id=#{older.id}"]})
-        |> render_click()
+      detail = live(conn, ~p"/statements?id=#{older.id}") |> elem(2)
 
       assert detail =~ "NOTEBOOK DELL"
       assert detail =~ "Parcela 3/10"
