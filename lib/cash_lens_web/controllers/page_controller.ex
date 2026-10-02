@@ -3,8 +3,6 @@ defmodule CashLensWeb.PageController do
 
   alias CashLens.Accounting
   alias CashLens.Accounts
-  alias CashLens.Pluggy.LivePreview
-  alias CashLens.Pluggy.LivePreviewCache
   alias CashLens.Transactions
 
   @history_months 12
@@ -28,25 +26,12 @@ defmodule CashLensWeb.PageController do
 
     chart_data = Jason.encode!(historical)
 
-    # A linked account's Pluggy-reported balance, when available, is more
-    # trustworthy than "persisted balance + estimated live-transaction
-    # delta" — it's the bank's own real number, not an approximation that
-    # can miss transactions our own fetch doesn't see (a real gap found
-    # earlier: a PIX present in the bank's own export but absent from
-    # Pluggy's transaction API). Only accounts with a stored `pluggy_balance`
-    # use it; everything else keeps today's calculation.
-    pluggy_balance_by_account_id =
-      CashLens.Pluggy.list_linked_account_links()
-      |> Enum.reject(&is_nil(&1.pluggy_balance))
-      |> Map.new(&{&1.account_id, &1.pluggy_balance})
-
     # Credit card and closed accounts are excluded from the dashboard listing.
     accounts_with_data =
       all_accounts
       |> Enum.reject(&(&1.is_credit_card or &1.is_closed))
       |> Enum.map(fn account ->
         balance = Enum.find(latest_balances, &(&1.account_id == account.id))
-        pluggy_balance = Map.get(pluggy_balance_by_account_id, account.id)
 
         %{
           id: account.id,
@@ -54,9 +39,7 @@ defmodule CashLensWeb.PageController do
           bank: account.bank,
           color: account.color,
           icon: account.icon,
-          uses_pluggy_balance?: not is_nil(pluggy_balance),
-          display_balance:
-            pluggy_balance || if(balance, do: balance.final_balance, else: account.balance)
+          display_balance: if(balance, do: balance.final_balance, else: account.balance)
         }
       end)
 
@@ -66,37 +49,10 @@ defmodule CashLensWeb.PageController do
         Decimal.add(acc, a.display_balance)
       end)
 
-    # Live (unsaved) Pluggy entries bring "Saldo Atual" up to date with
-    # activity since the last real import/sync — it only counts accounts
-    # already reflected in `total_balance` above (no credit cards, no closed
-    # accounts). Receitas/Despesas/Balanço, by contrast, reflect only
-    # already-imported transactions: "Balanço" is derived directly from
-    # Saldo Atual's own delta against the month's opening balance, so it
-    # still captures live activity without a separate live income/expenses
-    # tally that would double-count what Saldo Atual already shows.
-    live_entries =
-      safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
-      |> LivePreview.filter_temporary_entries()
-
-    balance_account_ids = MapSet.new(accounts_with_data, & &1.id)
-
-    # An account already using pluggy_balance directly (above) must not also
-    # have its live entries added on top — pluggy_balance already reflects
-    # the bank's current balance, so adding would double-count it.
-    pluggy_balance_account_ids =
-      accounts_with_data
-      |> Enum.filter(& &1.uses_pluggy_balance?)
-      |> MapSet.new(& &1.id)
-
-    live_balance_entries =
-      live_entries
-      |> Enum.filter(&MapSet.member?(balance_account_ids, &1.account_id))
-      |> Enum.reject(&MapSet.member?(pluggy_balance_account_ids, &1.account_id))
-
-    current_total_balance = Decimal.add(total_balance, sum_amounts(live_balance_entries))
-
     summary = Transactions.get_monthly_summary()
     month_name = CashLensWeb.Formatters.month_name(summary.month.month)
+
+    balance_account_ids = MapSet.new(accounts_with_data, & &1.id)
 
     initial_balance_total =
       latest_balances
@@ -105,10 +61,10 @@ defmodule CashLensWeb.PageController do
 
     render(conn, :home,
       layout: {CashLensWeb.Layouts, :app},
-      total_balance: current_total_balance,
+      total_balance: total_balance,
       monthly_income: summary.income,
       monthly_expenses: summary.expenses,
-      monthly_balance: Decimal.sub(current_total_balance, initial_balance_total),
+      monthly_balance: Decimal.sub(total_balance, initial_balance_total),
       accounts: accounts_with_data,
       summary_month: month_name,
       chart_data: chart_data,
@@ -119,21 +75,6 @@ defmodule CashLensWeb.PageController do
   def chrome_devtools(conn, _params) do
     send_resp(conn, :no_content, "")
   end
-
-  defp live_preview_cache,
-    do: Application.get_env(:cash_lens, :pluggy_live_preview_cache, LivePreviewCache)
-
-  # The cache is an optional, best-effort component (not started in `:test`).
-  # If it isn't running, the dashboard must still render with plain DB
-  # figures rather than crash.
-  defp safe_cache(fun, default) do
-    fun.()
-  catch
-    :exit, _reason -> default
-  end
-
-  defp sum_amounts(entries),
-    do: Enum.reduce(entries, Decimal.new("0"), &Decimal.add(&2, &1.amount))
 
   defp calculate_start_period(date, months_back) do
     m = date.month - months_back

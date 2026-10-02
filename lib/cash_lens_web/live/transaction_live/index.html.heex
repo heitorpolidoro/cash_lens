@@ -98,11 +98,6 @@
               </.link>
             </li>
             <li>
-              <button type="button" phx-click="sync_pluggy">
-                <.icon name="hero-arrow-path" class="size-4" /> Sincronizar Pluggy
-              </button>
-            </li>
-            <li>
               <button type="button" phx-click="auto_categorize_all">
                 <.icon name="hero-sparkles" class="size-4" /> Auto-Categorizar
               </button>
@@ -128,23 +123,6 @@
       </div>
     </:actions>
   </.header>
-
-  <div
-    :if={@pluggy_error}
-    class="alert alert-error mb-4"
-    role="alert"
-  >
-    <.icon name="hero-exclamation-triangle" class="size-5" />
-    <span>
-      Não foi possível atualizar dados do Pluggy: {pluggy_error_message(elem(@pluggy_error, 0))}.
-      <%= if elem(@pluggy_error, 1) do %>
-        Última atualização bem-sucedida: {Calendar.strftime(elem(@pluggy_error, 1), "%d/%m %H:%M")}.
-      <% else %>
-        Nunca houve uma atualização bem-sucedida.
-      <% end %>
-      Mostrando apenas dados já salvos.
-    </span>
-  </div>
 
   <%!--
     Contextual bar: the statement health counters while the full flow is on
@@ -506,403 +484,349 @@
               id={id}
               class={[
                 "hover group border-b border-base-200 overflow-visible",
-                match?(%LivePreview.Entry{}, transaction) &&
-                  "bg-warning/10 pluggy-preview-live-entry",
                 Map.get(transaction, :transfer_key) && "border-l-2 border-l-secondary/50"
               ]}
             >
-              <%= if match?(%LivePreview.Entry{}, transaction) do %>
-                <td class="whitespace-nowrap w-40 px-4">
-                  <div class="flex flex-col">
-                    <span class="font-medium text-base-content">
-                      {format_date(transaction.date)}
-                    </span>
-                    <span class="text-[10px] opacity-50">
-                      --:-- — {format_weekday(transaction.date)}
-                    </span>
-                  </div>
-                </td>
-                <td class="py-2 px-4">
-                  <div class="flex flex-col">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <div class="leading-relaxed font-medium">
-                        {transaction.description}
-                      </div>
-                      <span class="badge badge-xs badge-warning font-bold">Temporário</span>
-                    </div>
-                  </div>
-                </td>
-                <td class={"w-32 px-4 text-right font-bold #{if Decimal.lt?(transaction.amount, 0), do: "text-error", else: "text-success"}"}>
-                  {format_currency(transaction.amount)}
-                </td>
-                <td class="w-48 px-4">
-                  <div class="text-xs opacity-50 italic">
-                    {transaction.pluggy_category || "—"}
-                  </div>
-                </td>
-                <td class="w-40 px-4 text-xs opacity-60 truncate">
-                  <%= if account = Enum.find(@accounts, &(&1.id == transaction.account_id)) do %>
-                    <div class="font-medium truncate">{account.bank}</div>
-                    <div class="opacity-50 truncate">{account.name}</div>
-                  <% else %>
-                    Open Finance
-                  <% end %>
-                </td>
-                <td class="w-24 px-4 text-right">
-                  <div class="tooltip tooltip-left" data-tip="Transação temporária (Pluggy)">
-                    <.icon name="hero-cloud" class="size-4 opacity-40" />
-                  </div>
-                </td>
-              <% else %>
-                <td class="whitespace-nowrap w-40 px-4">
-                  <div class="flex flex-col">
-                    <span class="font-medium text-base-content">
-                      {format_date(transaction.date)}
-                    </span>
-                    <span class="text-[10px] opacity-50">
-                      {if transaction.time, do: format_time(transaction.time), else: "--:--"} — {format_weekday(
-                        transaction.date
-                      )}
-                    </span>
-                  </div>
-                </td>
-                <td class="py-2 px-4">
-                  <div class="flex flex-col">
-                    <div class="flex items-center gap-1">
-                      <div
-                        class="leading-relaxed font-medium"
-                        title={transaction.description}
-                      >
-                        {transaction.description}
-                      </div>
-                    </div>
+              <td class="whitespace-nowrap w-40 px-4">
+                <div class="flex flex-col">
+                  <span class="font-medium text-base-content">
+                    {format_date(transaction.date)}
+                  </span>
+                  <span class="text-[10px] opacity-50">
+                    {if transaction.time, do: format_time(transaction.time), else: "--:--"} — {format_weekday(
+                      transaction.date
+                    )}
+                  </span>
+                </div>
+              </td>
+              <td class="py-2 px-4">
+                <div class="flex flex-col">
+                  <div class="flex items-center gap-1">
                     <div
-                      :if={transaction.notes || transaction.installment_group_id}
-                      class="text-[10px] opacity-70 italic mt-0.5 flex items-center gap-2"
+                      class="leading-relaxed font-medium"
+                      title={transaction.description}
                     >
-                      <span :if={transaction.notes} class="flex items-center gap-1">
-                        <.icon name="hero-document-text" class="size-2.5" />
-                        {transaction.notes}
-                      </span>
-                      <span
-                        :if={transaction.installment_group_id}
-                        class="flex items-center gap-1 bg-primary/10 text-primary not-italic font-black px-1 rounded"
-                      >
-                        <.icon name="hero-rectangle-group" class="size-2.5" />
-                        {transaction.installment_number} / {transaction.installment_group.installments}
-                      </span>
+                      {transaction.description}
                     </div>
-                    <%= if transaction.reimbursement_status do %>
-                      <% counterpart =
-                        reimbursement_counterpart(@reimbursement_pairs, transaction) %>
-                      <div class="flex items-center gap-1 mt-1">
-                        <%= if counterpart do %>
-                          <button
-                            type="button"
-                            data-role="reimbursement-link"
-                            phx-click="open_reimbursement_pair"
-                            phx-value-key={transaction.reimbursement_link_key}
-                            title={"Vinculado a: #{counterpart.description} (#{format_date(counterpart.date)}) — clique para ver o par"}
-                            class="badge badge-sm badge-success badge-outline gap-1 text-[9px] uppercase font-black cursor-pointer hover:bg-success hover:text-success-content transition-colors"
-                          >
-                            <.icon name="hero-link" class="size-3" />
-                            {CashLensWeb.Formatters.translate_reimbursement_status(
-                              transaction.reimbursement_status,
-                              transaction.amount
-                            )}
-                          </button>
-                        <% else %>
-                          <div class={[
-                            "badge badge-sm gap-1 text-[9px] uppercase font-black",
-                            transaction.reimbursement_status == "paid" && "badge-success",
-                            transaction.reimbursement_status == "requested" && "badge-info",
-                            transaction.reimbursement_status == "pending" && "badge-warning"
-                          ]}>
-                            {CashLensWeb.Formatters.translate_reimbursement_status(
-                              transaction.reimbursement_status,
-                              transaction.amount
-                            )}
-                          </div>
-                        <% end %>
-                      </div>
-                    <% end %>
                   </div>
-                </td>
-                <td class={"w-32 px-4 text-right font-bold #{if Decimal.lt?(transaction.amount, 0), do: "text-error", else: "text-success"}"}>
-                  {format_currency(transaction.amount)}
-                </td>
-                <td class="w-48 px-4 overflow-visible">
-                  <div class="flex items-center gap-1 relative overflow-visible">
-                    <div
-                      id={"cat-select-#{transaction.id}"}
-                      phx-hook="CategoryAutocomplete"
-                      data-transaction-id={transaction.id}
-                      data-categories={
-                        Jason.encode!(
-                          Enum.map(
-                            @categories,
-                            &%{id: &1.id, name: CashLens.Categories.Category.full_name(&1)}
-                          )
-                        )
-                      }
-                      class="relative w-full overflow-visible"
-                      phx-click-stop
+                  <div
+                    :if={transaction.notes || transaction.installment_group_id}
+                    class="text-[10px] opacity-70 italic mt-0.5 flex items-center gap-2"
+                  >
+                    <span :if={transaction.notes} class="flex items-center gap-1">
+                      <.icon name="hero-document-text" class="size-2.5" />
+                      {transaction.notes}
+                    </span>
+                    <span
+                      :if={transaction.installment_group_id}
+                      class="flex items-center gap-1 bg-primary/10 text-primary not-italic font-black px-1 rounded"
                     >
-                      <div class="flex items-center gap-1 group/cat">
-                        <input
-                          type="text"
-                          placeholder={
-                            if transaction.category,
-                              do: CashLens.Categories.Category.full_name(transaction.category),
-                              else: "Pendente"
-                          }
-                          class={[
-                            "input input-bordered input-xs w-full font-bold uppercase text-[9px] cursor-pointer",
-                            is_nil(transaction.category_id) &&
-                              "bg-warning text-warning-content border-warning/50"
-                          ]}
-                        />
-                        <button
-                          :if={transaction.category_id}
-                          type="button"
-                          phx-click="update_category"
-                          phx-value-transaction_id={transaction.id}
-                          phx-value-category_id=""
-                          class="btn btn-ghost btn-xs p-0 text-error min-h-0 h-5 w-5 opacity-0 group-hover/cat:opacity-100 transition-opacity"
-                          title="Limpar Categoria"
-                        >
-                          <.icon name="hero-x-mark" class="size-3" />
-                        </button>
-                      </div>
-                      <button
-                        :if={is_nil(transaction.category_id) && transaction.suggested_category}
-                        type="button"
-                        data-role="category-suggestion"
-                        phx-click="update_category"
-                        phx-value-transaction_id={transaction.id}
-                        phx-value-category_id={transaction.suggested_category.category_id}
-                        class="badge badge-outline badge-info badge-sm mt-1 gap-1 cursor-pointer hover:bg-info hover:text-info-content text-[9px] font-bold"
-                        title="Aplicar categoria sugerida"
-                      >
-                        <.icon name="hero-sparkles" class="size-3" />
-                        Sugestão: {transaction.suggested_category.category_name}
-                      </button>
-                      <div
-                        :if={transaction.pluggy_category}
-                        data-role="pluggy-category"
-                        class="badge badge-outline badge-ghost badge-sm mt-1 gap-1 text-[9px] font-medium opacity-80"
-                        title="Categoria identificada pelo Pluggy"
-                      >
-                        pluggy: {transaction.pluggy_category}
-                      </div>
-                      <div class="dropdown-content hidden fixed z-[100] mt-1 w-64 bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
-                        <ul
-                          id={"cat-options-#{transaction.id}"}
-                          phx-update="ignore"
-                          class="menu menu-compact p-1"
-                        >
-                          <li class="new-option border-b border-base-200 mb-1">
-                            <button
-                              type="button"
-                              class="font-black text-primary hover:bg-primary/10"
-                            >
-                              <.icon name="hero-plus-circle" class="size-4" />
-                              <span>
-                                Nova Categoria
-                              </span>
-                            </button>
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
-                    <%= if transaction.category && transaction.category.slug == "transfer" do %>
-                      <button
-                        :if={transaction.transfer_key}
-                        type="button"
-                        phx-click="open_transfer_pair"
-                        phx-value-key={transaction.transfer_key}
-                        title="Transferência vinculada — clique para ver/desvincular"
-                        class="hover:scale-125 transition-transform"
-                      >
-                        <.icon name="hero-link" class="size-3 text-primary" />
-                      </button>
-                      <span
-                        :if={!transaction.transfer_key}
-                        title="Transferência pendente de vínculo"
-                      >
-                        <.icon name="hero-exclamation-triangle" class="size-3 text-warning" />
-                      </span>
-                    <% end %>
+                      <.icon name="hero-rectangle-group" class="size-2.5" />
+                      {transaction.installment_number} / {transaction.installment_group.installments}
+                    </span>
                   </div>
-                </td>
-                <td class="w-40 px-4 text-xs opacity-60 truncate">
-                  <%= if transaction.account do %>
-                    <div class="font-medium truncate">{transaction.account.bank}</div>
-                    <div class="opacity-50 truncate">{transaction.account.name}</div>
-                  <% else %>
-                    ...
-                  <% end %>
-                </td>
-                <td class="w-24 px-4 text-right">
-                  <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <%= if transaction.reimbursement_status do %>
-                      <div class="tooltip tooltip-left" data-tip="Remover Reembolso">
+                  <%= if transaction.reimbursement_status do %>
+                    <% counterpart =
+                      reimbursement_counterpart(@reimbursement_pairs, transaction) %>
+                    <div class="flex items-center gap-1 mt-1">
+                      <%= if counterpart do %>
                         <button
                           type="button"
-                          phx-click="unmark_reimbursable"
-                          phx-value-id={transaction.id}
-                          class="btn btn-ghost btn-xs text-error"
-                        >
-                          <.icon name="hero-x-circle" class="size-3" />
-                        </button>
-                      </div>
-                    <% end %>
-
-                    <%= if Decimal.lt?(transaction.amount, 0) && is_nil(transaction.reimbursement_status) do %>
-                      <div class="tooltip tooltip-left" data-tip="Marcar como Reembolsável">
-                        <button
-                          type="button"
-                          phx-click="mark_reimbursable"
-                          phx-value-id={transaction.id}
-                          class="btn btn-ghost btn-xs text-primary"
-                        >
-                          <.icon name="hero-banknotes" class="size-3" />
-                        </button>
-                      </div>
-                    <% end %>
-                    <%= if Decimal.gt?(transaction.amount, 0) && is_nil(transaction.reimbursement_link_key) do %>
-                      <div class="tooltip tooltip-left" data-tip="Vincular Reembolso">
-                        <button
-                          type="button"
-                          phx-click="open_reimbursement_link"
-                          phx-value-id={transaction.id}
-                          class="btn btn-ghost btn-xs text-success"
-                        >
-                          <.icon name="hero-arrow-path" class="size-3" />
-                        </button>
-                      </div>
-                    <% end %>
-                    <%= if transaction.category && transaction.category.slug == "transfer" && is_nil(transaction.transfer_key) do %>
-                      <div class="tooltip tooltip-left" data-tip="Vincular Transferência">
-                        <button
-                          type="button"
-                          phx-click="open_transfer_link"
-                          phx-value-id={transaction.id}
-                          class="btn btn-ghost btn-xs text-primary"
+                          data-role="reimbursement-link"
+                          phx-click="open_reimbursement_pair"
+                          phx-value-key={transaction.reimbursement_link_key}
+                          title={"Vinculado a: #{counterpart.description} (#{format_date(counterpart.date)}) — clique para ver o par"}
+                          class="badge badge-sm badge-success badge-outline gap-1 text-[9px] uppercase font-black cursor-pointer hover:bg-success hover:text-success-content transition-colors"
                         >
                           <.icon name="hero-link" class="size-3" />
+                          {CashLensWeb.Formatters.translate_reimbursement_status(
+                            transaction.reimbursement_status,
+                            transaction.amount
+                          )}
                         </button>
-                      </div>
-                    <% end %>
-                    <div class="tooltip tooltip-left" data-tip="Editar">
-                      <.link
-                        patch={~p"/transactions/#{transaction}/edit"}
-                        class="btn btn-ghost btn-xs px-1"
-                      >
-                        <.icon name="hero-pencil" class="size-3" />
-                      </.link>
+                      <% else %>
+                        <div class={[
+                          "badge badge-sm gap-1 text-[9px] uppercase font-black",
+                          transaction.reimbursement_status == "paid" && "badge-success",
+                          transaction.reimbursement_status == "requested" && "badge-info",
+                          transaction.reimbursement_status == "pending" && "badge-warning"
+                        ]}>
+                          {CashLensWeb.Formatters.translate_reimbursement_status(
+                            transaction.reimbursement_status,
+                            transaction.amount
+                          )}
+                        </div>
+                      <% end %>
                     </div>
-                    <div class="tooltip tooltip-left" data-tip="Excluir">
+                  <% end %>
+                </div>
+              </td>
+              <td class={"w-32 px-4 text-right font-bold #{if Decimal.lt?(transaction.amount, 0), do: "text-error", else: "text-success"}"}>
+                {format_currency(transaction.amount)}
+              </td>
+              <td class="w-48 px-4 overflow-visible">
+                <div class="flex items-center gap-1 relative overflow-visible">
+                  <div
+                    id={"cat-select-#{transaction.id}"}
+                    phx-hook="CategoryAutocomplete"
+                    data-transaction-id={transaction.id}
+                    data-categories={
+                      Jason.encode!(
+                        Enum.map(
+                          @categories,
+                          &%{id: &1.id, name: CashLens.Categories.Category.full_name(&1)}
+                        )
+                      )
+                    }
+                    class="relative w-full overflow-visible"
+                    phx-click-stop
+                  >
+                    <div class="flex items-center gap-1 group/cat">
+                      <input
+                        type="text"
+                        placeholder={
+                          if transaction.category,
+                            do: CashLens.Categories.Category.full_name(transaction.category),
+                            else: "Pendente"
+                        }
+                        class={[
+                          "input input-bordered input-xs w-full font-bold uppercase text-[9px] cursor-pointer",
+                          is_nil(transaction.category_id) &&
+                            "bg-warning text-warning-content border-warning/50"
+                        ]}
+                      />
                       <button
+                        :if={transaction.category_id}
                         type="button"
-                        phx-click="confirm_delete"
-                        phx-value-id={transaction.id}
-                        class="btn btn-ghost btn-xs text-error px-1"
+                        phx-click="update_category"
+                        phx-value-transaction_id={transaction.id}
+                        phx-value-category_id=""
+                        class="btn btn-ghost btn-xs p-0 text-error min-h-0 h-5 w-5 opacity-0 group-hover/cat:opacity-100 transition-opacity"
+                        title="Limpar Categoria"
                       >
-                        <.icon name="hero-trash" class="size-3" />
+                        <.icon name="hero-x-mark" class="size-3" />
                       </button>
                     </div>
-                    <div class="tooltip tooltip-left" data-tip="Notas">
-                      <button
-                        type="button"
-                        phx-click="open_notes"
-                        phx-value-id={transaction.id}
-                        class="btn btn-ghost btn-xs text-primary px-1"
-                      >
-                        <.icon name="hero-document-text" class="size-3" />
-                      </button>
-                    </div>
-
-                    <div class="dropdown dropdown-end">
-                      <div class="tooltip tooltip-left" data-tip="Grupo de Parcelamento">
-                        <button
-                          id={"installment-menu-#{transaction.id}"}
-                          tabindex="0"
-                          type="button"
-                          phx-click="load_installment_suggestion"
-                          phx-value-id={transaction.id}
-                          class={[
-                            "btn btn-ghost btn-xs px-1",
-                            if(transaction.installment_group_id,
-                              do: "text-primary",
-                              else: "opacity-40"
-                            )
-                          ]}
-                        >
-                          <.icon name="hero-rectangle-group" class="size-3" />
-                        </button>
-                      </div>
+                    <button
+                      :if={is_nil(transaction.category_id) && transaction.suggested_category}
+                      type="button"
+                      data-role="category-suggestion"
+                      phx-click="update_category"
+                      phx-value-transaction_id={transaction.id}
+                      phx-value-category_id={transaction.suggested_category.category_id}
+                      class="badge badge-outline badge-info badge-sm mt-1 gap-1 cursor-pointer hover:bg-info hover:text-info-content text-[9px] font-bold"
+                      title="Aplicar categoria sugerida"
+                    >
+                      <.icon name="hero-sparkles" class="size-3" />
+                      Sugestão: {transaction.suggested_category.category_name}
+                    </button>
+                    <div class="dropdown-content hidden fixed z-[100] mt-1 w-64 bg-base-100 border border-base-300 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
                       <ul
-                        tabindex="0"
-                        class="dropdown-content z-[1] menu p-2 shadow-2xl bg-base-100 border border-base-300 rounded-box w-52"
+                        id={"cat-options-#{transaction.id}"}
+                        phx-update="ignore"
+                        class="menu menu-compact p-1"
                       >
-                        <%= if transaction.installment_group_id do %>
-                          <li>
-                            <button
-                              phx-click="unlink_installment"
-                              phx-value-id={transaction.id}
-                              class="text-error"
-                            >
-                              <.icon name="hero-no-symbol" class="size-4" /> Desvincular Grupo
-                            </button>
-                          </li>
-                        <% else %>
-                          <%!--
-                            The suggestion is resolved by the LiveView when this
-                            menu is opened, never per row at render time.
-                          --%>
-                          <li
-                            :if={transaction.installment_suggestion == :not_loaded}
-                            class="border-b border-base-200 mb-1 pb-1"
+                        <li class="new-option border-b border-base-200 mb-1">
+                          <button
+                            type="button"
+                            class="font-black text-primary hover:bg-primary/10"
                           >
-                            <span class="text-[10px] opacity-50 italic">
-                              Buscando sugestão...
+                            <.icon name="hero-plus-circle" class="size-4" />
+                            <span>
+                              Nova Categoria
                             </span>
-                          </li>
-                          <li
-                            :if={is_map(transaction.installment_suggestion)}
-                            class="border-b border-base-200 mb-1 pb-1"
-                          >
-                            <button
-                              phx-click="link_installment"
-                              phx-value-id={transaction.id}
-                              phx-value-group_id={transaction.installment_suggestion.group_id}
-                              class="bg-primary/10 text-primary font-black animate-pulse"
-                            >
-                              <.icon name="hero-sparkles" class="size-4" />
-                              Vincular a {transaction.installment_suggestion.group_name}? ({transaction.installment_suggestion.next_installment}/{transaction.installment_suggestion.total_installments})
-                            </button>
-                          </li>
-                          <li :for={group <- @installment_groups}>
-                            <button
-                              phx-click="link_installment"
-                              phx-value-id={transaction.id}
-                              phx-value-group_id={group.id}
-                            >
-                              {group.description_pattern}
-                            </button>
-                          </li>
-                          <li :if={Enum.empty?(@installment_groups)}>
-                            <span class="text-[10px] opacity-50 italic">
-                              Nenhum grupo encontrado
-                            </span>
-                          </li>
-                        <% end %>
+                          </button>
+                        </li>
                       </ul>
                     </div>
                   </div>
-                </td>
-              <% end %>
+                  <%= if transaction.category && transaction.category.slug == "transfer" do %>
+                    <button
+                      :if={transaction.transfer_key}
+                      type="button"
+                      phx-click="open_transfer_pair"
+                      phx-value-key={transaction.transfer_key}
+                      title="Transferência vinculada — clique para ver/desvincular"
+                      class="hover:scale-125 transition-transform"
+                    >
+                      <.icon name="hero-link" class="size-3 text-primary" />
+                    </button>
+                    <span
+                      :if={!transaction.transfer_key}
+                      title="Transferência pendente de vínculo"
+                    >
+                      <.icon name="hero-exclamation-triangle" class="size-3 text-warning" />
+                    </span>
+                  <% end %>
+                </div>
+              </td>
+              <td class="w-40 px-4 text-xs opacity-60 truncate">
+                <%= if transaction.account do %>
+                  <div class="font-medium truncate">{transaction.account.bank}</div>
+                  <div class="opacity-50 truncate">{transaction.account.name}</div>
+                <% else %>
+                  ...
+                <% end %>
+              </td>
+              <td class="w-24 px-4 text-right">
+                <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <%= if transaction.reimbursement_status do %>
+                    <div class="tooltip tooltip-left" data-tip="Remover Reembolso">
+                      <button
+                        type="button"
+                        phx-click="unmark_reimbursable"
+                        phx-value-id={transaction.id}
+                        class="btn btn-ghost btn-xs text-error"
+                      >
+                        <.icon name="hero-x-circle" class="size-3" />
+                      </button>
+                    </div>
+                  <% end %>
+
+                  <%= if Decimal.lt?(transaction.amount, 0) && is_nil(transaction.reimbursement_status) do %>
+                    <div class="tooltip tooltip-left" data-tip="Marcar como Reembolsável">
+                      <button
+                        type="button"
+                        phx-click="mark_reimbursable"
+                        phx-value-id={transaction.id}
+                        class="btn btn-ghost btn-xs text-primary"
+                      >
+                        <.icon name="hero-banknotes" class="size-3" />
+                      </button>
+                    </div>
+                  <% end %>
+                  <%= if Decimal.gt?(transaction.amount, 0) && is_nil(transaction.reimbursement_link_key) do %>
+                    <div class="tooltip tooltip-left" data-tip="Vincular Reembolso">
+                      <button
+                        type="button"
+                        phx-click="open_reimbursement_link"
+                        phx-value-id={transaction.id}
+                        class="btn btn-ghost btn-xs text-success"
+                      >
+                        <.icon name="hero-arrow-path" class="size-3" />
+                      </button>
+                    </div>
+                  <% end %>
+                  <%= if transaction.category && transaction.category.slug == "transfer" && is_nil(transaction.transfer_key) do %>
+                    <div class="tooltip tooltip-left" data-tip="Vincular Transferência">
+                      <button
+                        type="button"
+                        phx-click="open_transfer_link"
+                        phx-value-id={transaction.id}
+                        class="btn btn-ghost btn-xs text-primary"
+                      >
+                        <.icon name="hero-link" class="size-3" />
+                      </button>
+                    </div>
+                  <% end %>
+                  <div class="tooltip tooltip-left" data-tip="Editar">
+                    <.link
+                      patch={~p"/transactions/#{transaction}/edit"}
+                      class="btn btn-ghost btn-xs px-1"
+                    >
+                      <.icon name="hero-pencil" class="size-3" />
+                    </.link>
+                  </div>
+                  <div class="tooltip tooltip-left" data-tip="Excluir">
+                    <button
+                      type="button"
+                      phx-click="confirm_delete"
+                      phx-value-id={transaction.id}
+                      class="btn btn-ghost btn-xs text-error px-1"
+                    >
+                      <.icon name="hero-trash" class="size-3" />
+                    </button>
+                  </div>
+                  <div class="tooltip tooltip-left" data-tip="Notas">
+                    <button
+                      type="button"
+                      phx-click="open_notes"
+                      phx-value-id={transaction.id}
+                      class="btn btn-ghost btn-xs text-primary px-1"
+                    >
+                      <.icon name="hero-document-text" class="size-3" />
+                    </button>
+                  </div>
+
+                  <div class="dropdown dropdown-end">
+                    <div class="tooltip tooltip-left" data-tip="Grupo de Parcelamento">
+                      <button
+                        id={"installment-menu-#{transaction.id}"}
+                        tabindex="0"
+                        type="button"
+                        phx-click="load_installment_suggestion"
+                        phx-value-id={transaction.id}
+                        class={[
+                          "btn btn-ghost btn-xs px-1",
+                          if(transaction.installment_group_id,
+                            do: "text-primary",
+                            else: "opacity-40"
+                          )
+                        ]}
+                      >
+                        <.icon name="hero-rectangle-group" class="size-3" />
+                      </button>
+                    </div>
+                    <ul
+                      tabindex="0"
+                      class="dropdown-content z-[1] menu p-2 shadow-2xl bg-base-100 border border-base-300 rounded-box w-52"
+                    >
+                      <%= if transaction.installment_group_id do %>
+                        <li>
+                          <button
+                            phx-click="unlink_installment"
+                            phx-value-id={transaction.id}
+                            class="text-error"
+                          >
+                            <.icon name="hero-no-symbol" class="size-4" /> Desvincular Grupo
+                          </button>
+                        </li>
+                      <% else %>
+                        <%!--
+                            The suggestion is resolved by the LiveView when this
+                            menu is opened, never per row at render time.
+                          --%>
+                        <li
+                          :if={transaction.installment_suggestion == :not_loaded}
+                          class="border-b border-base-200 mb-1 pb-1"
+                        >
+                          <span class="text-[10px] opacity-50 italic">
+                            Buscando sugestão...
+                          </span>
+                        </li>
+                        <li
+                          :if={is_map(transaction.installment_suggestion)}
+                          class="border-b border-base-200 mb-1 pb-1"
+                        >
+                          <button
+                            phx-click="link_installment"
+                            phx-value-id={transaction.id}
+                            phx-value-group_id={transaction.installment_suggestion.group_id}
+                            class="bg-primary/10 text-primary font-black animate-pulse"
+                          >
+                            <.icon name="hero-sparkles" class="size-4" />
+                            Vincular a {transaction.installment_suggestion.group_name}? ({transaction.installment_suggestion.next_installment}/{transaction.installment_suggestion.total_installments})
+                          </button>
+                        </li>
+                        <li :for={group <- @installment_groups}>
+                          <button
+                            phx-click="link_installment"
+                            phx-value-id={transaction.id}
+                            phx-value-group_id={group.id}
+                          >
+                            {group.description_pattern}
+                          </button>
+                        </li>
+                        <li :if={Enum.empty?(@installment_groups)}>
+                          <span class="text-[10px] opacity-50 italic">
+                            Nenhum grupo encontrado
+                          </span>
+                        </li>
+                      <% end %>
+                    </ul>
+                  </div>
+                </div>
+              </td>
             </tr>
           </tbody>
         </table>

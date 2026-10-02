@@ -32,47 +32,6 @@ defmodule CashLens.TransactionsTest do
 
       assert Transactions.latest_transaction_date(account.id) == nil
     end
-
-    test "ignores leftover pluggy-sourced rows so they can't move the cutoff" do
-      account = account_fixture()
-
-      transaction_fixture(%{account_id: account.id, date: ~D[2026-01-10], amount: "-10"})
-
-      transaction_fixture(%{
-        account_id: account.id,
-        date: ~D[2026-05-01],
-        amount: "-20",
-        source: "pluggy"
-      })
-
-      assert Transactions.latest_transaction_date(account.id) == ~D[2026-01-10]
-    end
-  end
-
-  describe "latest_transaction_dates/0" do
-    import CashLens.AccountsFixtures
-    import CashLens.TransactionsFixtures
-
-    test "returns a map of latest transaction dates per account" do
-      acc1 = account_fixture()
-      acc2 = account_fixture()
-
-      transaction_fixture(%{account_id: acc1.id, date: ~D[2026-01-10], amount: "-10"})
-      transaction_fixture(%{account_id: acc1.id, date: ~D[2026-03-05], amount: "-20"})
-      transaction_fixture(%{account_id: acc2.id, date: ~D[2026-02-15], amount: "-30"})
-
-      transaction_fixture(%{
-        account_id: acc2.id,
-        date: ~D[2026-05-01],
-        amount: "-40",
-        source: "pluggy"
-      })
-
-      dates = Transactions.latest_transaction_dates()
-
-      assert Map.get(dates, acc1.id) == ~D[2026-03-05]
-      assert Map.get(dates, acc2.id) == ~D[2026-02-15]
-    end
   end
 
   describe "new-code coverage" do

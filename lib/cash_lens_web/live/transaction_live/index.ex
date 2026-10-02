@@ -4,11 +4,8 @@ defmodule CashLensWeb.TransactionLive.Index do
   alias CashLens.Accounts
   alias CashLens.Categories
   alias CashLens.Categories.Category
-  alias CashLens.Pluggy.LivePreview
-  alias CashLens.Pluggy.LivePreviewCache
   alias CashLens.Transactions
   alias CashLens.Transactions.CategorySuggester
-  alias CashLens.Transactions.PluggyMatcher
   alias CashLens.Transactions.Transaction
 
   @impl true
@@ -44,8 +41,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:filtered_count, nil)
      |> assign(:filters_active?, false)
      |> assign(:summary, Transactions.empty_filtered_summary())
-     |> assign(:pluggy_error, nil)
-     |> assign(:live_entries, [])
      |> assign(:transfer_pairs, %{})
      |> assign(:reimbursement_pairs, %{})
      |> assign(:reimbursement_pair_view, nil)
@@ -303,67 +298,6 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   @impl true
-  def handle_event("sync_pluggy", _params, socket) do
-    req_options = Application.get_env(:cash_lens, :pluggy_req_options, [])
-    alias CashLens.Pluggy
-    alias CashLens.Pluggy.Client
-
-    case fetch_pluggy_credentials() do
-      {:ok, client_id, client_secret} ->
-        case Client.auth(client_id, client_secret, req_options) do
-          {:ok, api_key} ->
-            results =
-              Enum.map(Pluggy.list_items(), fn item ->
-                with {:ok, accounts} <- Client.list_accounts(api_key, item.item_id, req_options) do
-                  Enum.each(accounts, fn account ->
-                    Pluggy.upsert_account_link(item, %{
-                      pluggy_account_id: account["id"],
-                      pluggy_account_name: account["name"],
-                      pluggy_account_type: account["type"],
-                      pluggy_balance: account["balance"]
-                    })
-                  end)
-
-                  {:ok, accounts}
-                end
-              end)
-
-            ok_count = Enum.count(results, &match?({:ok, _}, &1))
-            failed_count = length(results) - ok_count
-
-            LivePreviewCache.refresh_now(live_preview_cache())
-
-            items_count = length(Pluggy.list_items())
-
-            {flash_kind, message} =
-              cond do
-                items_count == 0 ->
-                  {:info, "Nenhum item Pluggy cadastrado."}
-
-                failed_count > 0 ->
-                  {:error,
-                   "Sincronização com Pluggy concluída com erros (#{ok_count} ok, #{failed_count} falharam)."}
-
-                true ->
-                  {:success, "Pluggy sincronizado com sucesso."}
-              end
-
-            {:noreply,
-             socket
-             |> put_flash(flash_kind, message)
-             |> refresh_transactions_page1(socket.assigns.filters)}
-
-          {:error, _reason} ->
-            {:noreply, put_flash(socket, :error, "Falha ao autenticar no Pluggy.")}
-        end
-
-      {:error, :missing_credentials} ->
-        {:noreply,
-         put_flash(socket, :error, "PLUGGY_CLIENT_ID/PLUGGY_CLIENT_SECRET não configurados.")}
-    end
-  end
-
-  @impl true
   def handle_event("open_quick_category", %{"name" => name, "id" => tx_id}, socket) do
     suggested_name = name |> String.split(" ") |> Enum.map_join(" ", &String.capitalize/1)
     new_category = %Category{name: suggested_name, default_reimbursable: false}
@@ -471,7 +405,7 @@ defmodule CashLensWeb.TransactionLive.Index do
         socket =
           socket
           |> assign(:pending_count, Transactions.count_pending_transactions())
-          |> recalculate_summary()
+          |> calculate_summary()
           |> put_flash(:success, flash_msg)
           |> handle_bulk_suggestion(updated_tx, category_id)
           |> stream_update_transaction(updated_tx)
@@ -718,7 +652,6 @@ defmodule CashLensWeb.TransactionLive.Index do
 
       items =
         Transactions.list_transactions(map_filters(socket.assigns.filters), next_page)
-        |> annotate_pluggy_categories()
 
       # A short page means the last row has been reached — stop before issuing
       # an extra empty query when the sentinel scrolls into view again.
@@ -757,7 +690,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:confirm_modal, nil)
      |> stream_delete(:transactions, transaction)
-     |> recalculate_summary()
+     |> calculate_summary()
      |> assign(:pending_count, Transactions.count_pending_transactions())}
   end
 
@@ -769,9 +702,6 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:confirm_modal, nil)
      |> stream(:transactions, [], reset: true)
-     # The stream reset also clears the live rows, so the summary must drop
-     # their contribution too — hence plain `calculate_summary/1` here.
-     |> assign(:live_entries, [])
      |> calculate_summary()
      |> assign(:pending_count, 0)}
   end
@@ -802,7 +732,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> put_flash(:success, message)
      |> insert_saved_transaction(transaction, action)
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> recalculate_summary()
+     |> calculate_summary()
      |> push_patch(to: ~p"/transactions")}
   end
 
@@ -877,7 +807,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> assign(:show_quick_category_modal, false)
       |> assign(:categories, Categories.list_categories())
       |> assign(:pending_count, Transactions.count_pending_transactions())
-      |> recalculate_summary()
+      |> calculate_summary()
       |> put_flash(:success, "Categoria criada!")
 
     bulk_items = get_bulk_items_for_tx(tx, category.id)
@@ -944,13 +874,12 @@ defmodule CashLensWeb.TransactionLive.Index do
     update(socket, :installment_suggestions, &Map.delete(&1, id))
   end
 
-  # Single-row convenience over CategorySuggester.annotate/1 and PluggyMatcher.annotate/2
-  # so streamed rows never lose their suggestion pill or pluggy category badge.
+  # Single-row convenience over CategorySuggester.annotate/1 so streamed rows
+  # never lose their suggestion pill.
   defp annotate_one(tx) do
     [tx] =
       [tx]
       |> CategorySuggester.annotate()
-      |> annotate_pluggy_categories()
 
     tx
   end
@@ -1094,249 +1023,22 @@ defmodule CashLensWeb.TransactionLive.Index do
     Enum.reduce(items, socket, fn item, acc -> stream_insert(acc, stream_name, item) end)
   end
 
-  defp live_preview_cache,
-    do: Application.get_env(:cash_lens, :pluggy_live_preview_cache, LivePreviewCache)
-
-  defp fetch_pluggy_credentials do
-    client_id = System.get_env("PLUGGY_CLIENT_ID")
-    client_secret = System.get_env("PLUGGY_CLIENT_SECRET")
-
-    if is_binary(client_id) and is_binary(client_secret) and client_id != "" and
-         client_secret != "" do
-      {:ok, client_id, client_secret}
-    else
-      {:error, :missing_credentials}
-    end
-  end
-
   defp refresh_transactions_page1(socket, filters) do
     db_transactions =
       Transactions.list_transactions(map_filters(filters), 1)
-      |> annotate_pluggy_categories()
-
-    {live_entries, pluggy_error} = live_preview_entries(filters)
 
     socket
     |> assign(:page, 1)
     |> assign(:end_of_list?, length(db_transactions) < page_size())
     |> assign(:transfer_pairs, %{})
     |> assign(:reimbursement_pairs, %{})
-    |> assign(:pluggy_error, pluggy_error)
-    |> assign(:live_entries, live_entries)
-    |> recalculate_summary()
+    |> calculate_summary()
     |> load_transfer_pairs(db_transactions)
     |> load_reimbursement_pairs(db_transactions)
     # `reset: true` is what keeps a filter change from appending to the
     # previous result set: page 1 replaces the stream wholesale.
     |> stream(:transactions, db_transactions, reset: true)
-    |> insert_live_entries(live_entries)
   end
-
-  defp annotate_pluggy_categories(transactions) do
-    all_cached_entries = safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
-    PluggyMatcher.annotate(transactions, all_cached_entries)
-  end
-
-  # Recomputes the summary INCLUDING the live entries currently on screen.
-  # Any handler that touches the totals without rebuilding the stream must use
-  # this instead of `calculate_summary/1`, otherwise the displayed total drops
-  # by the live entries' amount while their rows are still visible.
-  defp recalculate_summary(socket) do
-    socket
-    |> calculate_summary()
-    |> add_live_summary(socket.assigns.live_entries)
-  end
-
-  # Every live entry's date is newer than any already-persisted transaction
-  # for its account (see `LivePreview.from_date/1`), so they belong ahead of
-  # the real rows, not appended after them (`stream_insert/4`'s default).
-  # Inserting oldest-to-newest, each `at: 0`, lands them at the top in
-  # newest-first order, matching the real rows' own date-desc ordering.
-  defp insert_live_entries(socket, entries) do
-    entries
-    |> Enum.sort_by(& &1.date, {:asc, Date})
-    |> Enum.reduce(socket, fn entry, acc ->
-      stream_insert(acc, :transactions, entry, at: 0)
-    end)
-  end
-
-  defp add_live_summary(socket, []), do: socket
-
-  # A live entry carries an `account_id` but no `is_credit_card`, so its own
-  # account decides which group it joins — cards when the account is a credit
-  # card, cash otherwise (including when the account cannot be resolved, the
-  # same default `Transactions.get_filtered_summary/1` applies). The entry also
-  # bumps its group's `count`, without which a filter matching only live
-  # entries would leave the group at zero rows and the template would omit it,
-  # hiding figures whose rows are visible in the table right below.
-  defp add_live_summary(socket, live_entries) do
-    card_account_ids = card_account_ids(socket.assigns.accounts)
-
-    grouped =
-      Enum.group_by(live_entries, fn entry ->
-        if MapSet.member?(card_account_ids, entry.account_id), do: :cards, else: :cash
-      end)
-
-    update(socket, :summary, fn summary ->
-      Enum.reduce(grouped, summary, fn {group, entries}, acc ->
-        Map.update!(acc, group, &add_entries_to_group(&1, entries))
-      end)
-    end)
-  end
-
-  defp card_account_ids(accounts) do
-    accounts
-    |> Enum.filter(& &1.is_credit_card)
-    |> MapSet.new(& &1.id)
-  end
-
-  defp add_entries_to_group(group, entries) do
-    income =
-      entries
-      |> Enum.filter(&Decimal.positive?(&1.amount))
-      |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, &1.amount))
-
-    expenses =
-      entries
-      |> Enum.filter(&Decimal.negative?(&1.amount))
-      |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, Decimal.abs(&1.amount)))
-
-    %{
-      income: Decimal.add(group.income, income),
-      expenses: Decimal.add(group.expenses, expenses),
-      count: group.count + length(entries)
-    }
-  end
-
-  # Filters a live entry cannot structurally satisfy (category, reimbursement
-  # status, unmatched-transfers, amount — whose matching semantics live in the
-  # DB query) or that navigate away from "now" (month/year — a live entry only
-  # ever reflects the current period, so showing it under a past/future month
-  # view would be actively wrong, not just unfiltered):
-  # if any of these are active, live entries are excluded entirely rather
-  # than guessed at. Returns `{live_entries, pluggy_error}` where
-  # `pluggy_error` is `nil` on a healthy cache, or `{reason, last_success_at}`
-  # when the last refresh failed.
-  defp live_preview_entries(filters) do
-    case safe_cache(fn -> live_preview_cache().get_status() end, :unavailable) do
-      {:ok, _at} ->
-        {matching_live_entries(filters), nil}
-
-      {:error, reason, last_success_at} ->
-        {[], banner_error(reason, last_success_at)}
-
-      :unavailable ->
-        {[], nil}
-    end
-  end
-
-  # The cache is an optional, best-effort component (and is deliberately not
-  # started at all in `:test`). If it isn't running, the Transactions page
-  # must still render — showing only persisted rows, with no scary banner —
-  # rather than crashing the LiveView.
-  defp safe_cache(fun, default) do
-    fun.()
-  catch
-    :exit, _reason -> default
-  end
-
-  # A red, non-dismissing banner is for "something broke", not for "there is
-  # nothing to show yet". Suppress it when no account is even linked to
-  # Pluggy, and when the only reason is un-configured credentials or a
-  # first refresh that hasn't landed yet with no prior success to lose.
-  defp banner_error(reason, last_success_at) do
-    cond do
-      CashLens.Pluggy.list_linked_account_links() == [] -> nil
-      last_success_at == nil and reason in [:missing_credentials, :not_yet_fetched] -> nil
-      true -> {reason, last_success_at}
-    end
-  end
-
-  # User-facing Portuguese text for every reason the banner can actually
-  # reach — never a raw `inspect/1` of an Elixir term.
-  defp pluggy_error_message(:missing_credentials),
-    do: "credenciais do Pluggy não configuradas"
-
-  defp pluggy_error_message(:not_yet_fetched),
-    do: "ainda não houve uma primeira atualização"
-
-  defp pluggy_error_message({:exception, message}),
-    do: "erro inesperado (#{message})"
-
-  defp pluggy_error_message({:exit, _reason}),
-    do: "a atualização foi interrompida antes de terminar"
-
-  defp pluggy_error_message(_reason),
-    do: "falha ao comunicar com o Pluggy"
-
-  defp matching_live_entries(filters) do
-    if incompatible_filters_active?(filters) do
-      []
-    else
-      filters
-      |> live_entries_for_account_filter()
-      |> LivePreview.filter_temporary_entries()
-      |> Enum.filter(&matches_live_entry_filters?(&1, filters))
-    end
-  end
-
-  defp live_entries_for_account_filter(%{"account_id" => account_id})
-       when account_id not in [nil, ""] do
-    safe_cache(fn -> live_preview_cache().get_entries(account_id) end, [])
-  end
-
-  defp live_entries_for_account_filter(_filters),
-    do: safe_cache(fn -> live_preview_cache().get_all_entries() end, [])
-
-  @live_entry_incompatible_filters ~w(category_id reimbursement_status month year amount)
-
-  defp incompatible_filters_active?(filters) do
-    filters["unmatched_transfers"] == "true" or
-      Enum.any?(@live_entry_incompatible_filters, &((filters[&1] || "") != ""))
-  end
-
-  defp matches_live_entry_filters?(entry, filters) do
-    matches_live_search?(entry, filters["search"]) and
-      matches_live_date?(entry, filters["date"]) and
-      matches_live_date_range?(entry, filters["date_from"], filters["date_to"]) and
-      matches_live_type?(entry, filters["type"])
-  end
-
-  defp matches_live_search?(_entry, search) when search in [nil, ""], do: true
-
-  defp matches_live_search?(entry, search) do
-    String.contains?(String.downcase(entry.description), String.downcase(search))
-  end
-
-  defp matches_live_date?(_entry, date) when date in [nil, ""], do: true
-
-  defp matches_live_date?(entry, date) do
-    case Date.from_iso8601(date) do
-      {:ok, parsed} -> Date.compare(entry.date, parsed) == :eq
-      _ -> true
-    end
-  end
-
-  defp matches_live_date_range?(_entry, from, _to) when from in [nil, ""], do: true
-  defp matches_live_date_range?(_entry, _from, to) when to in [nil, ""], do: true
-
-  defp matches_live_date_range?(entry, from, to) do
-    with {:ok, date_from} <- Date.from_iso8601(from),
-         {:ok, date_to} <- Date.from_iso8601(to) do
-      Date.compare(entry.date, date_from) != :lt and Date.compare(entry.date, date_to) != :gt
-    else
-      _ -> true
-    end
-  end
-
-  defp matches_live_type?(_entry, type) when type not in ["debit", "expense", "credit", "income"],
-    do: true
-
-  defp matches_live_type?(entry, type) when type in ["debit", "expense"],
-    do: Decimal.negative?(entry.amount)
-
-  defp matches_live_type?(entry, type) when type in ["credit", "income"],
-    do: Decimal.positive?(entry.amount)
 
   defp calculate_summary(socket) do
     mapped = map_filters(socket.assigns.filters)

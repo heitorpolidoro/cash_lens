@@ -1,0 +1,144 @@
+diff --git a/lib/cash_lens/pluggy/live_preview.ex b/lib/cash_lens/pluggy/live_preview.ex
+index 8a2bc05..7d7d398 100644
+--- a/lib/cash_lens/pluggy/live_preview.ex
++++ b/lib/cash_lens/pluggy/live_preview.ex
+@@ -22,13 +22,12 @@ defmodule CashLens.Pluggy.LivePreview do
+   @default_lookback_days 90
+ 
+   @doc """
+-  Fetches every linked account's transactions from that account's own
+-  latest stored transaction date (or #{@default_lookback_days} days back if
+-  it has none) through today. Returns `{:ok, %{account_id => [Entry.t()]}}`
+-  with every linked account present as a key — an account whose own fetch
+-  failed contributes `[]`, it does not fail the whole call. Only a total
+-  failure (bad/missing credentials, can't authenticate at all) returns
+-  `{:error, reason}`.
++  Fetches every linked account's transactions from the lookback window
++  (#{@default_lookback_days} days back through today). Returns
++  `{:ok, %{account_id => [Entry.t()]}}` with every linked account present as a
++  key — an account whose own fetch failed contributes `[]`, it does not fail
++  the whole call. Only a total failure (bad/missing credentials, can't
++  authenticate at all) returns `{:error, reason}`.
+   """
+   @spec fetch_all(keyword()) :: {:ok, %{Ecto.UUID.t() => [Entry.t()]}} | {:error, term()}
+   def fetch_all(req_options \\ default_req_options()) do
+@@ -45,6 +44,23 @@ defmodule CashLens.Pluggy.LivePreview do
+     end
+   end
+ 
++  @doc """
++  Filters cached Pluggy entries to only those that represent temporary
++  transactions (i.e. dated strictly after the account's latest persisted
++  transaction).
++  """
++  @spec filter_temporary_entries([Entry.t()], %{Ecto.UUID.t() => Date.t()} | nil) :: [Entry.t()]
++  def filter_temporary_entries(entries, latest_dates_by_account_id \\ nil) do
++    latest_dates = latest_dates_by_account_id || Transactions.latest_transaction_dates()
++
++    Enum.filter(entries, fn entry ->
++      case Map.get(latest_dates, entry.account_id) do
++        nil -> true
++        latest_date -> Date.compare(entry.date, latest_date) == :gt
++      end
++    end)
++  end
++
+   defp fetch_account_entries(link, api_key, req_options) do
+     from_date = from_date(link.account_id)
+ 
+@@ -62,16 +78,8 @@ defmodule CashLens.Pluggy.LivePreview do
+     end
+   end
+ 
+-  # The client-side date filter is inclusive (`date >= from_date`), so using
+-  # the latest stored date verbatim would re-fetch — and re-render as a
+-  # "temporary" duplicate — every transaction already persisted on that day.
+-  # Start from the day after instead. With no stored transactions at all
+-  # there is no such boundary, so the plain lookback window applies.
+-  defp from_date(account_id) do
+-    case Transactions.latest_transaction_date(account_id) do
+-      nil -> Date.add(Date.utc_today(), -@default_lookback_days)
+-      date -> Date.add(date, 1)
+-    end
++  defp from_date(_account_id) do
++    Date.add(Date.utc_today(), -@default_lookback_days)
+   end
+ 
+   # A single malformed transaction must not abort the whole account's
+diff --git a/test/cash_lens/pluggy/live_preview_test.exs b/test/cash_lens/pluggy/live_preview_test.exs
+index dab0e5c..fa4f630 100644
+--- a/test/cash_lens/pluggy/live_preview_test.exs
++++ b/test/cash_lens/pluggy/live_preview_test.exs
+@@ -68,11 +68,17 @@ defmodule CashLens.Pluggy.LivePreviewTest do
+       assert entry.pluggy_category == "Supermarket"
+     end
+ 
+-    test "fetches from the account's latest transaction date, not a fixed lookback", %{
+-      req_options: req_options
+-    } do
++    test "fetches all entries within lookback window and filter_temporary_entries filters by latest date",
++         %{
++           req_options: req_options
++         } do
+       account = account_fixture()
+-      transaction_fixture(%{account_id: account.id, date: ~D[2026-06-01], amount: "-10"})
++      today = Date.utc_today()
++      d_before = Date.add(today, -20)
++      d_boundary = Date.add(today, -10)
++      d_after = Date.add(today, -5)
++
++      transaction_fixture(%{account_id: account.id, date: d_boundary, amount: "-10"})
+ 
+       item = pluggy_item_fixture()
+ 
+@@ -95,7 +101,7 @@ defmodule CashLens.Pluggy.LivePreviewTest do
+               "results" => [
+                 %{
+                   "id" => "tx-before",
+-                  "date" => "2026-05-15T10:00:00.000Z",
++                  "date" => "#{d_before}T10:00:00.000Z",
+                   "description" => "BEFORE CUTOFF",
+                   "amount" => -50.0,
+                   "type" => "DEBIT",
+@@ -103,7 +109,7 @@ defmodule CashLens.Pluggy.LivePreviewTest do
+                 },
+                 %{
+                   "id" => "tx-on-boundary",
+-                  "date" => "2026-06-01T14:00:00.000Z",
++                  "date" => "#{d_boundary}T14:00:00.000Z",
+                   "description" => "ON BOUNDARY",
+                   "amount" => -25.0,
+                   "type" => "DEBIT",
+@@ -111,7 +117,7 @@ defmodule CashLens.Pluggy.LivePreviewTest do
+                 },
+                 %{
+                   "id" => "tx-after",
+-                  "date" => "2026-06-02T14:00:00.000Z",
++                  "date" => "#{d_after}T14:00:00.000Z",
+                   "description" => "AFTER CUTOFF",
+                   "amount" => -25.0,
+                   "type" => "DEBIT",
+@@ -126,15 +132,14 @@ defmodule CashLens.Pluggy.LivePreviewTest do
+       {:ok, entries_by_account} = LivePreview.fetch_all(req_options)
+       entries = entries_by_account[link.account_id]
+ 
+-      # Only transactions AFTER the latest_transaction_date (2026-06-01) are
+-      # included. If from_date used the 90-day fallback instead of the account's
+-      # own latest date, "BEFORE CUTOFF" would be included too. And because the
+-      # underlying date filter is inclusive, a transaction dated exactly on the
+-      # latest stored date would be re-fetched and shown a second time as a
+-      # "temporary" duplicate — hence the cutoff is latest_date + 1 day.
+-      assert length(entries) == 1
+-      assert hd(entries).description == "AFTER CUTOFF"
+-      assert hd(entries).id == "pluggy-preview-tx-after"
++      # All 3 entries within the lookback window are preserved in the cache
++      assert length(entries) == 3
++
++      # filter_temporary_entries filters down to only entries strictly after latest_transaction_date
++      temp_entries = LivePreview.filter_temporary_entries(entries)
++      assert length(temp_entries) == 1
++      assert hd(temp_entries).description == "AFTER CUTOFF"
++      assert hd(temp_entries).id == "pluggy-preview-tx-after"
+     end
+ 
+     test "one account's fetch failure yields an empty list for it without affecting others", %{

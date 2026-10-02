@@ -910,9 +910,7 @@ defmodule CashLens.Transactions do
   Returns the most recent transaction date for `account_id`, or `nil` if the
   account has no transactions at all.
 
-  Only permanently-persisted rows (`source` of `"file"` or `"manual"`) count:
-  a leftover `"pluggy"` row from the old persist-based sync must not move the
-  live-preview fetch cutoff.
+  Only permanently-persisted rows (`source` of `"file"` or `"manual"`) count.
   """
   @spec latest_transaction_date(Ecto.UUID.t()) :: Date.t() | nil
   def latest_transaction_date(account_id) do

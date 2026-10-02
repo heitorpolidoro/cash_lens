@@ -42,11 +42,6 @@ defmodule CashLensWeb.AccountLive.Index do
               /> Mostrar contas encerradas
             </label>
           </form>
-          <.link navigate={~p"/pluggy"}>
-            <.button>
-              <.icon name="hero-building-library" class="mr-1" /> Pluggy
-            </.button>
-          </.link>
           <.link patch={~p"/accounts/new"}>
             <.button variant="primary">
               <.icon name="hero-plus" class="mr-1" /> Nova Conta

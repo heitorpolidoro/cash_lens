@@ -35,7 +35,6 @@ defmodule CashLens.Transactions.Transaction do
     # asked for yet", `nil` means "asked for, nothing to suggest".
     field :installment_suggestion, :any, virtual: true, default: :not_loaded
     field :notes, :string
-    field :pluggy_category, :string
     field :source, :string
     field :installment_number, :integer
     field :parent_transaction_id, :binary_id
@@ -64,7 +63,6 @@ defmodule CashLens.Transactions.Transaction do
       :reimbursement_carrier,
       :reimbursement_protocol,
       :notes,
-      :pluggy_category,
       :source,
       :installment_group_id,
       :installment_number,
@@ -74,7 +72,7 @@ defmodule CashLens.Transactions.Transaction do
     ])
     |> validate_required([:date, :description, :amount, :account_id])
     |> put_default_source()
-    |> validate_inclusion(:source, ["file", "pluggy", "manual"])
+    |> validate_inclusion(:source, ["file", "manual"])
     |> put_dedup_key()
     |> generate_fingerprint()
     |> unique_constraint(:fingerprint)
