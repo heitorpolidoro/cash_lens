@@ -495,6 +495,7 @@ defmodule CashLens.Parsers.IngestorTest do
 
   describe "duplicate-safe re-import" do
     import CashLens.AccountsFixtures
+    import Ecto.Query
     alias CashLens.Transactions.Transaction
 
     test "importing the same OFX fatura twice yields no duplicates and reports skips" do
@@ -514,6 +515,42 @@ defmodule CashLens.Parsers.IngestorTest do
       assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, file_path)
       assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, file_path)
 
+      assert Repo.aggregate(Transaction, :count) == 2
+    end
+
+    test "re-importing a card statement stamps the rows that already existed" do
+      account = account_fixture(parser_type: "ourocard_ofx", is_credit_card: true)
+
+      ofx = """
+      <STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260415</DTPOSTED>
+      <TRNAMT>-66.00</TRNAMT><MEMO>VALE EVENTOS   SAO PAULO  BR</MEMO></STMTTRN>
+      <STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20260416</DTPOSTED>
+      <TRNAMT>-12.50</TRNAMT><MEMO>PADARIA SAO JOSE</MEMO></STMTTRN>
+      """
+
+      file_path = "test/support/fixtures/files/restamp_#{account.id}.ofx"
+      File.write!(file_path, ofx)
+      on_exit(fn -> File.rm(file_path) end)
+
+      assert {:ok, %{imported: 2}} = Ingestor.import_file(account, file_path)
+
+      # Orphan the rows, reproducing a statement imported before the file was
+      # re-run: the transactions exist, no statement claims them.
+      Repo.update_all(Transaction, set: [import_batch_id: nil])
+
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, file_path)
+
+      statements = Repo.all(CashLens.CreditCards.Statement)
+      latest = Enum.max_by(statements, & &1.inserted_at)
+
+      stamped =
+        Repo.aggregate(
+          from(t in Transaction, where: t.import_batch_id == ^latest.id),
+          :count
+        )
+
+      # Both rows belong to the cycle, even though neither was inserted.
+      assert stamped == 2
       assert Repo.aggregate(Transaction, :count) == 2
     end
 

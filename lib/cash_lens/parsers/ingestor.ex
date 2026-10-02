@@ -448,6 +448,12 @@ defmodule CashLens.Parsers.Ingestor do
     # which lets the caller compute how many input rows were skipped as duplicates.
     {count, inserted_transactions} = batch_insert_transactions(entries)
 
+    # `insert_all` drops conflicting rows silently, so a re-import of a
+    # statement whose transactions already exist stamps nothing: the statement
+    # is created and every one of its lines stays orphaned. Those rows are
+    # known by the fingerprints that conflicted, so they are stamped here.
+    statement_lines = claim_existing_lines(entries, inserted_transactions, statement_id)
+
     # 3. Apply transfer rules for newly inserted transactions, creating mirrors as needed
     mirror_transactions = TransferRuleApplier.apply_rules(inserted_transactions)
 
@@ -457,8 +463,11 @@ defmodule CashLens.Parsers.Ingestor do
       statement = CashLens.CreditCards.get_statement!(statement_id)
       CashLens.CreditCards.absorb_pending(statement)
 
+      # The cycle's total is every line of the statement, not only the rows
+      # this run happened to insert. Summing the inserted ones alone made a
+      # re-import see a near-empty cycle and match against the wrong figure.
       line_total =
-        Enum.reduce(inserted_transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
+        Enum.reduce(statement_lines, Decimal.new(0), &Decimal.add(&2, &1.amount))
 
       CashLens.CreditCards.Matcher.auto_link(statement, line_total)
     end
@@ -573,6 +582,42 @@ defmodule CashLens.Parsers.Ingestor do
   end
 
   defp log_record_failure(other, _file_path), do: other
+
+  # Stamps the statement onto the rows this run could not insert because they
+  # already existed, and returns every line the statement now covers (inserted
+  # plus claimed). Returns the inserted rows unchanged for a regular account,
+  # where there is no statement to stamp.
+  defp claim_existing_lines(_entries, inserted, nil), do: inserted
+
+  defp claim_existing_lines(entries, inserted, statement_id) do
+    inserted_ids = MapSet.new(inserted, & &1.id)
+
+    skipped_fingerprints =
+      entries
+      |> Enum.reject(&MapSet.member?(inserted_ids, &1.id))
+      |> Enum.map(& &1.fingerprint)
+
+    claimed =
+      if skipped_fingerprints == [] do
+        []
+      else
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        {_count, rows} =
+          from(t in Transaction,
+            where: t.fingerprint in ^skipped_fingerprints,
+            select: t
+          )
+          |> CashLens.Repo.update_all(
+            [set: [import_batch_id: statement_id, updated_at: now]],
+            returning: true
+          )
+
+        rows
+      end
+
+    inserted ++ claimed
+  end
 
   defp batch_insert_transactions(entries) do
     CashLens.Repo.insert_all(
