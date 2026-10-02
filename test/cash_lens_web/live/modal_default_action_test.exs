@@ -23,7 +23,8 @@ defmodule CashLensWeb.ModalDefaultActionTest do
   @allowed_marks %{
     "lib/cash_lens_web/live/transaction_live/index.html.heex" => 2,
     "lib/cash_lens_web/live/reimbursement_live/index.ex" => 1,
-    "lib/cash_lens_web/live/import_live/index.ex" => 1
+    "lib/cash_lens_web/live/import_live/index.ex" => 1,
+    "lib/cash_lens_web/live/credit_card_statement_live/index.ex" => 1
   }
 
   describe "the shared modal component" do

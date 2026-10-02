@@ -300,6 +300,67 @@ defmodule CashLens.CreditCards do
     end)
   end
 
+  @manual_source "manual"
+
+  @doc """
+  The `source_file` value marking a statement typed by hand rather than parsed
+  from a file.
+  """
+  def manual_source, do: @manual_source
+
+  @doc """
+  Creates a statement from typed values, with its cycle lines, and offers it to
+  the auto-matcher.
+
+  `lines` is a list of `%{date, description, amount}`, each stored as a
+  transaction on the card's own account and stamped with the new statement's
+  id, exactly as an imported cycle would be. The whole thing is one
+  transaction: a bad line leaves no half-made statement behind.
+
+  Exists because a bank app will refuse to produce a PDF for a small or
+  negative bill, which leaves the payment in the account with nothing to
+  reconcile against.
+  """
+  def create_manual_statement(attrs, lines \\ []) do
+    Multi.new()
+    |> Multi.run(:statement, fn _repo, _ ->
+      attrs
+      |> Map.put(:source_file, @manual_source)
+      |> create_statement()
+    end)
+    |> Multi.run(:lines, fn _repo, %{statement: statement} ->
+      insert_manual_lines(statement, lines)
+    end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{statement: statement, lines: inserted}} ->
+        line_total = Enum.reduce(inserted, Decimal.new(0), &Decimal.add(&2, &1.amount))
+        CashLens.CreditCards.Matcher.auto_link(statement, line_total)
+        {:ok, Repo.get!(Statement, statement.id)}
+
+      {:error, _step, reason, _} ->
+        {:error, reason}
+    end
+  end
+
+  defp insert_manual_lines(_statement, []), do: {:ok, []}
+
+  defp insert_manual_lines(statement, lines) do
+    Enum.reduce_while(lines, {:ok, []}, fn line, {:ok, acc} ->
+      attrs =
+        line
+        |> Map.put(:account_id, statement.account_id)
+        |> Map.put(:import_batch_id, statement.id)
+        |> Map.put(:source, "manual")
+
+      case CashLens.Transactions.create_transaction(attrs) do
+        {:ok, :duplicate} -> {:cont, {:ok, acc}}
+        {:ok, transaction} -> {:cont, {:ok, [transaction | acc]}}
+        {:error, changeset} -> {:halt, {:error, changeset}}
+      end
+    end)
+  end
+
   @doc """
   Gaps worth acting on, over the statement entries given.
 

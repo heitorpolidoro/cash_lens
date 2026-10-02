@@ -10,6 +10,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
   alias CashLens.CreditCards
   alias CashLens.CreditCards.Statement
   alias CashLens.Repo
+  import Ecto.Query
   alias CashLens.Transactions.Transaction
 
   defp card_account(name), do: account_fixture(%{is_credit_card: true, name: name})
@@ -268,6 +269,143 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       {:ok, _view, html} = live(conn, ~p"/statements")
 
       refute html =~ ~s(data-role="gap-missing")
+    end
+  end
+
+  describe "manual statement" do
+    setup do
+      payment_category()
+      %{card: card_account("Nubank"), bank: account_fixture(%{name: "Conta"})}
+    end
+
+    test "creates a statement with its lines and marks it manual", %{conn: conn, card: card} do
+      {:ok, view, _html} = live(conn, ~p"/statements")
+
+      view |> element("button[phx-click='new_statement']") |> render_click()
+
+      html =
+        view
+        |> form("#new-statement-modal form", %{
+          "account_id" => card.id,
+          "competencia" => "2026-09",
+          "due_date" => "2026-09-15",
+          "total_a_pagar" => "80,50",
+          "lines" => %{
+            "0" => %{
+              "date" => "2026-09-02",
+              "description" => "COMPRA TESTE",
+              "amount" => "80,50",
+              "kind" => "compra"
+            }
+          }
+        })
+        |> render_submit()
+
+      assert html =~ "Fatura criada."
+
+      statement = Repo.one!(from(s in Statement, where: s.account_id == ^card.id))
+      assert statement.source_file == "manual"
+      assert statement.competencia == ~D[2026-09-01]
+      assert Decimal.equal?(statement.total_a_pagar, "80.50")
+
+      line = Repo.one!(from(t in Transaction, where: t.import_batch_id == ^statement.id))
+      assert line.description == "COMPRA TESTE"
+      # A purchase is stored negative on the card, from the "Compra" kind.
+      assert Decimal.equal?(line.amount, "-80.50")
+      assert line.account_id == card.id
+    end
+
+    test "a Crédito line is stored positive", %{conn: conn, card: card} do
+      {:ok, view, _html} = live(conn, ~p"/statements")
+      view |> element("button[phx-click='new_statement']") |> render_click()
+
+      view
+      |> form("#new-statement-modal form", %{
+        "account_id" => card.id,
+        "competencia" => "2026-09",
+        "due_date" => "2026-09-15",
+        "total_a_pagar" => "10,00",
+        "lines" => %{
+          "0" => %{
+            "date" => "2026-09-02",
+            "description" => "ESTORNO",
+            "amount" => "25,00",
+            "kind" => "credito"
+          }
+        }
+      })
+      |> render_submit()
+
+      statement = Repo.one!(from(s in Statement, where: s.account_id == ^card.id))
+      line = Repo.one!(from(t in Transaction, where: t.import_batch_id == ^statement.id))
+      assert Decimal.equal?(line.amount, "25.00")
+    end
+
+    test "refuses a statement with neither competência nor due date", %{conn: conn, card: card} do
+      {:ok, view, _html} = live(conn, ~p"/statements")
+      view |> element("button[phx-click='new_statement']") |> render_click()
+
+      html =
+        view
+        |> form("#new-statement-modal form", %{
+          "account_id" => card.id,
+          "competencia" => "",
+          "due_date" => "",
+          "total_a_pagar" => "10,00"
+        })
+        |> render_submit()
+
+      assert html =~ "Informe a competência ou o vencimento"
+      assert Repo.aggregate(Statement, :count) == 0
+    end
+
+    test "refuses a statement with no card", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/statements")
+      view |> element("button[phx-click='new_statement']") |> render_click()
+
+      html =
+        view
+        |> form("#new-statement-modal form", %{
+          "account_id" => "",
+          "competencia" => "2026-09",
+          "total_a_pagar" => "10,00"
+        })
+        |> render_submit()
+
+      assert html =~ "Escolha o cartão"
+      assert Repo.aggregate(Statement, :count) == 0
+    end
+
+    test "an existing payment of the exact amount is linked on creation", %{
+      conn: conn,
+      card: card,
+      bank: bank
+    } do
+      category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      payment =
+        transaction_fixture(%{
+          account_id: bank.id,
+          category_id: category.id,
+          amount: "-80.50",
+          date: ~D[2026-09-15],
+          description: "PAGTO FATURA"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/statements")
+      view |> element("button[phx-click='new_statement']") |> render_click()
+
+      view
+      |> form("#new-statement-modal form", %{
+        "account_id" => card.id,
+        "competencia" => "2026-09",
+        "due_date" => "2026-09-15",
+        "total_a_pagar" => "80,50"
+      })
+      |> render_submit()
+
+      statement = Repo.one!(from(s in Statement, where: s.account_id == ^card.id))
+      assert statement.payment_transaction_id == payment.id
     end
   end
 

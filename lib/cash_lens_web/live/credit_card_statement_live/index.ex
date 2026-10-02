@@ -13,6 +13,9 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
      |> assign(:selected, nil)
      |> assign(:suggestion, nil)
      |> assign(:candidates, [])
+     |> assign(:new_statement, nil)
+     |> assign(:new_lines, [])
+     |> assign(:new_error, nil)
      |> assign(:search, "")
      |> assign(:card_filter, "")
      |> assign(:status_filter, "")
@@ -33,6 +36,74 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   end
 
   @impl true
+  def handle_event("new_statement", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:new_statement, %{
+       "account_id" => "",
+       "competencia" => "",
+       "due_date" => "",
+       "total_a_pagar" => ""
+     })
+     |> assign(:new_lines, [blank_line()])
+     |> assign(:new_error, nil)}
+  end
+
+  def handle_event("close_new", _params, socket) do
+    {:noreply, socket |> assign(:new_statement, nil) |> assign(:new_error, nil)}
+  end
+
+  def handle_event("add_line", _params, socket) do
+    {:noreply, assign(socket, :new_lines, socket.assigns.new_lines ++ [blank_line()])}
+  end
+
+  def handle_event("remove_line", %{"index" => index}, socket) do
+    i = String.to_integer(index)
+    {:noreply, assign(socket, :new_lines, List.delete_at(socket.assigns.new_lines, i))}
+  end
+
+  def handle_event("validate_new", params, socket) do
+    {:noreply,
+     socket
+     |> assign(
+       :new_statement,
+       Map.take(params, ~w(account_id competencia due_date total_a_pagar))
+     )
+     |> assign(:new_lines, lines_from_params(params))}
+  end
+
+  def handle_event("save_new", params, socket) do
+    header = Map.take(params, ~w(account_id competencia due_date total_a_pagar))
+    lines = lines_from_params(params)
+
+    case build_manual_attrs(header) do
+      {:error, message} ->
+        {:noreply,
+         socket
+         |> assign(:new_statement, header)
+         |> assign(:new_lines, lines)
+         |> assign(:new_error, message)}
+
+      {:ok, attrs} ->
+        case CreditCards.create_manual_statement(attrs, build_manual_lines(lines)) do
+          {:ok, _statement} ->
+            {:noreply,
+             socket
+             |> assign(:new_statement, nil)
+             |> assign(:new_error, nil)
+             |> put_flash(:info, "Fatura criada.")
+             |> load_statements()}
+
+          {:error, _reason} ->
+            {:noreply,
+             socket
+             |> assign(:new_statement, header)
+             |> assign(:new_lines, lines)
+             |> assign(:new_error, "Não foi possível criar a fatura. Revise os valores.")}
+        end
+    end
+  end
+
   def handle_event("filter", params, socket) do
     {:noreply,
      socket
@@ -45,6 +116,9 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   def handle_event("clear_filters", _params, socket) do
     {:noreply,
      socket
+     |> assign(:new_statement, nil)
+     |> assign(:new_lines, [])
+     |> assign(:new_error, nil)
      |> assign(:search, "")
      |> assign(:card_filter, "")
      |> assign(:status_filter, "")
@@ -119,13 +193,96 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     |> assign(:entries, entries)
     |> assign(:metrics, CreditCards.hub_metrics(entries))
     |> assign(:gaps, CreditCards.statement_gaps(entries))
-    |> assign(
-      :cards,
-      entries |> Enum.map(& &1.account) |> Enum.uniq_by(& &1.id) |> Enum.sort_by(& &1.name)
-    )
+    # Every credit-card account, not just those that already have a statement:
+    # the whole point of "Nova fatura" is the card that has none.
+    |> assign(:cards, CashLens.Accounts.list_credit_cards() |> Enum.sort_by(& &1.name))
     |> assign(:suggestions, current_suggestions(card_groups))
     |> assign(:unlinked_payments, CreditCards.unlinked_card_payments())
     |> apply_filters()
+  end
+
+  defp blank_line, do: %{"date" => "", "description" => "", "amount" => "", "kind" => "compra"}
+
+  defp lines_from_params(params) do
+    params
+    |> Map.get("lines", %{})
+    |> Enum.sort_by(fn {index, _} -> String.to_integer(index) end)
+    |> Enum.map(fn {_index, line} -> line end)
+  end
+
+  # A statement needs the card and at least one of competência/vencimento --
+  # `create_statement/1` keys its "already exists?" check on them, so without
+  # either every save would create another row.
+  defp build_manual_attrs(%{"account_id" => ""}), do: {:error, "Escolha o cartão."}
+
+  defp build_manual_attrs(header) do
+    competencia = parse_month(header["competencia"])
+    due_date = parse_date(header["due_date"])
+
+    if is_nil(competencia) and is_nil(due_date) do
+      {:error, "Informe a competência ou o vencimento."}
+    else
+      {:ok,
+       %{
+         account_id: header["account_id"],
+         competencia: competencia,
+         due_date: due_date,
+         total_a_pagar: parse_decimal(header["total_a_pagar"])
+       }}
+    end
+  end
+
+  defp build_manual_lines(lines) do
+    lines
+    |> Enum.map(fn line ->
+      %{
+        date: parse_date(line["date"]),
+        description: String.trim(line["description"] || ""),
+        amount: signed_amount(line)
+      }
+    end)
+    |> Enum.filter(&(&1.date && &1.description != "" && &1.amount))
+  end
+
+  # The form asks what the line IS rather than making the operator remember
+  # that a purchase is stored negative on a card.
+  defp signed_amount(line) do
+    case parse_decimal(line["amount"]) do
+      nil ->
+        nil
+
+      value ->
+        if line["kind"] == "credito",
+          do: Decimal.abs(value),
+          else: Decimal.negate(Decimal.abs(value))
+    end
+  end
+
+  defp parse_month(value) when value in [nil, ""], do: nil
+
+  defp parse_month(value) do
+    case Date.from_iso8601(value <> "-01") do
+      {:ok, date} -> date
+      _ -> nil
+    end
+  end
+
+  defp parse_date(value) when value in [nil, ""], do: nil
+
+  defp parse_date(value) do
+    case Date.from_iso8601(value) do
+      {:ok, date} -> date
+      _ -> nil
+    end
+  end
+
+  defp parse_decimal(value) when value in [nil, ""], do: nil
+
+  defp parse_decimal(value) do
+    case value |> to_string() |> String.replace(",", ".") |> Decimal.parse() do
+      {decimal, _} -> decimal
+      :error -> nil
+    end
   end
 
   # The table is filtered in memory: the whole statement list is already loaded
@@ -297,14 +454,19 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                   length(@visible_entries) != length(@entries)
                 }> de {length(@entries)}</span>)
               </h2>
-              <button
-                :if={@search != "" or @card_filter != "" or @status_filter != ""}
-                type="button"
-                phx-click="clear_filters"
-                class="btn btn-ghost btn-xs"
-              >
-                Limpar filtros
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  :if={@search != "" or @card_filter != "" or @status_filter != ""}
+                  type="button"
+                  phx-click="clear_filters"
+                  class="btn btn-ghost btn-xs"
+                >
+                  Limpar filtros
+                </button>
+                <button type="button" phx-click="new_statement" class="btn btn-primary btn-xs">
+                  <.icon name="hero-plus" class="size-3" /> Nova fatura
+                </button>
+              </div>
             </div>
 
             <form phx-change="filter" phx-submit="filter" class="flex flex-wrap gap-2">
@@ -404,6 +566,141 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
               </tbody>
             </table>
           </div>
+        </div>
+
+        <%!--
+          Typing a statement by hand. A bank app will not produce a PDF for a
+          small or negative bill, which leaves its payment in the account with
+          nothing to reconcile against.
+        --%>
+        <div
+          :if={@new_statement}
+          id="new-statement-modal"
+          data-role="new-statement"
+          class="modal modal-open"
+          phx-window-keydown="close_new"
+          phx-key="escape"
+        >
+          <div class="modal-box max-w-3xl">
+            <h3 class="text-sm font-black uppercase tracking-tight">Nova fatura</h3>
+            <p class="text-[11px] opacity-50 mt-0.5 mb-4">
+              Registrada como <span class="font-mono">manual</span>. Se o pagamento já estiver
+              lançado com o valor exato, ele é vinculado automaticamente.
+            </p>
+
+            <p :if={@new_error} class="alert alert-error text-xs mb-3">{@new_error}</p>
+
+            <form phx-change="validate_new" phx-submit="save_new" class="space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <label class="form-control">
+                  <span class="label-text text-xs">Cartão</span>
+                  <select name="account_id" class="select select-bordered select-sm">
+                    <option value="">Selecione</option>
+                    <option
+                      :for={card <- @cards}
+                      value={card.id}
+                      selected={@new_statement["account_id"] == card.id}
+                    >
+                      {card.name}
+                    </option>
+                  </select>
+                </label>
+                <label class="form-control">
+                  <span class="label-text text-xs">Competência</span>
+                  <input
+                    type="month"
+                    name="competencia"
+                    value={@new_statement["competencia"]}
+                    class="input input-bordered input-sm"
+                  />
+                </label>
+                <label class="form-control">
+                  <span class="label-text text-xs">Vencimento</span>
+                  <input
+                    type="date"
+                    name="due_date"
+                    value={@new_statement["due_date"]}
+                    class="input input-bordered input-sm"
+                  />
+                </label>
+                <label class="form-control">
+                  <span class="label-text text-xs">Total da fatura</span>
+                  <input
+                    type="text"
+                    name="total_a_pagar"
+                    value={@new_statement["total_a_pagar"]}
+                    placeholder="0,00"
+                    class="input input-bordered input-sm"
+                  />
+                </label>
+              </div>
+
+              <div class="border-t border-base-200 pt-3">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-black uppercase opacity-60">Lançamentos do ciclo</span>
+                  <button type="button" phx-click="add_line" class="btn btn-ghost btn-xs">
+                    <.icon name="hero-plus" class="size-3" /> Adicionar
+                  </button>
+                </div>
+
+                <div class="space-y-2">
+                  <div
+                    :for={{line, index} <- Enum.with_index(@new_lines)}
+                    class="grid grid-cols-12 gap-2 items-center"
+                  >
+                    <input
+                      type="date"
+                      name={"lines[#{index}][date]"}
+                      value={line["date"]}
+                      class="input input-bordered input-xs col-span-3"
+                    />
+                    <input
+                      type="text"
+                      name={"lines[#{index}][description]"}
+                      value={line["description"]}
+                      placeholder="Descrição"
+                      class="input input-bordered input-xs col-span-4"
+                    />
+                    <select
+                      name={"lines[#{index}][kind]"}
+                      class="select select-bordered select-xs col-span-2"
+                    >
+                      <option value="compra" selected={line["kind"] != "credito"}>Compra</option>
+                      <option value="credito" selected={line["kind"] == "credito"}>Crédito</option>
+                    </select>
+                    <input
+                      type="text"
+                      name={"lines[#{index}][amount]"}
+                      value={line["amount"]}
+                      placeholder="0,00"
+                      class="input input-bordered input-xs col-span-2"
+                    />
+                    <button
+                      type="button"
+                      phx-click="remove_line"
+                      phx-value-index={index}
+                      class="btn btn-ghost btn-xs text-error col-span-1"
+                    >
+                      <.icon name="hero-x-mark" class="size-3" />
+                    </button>
+                  </div>
+                </div>
+                <p class="text-[10px] opacity-40 mt-2">
+                  Linhas sem data, descrição ou valor são ignoradas. O sinal é dado pelo tipo.
+                </p>
+              </div>
+
+              <div class="flex gap-2 pt-2">
+                <button type="submit" data-modal-default class="btn btn-primary btn-sm flex-1">
+                  Criar fatura
+                </button>
+                <button type="button" phx-click="close_new" class="btn btn-ghost btn-sm">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+          <div class="modal-backdrop bg-black/40" phx-click="close_new"></div>
         </div>
 
         <%!--
