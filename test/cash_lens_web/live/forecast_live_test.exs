@@ -96,6 +96,51 @@ defmodule CashLensWeb.ForecastLiveTest do
     end
   end
 
+  describe "daily balance chart" do
+    test "renders above the ruler with a point per day of the horizon", %{conn: conn} do
+      account_fixture(%{balance: "10000.00"})
+      recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-500.00"})
+
+      {:ok, _view, html} = live(conn, ~p"/forecast")
+
+      assert html =~ ~s(data-role="balance-chart")
+      assert html =~ ~s(phx-hook="ForecastChart")
+
+      # Reading order: the curve first, then the ruler that details its first
+      # 90 days.
+      chart_at = :binary.match(html, ~s(data-role="balance-chart")) |> elem(0)
+      ruler_at = :binary.match(html, ~s(data-role="ruler")) |> elem(0)
+      assert chart_at < ruler_at
+    end
+
+    test "carries one point per day, starting at today's balance", %{conn: conn} do
+      account_fixture(%{balance: "10000.00"})
+      recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-500.00"})
+
+      {:ok, view, _html} = live(conn, ~p"/forecast")
+
+      rendered = view |> element("#forecast-balance-chart") |> render()
+
+      [_, escaped] = Regex.run(~r/data-points="([^"]*)"/, rendered)
+
+      points =
+        escaped
+        |> String.replace("&quot;", "\"")
+        |> String.replace("&amp;", "&")
+        |> Jason.decode!()
+
+      today = Date.utc_today()
+
+      assert length(points) == 366
+      assert hd(points)["date"] == Date.to_iso8601(today)
+      assert List.last(points)["date"] == Date.to_iso8601(Date.add(today, 365))
+
+      # Cents survive the trip: the balance is serialised as a string, not
+      # through a float.
+      assert Enum.all?(points, &is_binary(&1["balance"]))
+    end
+  end
+
   # The bands are asserted on the classifier rather than through a projection:
   # occurrences land on a day_of_month, so the distance to the zero date would
   # depend on the day the suite happens to run.

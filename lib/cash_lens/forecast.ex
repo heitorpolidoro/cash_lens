@@ -226,6 +226,39 @@ defmodule CashLens.Forecast do
   end
 
   @doc """
+  The projected balance on every day from today through `days` days ahead,
+  inclusive, as `[%{date: Date.t(), balance: Decimal.t()}]`.
+
+  The balance only moves on a day something settles, so this is a step series:
+  a day with no occurrence carries the previous day's balance, and a day with
+  several carries the balance after the last of them.
+
+  Built in one pass over the already-sorted occurrences rather than by calling
+  `balance_on/2` per day, which would rescan the whole list for each of the
+  366 days.
+  """
+  def daily_balances(%{starting_balance: starting_balance, occurrences: occurrences}, days) do
+    today = Date.utc_today()
+
+    {points, _remaining, _balance} =
+      Enum.reduce(0..days, {[], occurrences, starting_balance}, fn offset,
+                                                                   {acc, pending, balance} ->
+        date = Date.add(today, offset)
+        {settled, pending} = Enum.split_while(pending, &(Date.compare(&1.date, date) != :gt))
+
+        balance =
+          case List.last(settled) do
+            nil -> balance
+            occ -> occ.balance_after
+          end
+
+        {[%{date: date, balance: balance} | acc], pending, balance}
+      end)
+
+    Enum.reverse(points)
+  end
+
+  @doc """
   The occurrence leaving the lowest balance within `days` days, or `nil` when
   nothing settles in that window.
   """

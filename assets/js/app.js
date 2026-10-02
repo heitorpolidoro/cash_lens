@@ -74,11 +74,17 @@ const liveSocket = new LiveSocket("/live", Socket, {
           this.chart.destroy();
         }
 
-        const labels = points.map(p => {
-          const d = new Date(p.date + "T00:00:00");
-          return d.toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" });
-        });
-        const balances = points.map(p => p.balance);
+        // A daily series over 12 months is ~366 points, so a label per point
+        // would repeat each month 30 times; the axis is thinned by
+        // maxTicksLimit below and reads day/month.
+        const dates = points.map(p => new Date(p.date + "T00:00:00"));
+        const labels = dates.map(d =>
+          d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+        );
+        const fullDates = dates.map(d =>
+          d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+        );
+        const balances = points.map(p => Number(p.balance));
 
         const ctx = this.el.getContext("2d");
         this.chart = new Chart(ctx, {
@@ -93,8 +99,10 @@ const liveSocket = new LiveSocket("/live", Socket, {
               borderWidth: 3,
               fill: true,
               tension: 0.2,
-              pointRadius: 4,
-              pointHoverRadius: 6,
+              // 366 visible dots merge into a solid band; the point only
+              // appears under the cursor.
+              pointRadius: 0,
+              pointHoverRadius: 5,
               pointBackgroundColor: balances.map(b => b < 0 ? 'rgb(239, 68, 68)' : 'rgb(59, 130, 246)'),
               pointBorderColor: '#fff',
               pointBorderWidth: 1,
@@ -115,6 +123,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
               legend: { display: false },
               tooltip: {
                 callbacks: {
+                  title: items => (items.length ? fullDates[items[0].dataIndex] : ''),
                   label: function(context) {
                     let label = context.dataset.label || '';
                     if (label) label += ': ';
@@ -135,6 +144,12 @@ const liveSocket = new LiveSocket("/live", Socket, {
                 }
               },
               y: {
+                // The zero line is the whole point of the chart: it is where
+                // the curve turns red and the bankruptcy date is read off.
+                grid: {
+                  color: ctx => (ctx.tick.value === 0 ? 'rgba(239, 68, 68, 0.5)' : 'rgba(0,0,0,0.05)'),
+                  lineWidth: ctx => (ctx.tick.value === 0 ? 2 : 1)
+                },
                 ticks: {
                   callback: function(value) {
                     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value);

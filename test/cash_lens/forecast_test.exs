@@ -442,6 +442,69 @@ defmodule CashLens.ForecastTest do
     end
   end
 
+  describe "daily_balances/2" do
+    defp projection_with(occurrence_offsets, starting_balance \\ "100.00") do
+      today = Date.utc_today()
+
+      %{
+        starting_balance: Decimal.new(starting_balance),
+        occurrences:
+          Enum.map(occurrence_offsets, fn {offset, balance_after} ->
+            %{date: Date.add(today, offset), item: nil, balance_after: Decimal.new(balance_after)}
+          end),
+        zero_date: nil
+      }
+    end
+
+    test "returns one point per day, today through the horizon inclusive" do
+      points = Forecast.daily_balances(projection_with([]), 365)
+      today = Date.utc_today()
+
+      assert length(points) == 366
+      assert hd(points).date == today
+      assert List.last(points).date == Date.add(today, 365)
+      assert Enum.map(points, & &1.date) == Enum.sort(Enum.map(points, & &1.date), Date)
+    end
+
+    test "holds the balance flat on days when nothing settles" do
+      points = Forecast.daily_balances(projection_with([{5, "40.00"}]), 10)
+
+      # Days 0..4 keep the starting balance, days 5..10 keep the new one.
+      for %{date: date, balance: balance} <- points do
+        offset = Date.diff(date, Date.utc_today())
+        expected = if offset < 5, do: "100.00", else: "40.00"
+
+        assert Decimal.equal?(balance, expected),
+               "day #{offset} should be #{expected}, got #{balance}"
+      end
+    end
+
+    test "a day with several occurrences carries the balance after the last one" do
+      points = Forecast.daily_balances(projection_with([{3, "70.00"}, {3, "25.00"}]), 5)
+      day_three = Enum.find(points, &(Date.diff(&1.date, Date.utc_today()) == 3))
+
+      assert Decimal.equal?(day_three.balance, "25.00")
+    end
+
+    test "every point agrees with balance_on/2 for the same date" do
+      # balance_on/2 is tested independently above, so this is a cross-check of
+      # two different traversals rather than a restatement of one of them.
+      projection = projection_with([{2, "80.00"}, {7, "-15.00"}, {9, "120.00"}])
+      points = Forecast.daily_balances(projection, 12)
+
+      for %{date: date, balance: balance} <- points do
+        assert Decimal.equal?(balance, Forecast.balance_on(projection, date)),
+               "disagreement on #{date}"
+      end
+    end
+
+    test "carries the starting balance throughout when nothing settles at all" do
+      points = Forecast.daily_balances(projection_with([], "250.00"), 30)
+
+      assert Enum.all?(points, &Decimal.equal?(&1.balance, "250.00"))
+    end
+  end
+
   describe "balance_on/2" do
     test "returns starting_balance when the date is before any occurrence" do
       projection = %{

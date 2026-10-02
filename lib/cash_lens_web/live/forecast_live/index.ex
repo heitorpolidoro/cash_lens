@@ -39,6 +39,7 @@ defmodule CashLensWeb.ForecastLive.Index do
     |> assign(:ruler_occurrences, ruler_occurrences)
     |> assign(:critical_date, critical_date(ruler_occurrences))
     |> assign(:bankruptcy, bankruptcy_status(projection.zero_date, today))
+    |> assign(:chart_points, chart_points(projection))
     |> assign(:income_date, income_date)
     |> assign(:income_balance, income_balance)
     |> assign(:final_balance, Forecast.final_balance(projection))
@@ -331,6 +332,36 @@ defmodule CashLensWeb.ForecastLive.Index do
           ]}>
             {bankruptcy_caption(@bankruptcy)}
           </span>
+        </div>
+      </div>
+
+      <%!--
+        The daily curve over the whole 12-month horizon. The ruler below it
+        details the next 90 days event by event; this is the shape those events
+        add up to, and where the balance crosses zero.
+      --%>
+      <div
+        class="card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-6 space-y-4"
+        data-role="balance-chart"
+      >
+        <div>
+          <h2 class="text-xs font-black uppercase tracking-wider">
+            Saldo Projetado Dia a Dia (12 Meses)
+          </h2>
+          <p class="text-[11px] opacity-50 mt-0.5">
+            {if @bankruptcy.date,
+              do: "A curva cruza zero em #{format_date(@bankruptcy.date)}",
+              else: "A curva não cruza zero no horizonte"}
+          </p>
+        </div>
+        <div class="w-full h-64">
+          <canvas
+            id="forecast-balance-chart"
+            phx-hook="ForecastChart"
+            phx-update="ignore"
+            data-points={@chart_points}
+          >
+          </canvas>
         </div>
       </div>
 
@@ -759,6 +790,16 @@ defmodule CashLensWeb.ForecastLive.Index do
   # lands in `:critical`.
   @near_days 120
   @critical_days 60
+
+  # Chart.js reads plain numbers, so the Decimal balances are rendered as
+  # strings and parsed client-side -- `Decimal.to_float/1` here would round the
+  # cents of a large balance before they ever reach the chart.
+  defp chart_points(projection) do
+    projection
+    |> Forecast.daily_balances(@horizon_days)
+    |> Enum.map(&%{date: Date.to_iso8601(&1.date), balance: Decimal.to_string(&1.balance)})
+    |> Jason.encode!()
+  end
 
   @doc """
   Classifies how close the projection puts us to running out of money.
