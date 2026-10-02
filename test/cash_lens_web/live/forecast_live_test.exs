@@ -139,6 +139,35 @@ defmodule CashLensWeb.ForecastLiveTest do
       # through a float.
       assert Enum.all?(points, &is_binary(&1["balance"]))
     end
+
+    test "marks the zero date so the rule matches the bankruptcy card", %{conn: conn} do
+      account_fixture(%{balance: "100.00"})
+      recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-5000.00"})
+
+      zero_date = Forecast.project().zero_date
+      assert zero_date
+
+      {:ok, view, _html} = live(conn, ~p"/forecast")
+
+      rendered = view |> element("#forecast-balance-chart") |> render()
+      assert rendered =~ ~s(data-zero-date="#{Date.to_iso8601(zero_date)}")
+
+      # ...and it is the same date the card reports, so the rule cannot drift
+      # from the headline.
+      assert scoped(view, "[data-role='kpi-bankruptcy']") =~ format_date(zero_date)
+    end
+
+    test "carries no zero date when the balance never reaches zero", %{conn: conn} do
+      account_fixture(%{balance: "100000.00"})
+      recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-10.00"})
+
+      refute Forecast.project().zero_date
+
+      {:ok, view, _html} = live(conn, ~p"/forecast")
+
+      rendered = view |> element("#forecast-balance-chart") |> render()
+      refute rendered =~ "data-zero-date=\""
+    end
   end
 
   # The bands are asserted on the classifier rather than through a projection:

@@ -360,6 +360,7 @@ defmodule CashLensWeb.ForecastLive.Index do
             phx-hook="ForecastChart"
             phx-update="ignore"
             data-points={@chart_points}
+            data-zero-date={@bankruptcy.date && Date.to_iso8601(@bankruptcy.date)}
           >
           </canvas>
         </div>
