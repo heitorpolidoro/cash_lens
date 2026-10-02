@@ -21,8 +21,14 @@ defmodule CashLens.CreditCards.Matcher do
 
         candidates =
           from(t in Transaction,
+            join: a in Account,
+            on: a.id == t.account_id,
             where: t.category_id in ^category_ids,
-            where: t.account_id != ^statement.account_id,
+            # Money settling a bill leaves a bank account, never another card.
+            # Excluding only the statement's own account let the CARD side of
+            # some other card's payment -- a positive credit of the same
+            # amount, sitting on that card -- be auto-linked here.
+            where: not a.is_credit_card,
             where: is_nil(t.parent_transaction_id),
             where: t.amount == ^target or t.amount == ^Decimal.negate(target)
           )

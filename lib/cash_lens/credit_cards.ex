@@ -461,11 +461,11 @@ defmodule CashLens.CreditCards do
   `suggest_payment/1`'s.
   """
   def payment_candidates(%Statement{} = statement) do
-    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
-      nil ->
+    case credit_card_category_ids() do
+      [] ->
         []
 
-      category ->
+      category_ids ->
         reconciled =
           from(s in Statement,
             where: not is_nil(s.payment_transaction_id),
@@ -473,14 +473,28 @@ defmodule CashLens.CreditCards do
           )
 
         from(t in Transaction,
-          where: t.category_id == ^category.id,
-          where: t.account_id != ^statement.account_id,
+          join: a in Account,
+          on: a.id == t.account_id,
+          where: t.category_id in ^category_ids,
+          where: not a.is_credit_card,
           where: is_nil(t.parent_transaction_id),
           where: t.id not in subquery(reconciled),
           preload: [:account]
         )
         |> Repo.all()
         |> Enum.sort_by(&candidate_rank(&1, statement))
+    end
+  end
+
+  # The whole `cartao-de-credito` subtree, matching what
+  # `CashLens.CreditCards.Matcher` already does. Querying only the parent left
+  # the real payments invisible here: they are filed under the per-card
+  # children (`-ourocard`, `-amazon`, `-amex`), which is where 33 of the 36
+  # bank-side payments actually sit.
+  defp credit_card_category_ids do
+    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+      nil -> []
+      category -> CashLens.Categories.get_category_ids_with_children(category.id)
     end
   end
 
@@ -510,35 +524,59 @@ defmodule CashLens.CreditCards do
   defp date_distance(%Transaction{} = transaction, %Statement{due_date: due}),
     do: abs(Date.diff(transaction.date, due))
 
-  # How far from the due date a payment may sit and still be offered for
-  # one-click reconciliation.
-  @suggestion_window_days 10
+  # An exact payment may sit this far either side of the due date.
+  @exact_window_days 10
+
+  # A late payment carries a fine, so it is larger than the bill and lands
+  # after the due date. These two bound how late and how much larger.
+  @late_window_days 30
+  @late_overpay_ceiling Decimal.new("1.20")
 
   @doc """
   The payment to offer for one-click reconciliation, or `nil`.
 
-  Deliberately strict, because the suggestion is one click away from writing a
-  reconciliation: the amount must equal the statement's total exactly and the
-  payment must fall within #{@suggestion_window_days} days of the due date. A
-  statement with no total or no due date gets no suggestion at all.
+  Two tiers, tried in order, because the suggestion is one click away from
+  writing a reconciliation:
 
-  Anything weaker is still reachable through "Vincular pagamento manualmente",
-  which lists every candidate. Showing a near-miss under the heading "Pagamento
-  Detectado no Extrato Bancário!" is worse than showing nothing — it invites a
-  confident click on a wrong match.
+  1. **Exact** — the amount equals the statement's total and the payment is
+     within #{@exact_window_days} days either side of the due date.
+  2. **Late** — the payment lands *after* the due date, within
+     #{@late_window_days} days of it, for *more* than the total but no more
+     than 20% over. That is the shape of a bill paid late: fine and interest
+     push the amount up, never down. A payment for less than the total is a
+     partial payment, not a settlement, and is never suggested.
+
+  Within each tier the nearest-amount candidate wins, since
+  `payment_candidates/1` is already ranked.
+
+  A statement with no total or no due date gets no suggestion at all, and
+  anything outside both tiers stays reachable under "Vincular pagamento
+  manualmente", which lists every candidate. Announcing a weak match under
+  "Pagamento Detectado no Extrato Bancário!" is worse than announcing nothing.
   """
   def suggest_payment(%Statement{total_a_pagar: nil}), do: nil
   def suggest_payment(%Statement{due_date: nil}), do: nil
 
   def suggest_payment(%Statement{} = statement) do
-    statement
-    |> payment_candidates()
-    |> Enum.find(&confident_match?(&1, statement))
+    candidates = payment_candidates(statement)
+
+    Enum.find(candidates, &exact_match?(&1, statement)) ||
+      Enum.find(candidates, &late_match?(&1, statement))
   end
 
-  defp confident_match?(%Transaction{} = transaction, %Statement{} = statement) do
+  defp exact_match?(%Transaction{} = transaction, %Statement{} = statement) do
     Decimal.equal?(Decimal.abs(transaction.amount), statement.total_a_pagar) and
-      date_distance(transaction, statement) <= @suggestion_window_days
+      date_distance(transaction, statement) <= @exact_window_days
+  end
+
+  defp late_match?(%Transaction{} = transaction, %Statement{} = statement) do
+    days_late = Date.diff(transaction.date, statement.due_date)
+    paid = Decimal.abs(transaction.amount)
+    ceiling = Decimal.mult(statement.total_a_pagar, @late_overpay_ceiling)
+
+    days_late > 0 and days_late <= @late_window_days and
+      Decimal.gt?(paid, statement.total_a_pagar) and
+      Decimal.compare(paid, ceiling) != :gt
   end
 
   @doc """

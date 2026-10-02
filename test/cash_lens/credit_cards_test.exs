@@ -422,6 +422,140 @@ defmodule CashLens.CreditCardsTest do
       assert suggestion.id in [a.id, b.id]
     end
 
+    test "a late payment above the total is suggested after the due date", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1000.00"),
+          due_date: ctx.today
+        })
+
+      # Fine and interest push a late payment ABOVE the bill.
+      late = payment(ctx.bank, ctx.category, "-1047.30", Date.add(ctx.today, 5))
+
+      assert CashLens.CreditCards.suggest_payment(statement).id == late.id
+    end
+
+    test "the same amount BEFORE the due date is not a late payment", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1000.00"),
+          due_date: ctx.today
+        })
+
+      payment(ctx.bank, ctx.category, "-1047.30", Date.add(ctx.today, -5))
+
+      assert CashLens.CreditCards.suggest_payment(statement) == nil
+    end
+
+    test "a payment BELOW the total is never suggested, late or not", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1000.00"),
+          due_date: ctx.today
+        })
+
+      # A partial payment is not a settlement.
+      payment(ctx.bank, ctx.category, "-900.00", Date.add(ctx.today, 5))
+
+      assert CashLens.CreditCards.suggest_payment(statement) == nil
+    end
+
+    test "a late payment more than 20% over the total is not suggested", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1000.00"),
+          due_date: ctx.today
+        })
+
+      at_ceiling = payment(ctx.bank, ctx.category, "-1200.00", Date.add(ctx.today, 5))
+      assert CashLens.CreditCards.suggest_payment(statement).id == at_ceiling.id
+
+      {:ok, _} =
+        CashLens.Transactions.delete_transaction(
+          CashLens.Transactions.get_transaction!(at_ceiling.id)
+        )
+
+      payment(ctx.bank, ctx.category, "-1200.01", Date.add(ctx.today, 5))
+      assert CashLens.CreditCards.suggest_payment(statement) == nil
+    end
+
+    test "a late payment beyond 30 days is not suggested", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1000.00"),
+          due_date: ctx.today
+        })
+
+      payment(ctx.bank, ctx.category, "-1050.00", Date.add(ctx.today, 31))
+
+      assert CashLens.CreditCards.suggest_payment(statement) == nil
+    end
+
+    test "an exact match wins over a late one even when the late one is nearer in date", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1000.00"),
+          due_date: ctx.today
+        })
+
+      _late = payment(ctx.bank, ctx.category, "-1050.00", Date.add(ctx.today, 1))
+      exact = payment(ctx.bank, ctx.category, "-1000.00", Date.add(ctx.today, 8))
+
+      # The exact payment is auto-linked on sight, which is the strongest
+      # possible outcome -- the statement needs no suggestion at all.
+      assert CashLens.Repo.get!(Statement, statement.id).payment_transaction_id == exact.id
+    end
+
+    test "payments are drawn from the whole cartao-de-credito subtree", ctx do
+      {:ok, child} =
+        CashLens.Categories.create_category(%{
+          name: "Ourocard",
+          slug: "cartao-de-credito-ourocard",
+          parent_id: ctx.category.id
+        })
+
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("777.00"),
+          due_date: ctx.today
+        })
+
+      in_child = payment(ctx.bank, child, "-800.00", ctx.today)
+
+      ids = statement |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
+      assert in_child.id in ids
+    end
+
+    test "a credit sitting on a card account is never a candidate", ctx do
+      other_card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
+
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("500.00"),
+          due_date: ctx.today
+        })
+
+      # The card side of a payment: positive, and on a credit-card account.
+      # Money leaving for a bill never comes from another card.
+      #
+      # The amount deliberately does NOT equal the total: an exact one would be
+      # auto-linked on creation and then excluded as "already reconciled",
+      # which would make this test pass without the account filter doing
+      # anything at all.
+      payment(other_card, ctx.category, "499.00", ctx.today)
+
+      assert CashLens.CreditCards.payment_candidates(statement) == []
+      assert CashLens.CreditCards.suggest_payment(statement) == nil
+    end
+
     test "no suggestion without a total or without a due date", ctx do
       payment(ctx.bank, ctx.category, "-500.00", ctx.today)
 
