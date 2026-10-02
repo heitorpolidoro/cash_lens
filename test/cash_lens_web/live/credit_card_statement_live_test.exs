@@ -258,7 +258,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
         transaction_fixture(%{
           account_id: bank.id,
           category_id: category.id,
-          amount: "999.00",
+          amount: "-999.00",
           date: ~D[2026-06-14],
           description: "PAGTO DEBITO AUTOMATICO"
         })

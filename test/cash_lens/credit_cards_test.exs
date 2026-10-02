@@ -556,6 +556,119 @@ defmodule CashLens.CreditCardsTest do
       assert CashLens.CreditCards.suggest_payment(statement) == nil
     end
 
+    test "a payment with an unrelated category is still a candidate", ctx do
+      {:ok, outros} = CashLens.Categories.create_category(%{name: "Outros", slug: "outros"})
+
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1357.95"),
+          due_date: ctx.today
+        })
+
+      # The real case: a Pix paying the bill, filed as "Outros". Filtering by
+      # category is what hid it.
+      pix =
+        payment(ctx.bank, outros, "-1357.95", ctx.today, "Pix - Enviado - MERCADO PAGO")
+
+      ids = statement |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
+      assert pix.id in ids
+    end
+
+    test "a credit is never a candidate, whatever its category", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("500.00"),
+          due_date: ctx.today
+        })
+
+      payment(ctx.bank, ctx.category, "499.00", ctx.today)
+
+      assert CashLens.CreditCards.payment_candidates(statement) == []
+    end
+
+    test "candidates outside the due-date window are not listed", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("500.00"),
+          due_date: ctx.today
+        })
+
+      inside = payment(ctx.bank, ctx.category, "-480.00", Date.add(ctx.today, -45))
+      _early = payment(ctx.bank, ctx.category, "-470.00", Date.add(ctx.today, -46))
+      _late = payment(ctx.bank, ctx.category, "-460.00", Date.add(ctx.today, 31))
+
+      ids = statement |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
+      assert ids == [inside.id]
+    end
+
+    test "linking files the payment under Cartão de Crédito", ctx do
+      {:ok, outros} = CashLens.Categories.create_category(%{name: "Outros", slug: "outros"})
+
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1357.95"),
+          due_date: ctx.today
+        })
+
+      pix = payment(ctx.bank, outros, "-1300.00", ctx.today, "Pix - Enviado")
+      assert pix.category_id == outros.id
+
+      {:ok, _} = CashLens.CreditCards.link_payment(statement, pix.id)
+
+      assert CashLens.Transactions.get_transaction!(pix.id).category_id == ctx.category.id
+    end
+
+    test "linking leaves a more specific card subcategory alone", ctx do
+      {:ok, child} =
+        CashLens.Categories.create_category(%{
+          name: "Ourocard",
+          slug: "cartao-de-credito-ourocard",
+          parent_id: ctx.category.id
+        })
+
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("900.00"),
+          due_date: ctx.today
+        })
+
+      already = payment(ctx.bank, child, "-880.00", ctx.today)
+
+      {:ok, _} = CashLens.CreditCards.link_payment(statement, already.id)
+
+      # The operator's own, narrower choice is not overwritten by the parent.
+      assert CashLens.Transactions.get_transaction!(already.id).category_id == child.id
+    end
+
+    test "an internal transfer is not a candidate", ctx do
+      statement =
+        statement_fixture(%{
+          account: ctx.card,
+          total_a_pagar: Decimal.new("1357.95"),
+          due_date: ctx.today
+        })
+
+      # Money moving between the operator's own accounts. The amount is
+      # deliberately NOT the statement total: an exact one is auto-linked on
+      # creation and then excluded as "already reconciled", which would make
+      # this test pass with the transfer guard removed.
+      transfer =
+        payment(ctx.bank, ctx.category, "-1300.00", ctx.today, "Transferencia interna")
+
+      {:ok, _} =
+        CashLens.Transactions.update_transaction(transfer, %{
+          transfer_key: Ecto.UUID.generate()
+        })
+
+      ids = statement |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
+      refute transfer.id in ids
+    end
+
     test "no suggestion without a total or without a due date", ctx do
       payment(ctx.bank, ctx.category, "-500.00", ctx.today)
 

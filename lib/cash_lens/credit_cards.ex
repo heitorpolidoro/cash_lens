@@ -419,6 +419,7 @@ defmodule CashLens.CreditCards do
       from(t in Transaction, where: t.import_batch_id in ^covered_statement_ids(statement)),
       set: [parent_transaction_id: payment_id, updated_at: now]
     )
+    |> categorize_payment(payment_id, now)
     |> Multi.update(
       :statement,
       Statement.changeset(statement, %{payment_transaction_id: payment_id})
@@ -427,6 +428,35 @@ defmodule CashLens.CreditCards do
     |> case do
       {:ok, %{statement: s}} -> {:ok, s}
       {:error, _, reason, _} -> {:error, reason}
+    end
+  end
+
+  # Linking a transaction to a bill IS the statement that it is a card payment,
+  # so it is filed as one. Candidates are no longer filtered by category, which
+  # means the payment reaching this point is often categorized as something
+  # else -- or as nothing.
+  #
+  # Only the parent `cartao-de-credito` is applied: picking a per-card child
+  # would be guessing at which card, and the link already records that.
+  # A payment already somewhere in the subtree is left alone, so a more
+  # specific child the operator chose by hand is not overwritten.
+  defp categorize_payment(multi, payment_id, now) do
+    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+      nil ->
+        multi
+
+      category ->
+        keep = CashLens.Categories.get_category_ids_with_children(category.id)
+
+        Multi.update_all(
+          multi,
+          :payment_category,
+          from(t in Transaction,
+            where: t.id == ^payment_id,
+            where: is_nil(t.category_id) or t.category_id not in ^keep
+          ),
+          set: [category_id: category.id, updated_at: now]
+        )
     end
   end
 
@@ -460,42 +490,54 @@ defmodule CashLens.CreditCards do
   good enough to be offered for one-click reconciliation. That judgement is
   `suggest_payment/1`'s.
   """
+  # How far either side of the due date a transaction may sit and still be
+  # listed. Generous on the early side, because a bill is often paid as soon as
+  # it closes, which can be well over a month before it is due.
+  @candidate_days_before 45
+  @candidate_days_after 30
+
+  # The list is sorted nearest-first, so a cap costs nothing in practice and
+  # keeps a few hundred rows out of the DOM.
+  @candidate_limit 50
+
   def payment_candidates(%Statement{} = statement) do
-    case credit_card_category_ids() do
-      [] ->
-        []
+    reconciled =
+      from(s in Statement,
+        where: not is_nil(s.payment_transaction_id),
+        select: s.payment_transaction_id
+      )
 
-      category_ids ->
-        reconciled =
-          from(s in Statement,
-            where: not is_nil(s.payment_transaction_id),
-            select: s.payment_transaction_id
-          )
-
-        from(t in Transaction,
-          join: a in Account,
-          on: a.id == t.account_id,
-          where: t.category_id in ^category_ids,
-          where: not a.is_credit_card,
-          where: is_nil(t.parent_transaction_id),
-          where: t.id not in subquery(reconciled),
-          preload: [:account]
-        )
-        |> Repo.all()
-        |> Enum.sort_by(&candidate_rank(&1, statement))
-    end
+    from(t in Transaction,
+      join: a in Account,
+      on: a.id == t.account_id,
+      # Money settling a bill leaves a bank account, so: a debit, and never on
+      # another card. Category is deliberately NOT consulted -- a payment that
+      # was never categorized as a card payment is exactly the one the operator
+      # needs to find here.
+      where: t.amount < 0,
+      where: not a.is_credit_card,
+      # A paired internal transfer is money moved between the operator's own
+      # accounts, not a bill being settled. Without this, the transfer that
+      # funds a payment ties with the payment itself -- same date, same amount
+      # -- and can win the suggestion.
+      where: is_nil(t.transfer_key),
+      where: is_nil(t.parent_transaction_id),
+      where: t.id not in subquery(reconciled),
+      preload: [:account]
+    )
+    |> within_candidate_window(statement)
+    |> Repo.all()
+    |> Enum.sort_by(&candidate_rank(&1, statement))
+    |> Enum.take(@candidate_limit)
   end
 
-  # The whole `cartao-de-credito` subtree, matching what
-  # `CashLens.CreditCards.Matcher` already does. Querying only the parent left
-  # the real payments invisible here: they are filed under the per-card
-  # children (`-ourocard`, `-amazon`, `-amex`), which is where 33 of the 36
-  # bank-side payments actually sit.
-  defp credit_card_category_ids do
-    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
-      nil -> []
-      category -> CashLens.Categories.get_category_ids_with_children(category.id)
-    end
+  defp within_candidate_window(query, %Statement{due_date: nil}), do: query
+
+  defp within_candidate_window(query, %Statement{due_date: due}) do
+    from(t in query,
+      where: t.date >= ^Date.add(due, -@candidate_days_before),
+      where: t.date <= ^Date.add(due, @candidate_days_after)
+    )
   end
 
   # A payment leaves the current account, so its amount is negative while
