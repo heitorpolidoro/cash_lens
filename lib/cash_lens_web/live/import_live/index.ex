@@ -527,6 +527,7 @@ defmodule CashLensWeb.ImportLive.Index do
                 :if={confirm_button?(@inspect)}
                 id="confirm-import"
                 type="button"
+                data-modal-default
                 disabled={is_nil(@inspect.summary)}
                 phx-click="confirm_import"
                 phx-disable-with="Importando..."

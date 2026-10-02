@@ -243,6 +243,22 @@ defmodule CashLensWeb.ImportLiveTest do
       }
     end
 
+    test "the confirm button is the drawer's Enter default", %{conn: conn, root: root} do
+      dir = account_folder(root, "bb")
+      write_file(dir, "extrato.csv", @bb_sample)
+
+      {:ok, view, _html} = live(conn, ~p"/imports")
+
+      view
+      |> element(~s(tr[data-path="bb/extrato.csv"] [data-role="inspect"]))
+      |> render_click()
+
+      # Confirming an import writes new rows but destroys nothing, so unlike a
+      # delete confirmation it is a legitimate target for Enter.
+      assert has_element?(view, "#confirm-import[data-modal-default]")
+      refute has_element?(view, "#inspect-cancel[data-modal-default]")
+    end
+
     test "opening the drawer shows the dry run's new count", %{
       conn: conn,
       root: root,
