@@ -22,6 +22,10 @@ defmodule CashLens.Forecast do
   @default_horizon_days 365
   @baseline_months 6
 
+  # How many of a card's recent bills the estimate averages. Bounded so a card
+  # with a long history is still projected from its current spending level.
+  @estimate_sample 6
+
   @doc """
   Creates a recurring item directly. Used both by fixtures/tests and by
   the detection sync (Task 2) when a fixed category has no item yet.
@@ -550,6 +554,17 @@ defmodule CashLens.Forecast do
     |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
   end
 
+  # The estimate is the average of this card's recent bills, not its last one.
+  # A single bill is a sample of one: the Ourocard's last four came in at
+  # 14.391,19 / 11.938,58 / 14.995,67 / 14.018,20, so whichever happened to be
+  # most recent drove the whole year's projection, and a light month projected a
+  # light year.
+  #
+  # What gets averaged is each bill's VARIABLE part -- the bill minus the
+  # installments known for its own competência. Installments are not an average:
+  # they are a schedule, so the target month's own installment total is added
+  # back afterwards. Averaging the gross bill instead would smear a parcel that
+  # ends in March across all twelve months.
   defp estimate_for_month(account, month) do
     since = Date.add(Date.utc_today(), -30 * @history_months)
 
@@ -557,21 +572,34 @@ defmodule CashLens.Forecast do
       from(s in Statement,
         where: s.account_id == ^account.id and not is_nil(s.due_date) and s.due_date >= ^since,
         order_by: [desc: s.due_date],
-        limit: 1
+        limit: @estimate_sample
       )
-      |> Repo.one()
+      |> Repo.all()
 
     case recent do
-      nil ->
+      [] ->
         nil
 
-      statement ->
-        recent_month = statement.competencia || Date.beginning_of_month(statement.due_date)
-        recent_installments = Installments.account_installment_total(account.id, recent_month)
-        variable = Decimal.add(statement_amount(statement), recent_installments)
-        future_installments = Installments.account_installment_total(account.id, month)
-        Decimal.sub(variable, future_installments)
+      statements ->
+        statements
+        |> Enum.map(&variable_part/1)
+        |> average()
+        |> Decimal.sub(Installments.account_installment_total(account.id, month))
     end
+  end
+
+  defp variable_part(%Statement{} = statement) do
+    competencia = statement.competencia || Date.beginning_of_month(statement.due_date)
+    installments = Installments.account_installment_total(statement.account_id, competencia)
+
+    statement |> statement_amount() |> Decimal.add(installments)
+  end
+
+  defp average(amounts) do
+    amounts
+    |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1))
+    |> Decimal.div(length(amounts))
+    |> Decimal.round(2)
   end
 
   defp build_card_occurrence(account, date, amount, origin, installments) do

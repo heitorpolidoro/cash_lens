@@ -666,6 +666,99 @@ defmodule CashLens.ForecastTest do
       assert Decimal.equal?(occ.item.amount, Decimal.new("-1700.00"))
     end
 
+    test "estimates from the average of the card's recent bills, not its last one", %{card: card} do
+      # A single bill is a sample of one, and the amount swings: whichever month
+      # happened to be last drove the whole twelve-month projection, so a light
+      # month projected a light year.
+      for {offset, total} <- [{-30, "1200.00"}, {-60, "800.00"}, {-90, "1000.00"}] do
+        due = Date.add(Date.utc_today(), offset)
+
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: due,
+          competencia: Date.beginning_of_month(due),
+          total_a_pagar: Decimal.new(total)
+        })
+      end
+
+      future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
+
+      occurrences =
+        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+
+      assert [occ] = occurrences
+      assert occ.origin == :estimado
+      # (1200 + 800 + 1000) / 3 = 1000, not the 1200 of the most recent bill.
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-1000.00"))
+    end
+
+    test "averages each bill's variable part, keeping installments on their schedule", %{
+      card: card
+    } do
+      # Two bills of 2000, each carrying one 500,00 parcel of a plan that ends
+      # before the projected month. Averaging the gross bills would charge
+      # -2000,00 every month forever, smearing a finished plan across the whole
+      # horizon. Averaging each bill's variable part gives -1500,00, and the
+      # target month's own installments -- none here -- are added back after.
+      older_due = Date.add(Date.utc_today(), -60)
+      older_competencia = Date.beginning_of_month(older_due)
+      newer_due = Date.add(Date.utc_today(), -30)
+
+      for due <- [newer_due, older_due] do
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: due,
+          competencia: Date.beginning_of_month(due),
+          total_a_pagar: Decimal.new("2000.00")
+        })
+      end
+
+      {:ok, group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "ENDED_PARCEL",
+          installments: 2,
+          start_date: older_competencia,
+          total_amount: Decimal.new("1000.00")
+        })
+
+      for {offset, date} <- [{1, older_competencia}, {2, Date.beginning_of_month(newer_due)}] do
+        CashLens.TransactionsFixtures.transaction_fixture(%{
+          account_id: card.id,
+          installment_group_id: group.id,
+          installment_number: offset,
+          date: date,
+          amount: Decimal.new("-500.00")
+        })
+      end
+
+      future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
+
+      occurrences =
+        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+
+      assert [occ] = occurrences
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-1500.00"))
+    end
+
+    test "a card with one bill estimates from it, unchanged", %{card: card} do
+      # The average degrades gracefully: a new card must still be projected.
+      due = Date.add(Date.utc_today(), -30)
+
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: due,
+        competencia: Date.beginning_of_month(due),
+        total_a_pagar: Decimal.new("777.00")
+      })
+
+      future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
+
+      assert [occ] =
+               CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-777.00"))
+    end
+
     test "no recent boleto within history window yields no occurrences", %{card: card} do
       CashLens.CreditCardsFixtures.statement_fixture(%{
         account: card,
