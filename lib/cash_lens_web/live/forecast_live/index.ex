@@ -415,7 +415,7 @@ defmodule CashLensWeb.ForecastLive.Index do
               :for={occ <- @ruler_occurrences}
               data-role="ruler-event"
               class={[
-                "w-[198px] shrink-0 rounded-2xl border p-3 space-y-2",
+                "w-[198px] shrink-0 rounded-2xl border p-3 space-y-2 flex flex-col",
                 ruler_card_class(occ, @critical_date)
               ]}
             >
@@ -490,8 +490,12 @@ defmodule CashLensWeb.ForecastLive.Index do
                 </span>
               </div>
 
-              <%!-- 4. and 5. the "Saldo após" label and the dominant running balance --%>
-              <div class="pt-2 border-t border-base-300/60">
+              <%!--
+                4. and 5. the "Saldo após" label and the dominant running balance.
+                `mt-auto` pins it to the card's floor, so the balances line up
+                across a strip whose cards carry different numbers of badges.
+              --%>
+              <div class="mt-auto pt-2 border-t border-base-300/60">
                 <span class="block text-[10px] font-bold uppercase tracking-wider opacity-50">
                   Saldo após
                 </span>
