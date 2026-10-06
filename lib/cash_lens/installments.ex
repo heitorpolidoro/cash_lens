@@ -124,7 +124,16 @@ defmodule CashLens.Installments do
   Deletes an installment group.
   """
   def delete_installment_group(%InstallmentGroup{} = group) do
-    Repo.delete(group)
+    # The parcels outlive the grouping: deleting a commitment undoes how its
+    # transactions were read together, never the transactions themselves. The
+    # foreign key is NO ACTION, so they have to be unlinked first or Postgres
+    # refuses the delete outright.
+    Repo.transaction(fn ->
+      from(t in Transaction, where: t.installment_group_id == ^group.id)
+      |> Repo.update_all(set: [installment_group_id: nil, installment_number: nil])
+
+      Repo.delete!(group)
+    end)
   end
 
   @doc """

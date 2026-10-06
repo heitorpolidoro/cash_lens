@@ -712,6 +712,28 @@ defmodule CashLens.InstallmentsTest do
     end
   end
 
+  describe "delete_installment_group/1" do
+    test "unlinks the parcels instead of hitting the foreign key" do
+      acc = account_fixture()
+      g = group(%{description_pattern: "COM PARCELAS"})
+
+      tx =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-100.00",
+          description: "COM PARCELAS 1",
+          installment_group_id: g.id
+        })
+
+      assert {:ok, _} = Installments.delete_installment_group(g)
+
+      # The transaction survives the grouping being undone.
+      survivor = CashLens.Transactions.get_transaction!(tx.id)
+      assert survivor.installment_group_id == nil
+      assert survivor.installment_number == nil
+    end
+  end
+
   describe "associate_matching_transactions/1 numbering" do
     test "numbers a parcel by its distance from the first, not by arrival order" do
       acc = account_fixture()

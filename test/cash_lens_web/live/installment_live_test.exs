@@ -671,6 +671,30 @@ defmodule CashLensWeb.InstallmentLiveTest do
       assert html =~ "out/26"
     end
 
+    test "deleting a commitment with parcels does not crash the view", %{conn: conn} do
+      acc = account_fixture()
+      group = commitment(%{description_pattern: "COM PARCELAS"})
+
+      tx =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-100.00",
+          description: "COM PARCELAS 1"
+        })
+
+      Repo.update_all(from(t in Transaction, where: t.id == ^tx.id),
+        set: [installment_group_id: group.id, installment_number: 1]
+      )
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      assert render(live) =~ "COM PARCELAS"
+
+      html = render_click(live, "delete", %{"id" => group.id})
+
+      refute html =~ "COM PARCELAS"
+      assert Installments.list_installment_groups() == []
+    end
+
     test "bands the table by payoff month, not by row", %{conn: conn} do
       # Two plans end in m0+1 and two in m0+2, so the shading must flip once
       # between the pairs — never inside one.
