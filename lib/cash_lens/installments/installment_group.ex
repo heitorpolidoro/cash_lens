@@ -31,6 +31,11 @@ defmodule CashLens.Installments.InstallmentGroup do
     field :contemplated_at, :date
     field :installment_amount, :decimal, virtual: true
 
+    # How many parcels the contract has already billed. Never stored: it only
+    # exists so the form can derive `start_date` backwards from today, because
+    # a statement shows the parcels it imported, not the ones paid before that.
+    field :paid_installments, :integer, virtual: true
+
     has_many :transactions, CashLens.Transactions.Transaction
 
     timestamps(type: :utc_datetime)
@@ -50,13 +55,27 @@ defmodule CashLens.Installments.InstallmentGroup do
       :interest_rate,
       :credit_letter_amount,
       :is_contemplated,
-      :contemplated_at
+      :contemplated_at,
+      :paid_installments
     ])
     |> validate_required([:description_pattern, :installments, :start_date])
     |> validate_number(:installments, greater_than: 1)
+    |> validate_number(:paid_installments, greater_than_or_equal_to: 0)
+    |> validate_paid_within_term()
     |> validate_inclusion(:commitment_type, @commitment_types)
     |> maybe_calculate_total_amount()
     |> unique_constraint(:description_pattern)
+  end
+
+  defp validate_paid_within_term(changeset) do
+    paid = get_field(changeset, :paid_installments)
+    total = get_field(changeset, :installments)
+
+    if is_integer(paid) and is_integer(total) and paid > total do
+      add_error(changeset, :paid_installments, "não pode ser maior que o total de parcelas")
+    else
+      changeset
+    end
   end
 
   defp maybe_calculate_total_amount(changeset) do

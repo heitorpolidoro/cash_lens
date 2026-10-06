@@ -436,6 +436,67 @@ defmodule CashLensWeb.InstallmentLiveTest do
       assert html =~ "Nenhum lançamento recorrente encontrado"
     end
 
+    test "parcelas pagas reaches a contract that began before the statement", %{conn: conn} do
+      acc = account_fixture()
+
+      # Only the tail of a 360-month mortgage was ever imported.
+      for date <- [~D[2026-07-10], ~D[2026-08-10], ~D[2026-09-10]] do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-3524.55",
+          description: "PRESTACAO DE CRED IMOB",
+          date: date
+        })
+      end
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      render_click(live, "open_modal", %{})
+      render_click(live, "apply_suggestion", %{"description" => "PRESTACAO DE CRED IMOB"})
+
+      # The suggestion alone can only see the statement: parcel 1 in Jul/2026.
+      assert render(live) =~ "2026-07-10"
+
+      html =
+        render_change(live, "validate", %{
+          "installment_group" => %{
+            "commitment_type" => "financing",
+            "description_pattern" => "PRESTACAO DE CRED IMOB",
+            "installments" => "360",
+            "paid_installments" => "81"
+          }
+        })
+
+      # 81 paid, anchored on the last billed parcel (Sep/2026), puts parcel 1
+      # eighty months earlier.
+      assert html =~ "2020-01-10"
+
+      summary = live |> element("#term-summary") |> render()
+      assert summary =~ "Parcela 81 de 360"
+      assert summary =~ "279 restantes"
+      assert summary =~ "dez/49"
+    end
+
+    test "a hand-typed start date survives further edits", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      render_click(live, "open_modal", %{})
+
+      render_change(live, "validate", %{
+        "installment_group" => %{"installments" => "360", "paid_installments" => "81"}
+      })
+
+      html =
+        render_change(live, "validate", %{
+          "installment_group" => %{
+            "installments" => "360",
+            "paid_installments" => "81",
+            "start_date" => "2019-06-15"
+          }
+        })
+
+      # paid_installments did not change, so it must not overwrite the date.
+      assert html =~ "2019-06-15"
+    end
+
     test "'trocar' puts the picker back", %{conn: conn} do
       acc = account_fixture()
 

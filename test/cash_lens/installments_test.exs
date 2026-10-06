@@ -686,6 +686,64 @@ defmodule CashLens.InstallmentsTest do
     end
   end
 
+  describe "paid_installments" do
+    test "refuses a contract with more parcels paid than it has" do
+      assert {:error, changeset} =
+               Installments.create_installment_group(%{
+                 description_pattern: "IMPOSSIVEL",
+                 installments: 10,
+                 paid_installments: 11,
+                 start_date: ~D[2026-01-10]
+               })
+
+      assert "não pode ser maior que o total de parcelas" in errors_on(changeset).paid_installments
+    end
+
+    test "is never persisted" do
+      assert {:ok, group} =
+               Installments.create_installment_group(%{
+                 description_pattern: "VIRTUAL",
+                 installments: 10,
+                 paid_installments: 3,
+                 start_date: ~D[2026-01-10]
+               })
+
+      assert Installments.get_installment_group!(group.id).paid_installments == nil
+    end
+  end
+
+  describe "associate_matching_transactions/1 numbering" do
+    test "numbers a parcel by its distance from the first, not by arrival order" do
+      acc = account_fixture()
+
+      # A plan that started in 2020; only the 2026 tail was ever imported.
+      for date <- [~D[2026-07-10], ~D[2026-08-10], ~D[2026-09-10]] do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-3524.55",
+          description: "PRESTACAO DE CRED IMOB",
+          date: date
+        })
+      end
+
+      {:ok, group} =
+        Installments.create_installment_group(%{
+          description_pattern: "PRESTACAO DE CRED IMOB",
+          commitment_type: "financing",
+          installments: 360,
+          start_date: ~D[2020-01-10]
+        })
+
+      numbers =
+        group.id
+        |> Installments.list_group_transactions()
+        |> Enum.map(& &1.installment_number)
+
+      # Jan/2020 is parcel 1, so Jul/2026 is parcel 79.
+      assert numbers == [79, 80, 81]
+    end
+  end
+
   describe "suggest_commitment_patterns/1" do
     test "surfaces recurring unlinked debits from the statement" do
       acc = account_fixture()

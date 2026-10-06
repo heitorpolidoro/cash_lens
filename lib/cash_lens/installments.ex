@@ -612,14 +612,12 @@ defmodule CashLens.Installments do
             limit: ^group.installments
         )
 
-      unlinked_matches
-      |> Enum.with_index(1)
-      |> Enum.each(fn {tx, next_num} ->
+      Enum.each(unlinked_matches, fn tx ->
         from(t in Transaction, where: t.id == ^tx.id)
         |> Repo.update_all(
           set: [
             installment_group_id: group.id,
-            installment_number: next_num,
+            installment_number: parcel_number_on(group, tx.date),
             updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
           ]
         )
@@ -627,6 +625,20 @@ defmodule CashLens.Installments do
 
       :ok
     end
+  end
+
+  # Which parcel of `group` a debit dated `date` is, counted in months from the
+  # plan's first parcel rather than by position in the matched list. A contract
+  # that began before the imported statement has its early parcels missing, and
+  # numbering what did arrive 1, 2, 3… would label a 2025 debit as parcel 1 of a
+  # plan that started in 2020.
+  defp parcel_number_on(%{start_date: start_date, installments: n}, %Date{} = date) do
+    start_date
+    |> month_start()
+    |> month_diff(month_start(date))
+    |> Kernel.+(1)
+    |> max(1)
+    |> min(n)
   end
 
   @doc """

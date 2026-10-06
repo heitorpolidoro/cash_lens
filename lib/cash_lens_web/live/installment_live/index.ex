@@ -168,6 +168,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   @impl true
   def handle_event("validate", %{"installment_group" => params}, socket) do
+    params = maybe_derive_start_date(params, socket.assigns)
     {:noreply, socket |> assign(:commitment_params, params) |> assign_form()}
   end
 
@@ -405,6 +406,49 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   # coveralls-ignore-next-line — defensive: a transaction always carries a date.
   defp parcel_status(_parcel), do: "—"
+
+  # "Parcelas já pagas" is the only way to reach a contract that began before the
+  # imported history: 81 paid parcels put the first one 80 months before the last
+  # one billed. It rewrites `start_date` only on the event that changes it, so a
+  # date typed by hand afterwards survives.
+  defp maybe_derive_start_date(params, assigns) do
+    previous = Map.get(assigns.commitment_params, "paid_installments")
+    typed = Map.get(params, "paid_installments")
+
+    with true <- typed not in [nil, ""] and typed != previous,
+         {paid, ""} when paid > 0 <- Integer.parse(typed),
+         %Date{} = anchor <- paid_anchor(assigns) do
+      first = Installments.add_months(anchor, -(paid - 1))
+      Map.put(params, "start_date", Date.to_iso8601(first))
+    else
+      _ -> params
+    end
+  end
+
+  # The newest parcel already billed: the statement's last occurrence when one
+  # was picked from the history, otherwise last month.
+  defp paid_anchor(%{applied_suggestion: %{last_date: %Date{} = date}}), do: date
+  defp paid_anchor(_assigns), do: Installments.add_months(Date.utc_today(), -1)
+
+  # What the typed term and start date add up to, so the contract can be checked
+  # against the form before saving.
+  defp term_summary(%Phoenix.HTML.Form{source: %Ecto.Changeset{} = changeset}) do
+    changeset |> Ecto.Changeset.apply_changes() |> term_summary()
+  end
+
+  defp term_summary(%{start_date: %Date{} = start_date, installments: n})
+       when is_integer(n) and n > 0 do
+    group = %{start_date: start_date, installments: n}
+    remaining = Installments.remaining_parcels(group, Installments.current_month())
+
+    %{
+      paid: n - remaining,
+      remaining: remaining,
+      ends_on: Installments.last_installment_date(group)
+    }
+  end
+
+  defp term_summary(_form_data), do: nil
 
   defp reset_suggestions(socket) do
     socket
