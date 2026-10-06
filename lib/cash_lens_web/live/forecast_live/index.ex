@@ -383,11 +383,25 @@ defmodule CashLensWeb.ForecastLive.Index do
             <p class="text-[11px] opacity-50 mt-1">
               <strong>Recorrência temporária</strong>: financiamento ou consórcio pago fora do cartão — tem fim conhecido e mostra a posição da parcela. Parcelas de cartão não aparecem aqui: elas já estão dentro da fatura.
             </p>
-            <p :if={@baseline_rate} class="text-[11px] opacity-50 mt-1" data-role="baseline-note">
-              Os saldos abaixo já descontam uma média de gasto variável de
-              <strong>{format_currency(@baseline_rate.monthly)}/mês</strong>
-              ({format_currency(@baseline_rate.daily)}/dia), apurada nos últimos {@baseline_rate.months} meses. É uma estimativa, não um lançamento: por isso não aparece como evento na régua.
-            </p>
+            <div
+              :if={@baseline_rate}
+              class="text-[11px] opacity-60 mt-2 rounded-xl bg-base-200/60 px-3 py-2 space-y-1"
+              data-role="baseline-note"
+            >
+              <p>
+                Os saldos abaixo já descontam uma média de gasto variável de <strong>{format_currency(@baseline_rate.monthly)}/mês</strong>. É uma estimativa, não um lançamento: por isso não aparece como evento na régua.
+              </p>
+              <p class="font-mono" data-role="baseline-math">
+                {format_currency(@baseline_rate.total)} ÷ {@baseline_rate.days} dias =
+                <strong>{format_currency(@baseline_rate.daily)}/dia</strong>
+                × 30 = {format_currency(@baseline_rate.monthly)}/mês
+              </p>
+              <p>
+                Soma de tudo que saiu das contas-correntes entre {format_date(@baseline_rate.since)} e {format_date(
+                  @baseline_rate.until
+                )} fora o que já está modelado aqui: contas fixas, faturas de cartão e transferências entre as suas contas.
+              </p>
+            </div>
           </div>
           <span class="text-xs font-semibold opacity-50">Ordenado por data de liquidação</span>
         </div>

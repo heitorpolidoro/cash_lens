@@ -890,6 +890,25 @@ defmodule CashLens.ForecastTest do
       assert rate.months == 6
     end
 
+    test "carries the arithmetic behind the rate, not just its result", %{
+      account: account,
+      variable: variable
+    } do
+      # The screen shows the division. A balance moved by a number nobody can
+      # derive is worse than no number.
+      spend(account, variable, Date.add(Date.utc_today(), -10), "-1800.00")
+
+      rate = Forecast.variable_baseline_rate()
+
+      assert Decimal.equal?(rate.total, Decimal.new("-1800.00"))
+      assert rate.days == 180
+      assert rate.since == Date.add(Date.utc_today(), -180)
+      # The window stops yesterday: today's spending is already in the balance.
+      assert rate.until == Date.add(Date.utc_today(), -1)
+      # ... and the parts really do produce the whole.
+      assert Decimal.equal?(Decimal.div(rate.total, rate.days) |> Decimal.round(2), rate.daily)
+    end
+
     test "returns nil when the window holds no variable spending" do
       refute Forecast.variable_baseline_rate()
     end

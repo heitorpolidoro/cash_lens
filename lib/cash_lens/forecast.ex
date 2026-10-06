@@ -250,8 +250,12 @@ defmodule CashLens.Forecast do
   end
 
   @doc """
-  The average variable spending of the last `@baseline_months` months, as
-  `%{daily: Decimal.t(), monthly: Decimal.t(), months: integer(), since: Date.t()}`.
+  The average variable spending of the last `@baseline_months` months.
+
+  Returns the rate together with the arithmetic behind it -- `total` spent over
+  `days` days, from `since` to `until` -- because a balance moved by a number
+  nobody can derive is worse than no number: the screen shows the division, not
+  just its result.
 
   Variable spending is what the projection's three event sources cannot see: an
   outflow from a cash account whose category is neither fixed (already a
@@ -277,7 +281,10 @@ defmodule CashLens.Forecast do
         daily: daily,
         monthly: daily |> Decimal.mult(30) |> Decimal.round(2),
         months: @baseline_months,
-        since: since
+        since: since,
+        until: Date.add(today, -1),
+        total: total,
+        days: days
       }
     end
   end
