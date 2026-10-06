@@ -284,6 +284,72 @@ defmodule CashLens.PDFParserTest do
     end
   end
 
+  describe "parse/2 (bradesco_card) installment markers" do
+    # Bradesco card statements write an installment as a bare "N/M" column
+    # between the merchant and the city, with no keyword. The shared
+    # InstallmentDetector keys on "PARC N/M", so these parcels were invisible:
+    # averaged as ordinary spending and never ending in the forecast.
+    defp amex_statement(line) do
+      """
+      Fatura mensal
+      HEITOR POLIDORO
+
+      Lançamentos
+      Data Descrição                                                        Valor R$
+      Nacionais em Reais (R$)
+      #{line}
+
+      Total da fatura em real                                                          69,90
+      """
+    end
+
+    defp first_description(line) do
+      [tx] = PDFParser.parse(amex_statement(line), :bradesco_card)
+      tx.description
+    end
+
+    test "rewrites a bare N/M marker into the canonical PARC form" do
+      line = "18/04 RAIA2349       03/03                  SAO JOSE DOS                   69,90"
+
+      assert first_description(line) == "RAIA2349 PARC 03/03 SAO JOSE DOS"
+    end
+
+    test "never mistakes the line's leading purchase date for a marker" do
+      # The statement line BEGINS with DD/MM. A bare pattern applied to the raw
+      # line would read "18/04" as parcel 18 of 4 -- which is why this is done
+      # after the parser has captured the date separately.
+      line = "18/04 RAIA2349                              SAO JOSE DOS                   69,90"
+      description = first_description(line)
+
+      refute description =~ "PARC"
+      assert description == "RAIA2349 SAO JOSE DOS"
+    end
+
+    test "leaves a parcel number above the total alone" do
+      line = "18/04 LOJA 18/04                            SAO JOSE DOS                   69,90"
+
+      refute first_description(line) =~ "PARC"
+    end
+
+    test "a single payment is not an installment" do
+      line = "18/04 LOJA 1/1                              SAO JOSE DOS                   69,90"
+
+      refute first_description(line) =~ "PARC"
+    end
+
+    test "leaves a description that already carries PARC untouched" do
+      line = "18/04 RAIA4347      PARC 02/03               SAO JOSE DOS                  69,90"
+
+      assert first_description(line) == "RAIA4347 PARC 02/03 SAO JOSE DOS"
+    end
+
+    test "rewrites only the first marker" do
+      line = "18/04 LOJA 02/03 FILIAL 02/03               SAO JOSE DOS                   69,90"
+
+      assert first_description(line) == "LOJA PARC 02/03 FILIAL 02/03 SAO JOSE DOS"
+    end
+  end
+
   describe "parse/2 (mercado_pago_card)" do
     test "parses the payment line, every purchase row, and normalizes Parcela to PARC N/M" do
       # Real fatura text (pdftotext -layout output), trimmed to the

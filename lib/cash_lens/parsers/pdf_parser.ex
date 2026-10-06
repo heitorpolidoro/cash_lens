@@ -130,6 +130,49 @@ defmodule CashLens.Parsers.PDFParser do
   defp mercado_pago_description(desc, "", ""), do: desc
   defp mercado_pago_description(desc, n, m), do: desc <> " PARC #{n}/#{m}"
 
+  # Bradesco card statements mark an installment as a bare "N/M" column between
+  # the merchant and the city -- "RAIA2349 03/03 SAO JOSE DOS" -- with no
+  # keyword. `CashLens.Transactions.InstallmentDetector` keys on "PARC N/M", so
+  # those parcels were invisible to it: they were averaged as ordinary spending
+  # and never ended in the forecast.
+  #
+  # This rewrites the marker into the canonical form, exactly as
+  # `mercado_pago_description/3` does for that statement's "Parcela N de M".
+  # Normalizing in the parser, rather than relaxing the shared detector, is what
+  # keeps the ambiguity contained: a statement LINE starts with the purchase
+  # date, so a bare pattern applied there would read "18/04" as parcel 18 of 4.
+  # By this point the date has already been captured separately.
+  #
+  # Guards against a merchant name that merely contains a slash: the parcel
+  # number cannot exceed the total, a single-payment "1/1" is not an
+  # installment, and a description that already carries PARC is left alone.
+  @bare_installment_marker ~r/\b(\d{1,2})\/(\d{1,2})\b/
+
+  defp normalize_installment_marker(description) do
+    if String.contains?(String.upcase(description), "PARC ") do
+      description
+    else
+      rewrite_bare_marker(description)
+    end
+  end
+
+  defp rewrite_bare_marker(description) do
+    case Regex.run(@bare_installment_marker, description, return: :index) do
+      [{start, len}, _number, _total] ->
+        marker = String.slice(description, start, len)
+        [number, total] = marker |> String.split("/") |> Enum.map(&String.to_integer/1)
+
+        if total > 1 and number <= total do
+          String.replace(description, marker, "PARC #{marker}", global: false)
+        else
+          description
+        end
+
+      nil ->
+        description
+    end
+  end
+
   defp mercado_pago_amount(amount_str, :payment), do: parse_amount(amount_str)
   defp mercado_pago_amount(amount_str, :purchases), do: Decimal.negate(parse_amount(amount_str))
 
@@ -365,6 +408,7 @@ defmodule CashLens.Parsers.PDFParser do
         |> Enum.join(" ")
         |> String.replace(~r/\s+/, " ")
         |> String.trim()
+        |> normalize_installment_marker()
 
       final_tx = %{state.current_tx | description: final_desc}
 
