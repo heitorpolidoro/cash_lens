@@ -115,6 +115,20 @@ defmodule CashLensWeb.LayoutsTest do
       assert html =~ "section-title"
     end
 
+    test "the toggle drives the collapse through a hook, not markup the server re-renders" do
+      html = render_app(%{current_path: "/"})
+
+      # The collapsed state cannot live in anything this layout renders: every
+      # patch restores what the server sent, and the server always sends the
+      # expanded sidebar. So the button declares a hook -- which survives the
+      # patch and re-asserts the label -- and the class itself goes on <html>,
+      # set by the root layout. An earlier version toggled a class on
+      # #app-drawer from an inline script, and the first click anywhere in the
+      # app expanded the menu again.
+      assert html =~ ~s(phx-hook="SidebarToggle")
+      refute html =~ "getElementById(\"app-drawer\")"
+    end
+
     test "every entry carries a native tooltip so compact mode stays readable" do
       html = render_app(%{current_path: "/"})
 

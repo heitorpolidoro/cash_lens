@@ -10,6 +10,38 @@
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
+    <%!--
+      The collapsed sidebar is a class on <html>, set here rather than in the
+      app layout. Two reasons, both load-bearing: <html> lives in the root
+      layout, which LiveView renders once and never patches, so the class
+      survives every DOM update -- on the drawer it was stripped by the first
+      patch after any click; and running before <body> is parsed means the
+      sidebar never paints wide and then snaps narrow.
+    --%>
+    <script>
+      try {
+        if (localStorage.getItem("sidebar-collapsed") === "true") {
+          document.documentElement.classList.add("sidebar-collapsed");
+
+          // The toggle's own label and `aria-expanded` are rendered by the
+          // server, which always says "expanded". The SidebarToggle hook
+          // corrects them, but only once the socket connects -- a few hundred
+          // milliseconds in which a screen reader would be told the opposite of
+          // what the sidebar is doing. Correcting them at DOMContentLoaded
+          // closes that gap; the hook owns them from its mount onwards.
+          document.addEventListener("DOMContentLoaded", () => {
+            const button = document.getElementById("sidebar-toggle");
+            if (!button) return;
+
+            button.setAttribute("title", "Expandir menu");
+            button.setAttribute("aria-label", "Expandir menu");
+            button.setAttribute("aria-expanded", "false");
+          });
+        }
+      } catch (_) {
+        /* Private mode or blocked storage: the sidebar just starts expanded. */
+      }
+    </script>
   </head>
   <body class="antialiased bg-[#f8fafc] text-slate-800">
     {@inner_content}

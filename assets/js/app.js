@@ -13,6 +13,53 @@ const liveSocket = new LiveSocket("/live", Socket, {
   params: {_csrf_token: csrfToken},
   hooks: {
     ...colocatedHooks,
+    // The collapsed sidebar is a class on <html>, written by the root layout
+    // before the body paints and never touched by a patch. This hook owns the
+    // two things that DO live inside the patched DOM: the click, and the
+    // button's own label and `aria-expanded`. `updated` re-asserts them,
+    // because every patch restores the attributes the server rendered -- which
+    // always say "expanded", the server having no idea what this browser chose.
+    SidebarToggle: {
+      mounted() {
+        this.sync();
+
+        this.onClick = () => {
+          const collapsed = !this.collapsed();
+
+          try {
+            localStorage.setItem("sidebar-collapsed", String(collapsed));
+          } catch (_) {
+            /* Storage blocked: the choice still applies, just not next load. */
+          }
+
+          document.documentElement.classList.toggle("sidebar-collapsed", collapsed);
+          this.sync();
+        };
+
+        this.el.addEventListener("click", this.onClick);
+      },
+
+      updated() {
+        this.sync();
+      },
+
+      destroyed() {
+        this.el.removeEventListener("click", this.onClick);
+      },
+
+      collapsed() {
+        return document.documentElement.classList.contains("sidebar-collapsed");
+      },
+
+      sync() {
+        const collapsed = this.collapsed();
+        const label = collapsed ? "Expandir menu" : "Recolher menu";
+
+        this.el.setAttribute("title", label);
+        this.el.setAttribute("aria-label", label);
+        this.el.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      }
+    },
     // Enter fires a modal's primary action, mirroring Escape closing it.
     //
     // The target button opts in with `data-modal-default`; it is never inferred

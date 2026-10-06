@@ -90,6 +90,7 @@
           <button
             id="sidebar-toggle"
             type="button"
+            phx-hook="SidebarToggle"
             title="Recolher menu"
             aria-label="Recolher menu"
             aria-expanded="true"
@@ -151,8 +152,9 @@
     transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Compact mode: icons only. Applied on the drawer root so both the
-     sidebar and its contents react to a single class. */
+  /* Compact mode: icons only. The class sits on <html> -- see the root
+     layout for why -- and every rule below is a descendant selector, so it
+     reaches the sidebar from there exactly as it did from the drawer. */
   .sidebar-collapsed .sidebar-container {
     width: 5rem;
   }
@@ -181,51 +183,3 @@
     padding-top: 0.75rem;
   }
 </style>
-
-<script>
-  (() => {
-    const STORAGE_KEY = "sidebar-collapsed";
-
-    const isCollapsed = () => localStorage.getItem(STORAGE_KEY) === "true";
-
-    const applyState = () => {
-      const drawer = document.getElementById("app-drawer");
-      if (!drawer) return;
-
-      const collapsed = isCollapsed();
-      drawer.classList.toggle("sidebar-collapsed", collapsed);
-
-      const button = document.getElementById("sidebar-toggle");
-      if (!button) return;
-
-      const label = collapsed ? "Expandir menu" : "Recolher menu";
-      button.setAttribute("title", label);
-      button.setAttribute("aria-label", label);
-      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    };
-
-    // The click handler is delegated from the document and registered once per
-    // page load. Attaching it to the button itself is not safe here: LiveView
-    // patches the layout DOM, which drops any inline guard such as a dataset
-    // flag and leads to the handler being bound more than once.
-    if (!window.sidebarToggleBound) {
-      window.sidebarToggleBound = true;
-
-      document.addEventListener("click", (event) => {
-        const target = event.target;
-        if (!(target instanceof Element) || !target.closest("#sidebar-toggle")) return;
-
-        localStorage.setItem(STORAGE_KEY, isCollapsed() ? "false" : "true");
-        applyState();
-      });
-
-      window.addEventListener("phx:page-loading-stop", applyState);
-    }
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", applyState);
-    } else {
-      applyState();
-    }
-  })();
-</script>
