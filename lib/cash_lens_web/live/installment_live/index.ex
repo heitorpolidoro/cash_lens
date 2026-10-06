@@ -319,15 +319,18 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   defp type_label("financing"), do: "Financiamento"
   defp type_label("consorcio"), do: "Consórcio"
+  defp type_label("emprestimo"), do: "Empréstimo"
   defp type_label(_credit_card), do: "Cartão"
 
   defp type_icon("financing"), do: "🏠"
   defp type_icon("consorcio"), do: "🤝"
+  defp type_icon("emprestimo"), do: "💰"
   defp type_icon(_credit_card), do: "💳"
 
   defp type_tab_label("all"), do: "🌐 Todos"
   defp type_tab_label("financing"), do: "🏠 Financiamentos"
   defp type_tab_label("consorcio"), do: "🤝 Consórcios"
+  defp type_tab_label("emprestimo"), do: "💰 Empréstimos"
   defp type_tab_label(_credit_card), do: "💳 Cartão de Crédito"
 
   defp breakdown_caption(type, count) do
@@ -336,16 +339,20 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   defp relief_type_label("financing"), do: "Financiamento"
   defp relief_type_label("consorcio"), do: "Consórcio"
+  defp relief_type_label("emprestimo"), do: "Empréstimo"
   defp relief_type_label(_credit_card), do: "Parcelamento no cartão"
 
   defp breakdown_label("financing"), do: "Financiamentos"
   defp breakdown_label("consorcio"), do: "Consórcios"
+  defp breakdown_label("emprestimo"), do: "Empréstimos"
   defp breakdown_label(_credit_card), do: "Parcelamentos Cartão"
 
   defp unit_label("financing", 1), do: "contrato"
   defp unit_label("financing", _n), do: "contratos"
   defp unit_label("consorcio", 1), do: "cota"
   defp unit_label("consorcio", _n), do: "cotas"
+  defp unit_label("emprestimo", 1), do: "contrato"
+  defp unit_label("emprestimo", _n), do: "contratos"
   defp unit_label(_credit_card, 1), do: "compra"
   defp unit_label(_credit_card, _n), do: "compras"
 
@@ -354,27 +361,32 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   defp projected_amount(month, "financing"), do: month.financing
   defp projected_amount(month, "consorcio"), do: month.consorcio
+  defp projected_amount(month, "emprestimo"), do: month.emprestimo
   defp projected_amount(month, _credit_card), do: month.credit_card
 
   defp dot_class("financing"), do: "bg-indigo-500"
   defp dot_class("consorcio"), do: "bg-amber-500"
+  defp dot_class("emprestimo"), do: "bg-rose-500"
   defp dot_class(_credit_card), do: "bg-blue-500"
 
   defp badge_class("financing"), do: "bg-indigo-500/10 text-indigo-600 border-indigo-500/30"
   defp badge_class("consorcio"), do: "bg-amber-500/10 text-amber-600 border-amber-500/30"
+  defp badge_class("emprestimo"), do: "bg-rose-500/10 text-rose-600 border-rose-500/30"
   defp badge_class(_credit_card), do: "bg-blue-500/10 text-blue-600 border-blue-500/30"
 
   defp progress_class("financing"), do: "bg-indigo-500"
   defp progress_class("consorcio"), do: "bg-amber-500"
+  defp progress_class("emprestimo"), do: "bg-rose-500"
   defp progress_class(_credit_card), do: "bg-blue-500"
 
   # Percentage of each commitment type within a projected month, in the stacking
-  # order used by the ribbon (financing at the base, card on top). The three
-  # shares always describe the same total the cell displays.
+  # order used by the ribbon (financing at the base, card on top). The shares
+  # always describe the same total the cell displays.
   defp stack_shares(month) do
     [
       {"financing", share(month.financing, month.total)},
       {"consorcio", share(month.consorcio, month.total)},
+      {"emprestimo", share(month.emprestimo, month.total)},
       {"credit_card", share(month.credit_card, month.total)}
     ]
   end

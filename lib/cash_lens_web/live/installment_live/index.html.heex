@@ -510,7 +510,7 @@
 
       <div class="mb-4">
         <label class="block text-[11px] font-bold mb-1.5">Tipo de Compromisso</label>
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             :for={type <- @commitment_types}
             type="button"
@@ -630,7 +630,7 @@
             label="Instituição / Administradora"
             placeholder="Ex: Caixa Econômica, Porto Seguro..."
           />
-          <div :if={@modal_type == "financing"} id="field-interest-rate">
+          <div :if={@modal_type in ["financing", "emprestimo"]} id="field-interest-rate">
             <.input
               field={@form[:interest_rate]}
               type="number"

@@ -530,7 +530,12 @@ defmodule CashLens.InstallmentsTest do
     end
 
     test "commitment_types/0 lists the supported modalities" do
-      assert Installments.commitment_types() == ["credit_card", "financing", "consorcio"]
+      assert Installments.commitment_types() == [
+               "credit_card",
+               "financing",
+               "consorcio",
+               "emprestimo"
+             ]
     end
   end
 

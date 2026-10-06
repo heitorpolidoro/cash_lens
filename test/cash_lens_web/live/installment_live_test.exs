@@ -174,6 +174,29 @@ defmodule CashLensWeb.InstallmentLiveTest do
       assert cell =~ "R$ 1.000,00"
     end
 
+    test "a loan is projected and labelled as its own type", %{conn: conn} do
+      # A parcel no other fixture shares, so the amount proves the loan reached
+      # the ribbon rather than some other commitment's line.
+      commitment(%{
+        description_pattern: "EMPRESTIMO PESSOAL",
+        commitment_type: "emprestimo",
+        installments: 12,
+        total_amount: "9324.00"
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      assert render(live) =~ "Empréstimos"
+
+      breakdown = live |> element("#metric-month-breakdown") |> render()
+      assert breakdown =~ "Empréstimos (1 contrato)"
+      assert breakdown =~ "R$ 777,00"
+
+      cell = live |> element("#projection-#{Date.to_iso8601(month_start(0))}") |> render()
+      assert cell =~ "Empréstimo"
+      assert cell =~ "R$ 777,00"
+    end
+
     test "the stacked bars are proportional and fill the whole bar", %{conn: conn} do
       {:ok, live, _html} = live(conn, ~p"/installments")
 
@@ -184,7 +207,9 @@ defmodule CashLensWeb.InstallmentLiveTest do
           Regex.scan(~r/width:\s*([0-9.]+)%/, cell)
           |> Enum.map(fn [_, w] -> String.to_float(w) end)
 
-        assert length(widths) == 3, "expected three stacked segments for offset #{offset}"
+        assert length(widths) == length(Installments.commitment_types()),
+               "expected one stacked segment per commitment type for offset #{offset}"
+
         assert_in_delta Enum.sum(widths), 100.0, 0.5
       end
     end

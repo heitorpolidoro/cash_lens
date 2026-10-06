@@ -50,7 +50,7 @@ defmodule CashLensWeb.Layouts do
       %{
         title: "Planejamento",
         items: [
-          nav_item("Parcelas & Consórcios", "/installments", "hero-squares-2x2", "/installments"),
+          nav_item("Contas Parceladas", "/installments", "hero-squares-2x2", "/installments"),
           nav_item("Previsão de Caixa", "/forecast", "hero-arrow-trending-up", "/forecast")
         ]
       },

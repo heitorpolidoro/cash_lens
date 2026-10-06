@@ -5,14 +5,15 @@ defmodule CashLens.Installments.InstallmentGroup do
   Historically this schema only modelled credit-card instalment purchases
   ("parcelas"). It now also covers `"financing"` (long-term amortised debt) and
   `"consorcio"` (a Brazilian pooled-purchase plan with a credit letter and a
-  contemplation status). `commitment_type` defaults to `"credit_card"`, so every
+  contemplation status) and `"emprestimo"` (a personal loan: borrowed money
+  repaid in fixed instalments, with no asset behind it). `commitment_type` defaults to `"credit_card"`, so every
   row created before the commitment types were introduced keeps behaving exactly
   as a credit-card commitment.
   """
   use Ecto.Schema
   import Ecto.Changeset
 
-  @commitment_types ~w(credit_card financing consorcio)
+  @commitment_types ~w(credit_card financing consorcio emprestimo)
 
   @doc "The supported commitment modalities, in display order."
   def commitment_types, do: @commitment_types

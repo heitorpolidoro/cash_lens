@@ -795,7 +795,8 @@ defmodule CashLens.Installments do
   Projects the monthly commitment for `months` months starting at `month`,
   split by commitment type so the UI can stack one proportional bar per month.
 
-  Each entry is `%{date:, total:, credit_card:, financing:, consorcio:, current?:}`
+  Each entry is `%{date:, total:, credit_card:, financing:, consorcio:, emprestimo:,
+  current?:}`
   and the three type amounts always add up to `:total`.
   """
   def monthly_projection(month \\ current_month(), months \\ 10) do
@@ -824,6 +825,7 @@ defmodule CashLens.Installments do
       credit_card: by_type["credit_card"],
       financing: by_type["financing"],
       consorcio: by_type["consorcio"],
+      emprestimo: by_type["emprestimo"],
       current?: Date.compare(month, current) == :eq
     }
   end
