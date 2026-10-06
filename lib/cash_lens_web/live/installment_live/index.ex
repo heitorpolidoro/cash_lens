@@ -162,7 +162,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
      socket
      |> assign(:show_modal, true)
      |> assign(:commitment, group)
-     |> assign(:commitment_params, %{"commitment_type" => Installments.commitment_type(group)})
+     |> assign(:commitment_params, edit_params(group))
      |> reset_suggestions()
      |> assign_form()}
   end
@@ -418,6 +418,19 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   # coveralls-ignore-next-line — defensive: a transaction always carries a date.
   defp parcel_status(_parcel), do: "—"
+
+  # "Parcelas já pagas" is not stored, so an edit would open with it blank and the
+  # operator could not tell 81 of 360 from 1 of 360 without doing the arithmetic.
+  # It is derived back from the dates the group does store.
+  defp edit_params(group) do
+    paid =
+      group.installments - Installments.remaining_parcels(group, Installments.current_month())
+
+    %{
+      "commitment_type" => Installments.commitment_type(group),
+      "paid_installments" => to_string(paid)
+    }
+  end
 
   # "Parcelas já pagas" is the only way to reach a contract that began before the
   # imported history: 81 paid parcels put the first one 80 months before the last

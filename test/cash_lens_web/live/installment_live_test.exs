@@ -709,6 +709,28 @@ defmodule CashLensWeb.InstallmentLiveTest do
                "Nenhum lançamento está vinculado"
     end
 
+    test "editing shows how many parcels are already paid", %{conn: conn} do
+      # Parcel 1 fell 81 months ago, so parcels 1..81 are paid and this month
+      # bills 82 — leaving 279 of the 360.
+      group =
+        commitment(%{
+          description_pattern: "FINANCIAMENTO LONGO",
+          commitment_type: "financing",
+          installments: 360,
+          start_date: month_start(-81)
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      render_click(live, "edit", %{"id" => group.id})
+
+      assert live
+             |> element("#installment_group_paid_installments")
+             |> render() =~ ~s(value="81")
+
+      # Re-opening must not move the stored start date.
+      assert live |> element("#term-summary") |> render() =~ "279 restantes"
+    end
+
     test "the total follows the term through every keystroke", %{conn: conn} do
       acc = account_fixture()
 
