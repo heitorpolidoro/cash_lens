@@ -302,6 +302,11 @@ defmodule CashLens.Forecast do
       where: is_nil(t.transfer_key),
       where: is_nil(t.category_id) or t.category_id not in ^fixed_category_ids,
       where: is_nil(c.slug) or not like(c.slug, "cartao-de-credito%"),
+      # A parcel of a registered commitment is projected explicitly, by
+      # `commitment_occurrences/2` or inside a card's bill. Averaging it in here
+      # as well would charge the same financing twice — once smeared across every
+      # day of the month, once on its due date.
+      where: is_nil(t.installment_group_id),
       select: sum(t.amount)
     )
     |> Scopes.cash_accounts_only()

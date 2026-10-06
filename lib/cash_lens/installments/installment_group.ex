@@ -85,12 +85,17 @@ defmodule CashLens.Installments.InstallmentGroup do
       installments = get_field(changeset, :installments)
 
       cond do
-        not is_nil(total_amount) ->
-          changeset
-
+        # The parcel wins over a total already on the changeset. The form renders
+        # `total_amount` as an input, so a total derived here comes straight back
+        # as user input on the next keystroke — and a total derived while the term
+        # read "6" on the way to "60" would otherwise be frozen, leaving a parcel
+        # ten times too small.
         not is_nil(installment_amount) and not is_nil(installments) ->
           calculated_total = Decimal.mult(installment_amount, installments)
           put_change(changeset, :total_amount, calculated_total)
+
+        not is_nil(total_amount) ->
+          changeset
 
         true ->
           changeset

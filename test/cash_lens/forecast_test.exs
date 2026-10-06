@@ -4,6 +4,7 @@ defmodule CashLens.ForecastTest do
   alias CashLens.Forecast
   alias CashLens.Forecast.RecurringItem
 
+  import Ecto.Query, only: [from: 2]
   import CashLens.CategoriesFixtures
   import CashLens.ForecastFixtures
 
@@ -888,6 +889,36 @@ defmodule CashLens.ForecastTest do
       assert Decimal.equal?(rate.daily, Decimal.new("-10.00"))
       assert Decimal.equal?(rate.monthly, Decimal.new("-300.00"))
       assert rate.months == 6
+    end
+
+    test "leaves out parcels already belonging to a commitment", %{
+      account: account,
+      variable: variable
+    } do
+      spend(account, variable, Date.add(Date.utc_today(), -10), "-1000.00")
+      spend(account, variable, Date.add(Date.utc_today(), -100), "-800.00")
+
+      # A financing's parcel sits in a variable category, so nothing but its
+      # group membership keeps it out of the average — and it is already
+      # projected on its own due date by commitment_occurrences/2.
+      {:ok, group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "FINANCIAMENTO",
+          commitment_type: "financing",
+          installments: 60,
+          start_date: Date.add(Date.utc_today(), -400),
+          total_amount: "60000.00"
+        })
+
+      parcela = spend(account, variable, Date.add(Date.utc_today(), -20), "-3000.00")
+
+      CashLens.Repo.update_all(
+        from(t in CashLens.Transactions.Transaction, where: t.id == ^parcela.id),
+        set: [installment_group_id: group.id, installment_number: 1]
+      )
+
+      # Still -10,00/day: the 3.000,00 parcel is not averaged in.
+      assert Decimal.equal?(Forecast.variable_baseline_rate().daily, Decimal.new("-10.00"))
     end
 
     test "carries the arithmetic behind the rate, not just its result", %{

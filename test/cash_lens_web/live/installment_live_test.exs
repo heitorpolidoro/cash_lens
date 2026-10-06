@@ -709,6 +709,53 @@ defmodule CashLensWeb.InstallmentLiveTest do
                "Nenhum lançamento está vinculado"
     end
 
+    test "the total follows the term through every keystroke", %{conn: conn} do
+      acc = account_fixture()
+
+      for date <- [~D[2026-07-21], ~D[2026-08-21], ~D[2026-09-21]] do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-1471.52",
+          description: "BANCO GM SA",
+          date: date
+        })
+      end
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      render_click(live, "open_modal", %{})
+      render_click(live, "apply_suggestion", %{"description" => "BANCO GM SA"})
+
+      # Typing "60" arrives as "6" and then "60", through the real form, so every
+      # rendered input is sent back — including a total the form itself derived.
+      for term <- ["6", "60"] do
+        live
+        |> form("#commitment-form",
+          installment_group: %{
+            "description_pattern" => "BANCO GM SA",
+            "installment_amount" => "1471.52",
+            "installments" => term,
+            "start_date" => "2022-11-21"
+          }
+        )
+        |> render_change()
+      end
+
+      live
+      |> form("#commitment-form",
+        installment_group: %{
+          "description_pattern" => "BANCO GM SA",
+          "installment_amount" => "1471.52",
+          "installments" => "60",
+          "start_date" => "2022-11-21"
+        }
+      )
+      |> render_submit()
+
+      assert [group] = Installments.list_installment_groups()
+      assert group.installments == 60
+      assert Decimal.equal?(Installments.parcel_value(group), Decimal.new("1471.52"))
+    end
+
     test "the trash button opens the modal instead of deleting", %{conn: conn} do
       group = commitment(%{description_pattern: "NAO APAGUE AINDA"})
 
