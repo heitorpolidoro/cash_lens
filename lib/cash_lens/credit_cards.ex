@@ -390,6 +390,88 @@ defmodule CashLens.CreditCards do
     }
   end
 
+  @doc """
+  Credit-card cycles that have already closed but have no statement on record.
+
+  A statement's competência is the month its bill falls due, so the closing that
+  produced it sits one `closing_day` earlier — in the same month when `due_day`
+  is later than `closing_day`, in the previous month otherwise. A competência
+  whose closing is in the past is a bill the card has issued; without a row for
+  it, nothing on the forecast or the statements screen accounts for that spend.
+
+  This is the signal `statement_gaps/2` structurally cannot give: `missing_months`
+  only looks *between* a card's first and last imported competência, so the cycle
+  that just closed — always the newest one — is never inside that range.
+
+  Scans the last `cycles` closed competências per card, newest first. Cards
+  without both `closing_day` and `due_day` are skipped: with no cycle configured
+  there is no closing date to have passed.
+  """
+  def closed_without_statement(today \\ Date.utc_today(), cycles \\ 3) do
+    accounts =
+      from(a in Account,
+        where: a.is_credit_card == true and a.is_closed == false,
+        where: not is_nil(a.closing_day) and not is_nil(a.due_day),
+        order_by: a.name
+      )
+      |> Repo.all()
+
+    recorded =
+      from(s in Statement, select: {s.account_id, s.competencia})
+      |> Repo.all()
+      |> MapSet.new()
+
+    Enum.flat_map(accounts, fn account ->
+      account
+      |> closed_competencias(today, cycles)
+      |> Enum.reject(&MapSet.member?(recorded, {account.id, &1}))
+      |> Enum.map(
+        &%{
+          account: account,
+          competencia: &1,
+          closed_on: closing_for_competencia(&1, account.closing_day, account.due_day)
+        }
+      )
+    end)
+  end
+
+  # The `cycles` most recent competências whose closing date is not in the future,
+  # newest first.
+  defp closed_competencias(%{closing_day: c, due_day: d}, today, cycles) do
+    latest_closing =
+      case clamp_day(today.year, today.month, c) do
+        this -> if Date.compare(this, today) == :gt, do: previous_closing(this, c), else: this
+      end
+
+    newest = latest_closing |> due_from_closing(c, d) |> Date.beginning_of_month()
+
+    Enum.map(0..(cycles - 1), &months_back(newest, &1))
+  end
+
+  defp months_back(%Date{} = month, 0), do: month
+
+  defp months_back(%Date{year: y, month: m}, back) do
+    {py, pm} = previous_month(y, m)
+    months_back(Date.new!(py, pm, 1), back - 1)
+  end
+
+  defp previous_closing(%Date{year: y, month: m}, closing_day) do
+    {py, pm} = previous_month(y, m)
+    clamp_day(py, pm, closing_day)
+  end
+
+  # Inverse of `due_from_closing/3`: the closing that a competência came from.
+  defp closing_for_competencia(%Date{} = competencia, closing_day, due_day) do
+    if due_day > closing_day do
+      clamp_day(competencia.year, competencia.month, closing_day)
+    else
+      previous_closing(competencia, closing_day)
+    end
+  end
+
+  defp previous_month(year, 1), do: {year - 1, 12}
+  defp previous_month(year, month), do: {year, month - 1}
+
   defp missing_months(entries) do
     entries
     |> Enum.reject(&is_nil(&1.statement.competencia))

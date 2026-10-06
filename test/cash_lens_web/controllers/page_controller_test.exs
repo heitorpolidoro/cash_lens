@@ -4,6 +4,7 @@ defmodule CashLensWeb.PageControllerTest do
   import CashLens.AccountsFixtures
   import CashLens.AccountingFixtures
   import CashLens.TransactionsFixtures
+  import CashLens.CreditCardsFixtures
 
   test "GET / with data", %{conn: conn} do
     account = account_fixture()
@@ -200,5 +201,46 @@ defmodule CashLensWeb.PageControllerTest do
   test "GET /.well-known/appspecific/com.chrome.devtools.json", %{conn: conn} do
     conn = get(conn, "/.well-known/appspecific/com.chrome.devtools.json")
     assert response(conn, 204) == ""
+  end
+
+  describe "closed-statement warning" do
+    test "warns when a card's cycle has closed with no statement", %{conn: conn} do
+      account_fixture(%{
+        name: "AMAZON",
+        is_credit_card: true,
+        closing_day: 1,
+        due_day: 10
+      })
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert html =~ "Fatura possivelmente fechada"
+      assert html =~ "AMAZON"
+    end
+
+    test "stays silent once every closed cycle has a statement", %{conn: conn} do
+      account =
+        account_fixture(%{name: "AMEX", is_credit_card: true, closing_day: 1, due_day: 10})
+
+      today = Date.utc_today()
+
+      for back <- 0..3 do
+        competencia = today |> Date.beginning_of_month() |> months_ago(back)
+
+        statement_fixture(%{
+          account: account,
+          competencia: competencia,
+          due_date: %{competencia | day: 10}
+        })
+      end
+
+      refute conn |> get(~p"/") |> html_response(200) =~ "Fatura possivelmente fechada"
+    end
+
+    defp months_ago(date, 0), do: date
+
+    defp months_ago(%Date{year: y, month: 1}, n), do: months_ago(Date.new!(y - 1, 12, 1), n - 1)
+
+    defp months_ago(%Date{year: y, month: m}, n), do: months_ago(Date.new!(y, m - 1, 1), n - 1)
   end
 end

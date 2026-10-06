@@ -2,6 +2,7 @@ defmodule CashLensWeb.PageController do
   use CashLensWeb, :controller
 
   alias CashLens.Accounting
+  alias CashLens.CreditCards
   alias CashLens.Accounts
   alias CashLens.Transactions
 
@@ -68,7 +69,8 @@ defmodule CashLensWeb.PageController do
       accounts: accounts_with_data,
       summary_month: month_name,
       chart_data: chart_data,
-      historical: historical
+      historical: historical,
+      closed_statements: CreditCards.closed_without_statement()
     )
   end
 

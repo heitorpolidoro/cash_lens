@@ -737,4 +737,75 @@ defmodule CashLens.CreditCardsTest do
       assert CashLens.CreditCards.suggest_payment(no_due) == nil
     end
   end
+
+  describe "closed_without_statement/2" do
+    import CashLens.AccountsFixtures
+    import CashLens.CreditCardsFixtures
+
+    defp card(attrs) do
+      account_fixture(Map.merge(%{is_credit_card: true}, attrs))
+    end
+
+    test "reports a cycle whose closing day has passed with no statement" do
+      # Closes on the 3rd, due on the 10th: the cycle closing 03/10 is the
+      # October competência.
+      account = card(%{name: "AMAZON", closing_day: 3, due_day: 10})
+
+      assert [gap] = CreditCards.closed_without_statement(~D[2026-10-06], 1)
+      assert gap.account.id == account.id
+      assert gap.competencia == ~D[2026-10-01]
+      assert gap.closed_on == ~D[2026-10-03]
+    end
+
+    test "says nothing while the cycle is still open" do
+      # Closes on the 12th; on the 6th that has not happened yet, so the newest
+      # closed cycle is September's.
+      account = card(%{name: "CARTAO", closing_day: 12, due_day: 17})
+
+      statement_fixture(%{
+        account: account,
+        competencia: ~D[2026-09-01],
+        due_date: ~D[2026-09-17]
+      })
+
+      assert CreditCards.closed_without_statement(~D[2026-10-06], 1) == []
+    end
+
+    test "says nothing once the statement is on record" do
+      account = card(%{name: "AMEX", closing_day: 6, due_day: 16})
+
+      statement_fixture(%{
+        account: account,
+        competencia: ~D[2026-10-01],
+        due_date: ~D[2026-10-16]
+      })
+
+      assert CreditCards.closed_without_statement(~D[2026-10-06], 1) == []
+    end
+
+    test "places the competência in the next month when closing follows the due day" do
+      # Closes on the 25th, due on the 5th: the cycle closing 25/09 is due in
+      # October, so its competência is October.
+      card(%{name: "TARDIO", closing_day: 25, due_day: 5})
+
+      assert [gap] = CreditCards.closed_without_statement(~D[2026-10-06], 1)
+      assert gap.competencia == ~D[2026-10-01]
+      assert gap.closed_on == ~D[2026-09-25]
+    end
+
+    test "looks back over several cycles, newest first" do
+      card(%{name: "ATRASADO", closing_day: 3, due_day: 10})
+
+      gaps = CreditCards.closed_without_statement(~D[2026-10-06], 3)
+
+      assert Enum.map(gaps, & &1.competencia) == [~D[2026-10-01], ~D[2026-09-01], ~D[2026-08-01]]
+    end
+
+    test "skips cards with no cycle configured and closed cards" do
+      card(%{name: "SEM CICLO", closing_day: nil, due_day: nil})
+      card(%{name: "ENCERRADO", closing_day: 3, due_day: 10, is_closed: true})
+
+      assert CreditCards.closed_without_statement(~D[2026-10-06], 3) == []
+    end
+  end
 end

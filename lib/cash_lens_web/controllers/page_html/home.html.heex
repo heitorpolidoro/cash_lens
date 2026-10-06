@@ -15,6 +15,33 @@
       </.link>
     </div>
   </div>
+
+  <%!--
+    A cycle whose closing day has passed with no statement on record. The spend
+    is already on the card but invisible here, so every figure below understates
+    it until the bill is imported.
+  --%>
+  <div
+    :if={@closed_statements != []}
+    id="closed-statement-warning"
+    class="bg-amber-50 border border-amber-300 rounded-2xl px-6 py-4 flex items-start gap-3"
+  >
+    <.icon name="hero-exclamation-triangle" class="size-5 text-amber-600 shrink-0 mt-0.5" />
+    <div class="min-w-0">
+      <h2 class="text-xs font-black uppercase tracking-wider text-amber-900">
+        Fatura possivelmente fechada
+      </h2>
+      <p class="text-xs text-amber-800 mt-1">
+        {Enum.map_join(@closed_statements, " · ", fn s ->
+          "#{s.account.name} #{format_competencia(s.competencia)} (fechou #{format_date(s.closed_on)})"
+        end)}
+      </p>
+      <p class="text-[11px] text-amber-700 mt-1.5">
+        Enquanto não for importada, esse gasto não aparece em nenhum número desta tela.
+        <.link href={~p"/imports"} class="font-bold underline">Importar extrato</.link>
+      </p>
+    </div>
+  </div>
   
 <!-- KPI Cards -->
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
