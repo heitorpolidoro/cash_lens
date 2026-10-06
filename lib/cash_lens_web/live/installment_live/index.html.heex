@@ -402,6 +402,7 @@
                 <button
                   phx-click="delete"
                   phx-value-id={group.id}
+                  data-confirm={delete_confirm(group)}
                   class="btn btn-ghost btn-xs text-error p-0"
                 >
                   <.icon name="hero-trash" class="size-4" />

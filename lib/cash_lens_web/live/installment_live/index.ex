@@ -471,6 +471,22 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   defp term_summary(_form_data), do: nil
 
+  # Spells out what survives: the parcels are unlinked, never deleted, and the
+  # count is the one number that tells the operator how much is at stake.
+  defp delete_confirm(%{paid_count: 0} = group) do
+    "Excluir \"#{group.description_pattern}\"? Nenhum lançamento está vinculado a ele."
+  end
+
+  defp delete_confirm(%{paid_count: 1} = group) do
+    "Excluir \"#{group.description_pattern}\"? O lançamento vinculado volta a ser " <>
+      "uma transação solta — não é apagado."
+  end
+
+  defp delete_confirm(%{paid_count: count} = group) do
+    "Excluir \"#{group.description_pattern}\"? Os #{count} lançamentos vinculados voltam " <>
+      "a ser transações soltas — nenhum é apagado."
+  end
+
   defp reset_suggestions(socket) do
     socket
     |> assign(:suggestion_query, "")

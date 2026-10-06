@@ -671,6 +671,55 @@ defmodule CashLensWeb.InstallmentLiveTest do
       assert html =~ "out/26"
     end
 
+    test "the delete button asks for confirmation and says what survives", %{conn: conn} do
+      acc = account_fixture()
+      group = commitment(%{description_pattern: "COM PARCELAS"})
+      vazio = commitment(%{description_pattern: "SEM PARCELAS"})
+
+      tx =
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-100.00",
+          description: "COM PARCELAS 1"
+        })
+
+      Repo.update_all(from(t in Transaction, where: t.id == ^tx.id),
+        set: [installment_group_id: group.id, installment_number: 1]
+      )
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      html = render(live)
+
+      assert html =~ "Excluir &quot;COM PARCELAS&quot;?"
+      assert html =~ "O lançamento vinculado volta a ser uma transação solta"
+      assert html =~ "Excluir &quot;SEM PARCELAS&quot;? Nenhum lançamento está vinculado"
+
+      refute Installments.list_installment_groups() == []
+      assert vazio.id
+    end
+
+    test "the confirmation pluralises for several parcels", %{conn: conn} do
+      acc = account_fixture()
+      group = commitment(%{description_pattern: "TRES PARCELAS", installments: 3})
+
+      for n <- 1..3 do
+        tx =
+          transaction_fixture(%{
+            account_id: acc.id,
+            amount: "-100.00",
+            description: "TRES PARCELAS #{n}"
+          })
+
+        Repo.update_all(from(t in Transaction, where: t.id == ^tx.id),
+          set: [installment_group_id: group.id, installment_number: n]
+        )
+      end
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      assert render(live) =~ "Os 3 lançamentos vinculados voltam a ser transações soltas"
+    end
+
     test "deleting a commitment with parcels does not crash the view", %{conn: conn} do
       acc = account_fixture()
       group = commitment(%{description_pattern: "COM PARCELAS"})
