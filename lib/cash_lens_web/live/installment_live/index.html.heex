@@ -163,6 +163,32 @@
     <div class="modal-backdrop" phx-click="close_relief"></div>
   </div>
 
+  <%!-- Confirmação de exclusão --%>
+  <div :if={@delete_candidate} id="delete-modal" class="modal modal-open">
+    <div class="modal-box max-w-md">
+      <h3 class="text-sm font-black uppercase tracking-wider text-error">Excluir compromisso</h3>
+      <p id="delete-modal-message" class="text-xs opacity-70 mt-2">
+        {delete_confirm(@delete_candidate)}
+      </p>
+
+      <div class="modal-action">
+        <button type="button" phx-click="cancel_delete" class="btn btn-sm btn-ghost">
+          Cancelar
+        </button>
+        <button
+          type="button"
+          id="delete-modal-confirm"
+          phx-click="delete"
+          phx-value-id={@delete_candidate.id}
+          class="btn btn-sm btn-error"
+        >
+          Excluir
+        </button>
+      </div>
+    </div>
+    <div class="modal-backdrop" phx-click="cancel_delete"></div>
+  </div>
+
   <%!-- Fita de projeção mensal empilhada --%>
   <div class="bg-base-100 rounded-2xl border border-base-300 shadow-sm p-5 space-y-3">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -191,7 +217,7 @@
         :for={month <- @projection}
         id={"projection-#{Date.to_iso8601(month.date)}"}
         class={[
-          "shrink-0 flex-1 min-w-[130px] rounded-xl border p-3 flex flex-col justify-between",
+          "shrink-0 flex-1 min-w-[168px] rounded-xl border p-3 flex flex-col justify-between",
           if(month.current?,
             do: "bg-primary/5 border-primary/30 ring-1 ring-primary/20",
             else: "bg-base-200/40 border-base-300"
@@ -400,9 +426,9 @@
                   <.icon name="hero-pencil" class="size-4" />
                 </button>
                 <button
-                  phx-click="delete"
+                  id={"delete-#{group.id}"}
+                  phx-click="ask_delete"
                   phx-value-id={group.id}
-                  data-confirm={delete_confirm(group)}
                   class="btn btn-ghost btn-xs text-error p-0"
                 >
                   <.icon name="hero-trash" class="size-4" />

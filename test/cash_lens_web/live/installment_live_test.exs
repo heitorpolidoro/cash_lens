@@ -688,14 +688,48 @@ defmodule CashLensWeb.InstallmentLiveTest do
       )
 
       {:ok, live, _html} = live(conn, ~p"/installments")
-      html = render(live)
 
-      assert html =~ "Excluir &quot;COM PARCELAS&quot;?"
-      assert html =~ "O lançamento vinculado volta a ser uma transação solta"
-      assert html =~ "Excluir &quot;SEM PARCELAS&quot;? Nenhum lançamento está vinculado"
+      # No browser alert: nothing confirms until the app's own modal is opened.
+      refute render(live) =~ "data-confirm"
+      refute has_element?(live, "#delete-modal")
 
-      refute Installments.list_installment_groups() == []
-      assert vazio.id
+      render_click(live, "ask_delete", %{"id" => group.id})
+      message = live |> element("#delete-modal-message") |> render()
+      assert message =~ "Excluir &quot;COM PARCELAS&quot;?"
+      assert message =~ "O lançamento vinculado volta a ser uma transação solta"
+
+      # Cancelling keeps the commitment.
+      render_click(live, "cancel_delete", %{})
+      refute has_element?(live, "#delete-modal")
+      assert length(Installments.list_installment_groups()) == 2
+
+      render_click(live, "ask_delete", %{"id" => vazio.id})
+
+      assert live |> element("#delete-modal-message") |> render() =~
+               "Nenhum lançamento está vinculado"
+    end
+
+    test "the trash button opens the modal instead of deleting", %{conn: conn} do
+      group = commitment(%{description_pattern: "NAO APAGUE AINDA"})
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      live |> element("#delete-#{group.id}") |> render_click()
+
+      assert has_element?(live, "#delete-modal")
+      assert length(Installments.list_installment_groups()) == 1
+    end
+
+    test "confirming in the modal deletes and closes it", %{conn: conn} do
+      group = commitment(%{description_pattern: "PARA EXCLUIR"})
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      render_click(live, "ask_delete", %{"id" => group.id})
+
+      live |> element("#delete-modal-confirm") |> render_click()
+
+      refute has_element?(live, "#delete-modal")
+      assert Installments.list_installment_groups() == []
     end
 
     test "the confirmation pluralises for several parcels", %{conn: conn} do
@@ -717,7 +751,10 @@ defmodule CashLensWeb.InstallmentLiveTest do
 
       {:ok, live, _html} = live(conn, ~p"/installments")
 
-      assert render(live) =~ "Os 3 lançamentos vinculados voltam a ser transações soltas"
+      render_click(live, "ask_delete", %{"id" => group.id})
+
+      assert live |> element("#delete-modal-message") |> render() =~
+               "Os 3 lançamentos vinculados voltam a ser transações soltas"
     end
 
     test "deleting a commitment with parcels does not crash the view", %{conn: conn} do

@@ -29,6 +29,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
      |> assign(:suggestions, [])
      |> assign(:suggestion_query, "")
      |> assign(:applied_suggestion, nil)
+     |> assign(:delete_candidate, nil)
      |> assign(:commitment_types, Installments.commitment_types())
      |> assign(:relief_preview, @relief_preview)
      |> assign_form()}
@@ -230,10 +231,21 @@ defmodule CashLensWeb.InstallmentLive.Index do
   end
 
   @impl true
+  def handle_event("ask_delete", %{"id" => id}, socket) do
+    group = Enum.find(socket.assigns.commitments, &(&1.id == id))
+    {:noreply, assign(socket, :delete_candidate, group)}
+  end
+
+  @impl true
+  def handle_event("cancel_delete", _params, socket) do
+    {:noreply, assign(socket, :delete_candidate, nil)}
+  end
+
+  @impl true
   def handle_event("delete", %{"id" => id}, socket) do
     group = Installments.get_installment_group!(id)
     {:ok, _} = Installments.delete_installment_group(group)
-    {:noreply, load_data(socket)}
+    {:noreply, socket |> assign(:delete_candidate, nil) |> load_data()}
   end
 
   @impl true
