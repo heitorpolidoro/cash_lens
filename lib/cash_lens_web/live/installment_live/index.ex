@@ -204,7 +204,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
           socket.assigns.commitment_params
           |> Map.put("description_pattern", suggestion.description)
           |> Map.put("installment_amount", Decimal.to_string(suggestion.amount, :normal))
-          |> Map.put("start_date", Date.to_iso8601(suggestion.first_date))
+          |> put_start_date(suggestion)
 
         {:noreply,
          socket
@@ -416,12 +416,33 @@ defmodule CashLensWeb.InstallmentLive.Index do
     typed = Map.get(params, "paid_installments")
 
     with true <- typed not in [nil, ""] and typed != previous,
-         {paid, ""} when paid > 0 <- Integer.parse(typed),
+         paid when is_integer(paid) <- paid_count(params),
          %Date{} = anchor <- paid_anchor(assigns) do
       first = Installments.add_months(anchor, -(paid - 1))
       Map.put(params, "start_date", Date.to_iso8601(first))
     else
       _ -> params
+    end
+  end
+
+  # Picking a pattern normally dates the plan from its first occurrence — but a
+  # paid count already on the form outranks it, re-anchored on the pattern just
+  # picked. Otherwise the date would silently contradict the number still shown
+  # in "parcelas já pagas".
+  defp put_start_date(params, suggestion) do
+    date =
+      case paid_count(params) do
+        nil -> suggestion.first_date
+        paid -> Installments.add_months(suggestion.last_date, -(paid - 1))
+      end
+
+    Map.put(params, "start_date", Date.to_iso8601(date))
+  end
+
+  defp paid_count(params) do
+    case params |> Map.get("paid_installments") |> to_string() |> Integer.parse() do
+      {paid, ""} when paid > 0 -> paid
+      _ -> nil
     end
   end
 

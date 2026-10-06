@@ -476,6 +476,41 @@ defmodule CashLensWeb.InstallmentLiveTest do
       assert summary =~ "dez/49"
     end
 
+    test "switching patterns re-anchors the date on the paid count", %{conn: conn} do
+      acc = account_fixture()
+
+      for {description, dates} <- [
+            {"PRESTACAO DE CRED IMOB", [~D[2026-07-10], ~D[2026-08-10], ~D[2026-09-10]]},
+            {"CONSORCIO PORTO SEGURO", [~D[2026-05-15], ~D[2026-06-15], ~D[2026-07-15]]}
+          ],
+          date <- dates do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-500.00",
+          description: description,
+          date: date
+        })
+      end
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      render_click(live, "open_modal", %{})
+      render_click(live, "apply_suggestion", %{"description" => "PRESTACAO DE CRED IMOB"})
+
+      render_change(live, "validate", %{
+        "installment_group" => %{"installments" => "360", "paid_installments" => "81"}
+      })
+
+      assert render(live) =~ "2020-01-10"
+
+      # Picking a different pattern must re-anchor on ITS last parcel (Jul/2026),
+      # not fall back to its first occurrence, because 81 is still on the form.
+      render_click(live, "clear_suggestion", %{})
+      html = render_click(live, "apply_suggestion", %{"description" => "CONSORCIO PORTO SEGURO"})
+
+      assert html =~ "2019-11-15"
+      refute html =~ "2026-05-15"
+    end
+
     test "a hand-typed start date survives further edits", %{conn: conn} do
       {:ok, live, _html} = live(conn, ~p"/installments")
       render_click(live, "open_modal", %{})
