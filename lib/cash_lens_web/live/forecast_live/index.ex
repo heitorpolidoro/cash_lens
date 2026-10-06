@@ -42,6 +42,7 @@ defmodule CashLensWeb.ForecastLive.Index do
     # Only meaningful while the curve stays above zero: once it crosses, the
     # crossing is the worst news and the trough is just a point past it.
     |> assign(:trough, projection.zero_date == nil && Forecast.trough(projection, @horizon_days))
+    |> assign(:volatility, Forecast.monthly_volatility())
     |> assign(:chart_points, chart_points(projection))
     |> assign(:income_date, income_date)
     |> assign(:income_balance, income_balance)
@@ -327,9 +328,9 @@ defmodule CashLensWeb.ForecastLive.Index do
             </span>
             <span class={[
               "badge badge-sm text-[10px] font-black",
-              bankruptcy_badge_class(@bankruptcy)
+              bankruptcy_badge_class(@bankruptcy, fragile?(@trough, @volatility))
             ]}>
-              {bankruptcy_badge_label(@bankruptcy)}
+              {bankruptcy_badge_label(@bankruptcy, fragile?(@trough, @volatility))}
             </span>
           </div>
           <span class={[
@@ -337,6 +338,14 @@ defmodule CashLensWeb.ForecastLive.Index do
             if(@bankruptcy.severity == :critical, do: "opacity-90", else: "opacity-60")
           ]}>
             {bankruptcy_caption(@bankruptcy, @trough)}
+          </span>
+          <span
+            :if={fragile?(@trough, @volatility)}
+            data-role="volatility-warning"
+            class="text-[11px] font-bold text-warning mt-1 block"
+          >
+            Pode zerar: a folga é menor que a variação mensal típica
+            (±{format_currency(@volatility.sigma)} em {@volatility.months} meses).
           </span>
         </div>
       </div>
@@ -872,15 +881,26 @@ defmodule CashLensWeb.ForecastLive.Index do
   defp bankruptcy_figure_class(%{severity: :near}), do: "text-error"
   defp bankruptcy_figure_class(%{severity: :critical}), do: "text-error-content"
 
-  defp bankruptcy_badge_class(%{severity: :safe}), do: "badge-success"
-  defp bankruptcy_badge_class(%{severity: :distant}), do: "badge-warning"
-  defp bankruptcy_badge_class(%{severity: :near}), do: "badge-error"
-  defp bankruptcy_badge_class(%{severity: :critical}), do: "badge-neutral"
+  # A projection that never crosses zero is only as safe as its thinnest moment.
+  # When the trough is smaller than how much an ordinary month swings, the line
+  # staying positive says more about the model drawing one line than about the
+  # money being there.
+  defp fragile?(%{balance: balance}, %{sigma: sigma}),
+    do: Decimal.positive?(balance) and Decimal.lt?(balance, sigma)
 
-  defp bankruptcy_badge_label(%{severity: :safe}), do: "Seguro"
-  defp bankruptcy_badge_label(%{severity: :distant}), do: "Atenção"
-  defp bankruptcy_badge_label(%{severity: :near}), do: "Em risco"
-  defp bankruptcy_badge_label(%{severity: :critical}), do: "Crítico"
+  defp fragile?(_trough, _volatility), do: false
+
+  defp bankruptcy_badge_class(%{severity: :safe}, true), do: "badge-warning"
+  defp bankruptcy_badge_class(%{severity: :safe}, _solid), do: "badge-success"
+  defp bankruptcy_badge_class(%{severity: :distant}, _fragile), do: "badge-warning"
+  defp bankruptcy_badge_class(%{severity: :near}, _fragile), do: "badge-error"
+  defp bankruptcy_badge_class(%{severity: :critical}, _fragile), do: "badge-neutral"
+
+  defp bankruptcy_badge_label(%{severity: :safe}, true), do: "Pode zerar"
+  defp bankruptcy_badge_label(%{severity: :safe}, _solid), do: "Seguro"
+  defp bankruptcy_badge_label(%{severity: :distant}, _fragile), do: "Atenção"
+  defp bankruptcy_badge_label(%{severity: :near}, _fragile), do: "Em risco"
+  defp bankruptcy_badge_label(%{severity: :critical}, _fragile), do: "Crítico"
 
   # The headline figure is the trough's amount, so the caption carries its date:
   # together they say how little is left on the worst day and when that day is.

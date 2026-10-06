@@ -21,6 +21,7 @@ defmodule CashLens.Forecast do
   @min_occurrences 2
   @default_horizon_days 365
   @baseline_months 6
+  @volatility_months 12
 
   # How many of a card's recent bills the estimate averages. Bounded so a card
   # with a long history is still projected from its current spending level.
@@ -457,6 +458,75 @@ defmodule CashLens.Forecast do
         do: point,
         else: lowest
     end)
+  end
+
+  @doc """
+  How much the real monthly net has swung over the last `months` complete
+  months, as the standard deviation of that net.
+
+  The projection draws one line, but a month is never the average month: over
+  the last year the monthly net moved by far more than the model's bias against
+  it. A trough smaller than this number is not a margin — an ordinary month
+  inside the historical spread wipes it out.
+
+  Measured on cash accounts only and ignoring transfers, the same scope the
+  projection itself runs on. No attempt is made to strip one-off inflows such as
+  borrowed money: any rule for spotting them would be guesswork, and leaving
+  them in widens the spread, which errs toward caution.
+
+  Returns `nil` when there is not at least a full year to measure.
+  """
+  def monthly_volatility(months \\ @volatility_months, today \\ Date.utc_today()) do
+    window = complete_months_before(today, months)
+    nets = Enum.map(window, &monthly_net/1)
+
+    if length(nets) < months or Enum.all?(nets, &Decimal.equal?(&1, Decimal.new("0"))) do
+      nil
+    else
+      mean = Decimal.div(Enum.reduce(nets, Decimal.new("0"), &Decimal.add(&2, &1)), months)
+
+      variance =
+        nets
+        |> Enum.map(fn net -> net |> Decimal.sub(mean) |> then(&Decimal.mult(&1, &1)) end)
+        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1))
+        |> Decimal.div(months)
+
+      %{
+        sigma:
+          variance |> Decimal.to_float() |> :math.sqrt() |> Float.round(2) |> Decimal.from_float(),
+        mean: Decimal.round(mean, 2),
+        months: months,
+        since: List.first(window),
+        until: window |> List.last() |> Date.end_of_month()
+      }
+    end
+  end
+
+  # The `count` whole months that ended before `today`, oldest first. The current
+  # month is excluded: it is still accumulating and would read as an unusually
+  # good one.
+  defp complete_months_before(today, count) do
+    last = today |> Date.beginning_of_month() |> Date.add(-1) |> Date.beginning_of_month()
+    index = last.year * 12 + last.month - 1
+
+    Enum.map((count - 1)..0//-1, fn back ->
+      total = index - back
+      Date.new!(div(total, 12), rem(total, 12) + 1, 1)
+    end)
+  end
+
+  defp monthly_net(month) do
+    from(t in Transaction,
+      where: t.date >= ^month and t.date <= ^Date.end_of_month(month),
+      where: is_nil(t.transfer_key),
+      select: sum(t.amount)
+    )
+    |> Scopes.cash_accounts_only()
+    |> Repo.one()
+    |> case do
+      nil -> Decimal.new("0")
+      net -> net
+    end
   end
 
   @doc """

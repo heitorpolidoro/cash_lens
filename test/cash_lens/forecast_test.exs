@@ -1654,4 +1654,68 @@ defmodule CashLens.ForecastTest do
       assert trough.date == Date.utc_today()
     end
   end
+
+  describe "monthly_volatility/2" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    defp net_in(account, month, amount) do
+      transaction_fixture(%{account_id: account.id, date: month, amount: amount})
+    end
+
+    defp months_back(today, count) do
+      last = today |> Date.beginning_of_month() |> Date.add(-1) |> Date.beginning_of_month()
+      index = last.year * 12 + last.month - 1
+
+      Enum.map((count - 1)..0//-1, fn back ->
+        total = index - back
+        Date.new!(div(total, 12), rem(total, 12) + 1, 1)
+      end)
+    end
+
+    test "measures how far the monthly net swings" do
+      account = account_fixture()
+      today = ~D[2026-10-06]
+      meses = months_back(today, 12)
+
+      # Six months at -1000 and six at -3000: mean -2000, every month exactly
+      # 1000 away from it, so sigma is 1000.
+      meses
+      |> Enum.with_index()
+      |> Enum.each(fn {mes, i} ->
+        net_in(account, mes, if(rem(i, 2) == 0, do: "-1000.00", else: "-3000.00"))
+      end)
+
+      v = Forecast.monthly_volatility(12, today)
+
+      assert Decimal.equal?(v.mean, Decimal.new("-2000.00"))
+      assert Decimal.equal?(v.sigma, Decimal.new("1000.0"))
+      assert v.months == 12
+      assert v.since == List.first(meses)
+    end
+
+    test "leaves the current month out, since it is still accumulating" do
+      account = account_fixture()
+      today = ~D[2026-10-06]
+
+      Enum.each(months_back(today, 12), &net_in(account, &1, "-2000.00"))
+
+      # A single huge debit today must not register as volatility.
+      net_in(account, today, "-90000.00")
+
+      v = Forecast.monthly_volatility(12, today)
+
+      assert Decimal.equal?(v.sigma, Decimal.new("0.0"))
+      assert Decimal.equal?(v.mean, Decimal.new("-2000.00"))
+    end
+
+    test "returns nil without a full year of movement" do
+      account = account_fixture()
+      today = ~D[2026-10-06]
+
+      Enum.each(months_back(today, 12), &net_in(account, &1, "0.00"))
+
+      refute Forecast.monthly_volatility(12, today)
+    end
+  end
 end

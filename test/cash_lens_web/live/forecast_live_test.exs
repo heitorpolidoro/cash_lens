@@ -65,6 +65,65 @@ defmodule CashLensWeb.ForecastLiveTest do
                ~s(data-trough-date="#{Date.to_iso8601(trough.date)}")
     end
 
+    defp month_back(today, back) do
+      last = today |> Date.beginning_of_month() |> Date.add(-1) |> Date.beginning_of_month()
+      total = last.year * 12 + last.month - 1 - (back - 1)
+      Date.new!(div(total, 12), rem(total, 12) + 1, 1)
+    end
+
+    test "warns when the trough is thinner than an ordinary month's swing", %{conn: conn} do
+      account = account_fixture(%{balance: "10000.00"})
+      today = Date.utc_today()
+
+      # The swings sit in months 7-12, outside the 180-day window the variable
+      # baseline reads, so history is volatile while the projection itself stays
+      # calm and above zero. Recent months are quiet, giving a shallow trough
+      # well inside that spread.
+      for back <- 1..12 do
+        mes = month_back(today, back)
+        recente? = back <= 6
+
+        transaction_fixture(%{
+          account_id: account.id,
+          date: mes,
+          amount:
+            cond do
+              recente? -> "-100.00"
+              rem(back, 2) == 0 -> "-20000.00"
+              true -> "19000.00"
+            end
+        })
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/forecast")
+
+      card = scoped(view, "[data-role='kpi-bankruptcy']")
+      assert card =~ "Pode zerar"
+      refute card =~ "Seguro"
+
+      assert scoped(view, "[data-role='volatility-warning']") =~
+               "folga é menor que a variação mensal típica"
+    end
+
+    test "calls the projection safe when the trough clears the swing", %{conn: conn} do
+      account = account_fixture(%{balance: "500000.00"})
+      today = Date.utc_today()
+
+      # Twelve identical months: nothing swings, so any positive trough stands.
+      for back <- 1..12 do
+        transaction_fixture(%{
+          account_id: account.id,
+          date: month_back(today, back),
+          amount: "-100.00"
+        })
+      end
+
+      card = scoped(elem(live(conn, ~p"/forecast"), 1), "[data-role='kpi-bankruptcy']")
+
+      assert card =~ "Seguro"
+      refute card =~ "Pode zerar"
+    end
+
     test "names no trough once the balance actually crosses zero", %{conn: conn} do
       account_fixture(%{balance: "100.00"})
       today = Date.utc_today()
