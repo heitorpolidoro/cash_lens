@@ -1490,4 +1490,127 @@ defmodule CashLens.ForecastTest do
       assert Decimal.equal?(reloaded.amount, Decimal.new("-42.00"))
     end
   end
+
+  describe "deactivate_superseded_items/0" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    defp grouped_spend(account, category, group, amount) do
+      tx =
+        transaction_fixture(%{
+          account_id: account.id,
+          category_id: category.id,
+          amount: amount,
+          date: Date.add(Date.utc_today(), -30)
+        })
+
+      CashLens.Repo.update_all(
+        from(t in CashLens.Transactions.Transaction, where: t.id == ^tx.id),
+        set: [installment_group_id: group.id, installment_number: 1]
+      )
+
+      tx
+    end
+
+    defp commitment_group do
+      {:ok, group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "COMPROMISSO #{System.unique_integer([:positive])}",
+          commitment_type: "financing",
+          installments: 60,
+          start_date: Date.add(Date.utc_today(), -400),
+          total_amount: "60000.00"
+        })
+
+      group
+    end
+
+    test "switches off an item whose category is wholly projected as a commitment" do
+      account = account_fixture()
+      category = category_fixture(%{type: "fixed", name: "Financiamento"})
+      item = recurring_item_fixture(%{category_id: category.id, amount: "-1000.00"})
+      group = commitment_group()
+
+      grouped_spend(account, category, group, "-1000.00")
+
+      assert [switched] = Forecast.deactivate_superseded_items()
+      assert switched.id == item.id
+      refute Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "leaves an item alone while any debit in its category is unlinked" do
+      account = account_fixture()
+      category = category_fixture(%{type: "fixed", name: "Parcial"})
+      item = recurring_item_fixture(%{category_id: category.id, amount: "-1000.00"})
+      group = commitment_group()
+
+      grouped_spend(account, category, group, "-1000.00")
+
+      # One loose debit means the category still holds spending that only the
+      # recurring item accounts for.
+      transaction_fixture(%{
+        account_id: account.id,
+        category_id: category.id,
+        amount: "-80.00",
+        date: Date.add(Date.utc_today(), -5)
+      })
+
+      assert Forecast.deactivate_superseded_items() == []
+      assert Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "never touches an item edited by hand" do
+      account = account_fixture()
+      category = category_fixture(%{type: "fixed", name: "Na mao"})
+
+      item =
+        recurring_item_fixture(%{
+          category_id: category.id,
+          amount: "-1000.00",
+          manually_edited: true
+        })
+
+      group = commitment_group()
+      grouped_spend(account, category, group, "-1000.00")
+
+      assert Forecast.deactivate_superseded_items() == []
+      assert Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "leaves an item whose category has no transactions at all" do
+      category = category_fixture(%{type: "fixed", name: "Vazia"})
+      item = recurring_item_fixture(%{category_id: category.id, amount: "-1000.00"})
+
+      assert Forecast.deactivate_superseded_items() == []
+      assert Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "registering a commitment switches the duplicate off on its own" do
+      account = account_fixture()
+      category = category_fixture(%{type: "fixed", name: "Consorcio"})
+      item = recurring_item_fixture(%{category_id: category.id, amount: "-1400.00"})
+
+      tx =
+        transaction_fixture(%{
+          account_id: account.id,
+          category_id: category.id,
+          amount: "-1400.00",
+          description: "BOLETO CONSORCIO PORTO",
+          date: Date.add(Date.utc_today(), -30)
+        })
+
+      assert Forecast.get_recurring_item!(item.id).active
+
+      {:ok, _group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "BOLETO CONSORCIO PORTO",
+          commitment_type: "consorcio",
+          installments: 60,
+          start_date: Date.add(tx.date, -30),
+          total_amount: "84000.00"
+        })
+
+      refute Forecast.get_recurring_item!(item.id).active
+    end
+  end
 end

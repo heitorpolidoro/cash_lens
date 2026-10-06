@@ -121,6 +121,52 @@ defmodule CashLens.Forecast do
     end
   end
 
+  @doc """
+  Deactivates recurring items whose whole category is already projected as an
+  installment commitment, and returns the ones it switched off.
+
+  The two projectors cannot see each other: a recurring item is bound to a
+  *category* and never looks at transactions, while a commitment works from the
+  transactions linked to it. Register a commitment for a category that
+  `sync_all/0` had already turned into a recurring item and the same expense is
+  charged twice, on top of a balance that no longer reconciles with anything.
+
+  The test is deliberately strict: every transaction in the category must belong
+  to a group, and there must be at least one. A category holding so much as one
+  unlinked debit still has spending that only the recurring item accounts for, so
+  it is left alone. Items edited by hand are never touched — the same rule
+  `sync_all/0` follows.
+  """
+  def deactivate_superseded_items do
+    superseded =
+      list_recurring_items()
+      |> Enum.filter(
+        &(&1.active and not &1.manually_edited and fully_grouped_category?(&1.category_id))
+      )
+
+    Enum.each(superseded, fn item ->
+      item
+      |> Ecto.Changeset.change(%{active: false})
+      |> Repo.update!()
+    end)
+
+    superseded
+  end
+
+  defp fully_grouped_category?(category_id) do
+    counts =
+      from(t in Transaction,
+        where: t.category_id == ^category_id,
+        select: %{
+          total: count(t.id),
+          grouped: count(t.installment_group_id)
+        }
+      )
+      |> Repo.one()
+
+    counts.total > 0 and counts.total == counts.grouped
+  end
+
   defp credit_card_category?(%Category{slug: slug}) when is_binary(slug) do
     slug == "cartao-de-credito" or String.starts_with?(slug, "cartao-de-credito-")
   end

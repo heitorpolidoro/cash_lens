@@ -252,6 +252,67 @@ defmodule CashLens.CreditCards do
   end
 
   @doc """
+  Debits on a statement's own card that belong to no statement yet.
+
+  A transaction joins a statement through `import_batch_id` — there is no
+  `statement_id` column — which an import or `create_manual_statement/2` sets at
+  creation. A purchase that arrived outside either path has no way back in, so
+  these are the rows a statement can still adopt.
+
+  Restricted to the statement's own account: a card's bill can only ever contain
+  that card's spending.
+  """
+  def attachable_transactions(%Statement{} = statement, limit \\ 50) do
+    from(t in Transaction,
+      where: t.account_id == ^statement.account_id,
+      where: is_nil(t.import_batch_id),
+      order_by: [desc: t.date, desc: t.inserted_at],
+      limit: ^limit,
+      preload: [:category]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Puts existing transactions on `statement`, returning how many moved.
+
+  Both conditions are re-checked in the write itself rather than trusted from
+  the caller: the row must be on the statement's own account and must still
+  belong to no statement. A stale page offering a transaction that has since
+  been claimed elsewhere therefore moves nothing instead of stealing it.
+  """
+  def attach_transactions(%Statement{} = statement, transaction_ids)
+      when is_list(transaction_ids) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    {count, _} =
+      from(t in Transaction,
+        where: t.id in ^transaction_ids,
+        where: t.account_id == ^statement.account_id,
+        where: is_nil(t.import_batch_id)
+      )
+      |> Repo.update_all(set: [import_batch_id: statement.id, updated_at: now])
+
+    {:ok, count}
+  end
+
+  @doc """
+  Takes a transaction back off its statement, leaving the transaction itself
+  untouched. The inverse of `attach_transactions/2`.
+  """
+  def detach_transaction(%Statement{} = statement, transaction_id) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    {count, _} =
+      from(t in Transaction,
+        where: t.id == ^transaction_id and t.import_batch_id == ^statement.id
+      )
+      |> Repo.update_all(set: [import_batch_id: nil, updated_at: now])
+
+    {:ok, count}
+  end
+
+  @doc """
   Presentation-level lifecycle of a statement, on top of `statement_status/2`:
 
     * `:absorbed` — absorbed by another statement (wins over everything else).

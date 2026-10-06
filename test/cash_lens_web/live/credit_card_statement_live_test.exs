@@ -631,6 +631,47 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       refute is_nil(current.id)
     end
 
+    test "includes a loose purchase in the statement and takes it back out", %{conn: conn} do
+      account = card_account("Cartao Incluir")
+      statement = statement_fixture(%{account: account, total_a_pagar: "500.00"})
+
+      tx =
+        transaction_fixture(%{
+          account_id: account.id,
+          amount: "-123.45",
+          description: "COMPRA SOLTA"
+        })
+
+      {:ok, view, html} = live(conn, ~p"/statements?id=#{statement.id}")
+      assert html =~ "Incluir lançamentos na fatura"
+      assert has_element?(view, "#attachable-#{tx.id}")
+
+      render_click(view, "attach_transaction", %{"id" => tx.id})
+
+      refute has_element?(view, "#attachable-#{tx.id}")
+      assert has_element?(view, "#detach-#{tx.id}")
+      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == statement.id
+
+      render_click(view, "detach_transaction", %{"id" => tx.id})
+
+      assert has_element?(view, "#attachable-#{tx.id}")
+      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == nil
+    end
+
+    test "a zero or negative bill offers no payment linking", %{conn: conn} do
+      account = card_account("Cartao Zerado")
+      zerada = statement_fixture(%{account: account, total_a_pagar: "0.00"})
+
+      html = live(conn, ~p"/statements?id=#{zerada.id}") |> elem(2)
+      refute html =~ "Vincular pagamento manualmente"
+
+      paga = card_account("Cartao Com Saldo")
+      devendo = statement_fixture(%{account: paga, total_a_pagar: "500.00"})
+
+      html = live(conn, ~p"/statements?id=#{devendo.id}") |> elem(2)
+      assert html =~ "Vincular pagamento manualmente"
+    end
+
     test "detail view shows statement info", %{conn: conn} do
       account = card_account("Nubank Detalhe")
       statement = statement_fixture(%{account: account, total_a_pagar: nil})

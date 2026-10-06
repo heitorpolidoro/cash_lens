@@ -808,4 +808,86 @@ defmodule CashLens.CreditCardsTest do
       assert CreditCards.closed_without_statement(~D[2026-10-06], 3) == []
     end
   end
+
+  describe "attaching transactions to a statement" do
+    import CashLens.AccountsFixtures
+    import CashLens.CreditCardsFixtures
+    import CashLens.TransactionsFixtures
+
+    setup do
+      card = account_fixture(%{is_credit_card: true, name: "CARTAO"})
+      statement = statement_fixture(%{account: card})
+      %{card: card, statement: statement}
+    end
+
+    test "offers only loose debits of the statement's own card", %{card: card, statement: st} do
+      loose = transaction_fixture(%{account_id: card.id, amount: "-50.00", description: "SOLTA"})
+
+      transaction_fixture(%{
+        account_id: card.id,
+        amount: "-60.00",
+        description: "JA NA FATURA",
+        import_batch_id: st.id
+      })
+
+      outro = account_fixture(%{is_credit_card: true, name: "OUTRO"})
+      transaction_fixture(%{account_id: outro.id, amount: "-70.00", description: "OUTRO CARTAO"})
+
+      assert [offered] = CreditCards.attachable_transactions(st)
+      assert offered.id == loose.id
+    end
+
+    test "attaches a loose debit", %{card: card, statement: st} do
+      tx = transaction_fixture(%{account_id: card.id, amount: "-50.00"})
+
+      assert {:ok, 1} = CreditCards.attach_transactions(st, [tx.id])
+      assert [line] = CreditCards.statement_transactions(st.id)
+      assert line.id == tx.id
+      assert CreditCards.attachable_transactions(st) == []
+    end
+
+    test "refuses a debit that belongs to another statement", %{card: card, statement: st} do
+      other =
+        statement_fixture(%{account: card, competencia: ~D[2026-07-01], due_date: ~D[2026-07-15]})
+
+      tx =
+        transaction_fixture(%{account_id: card.id, amount: "-50.00", import_batch_id: other.id})
+
+      assert {:ok, 0} = CreditCards.attach_transactions(st, [tx.id])
+      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == other.id
+    end
+
+    test "refuses a debit from a different card", %{statement: st} do
+      outro = account_fixture(%{is_credit_card: true, name: "OUTRO"})
+      tx = transaction_fixture(%{account_id: outro.id, amount: "-50.00"})
+
+      assert {:ok, 0} = CreditCards.attach_transactions(st, [tx.id])
+      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == nil
+    end
+
+    test "detaching leaves the transaction itself alone", %{card: card, statement: st} do
+      tx = transaction_fixture(%{account_id: card.id, amount: "-50.00"})
+      {:ok, 1} = CreditCards.attach_transactions(st, [tx.id])
+
+      assert {:ok, 1} = CreditCards.detach_transaction(st, tx.id)
+
+      survivor = CashLens.Transactions.get_transaction!(tx.id)
+      assert survivor.import_batch_id == nil
+      assert Decimal.equal?(survivor.amount, Decimal.new("-50.00"))
+    end
+
+    test "detaching touches nothing when the line is on another statement", %{
+      card: card,
+      statement: st
+    } do
+      other =
+        statement_fixture(%{account: card, competencia: ~D[2026-07-01], due_date: ~D[2026-07-15]})
+
+      tx =
+        transaction_fixture(%{account_id: card.id, amount: "-50.00", import_batch_id: other.id})
+
+      assert {:ok, 0} = CreditCards.detach_transaction(st, tx.id)
+      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == other.id
+    end
+  end
 end

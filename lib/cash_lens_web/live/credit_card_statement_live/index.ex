@@ -53,6 +53,28 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     {:noreply, socket |> assign(:new_statement, nil) |> assign(:new_error, nil)}
   end
 
+  def handle_event("attach_transaction", %{"id" => id}, socket) do
+    statement = socket.assigns.selected.statement
+    {:ok, count} = CreditCards.attach_transactions(statement, [id])
+
+    {:noreply,
+     socket
+     |> put_flash(flash_kind(count), attach_message(count))
+     |> load_statements()
+     |> reload_selected()}
+  end
+
+  def handle_event("detach_transaction", %{"id" => id}, socket) do
+    statement = socket.assigns.selected.statement
+    {:ok, _count} = CreditCards.detach_transaction(statement, id)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Lançamento removido da fatura.")
+     |> load_statements()
+     |> reload_selected()}
+  end
+
   def handle_event("add_line", _params, socket) do
     {:noreply, assign(socket, :new_lines, socket.assigns.new_lines ++ [blank_line()])}
   end
@@ -183,7 +205,17 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     |> assign(:selected, detail)
     |> assign(:suggestion, suggestion)
     |> assign(:candidates, candidates)
+    |> assign(:attachable, attachable_for(detail))
   end
+
+  # Only a live cycle adopts loose purchases: an absorbed or already-paid
+  # statement is settled history, and moving spend into it would change a total
+  # that has been reconciled against the bank.
+  defp attachable_for(%{lifecycle: lifecycle, statement: statement})
+       when lifecycle in [:open, :closed],
+       do: CreditCards.attachable_transactions(statement)
+
+  defp attachable_for(_detail), do: []
 
   defp load_statements(socket) do
     entries = CreditCards.list_statements()
@@ -346,6 +378,20 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   defp due_label(1), do: "em 1 dia"
   defp due_label(days) when days < 0, do: "vencida há #{abs(days)} dias"
   defp due_label(days), do: "em #{days} dias"
+
+  # A bill of zero, or one with a credit balance, has nothing to settle — an
+  # absorbed cycle, or a month that closed owing nothing. Offering to reconcile a
+  # payment against it only invites linking an unrelated debit.
+  defp payable?(%{statement: %{total_a_pagar: %Decimal{} = total}}), do: Decimal.positive?(total)
+  defp payable?(_selected), do: true
+
+  defp flash_kind(0), do: :error
+  defp flash_kind(_moved), do: :success
+
+  defp attach_message(0),
+    do: "Nada foi movido: o lançamento já pertence a outra fatura. Recarregue a tela."
+
+  defp attach_message(_moved), do: "Lançamento incluído na fatura!"
 
   defp statement_count_label(1), do: "1 fatura"
   defp statement_count_label(count), do: "#{count} faturas"
@@ -834,7 +880,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
           </div>
 
           <div
-            :if={@selected.lifecycle in [:open, :closed] and @suggestion}
+            :if={@selected.lifecycle in [:open, :closed] and payable?(@selected) and @suggestion}
             id={"reconcile-#{@selected.statement.id}"}
             class="px-6 py-4 bg-warning/10 flex flex-wrap items-center justify-between gap-3"
           >
@@ -856,7 +902,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
           </div>
 
           <div
-            :if={@selected.lifecycle in [:open, :closed]}
+            :if={@selected.lifecycle in [:open, :closed] and payable?(@selected)}
             class="px-6 py-4 border-t border-base-200"
           >
             <p class="text-xs font-bold uppercase opacity-60 mb-2">Vincular pagamento manualmente</p>
@@ -904,6 +950,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                 <th>Descrição</th>
                 <th>Categoria</th>
                 <th class="text-right">Valor</th>
+                <th class="w-8"></th>
               </tr>
             </thead>
             <tbody>
@@ -917,9 +964,62 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                 </td>
                 <td>{t.category && t.category.name}</td>
                 <td class="text-right font-mono font-black">{format_currency(t.amount)}</td>
+                <td class="text-right w-8">
+                  <button
+                    type="button"
+                    id={"detach-#{t.id}"}
+                    phx-click="detach_transaction"
+                    phx-value-id={t.id}
+                    class="btn btn-ghost btn-xs text-error p-0"
+                    title="Remover da fatura"
+                  >
+                    <.icon name="hero-x-mark" class="size-3.5" />
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
+
+          <%!--
+            A purchase joins a statement through `import_batch_id`, which only an
+            import or a manual statement sets. Anything that arrived by another
+            route is stranded outside every bill until it is adopted here.
+          --%>
+          <div
+            :if={@attachable != []}
+            id="attachable-transactions"
+            class="px-6 py-4 border-t border-base-200"
+          >
+            <p class="text-xs font-bold uppercase opacity-60 mb-1">Incluir lançamentos na fatura</p>
+            <p class="text-[11px] opacity-40 mb-2">
+              Compras deste cartão que não pertencem a nenhuma fatura.
+            </p>
+            <div class="divide-y divide-base-200 max-h-64 overflow-y-auto">
+              <div
+                :for={t <- @attachable}
+                id={"attachable-#{t.id}"}
+                class="py-2 flex flex-wrap items-center justify-between gap-2 text-xs"
+              >
+                <div class="min-w-0">
+                  <p class="font-bold truncate">{t.description}</p>
+                  <p class="opacity-40">
+                    {format_date(t.date)} · {t.category && t.category.name}
+                  </p>
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                  <span class="font-mono font-black">{format_currency(t.amount)}</span>
+                  <button
+                    type="button"
+                    phx-click="attach_transaction"
+                    phx-value-id={t.id}
+                    class="btn btn-success btn-xs"
+                  >
+                    Incluir
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
