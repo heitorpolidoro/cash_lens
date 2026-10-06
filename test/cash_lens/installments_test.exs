@@ -616,8 +616,20 @@ defmodule CashLens.InstallmentsTest do
       assert Decimal.equal?(balance.by_type["credit_card"], Decimal.new("100.00"))
     end
 
-    test "cash_flow_relief/1 lists the card purchases ending within 90 days", %{m0: m0} do
-      relief = Installments.cash_flow_relief(m0)
+    test "cash_flow_relief/1 defaults to the reference month alone", %{m0: m0} do
+      # Nothing ends in m0 itself, so the default window is empty there...
+      assert Installments.cash_flow_relief(m0).items == []
+
+      # ...and one month on it reports CARTAO B alone, not CARTAO A, which
+      # only ends the month after.
+      relief = Installments.cash_flow_relief(Installments.add_months(m0, 1))
+
+      assert Enum.map(relief.items, & &1.description) == ["CARTAO B"]
+      assert Decimal.equal?(relief.total, Decimal.new("100.00"))
+    end
+
+    test "cash_flow_relief/2 widens to the window it is given", %{m0: m0} do
+      relief = Installments.cash_flow_relief(m0, 3)
 
       assert Decimal.equal?(relief.total, Decimal.new("200.00"))
       assert length(relief.items) == 2

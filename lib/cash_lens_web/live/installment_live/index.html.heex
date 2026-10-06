@@ -93,14 +93,14 @@
             Alívio no Fluxo de Caixa
           </span>
           <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-success/10 text-success">
-            Próximos 90 dias
+            A partir de {month_chip(Installments.add_months(@reference_month, 1))}
           </span>
         </div>
         <div id="metric-relief-total" class="text-2xl font-black text-success font-mono">
           +{format_currency(@relief.total)}<span class="text-xs font-semibold opacity-50">/mês livre</span>
         </div>
         <span class="text-[11px] opacity-40 mt-0.5 block">
-          Economia mensal conforme parcelas encerram
+          Parcelas que encerram em {month_chip(@reference_month)}
         </span>
       </div>
 
@@ -109,18 +109,58 @@
         class="mt-3 pt-2.5 border-t border-base-300 space-y-1.5 text-[11px]"
       >
         <div :if={@relief.items == []} class="opacity-40">
-          Nenhum compromisso se encerra nos próximos 90 dias.
+          Nenhum compromisso se encerra em {month_chip(@reference_month)}.
         </div>
-        <div :for={item <- @relief.items} class="flex items-center justify-between gap-2">
-          <span class="truncate opacity-70">
-            Em {month_chip(item.date)}: encerra <b>{item.description}</b>
-          </span>
+        <div
+          :for={item <- Enum.take(@relief.items, @relief_preview)}
+          class="flex items-center justify-between gap-2"
+        >
+          <span class="truncate opacity-70">{item.description}</span>
           <span class="font-mono text-success font-bold shrink-0">
             +{format_currency(item.amount)}
           </span>
         </div>
+        <button
+          :if={length(@relief.items) > @relief_preview}
+          id="metric-relief-more"
+          type="button"
+          phx-click="show_relief"
+          class="text-[11px] font-bold text-success hover:underline pt-0.5"
+        >
+          Ver mais {length(@relief.items) - @relief_preview} +
+        </button>
       </div>
     </div>
+  </div>
+
+  <%!-- Modal com o alívio completo --%>
+  <div :if={@show_relief} id="relief-modal" class="modal modal-open">
+    <div class="modal-box max-w-xl">
+      <h3 class="text-sm font-black uppercase tracking-wider">
+        Alívio a partir de {month_chip(Installments.add_months(@reference_month, 1))}
+      </h3>
+      <p class="text-[11px] opacity-50 mt-0.5">
+        {length(@relief.items)} compromissos encerram em {month_chip(@reference_month)},
+        liberando {format_currency(@relief.total)}/mês.
+      </p>
+
+      <table class="table table-xs w-full mt-3">
+        <tbody>
+          <tr :for={item <- @relief.items}>
+            <td class="text-xs">{item.description}</td>
+            <td class="text-[10px] opacity-50">{relief_type_label(item.commitment_type)}</td>
+            <td class="text-right font-mono text-success font-bold">
+              +{format_currency(item.amount)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="modal-action">
+        <button type="button" phx-click="close_relief" class="btn btn-sm">Fechar</button>
+      </div>
+    </div>
+    <div class="modal-backdrop" phx-click="close_relief"></div>
   </div>
 
   <%!-- Fita de projeção mensal empilhada --%>
@@ -289,7 +329,7 @@
       </thead>
       <tbody>
         <%= for group <- @commitments do %>
-          <tr class="hover">
+          <tr class={["hover", group.zebra? && "bg-base-200/30"]}>
             <td class="font-bold text-xs">
               <button
                 type="button"
@@ -369,7 +409,7 @@
               </div>
             </td>
           </tr>
-          <tr :if={MapSet.member?(@expanded_ids, group.id)} class="bg-base-200/40">
+          <tr :if={MapSet.member?(@expanded_ids, group.id)} class="bg-base-200/60">
             <td colspan="8" class="p-0">
               <div class="px-6 py-3 space-y-3">
                 <div class="flex flex-wrap gap-6 text-[11px]">

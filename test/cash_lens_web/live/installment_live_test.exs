@@ -97,15 +97,65 @@ defmodule CashLensWeb.InstallmentLiveTest do
       assert breakdown =~ "R$ 5.000,00"
     end
 
-    test "shows the 90-day cash-flow relief with the plans that end", %{conn: conn} do
+    test "the relief card reports only what ends in the reference month", %{conn: conn} do
+      # The whole portfolio starts this month, so nothing is paid off yet and
+      # the card has nothing to report — CARTAO B only ends next month.
       {:ok, live, _html} = live(conn, ~p"/installments")
 
-      assert live |> element("#metric-relief-total") |> render() =~ "R$ 200,00"
+      assert live |> element("#metric-relief-total") |> render() =~ "R$ 0,00"
 
       breakdown = live |> element("#metric-relief-breakdown") |> render()
-      assert breakdown =~ "CARTAO A"
-      assert breakdown =~ "CARTAO B"
-      refute breakdown =~ "FINANCIAMENTO CAIXA"
+      assert breakdown =~ "Nenhum compromisso se encerra"
+      refute breakdown =~ "CARTAO B"
+    end
+  end
+
+  describe "cash-flow relief card" do
+    setup do
+      # Seven plans whose last parcel falls in the reference month, so the
+      # five-row preview has to hide two of them.
+      for n <- 1..7 do
+        commitment(%{
+          description_pattern: "ENCERRA #{n}",
+          installments: 2,
+          start_date: month_start(-1),
+          total_amount: "#{n * 100}.00"
+        })
+      end
+
+      # A plan still running, to prove the card is not just listing everything.
+      commitment(%{description_pattern: "SEGUE", installments: 12, total_amount: "1200.00"})
+
+      :ok
+    end
+
+    test "previews five plans and offers the rest behind 'ver mais'", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      # 50 + 100 + ... + 350
+      assert live |> element("#metric-relief-total") |> render() =~ "R$ 1.400,00"
+
+      breakdown = live |> element("#metric-relief-breakdown") |> render()
+      assert breakdown |> String.split("ENCERRA ") |> length() == 6
+      refute breakdown =~ "SEGUE"
+
+      assert live |> element("#metric-relief-more") |> render() =~ "Ver mais 2"
+    end
+
+    test "'ver mais' opens a modal with every plan that ends", %{conn: conn} do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      refute has_element?(live, "#relief-modal")
+
+      live |> element("#metric-relief-more") |> render_click()
+
+      modal = live |> element("#relief-modal") |> render()
+      assert modal |> String.split("ENCERRA ") |> length() == 8
+      assert modal =~ "R$ 1.400,00"
+      refute modal =~ "SEGUE"
+
+      live |> element("#relief-modal button", "Fechar") |> render_click()
+      refute has_element?(live, "#relief-modal")
     end
   end
 
@@ -473,6 +523,30 @@ defmodule CashLensWeb.InstallmentLiveTest do
       assert html =~ "Financiamento"
       # 2026-01 + 9 months = 2026-10 -> "out/26"
       assert html =~ "out/26"
+    end
+
+    test "bands the table by payoff month, not by row", %{conn: conn} do
+      # Two plans end in m0+1 and two in m0+2, so the shading must flip once
+      # between the pairs — never inside one.
+      commitment(%{description_pattern: "PAR UM A", installments: 2})
+      commitment(%{description_pattern: "PAR UM B", installments: 2})
+      commitment(%{description_pattern: "PAR DOIS A", installments: 3})
+      commitment(%{description_pattern: "PAR DOIS B", installments: 3})
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      shaded =
+        live
+        |> render()
+        |> then(&Regex.scan(~r/<tr class="([^"]*)"[^>]*>.*?(PAR \w+ \w)/s, &1))
+        |> Map.new(fn [_, classes, name] -> {name, String.contains?(classes, "bg-base-200")} end)
+
+      # Without this the three assertions below pass vacuously on nil == nil.
+      assert map_size(shaded) == 4
+
+      assert shaded["PAR UM A"] == shaded["PAR UM B"]
+      assert shaded["PAR DOIS A"] == shaded["PAR DOIS B"]
+      assert shaded["PAR UM A"] != shaded["PAR DOIS A"]
     end
 
     test "expands a commitment row to list its parcels", %{conn: conn} do

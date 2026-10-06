@@ -4,7 +4,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
   purchases, financings and consórcios.
 
   The screen is read-only over the domain: all aggregation (monthly commitment,
-  consolidated outstanding balance, 90-day cash-flow relief and the stacked
+  consolidated outstanding balance, next-month cash-flow relief and the stacked
   monthly projection) lives in `CashLens.Installments`. The heavy statement-wide
   installment scan is deliberately NOT offered here — it runs automatically in
   the import pipeline and can be triggered manually from `/admin/db`.
@@ -15,17 +15,20 @@ defmodule CashLensWeb.InstallmentLive.Index do
   alias CashLens.Installments.InstallmentGroup
 
   @projection_months 10
+  @relief_preview 5
 
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
      socket
      |> assign(:show_modal, false)
+     |> assign(:show_relief, false)
      |> assign(:expanded_ids, MapSet.new())
      |> assign(:commitment, %InstallmentGroup{})
      |> assign(:commitment_params, %{})
      |> assign(:suggestions, [])
      |> assign(:commitment_types, Installments.commitment_types())
+     |> assign(:relief_preview, @relief_preview)
      |> assign_form()}
   end
 
@@ -80,6 +83,21 @@ defmodule CashLensWeb.InstallmentLive.Index do
         query_match?(group, assigns.query)
     end)
     |> Enum.sort_by(&sort_key/1)
+    |> zebra_by_payoff()
+  end
+
+  # The table is sorted by payoff month, so consecutive rows that share one
+  # share a band. The flag flips on every month change, not on every row, which
+  # is what makes a run of plans ending together read as one block.
+  defp zebra_by_payoff(groups) do
+    {tagged, _, _} =
+      Enum.reduce(groups, {[], nil, false}, fn group, {acc, previous, shaded?} ->
+        key = sort_key(group)
+        shaded? = if is_nil(previous) or key == previous, do: shaded?, else: not shaded?
+        {[Map.put(group, :zebra?, shaded?) | acc], key, shaded?}
+      end)
+
+    Enum.reverse(tagged)
   end
 
   defp type_match?(_group, "all"), do: true
@@ -205,6 +223,16 @@ defmodule CashLensWeb.InstallmentLive.Index do
     {:noreply, assign(socket, :expanded_ids, expanded)}
   end
 
+  @impl true
+  def handle_event("show_relief", _params, socket) do
+    {:noreply, assign(socket, :show_relief, true)}
+  end
+
+  @impl true
+  def handle_event("close_relief", _params, socket) do
+    {:noreply, assign(socket, :show_relief, false)}
+  end
+
   defp save_commitment(socket, %InstallmentGroup{id: nil}, params) do
     case Installments.create_installment_group(params) do
       {:ok, _group} -> {:noreply, close_and_reload(socket, "Compromisso criado com sucesso!")}
@@ -270,6 +298,10 @@ defmodule CashLensWeb.InstallmentLive.Index do
   defp breakdown_caption(type, count) do
     "#{breakdown_label(type)} (#{count} #{unit_label(type, count)})"
   end
+
+  defp relief_type_label("financing"), do: "Financiamento"
+  defp relief_type_label("consorcio"), do: "Consórcio"
+  defp relief_type_label(_credit_card), do: "Parcelamento no cartão"
 
   defp breakdown_label("financing"), do: "Financiamentos"
   defp breakdown_label("consorcio"), do: "Consórcios"

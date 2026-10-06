@@ -665,7 +665,7 @@ defmodule CashLens.Installments do
     end
   end
 
-  @relief_window_months 3
+  @relief_window_months 1
   @suggestion_min_occurrences 3
 
   @doc """
@@ -737,8 +737,11 @@ defmodule CashLens.Installments do
   end
 
   @doc """
-  How much monthly commitment frees up over the next `window` months (90 days by
-  default), because the plans listed bill their last parcel inside that window.
+  How much monthly commitment frees up over the next `window` months (the
+  reference month alone, by default), because the plans listed bill their last
+  parcel inside that window. With the default window the figure answers "how
+  much lighter is next month", since a plan whose last parcel falls in `month`
+  stops costing anything from the month after.
 
   Returns `%{total: Decimal.t(), items: [...]}` ordered by the month the plan
   ends. Commitments *starting* inside the window are not netted out: this metric
