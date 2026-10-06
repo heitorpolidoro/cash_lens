@@ -890,4 +890,73 @@ defmodule CashLens.CreditCardsTest do
       assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == other.id
     end
   end
+
+  describe "manual absorption" do
+    import CashLens.AccountsFixtures
+    import CashLens.CreditCardsFixtures
+
+    setup do
+      card = account_fixture(%{is_credit_card: true, name: "CARTAO"})
+
+      julho =
+        statement_fixture(%{account: card, competencia: ~D[2026-07-01], due_date: ~D[2026-07-15]})
+
+      agosto =
+        statement_fixture(%{account: card, competencia: ~D[2026-08-01], due_date: ~D[2026-08-15]})
+
+      %{card: card, julho: julho, agosto: agosto}
+    end
+
+    test "folds one statement into another by hand", %{julho: julho, agosto: agosto} do
+      assert {:ok, updated} = CreditCards.absorb_into(julho, agosto)
+      assert updated.absorbed_by_statement_id == agosto.id
+    end
+
+    test "releasing puts it back on its own feet", %{julho: julho, agosto: agosto} do
+      {:ok, absorbed} = CreditCards.absorb_into(julho, agosto)
+
+      assert {:ok, released} = CreditCards.release_absorption(absorbed)
+      assert released.absorbed_by_statement_id == nil
+    end
+
+    test "refuses to absorb a statement into itself", %{julho: julho} do
+      assert {:error, :same_statement} = CreditCards.absorb_into(julho, julho)
+    end
+
+    test "refuses to absorb across cards", %{julho: julho} do
+      outro = account_fixture(%{is_credit_card: true, name: "OUTRO"})
+      alheia = statement_fixture(%{account: outro, competencia: ~D[2026-08-01]})
+
+      assert {:error, :different_account} = CreditCards.absorb_into(julho, alheia)
+    end
+
+    test "refuses a target that is itself absorbed", %{card: card, julho: julho, agosto: agosto} do
+      setembro =
+        statement_fixture(%{account: card, competencia: ~D[2026-09-01], due_date: ~D[2026-09-15]})
+
+      {:ok, agosto} = CreditCards.absorb_into(agosto, setembro)
+
+      # A chain would leave julho pointing at something that no longer stands
+      # on its own.
+      assert {:error, :target_absorbed} = CreditCards.absorb_into(julho, agosto)
+    end
+
+    test "offers only same-card statements that are not themselves absorbed", %{
+      card: card,
+      julho: julho,
+      agosto: agosto
+    } do
+      outro = account_fixture(%{is_credit_card: true, name: "OUTRO"})
+      statement_fixture(%{account: outro, competencia: ~D[2026-08-01]})
+
+      setembro =
+        statement_fixture(%{account: card, competencia: ~D[2026-09-01], due_date: ~D[2026-09-15]})
+
+      {:ok, _} = CreditCards.absorb_into(agosto, setembro)
+
+      ids = julho |> CreditCards.absorption_targets() |> Enum.map(& &1.id)
+
+      assert ids == [setembro.id]
+    end
+  end
 end

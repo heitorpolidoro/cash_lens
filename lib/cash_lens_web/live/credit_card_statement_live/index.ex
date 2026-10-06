@@ -53,6 +53,33 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     {:noreply, socket |> assign(:new_statement, nil) |> assign(:new_error, nil)}
   end
 
+  def handle_event("absorb_into", %{"target_id" => target_id}, socket) do
+    statement = socket.assigns.selected.statement
+    target = CreditCards.get_statement!(target_id)
+
+    case CreditCards.absorb_into(statement, target) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:success, "Fatura incorporada!")
+         |> load_statements()
+         |> reload_selected()}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, absorb_error(reason))}
+    end
+  end
+
+  def handle_event("release_absorption", _params, socket) do
+    {:ok, _} = CreditCards.release_absorption(socket.assigns.selected.statement)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Fatura desincorporada.")
+     |> load_statements()
+     |> reload_selected()}
+  end
+
   def handle_event("attach_transaction", %{"id" => id}, socket) do
     statement = socket.assigns.selected.statement
     {:ok, count} = CreditCards.attach_transactions(statement, [id])
@@ -206,6 +233,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     |> assign(:suggestion, suggestion)
     |> assign(:candidates, candidates)
     |> assign(:attachable, attachable_for(detail))
+    |> assign(:absorption_targets, CreditCards.absorption_targets(detail.statement))
   end
 
   # Only a live cycle adopts loose purchases: an absorbed or already-paid
@@ -369,9 +397,9 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     |> Map.new()
   end
 
-  defp lifecycle_badge(:open), do: {"badge-info", "Aberta (Em Curso)"}
-  defp lifecycle_badge(:closed), do: {"badge-warning", "Fechada (Aguardando Pagamento)"}
-  defp lifecycle_badge(:paid), do: {"badge-success", "Paga e Conciliada"}
+  defp lifecycle_badge(:open), do: {"badge-info", "Aberta"}
+  defp lifecycle_badge(:closed), do: {"badge-warning", "Aguardando pagamento"}
+  defp lifecycle_badge(:paid), do: {"badge-success", "Paga e conciliada"}
   defp lifecycle_badge(:absorbed), do: {"badge-ghost", "Incorporada"}
 
   defp due_label(0), do: "hoje"
@@ -384,6 +412,14 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   # payment against it only invites linking an unrelated debit.
   defp payable?(%{statement: %{total_a_pagar: %Decimal{} = total}}), do: Decimal.positive?(total)
   defp payable?(_selected), do: true
+
+  defp absorb_error(:same_statement), do: "Uma fatura não pode ser incorporada nela mesma."
+  defp absorb_error(:different_account), do: "As duas faturas precisam ser do mesmo cartão."
+
+  defp absorb_error(:target_absorbed),
+    do: "A fatura escolhida já está incorporada em outra. Escolha a que de fato será cobrada."
+
+  defp absorb_error(_reason), do: "Não foi possível incorporar a fatura."
 
   defp flash_kind(0), do: :error
   defp flash_kind(_moved), do: :success
@@ -411,7 +447,16 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     assigns = assigns |> assign(:class, class) |> assign(:label, label)
 
     ~H"""
-    <span class={"badge #{@class} badge-sm font-bold"}>{@label}</span>
+    <span class={
+      [
+        "badge #{@class} badge-sm font-bold",
+        # DaisyUI badges are a fixed height with no wrapping, so a long label spills
+        # out of the pill and gets clipped. Let it grow instead.
+        "h-auto whitespace-normal text-left leading-tight py-0.5"
+      ]
+    }>
+      {@label}
+    </span>
     """
   end
 
@@ -453,9 +498,20 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
             <div :if={@metrics.next_due} class="text-2xl font-black text-info">
               {format_date(@metrics.next_due.due_date)} ({due_label(@metrics.next_due.days_remaining)})
             </div>
-            <p :if={@metrics.next_due} class="text-xs opacity-50 mt-1">
-              {@metrics.next_due.account_name} · {format_currency(@metrics.next_due.amount)}
-            </p>
+            <div :if={@metrics.next_due} class="text-xs opacity-50 mt-1 space-y-0.5">
+              <p :for={s <- @metrics.next_due.statements} data-role="next-due-card">
+                {s.account_name} · {format_currency(s.amount)}
+              </p>
+              <p
+                :if={length(@metrics.next_due.statements) > 1}
+                data-role="next-due-total"
+                class="font-bold opacity-80 pt-0.5"
+              >
+                {length(@metrics.next_due.statements)} faturas · {format_currency(
+                  @metrics.next_due.amount
+                )}
+              </p>
+            </div>
             <div :if={is_nil(@metrics.next_due)} class="text-sm opacity-40 italic mt-2">
               Nenhuma fatura fechada a vencer.
             </div>
@@ -866,17 +922,57 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
             <p class="text-sm opacity-40 italic mt-1">possível cobrança na próxima fatura</p>
           </div>
 
-          <div :if={@selected.lifecycle == :absorbed} class="px-6 py-4 bg-base-200">
-            <p class="text-xs font-bold uppercase opacity-60">
-              Incorporada na fatura {format_competencia(@selected.absorbed_into)}
-            </p>
-            <.link
-              :if={@selected.absorbed_by_id}
-              patch={~p"/statements?id=#{@selected.absorbed_by_id}"}
-              class="link"
+          <div
+            :if={@selected.lifecycle == :absorbed}
+            class="px-6 py-4 bg-base-200 flex flex-wrap items-center justify-between gap-3"
+          >
+            <div>
+              <p class="text-xs font-bold uppercase opacity-60">
+                Incorporada na fatura {format_competencia(@selected.absorbed_into)}
+              </p>
+              <.link
+                :if={@selected.absorbed_by_id}
+                patch={~p"/statements?id=#{@selected.absorbed_by_id}"}
+                class="link"
+              >
+                ver fatura
+              </.link>
+            </div>
+            <button
+              type="button"
+              id="release-absorption"
+              phx-click="release_absorption"
+              class="btn btn-ghost btn-sm text-error"
             >
-              ver fatura
-            </.link>
+              <.icon name="hero-arrow-uturn-left" class="size-4" /> Desincorporar
+            </button>
+          </div>
+
+          <%!--
+            `absorb_pending/1` only folds a cycle in when the arithmetic proves
+            it. Real statements often miss by a rounding difference or a credit
+            the parser read as a line, and those have to be said by hand.
+          --%>
+          <div
+            :if={@selected.lifecycle != :absorbed and @absorption_targets != []}
+            id="absorb-into"
+            class="px-6 py-4 border-t border-base-200"
+          >
+            <p class="text-xs font-bold uppercase opacity-60 mb-1">Incorporar em outra fatura</p>
+            <p class="text-[11px] opacity-40 mb-2">
+              Esta fatura deixa de ser cobrada por si e passa a contar dentro da escolhida.
+            </p>
+            <form phx-submit="absorb_into" class="flex flex-wrap items-center gap-2">
+              <select
+                name="target_id"
+                class="select select-bordered select-sm rounded-lg text-xs flex-1 min-w-48"
+              >
+                <option :for={t <- @absorption_targets} value={t.id}>
+                  {format_competencia(t.competencia)} · {format_currency(t.total_a_pagar)}
+                </option>
+              </select>
+              <button type="submit" class="btn btn-warning btn-sm">Incorporar</button>
+            </form>
           </div>
 
           <div

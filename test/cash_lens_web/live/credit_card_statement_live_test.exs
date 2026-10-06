@@ -133,9 +133,9 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       assert html =~ "Itau Card"
       assert html =~ "Inter Card"
       assert html =~ "Mercado Pago Card"
-      assert html =~ "Aberta (Em Curso)"
-      assert html =~ "Fechada (Aguardando Pagamento)"
-      assert html =~ "Paga e Conciliada"
+      assert html =~ "Aberta"
+      assert html =~ "Aguardando pagamento"
+      assert html =~ "Paga e conciliada"
       assert html =~ "R$ 80,00"
       assert html =~ "R$ 2.400,40"
     end
@@ -505,7 +505,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
         |> element("#statement-row-#{statement.id} button[phx-click='link']")
         |> render_click()
 
-      assert html =~ "Paga e Conciliada"
+      assert html =~ "Paga e conciliada"
 
       assert Repo.get!(Statement, statement.id).payment_transaction_id == debit.id
       assert Repo.get!(Transaction, purchase.id).parent_transaction_id == debit.id
@@ -530,7 +530,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       html = view |> element("button", "Desvincular") |> render_click()
 
-      assert html =~ "Fechada (Aguardando Pagamento)"
+      assert html =~ "Aguardando pagamento"
       assert is_nil(Repo.get!(Statement, statement.id).payment_transaction_id)
       assert is_nil(Repo.get!(Transaction, purchase.id).parent_transaction_id)
     end
@@ -541,7 +541,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       {:ok, _view, html} = live(conn, ~p"/statements")
 
       refute html =~ "Pagamento Detectado no Extrato Bancário"
-      assert html =~ "Fechada (Aguardando Pagamento)"
+      assert html =~ "Aguardando pagamento"
       # With no candidate there is nothing to offer on the row either.
       refute html =~ "#statement-row-#{statement.id} button[phx-click='link']"
 
@@ -658,6 +658,75 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == nil
     end
 
+    test "incorporates a statement into another and releases it again", %{conn: conn} do
+      account = card_account("Cartao Incorporar")
+
+      julho =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-07-01],
+          due_date: ~D[2026-07-15]
+        })
+
+      agosto =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-08-01],
+          due_date: ~D[2026-08-15]
+        })
+
+      {:ok, view, html} = live(conn, ~p"/statements?id=#{julho.id}")
+      assert html =~ "Incorporar em outra fatura"
+
+      render_submit(view, "absorb_into", %{"target_id" => agosto.id})
+
+      assert CreditCards.get_statement!(julho.id).absorbed_by_statement_id == agosto.id
+      assert render(view) =~ "Incorporada na fatura"
+      assert has_element?(view, "#release-absorption")
+      refute has_element?(view, "#absorb-into")
+
+      render_click(view, "release_absorption", %{})
+
+      assert CreditCards.get_statement!(julho.id).absorbed_by_statement_id == nil
+      assert has_element?(view, "#absorb-into")
+    end
+
+    test "reports why an impossible absorption was refused", %{conn: conn} do
+      account = card_account("Cartao A")
+      julho = statement_fixture(%{account: account, competencia: ~D[2026-07-01]})
+
+      outro = card_account("Cartao B")
+      alheia = statement_fixture(%{account: outro, competencia: ~D[2026-08-01]})
+
+      {:ok, view, _html} = live(conn, ~p"/statements?id=#{julho.id}")
+
+      html = render_submit(view, "absorb_into", %{"target_id" => alheia.id})
+
+      assert html =~ "precisam ser do mesmo cartão"
+      assert CreditCards.get_statement!(julho.id).absorbed_by_statement_id == nil
+    end
+
+    test "the next-due card names every statement sharing the date", %{conn: conn} do
+      um = card_account("Cartao Um")
+      dois = card_account("Cartao Dois")
+      vence = Date.add(Date.utc_today(), 5)
+
+      for account <- [um, dois] do
+        statement_fixture(%{
+          account: account,
+          competencia: Date.beginning_of_month(vence),
+          due_date: vence,
+          total_a_pagar: "300.00"
+        })
+      end
+
+      {:ok, view, html} = live(conn, ~p"/statements")
+
+      assert html =~ "Cartao Um"
+      assert html =~ "Cartao Dois"
+      assert view |> element("[data-role=\"next-due-total\"]") |> render() =~ "2 faturas"
+    end
+
     test "a zero or negative bill offers no payment linking", %{conn: conn} do
       account = card_account("Cartao Zerado")
       zerada = statement_fixture(%{account: account, total_a_pagar: "0.00"})
@@ -680,7 +749,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       assert html =~ "Nubank Detalhe"
       assert html =~ statement.source_file
-      assert html =~ "Aberta (Em Curso)"
+      assert html =~ "Aberta"
     end
 
     test "detail view for an absorbed statement links the absorbing boleto", %{conn: conn} do

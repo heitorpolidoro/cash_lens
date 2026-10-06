@@ -602,26 +602,42 @@ defmodule CashLens.CreditCards do
   defp same_month?(%Date{} = date, today),
     do: date.year == today.year and date.month == today.month
 
+  # Every statement falling due on the earliest upcoming date, not just one of
+  # them: two cards routinely share a due day, and reporting a single card there
+  # understates what leaves the account that morning.
   defp next_due(closed, today) do
     closed
     |> Enum.filter(&upcoming?(&1.statement.due_date, today))
     |> Enum.min_by(& &1.statement.due_date, Date, fn -> nil end)
     |> case do
-      nil -> nil
-      entry -> next_due_summary(entry, today)
+      nil ->
+        nil
+
+      %{statement: %{due_date: earliest}} ->
+        closed
+        |> Enum.filter(&(&1.statement.due_date == earliest))
+        |> Enum.sort_by(&(&1.account && &1.account.name))
+        |> next_due_summary(earliest, today)
     end
   end
 
   defp upcoming?(nil, _today), do: false
   defp upcoming?(%Date{} = date, today), do: Date.compare(date, today) != :lt
 
-  defp next_due_summary(entry, today) do
+  defp next_due_summary(entries, due_date, today) do
     %{
-      account_name: entry.account && entry.account.name,
-      due_date: entry.statement.due_date,
-      days_remaining: Date.diff(entry.statement.due_date, today),
-      amount: entry.amount,
-      statement_id: entry.statement.id
+      due_date: due_date,
+      days_remaining: Date.diff(due_date, today),
+      amount: Enum.reduce(entries, Decimal.new("0"), &Decimal.add(&2, &1.amount)),
+      statements:
+        Enum.map(
+          entries,
+          &%{
+            account_name: &1.account && &1.account.name,
+            amount: &1.amount,
+            statement_id: &1.statement.id
+          }
+        )
     }
   end
 
@@ -938,6 +954,61 @@ defmodule CashLens.CreditCards do
       from(t in Transaction, where: t.account_id == ^account_id) |> Repo.delete_all()
 
     {stmts, txns}
+  end
+
+  @doc """
+  Marks `statement` as absorbed by `target`, by hand.
+
+  `absorb_pending/1` only folds a cycle in when the arithmetic proves it — the
+  boleto's total minus its own lines equals the sum of what is pending. A real
+  statement often does not balance that cleanly: a rounding difference, a credit
+  the parser read as a line, a cycle the card rolled over for its own reasons.
+  Those are the ones that need saying so by hand.
+
+  Refuses to absorb a statement into itself, across cards, or into one that is
+  itself absorbed — a chain would leave the first statement pointing at something
+  that no longer stands on its own.
+  """
+  def absorb_into(%Statement{id: id}, %Statement{id: id}),
+    do: {:error, :same_statement}
+
+  def absorb_into(%Statement{} = statement, %Statement{} = target) do
+    cond do
+      statement.account_id != target.account_id ->
+        {:error, :different_account}
+
+      not is_nil(target.absorbed_by_statement_id) ->
+        {:error, :target_absorbed}
+
+      true ->
+        statement
+        |> Ecto.Changeset.change(%{absorbed_by_statement_id: target.id})
+        |> Repo.update()
+    end
+  end
+
+  @doc """
+  Undoes an absorption, manual or automatic, putting the statement back on its
+  own feet.
+  """
+  def release_absorption(%Statement{} = statement) do
+    statement
+    |> Ecto.Changeset.change(%{absorbed_by_statement_id: nil})
+    |> Repo.update()
+  end
+
+  @doc """
+  Statements of the same card that `statement` could be folded into: anything
+  else on that account that is not itself absorbed, newest competência first.
+  """
+  def absorption_targets(%Statement{} = statement) do
+    from(s in Statement,
+      where: s.account_id == ^statement.account_id,
+      where: s.id != ^statement.id,
+      where: is_nil(s.absorbed_by_statement_id),
+      order_by: [desc: s.competencia, desc: s.due_date]
+    )
+    |> Repo.all()
   end
 
   @doc """
