@@ -586,6 +586,139 @@ defmodule CashLens.PDFParserTest do
       refute log =~ "reconciliation mismatch"
     end
 
+    test "signs the fees in 'Movimentações na fatura' as charges while the fatura payment stays a credit" do
+      # Verbatim "Movimentações na fatura" section of the real fatura de
+      # agosto/2026 (vence 17/08/2026). Its own Resumo reads Consumos
+      # R$ 936,60, Tarifas e encargos R$ 5,62, Multas por atraso R$ 27,16,
+      # Juros do mês anterior R$ 34,23 and Total R$ 1.003,61 — so the four fee
+      # rows below are part of what the fatura CHARGES, not credits.
+      text = """
+      Resumo da fatura
+
+        Consumos de 13/07 a 12/08                 R$ 936,60    Juros do mês anterior            R$ 34,23
+
+        Tarifas e encargos                          R$ 5,62    Pagamentos e créditos devolvidos R$ 1.357,95
+
+        Multas por atraso                          R$ 27,16
+
+        Total da fatura de julho                R$ 1.357,95
+
+                                                               Total                            R$ 1.003,61
+
+      Detalhes de consumo
+
+      Movimentações na fatura
+
+      Data      Movimentações                                             Valor em R$
+
+
+      21/07     Pagamento da fatura de julho/2026                         R$ 1.357,95
+
+
+      13/08     Multa por atraso                                             R$ 27,16
+
+
+      13/08     IOF do rotativo                                              R$ 5,62
+
+
+      13/08     Juros do rotativo                                            R$ 32,41
+
+
+      13/08     Juros de mora                                                R$ 1,82
+
+
+
+      Cartão Visa [****8978]
+
+      Data      Movimentações                                             Valor em R$
+
+      13/07     MERCADOLIVRE*COMPELECTRO                                    R$ 936,60
+
+      Total                                                                R$ 936,60
+      """
+
+      transactions = PDFParser.parse(text, :mercado_pago_card)
+
+      by_description = Map.new(transactions, &{&1.description, &1.amount})
+
+      # The genuine credit keeps its positive sign.
+      assert by_description["Pagamento da fatura de julho/2026"] == Decimal.new("1357.95")
+
+      # Every fee in the same section is a charge.
+      assert by_description["Multa por atraso"] == Decimal.new("-27.16")
+      assert by_description["IOF do rotativo"] == Decimal.new("-5.62")
+      assert by_description["Juros do rotativo"] == Decimal.new("-32.41")
+      assert by_description["Juros de mora"] == Decimal.new("-1.82")
+
+      # The fatura's bottom line: charges sum to the statement's own Total of
+      # R$ 1.003,61 (936,60 consumos + 67,01 of fees) only when the fees are
+      # negative. This is the assertion that fails if the signs regress.
+      charges =
+        transactions
+        |> Enum.filter(&Decimal.negative?(&1.amount))
+        |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
+
+      assert Decimal.equal?(charges, Decimal.new("-1003.61"))
+
+      # And because they now reconcile, the fatura parses without the
+      # "silently dropped row" warning that the wrong signs provoked.
+      log = capture_log(fn -> PDFParser.parse(text, :mercado_pago_card) end)
+      refute log =~ "reconciliation mismatch"
+    end
+
+    test "keeps a 'Crédito concedido' row in the same section a credit" do
+      # From the real fatura de setembro/2026, whose Resumo's "Pagamentos e
+      # créditos devolvidos R$ 1.118,77" is exactly 1.003,61 + 37,16 + 78,00 —
+      # proving these two rows are credits. A naive "only a line starting with
+      # Pagamento is a credit" rule would wrongly charge them.
+      text = """
+      Movimentações na fatura
+
+      Data      Movimentações                                              Valor em R$
+
+      14/08     Pagamento da fatura de agosto/2026                          R$ 1.003,61
+
+      17/08     Crédito concedido                                              R$ 37,16
+
+      17/08     Crédito concedido                                             R$ 78,00
+
+      Cartão Visa [****8978]
+      Data      Movimentações                                              Valor em R$
+      08/09     MERCADOLIVRE*MERCADOLIVRE                                    R$ 445,89
+      """
+
+      transactions = PDFParser.parse(text, :mercado_pago_card)
+
+      credits = Enum.filter(transactions, &(Decimal.compare(&1.amount, 0) == :gt))
+
+      assert length(credits) == 3
+
+      credits_total = Enum.reduce(credits, Decimal.new("0"), &Decimal.add(&2, &1.amount))
+      assert Decimal.equal?(credits_total, Decimal.new("1118.77"))
+
+      assert Enum.count(credits, &(&1.description == "Crédito concedido")) == 2
+    end
+
+    test "defaults an unrecognised row in 'Movimentações na fatura' to a charge" do
+      # The charge side of that section is open-ended, so a fee Mercado Pago has
+      # not billed before must land as a charge rather than silently crediting
+      # the account.
+      text = """
+      Movimentações na fatura
+
+      13/08     Anuidade diferenciada                                        R$ 49,90
+
+      Cartão Visa [****8978]
+      01/03     LOJA                                                         R$ 10,00
+      """
+
+      transactions = PDFParser.parse(text, :mercado_pago_card)
+
+      fee = Enum.find(transactions, &(&1.description == "Anuidade diferenciada"))
+
+      assert fee.amount == Decimal.new("-49.90")
+    end
+
     test "does not parse a transaction-shaped line placed after the closing Total row, and a repeated 'Movimentações' banner mid-table does not re-enter :payment" do
       text = """
       Movimentações na fatura

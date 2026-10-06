@@ -115,11 +115,13 @@ defmodule CashLens.Parsers.PDFParser do
   defp parse_mercado_pago_line(line, section, statement_date) do
     case Regex.run(@mercado_pago_line_regex, line) do
       [_, date_str, desc, parcela_n, parcela_m, amount_str] ->
+        description = mercado_pago_description(desc, parcela_n, parcela_m)
+
         %{
           date: resolve_purchase_date(date_str, statement_date),
           time: nil,
-          description: mercado_pago_description(desc, parcela_n, parcela_m),
-          amount: mercado_pago_amount(amount_str, section)
+          description: description,
+          amount: mercado_pago_amount(amount_str, section, description)
         }
 
       _ ->
@@ -173,8 +175,62 @@ defmodule CashLens.Parsers.PDFParser do
     end
   end
 
-  defp mercado_pago_amount(amount_str, :payment), do: parse_amount(amount_str)
-  defp mercado_pago_amount(amount_str, :purchases), do: Decimal.negate(parse_amount(amount_str))
+  # The "Movimentações na fatura" section is NOT a credits-only section. Mercado
+  # Pago mixes two opposite kinds of row under that one heading: genuine credits
+  # (the previous fatura's payment, and any credit granted back to the card) and
+  # the cycle's own fees and interest, which the fatura CHARGES.
+  #
+  # The statement proves the split itself, in its "Resumo da fatura" block: that
+  # block buckets these rows into "Pagamentos e créditos devolvidos" (credits)
+  # versus "Tarifas e encargos", "Multas por atraso" and "Juros do mês anterior"
+  # (charges), and adds the charge buckets INTO the fatura's Total.
+  #
+  # Worked example — fatura de agosto/2026 (vence 17/08/2026). Its section holds
+  # "Pagamento da fatura de julho/2026 R$ 1.357,95", "Multa por atraso R$ 27,16",
+  # "IOF do rotativo R$ 5,62", "Juros do rotativo R$ 32,41" and "Juros de mora
+  # R$ 1,82". Its Resumo reads Consumos R$ 936,60, Tarifas e encargos R$ 5,62,
+  # Multas por atraso R$ 27,16, Juros do mês anterior R$ 34,23 (= 32,41 + 1,82)
+  # and Total R$ 1.003,61 — and 936,60 + 5,62 + 27,16 + 34,23 is exactly
+  # 1.003,61. So the four fee rows are charged, not credited.
+  #
+  # We therefore classify from the CREDIT side and let everything else in the
+  # section default to a charge, rather than enumerating fee names. Two reasons:
+  #
+  #   1. The credit side is a closed, self-naming set. Credit rows name
+  #      themselves with the same words the credit bucket does — "Pagamento da
+  #      fatura de <mês>/<ano>" and "Crédito concedido" are the only credit
+  #      descriptions across the real corpus. The charge side is open-ended
+  #      (multa, IOF, juros do rotativo, juros de mora, juros de parcelamento,
+  #      tarifa, anuidade, ...), so any fee list would be a guess that silently
+  #      rots the first time Mercado Pago bills something new.
+  #   2. The default is the safe direction. An unrecognised row becomes a
+  #      charge, which overstates what is owed; the opposite error hides a real
+  #      cost and understates the bill.
+  #
+  # Both prefixes below are observed in the corpus — "Crédito concedido" is why
+  # a bare "starts with Pagamento" rule is not enough: in the fatura de
+  # setembro/2026 the section's credits are the R$ 1.003,61 payment plus two
+  # "Crédito concedido" rows (R$ 37,16 and R$ 78,00), and its Resumo's
+  # "Pagamentos e créditos devolvidos R$ 1.118,77" is exactly their sum.
+  # Accent-insensitive on "credito" because pdftotext output is not guaranteed
+  # to preserve the composed form.
+  @mercado_pago_credit_prefixes ["pagamento", "crédito", "credito"]
+
+  defp mercado_pago_amount(amount_str, :payment, description) do
+    if mercado_pago_credit?(description) do
+      parse_amount(amount_str)
+    else
+      Decimal.negate(parse_amount(amount_str))
+    end
+  end
+
+  defp mercado_pago_amount(amount_str, :purchases, _description),
+    do: Decimal.negate(parse_amount(amount_str))
+
+  defp mercado_pago_credit?(description) do
+    downcased = String.downcase(description)
+    Enum.any?(@mercado_pago_credit_prefixes, &String.starts_with?(downcased, &1))
+  end
 
   defp detect_max_width(lines, regex) do
     widths =
