@@ -20,6 +20,7 @@ defmodule CashLens.Forecast do
   @history_months 6
   @min_occurrences 2
   @default_horizon_days 365
+  @baseline_months 6
 
   @doc """
   Creates a recurring item directly. Used both by fixtures/tests and by
@@ -186,7 +187,9 @@ defmodule CashLens.Forecast do
 
     occurrences =
       (recurring_occurrences ++
-         card_occurrences(today, horizon_end) ++ commitment_occurrences(today, horizon_end))
+         card_occurrences(today, horizon_end) ++
+         commitment_occurrences(today, horizon_end) ++
+         variable_baseline(today, horizon_end))
       |> Enum.sort_by(& &1.date, Date)
       |> with_running_balance(starting_balance)
 
@@ -223,6 +226,100 @@ defmodule CashLens.Forecast do
   def occurrences_within(%{occurrences: occurrences}, days) do
     limit = Date.add(Date.utc_today(), days)
     Enum.filter(occurrences, &(Date.compare(&1.date, limit) != :gt))
+  end
+
+  @doc """
+  The occurrences the temporal ruler shows: everything settling within `days`
+  days, minus the variable-spending baseline.
+
+  The baseline is an average, not an event. Listing 365 identical cards would
+  bury the real commitments it sits between, and there is no bill to go look at
+  behind any one of them. It still shapes every balance on this list, because
+  `with_running_balance/2` accumulates over the whole projection before anything
+  is filtered out — so each commitment here carries a `balance_after` that
+  already includes the daily drag.
+  """
+  def ruler_occurrences(projection, days) do
+    projection
+    |> occurrences_within(days)
+    |> Enum.reject(& &1[:baseline])
+  end
+
+  @doc """
+  The average variable spending of the last `@baseline_months` months, as
+  `%{daily: Decimal.t(), monthly: Decimal.t(), months: integer(), since: Date.t()}`.
+
+  Variable spending is what the projection's three event sources cannot see: an
+  outflow from a cash account whose category is neither fixed (already a
+  `RecurringItem`) nor credit-card (already a `card_occurrences/2` bill), and
+  which is not a transfer between the user's own accounts. An uncategorized
+  outflow counts — unfiled grocery money is still gone.
+
+  Returns `nil` when the window holds no such spending, so a fresh database
+  projects no baseline rather than a baseline of zero.
+  """
+  def variable_baseline_rate do
+    today = Date.utc_today()
+    days = 30 * @baseline_months
+    since = Date.add(today, -days)
+    total = variable_spending_total(since, Date.add(today, -1))
+
+    if Decimal.equal?(total, 0) do
+      nil
+    else
+      daily = total |> Decimal.div(days) |> Decimal.round(2)
+
+      %{
+        daily: daily,
+        monthly: daily |> Decimal.mult(30) |> Decimal.round(2),
+        months: @baseline_months,
+        since: since
+      }
+    end
+  end
+
+  defp variable_spending_total(since, until) do
+    fixed_category_ids =
+      from(c in Category, where: c.type == "fixed", select: c.id)
+      |> Repo.all()
+
+    from(t in Transaction,
+      left_join: c in Category,
+      on: c.id == t.category_id,
+      where: t.date >= ^since and t.date <= ^until,
+      where: t.amount < 0,
+      where: is_nil(t.transfer_key),
+      where: is_nil(t.category_id) or t.category_id not in ^fixed_category_ids,
+      where: is_nil(c.slug) or not like(c.slug, "cartao-de-credito%"),
+      select: sum(t.amount)
+    )
+    |> Scopes.cash_accounts_only()
+    |> Repo.one()
+    |> case do
+      nil -> Decimal.new("0")
+      total -> total
+    end
+  end
+
+  # One occurrence per day, starting TOMORROW: today's variable spending is
+  # already inside `current_balance/0`, so charging the average on top of it
+  # would count the same day twice.
+  defp variable_baseline(today, horizon_end) do
+    case variable_baseline_rate() do
+      nil ->
+        []
+
+      %{daily: daily} ->
+        item = %{
+          id: :variable_baseline,
+          label: "Gasto variável (média)",
+          amount: daily,
+          is_salary: false
+        }
+
+        Date.range(Date.add(today, 1), horizon_end)
+        |> Enum.map(&%{date: &1, item: item, balance_after: nil, baseline: true})
+    end
   end
 
   @doc """

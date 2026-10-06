@@ -758,6 +758,164 @@ defmodule CashLens.ForecastTest do
     end
   end
 
+  describe "variable spending baseline" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    # The projection's three event sources -- recurring items, card bills and
+    # off-card commitments -- model only money the user has already told the
+    # system about. Everything else leaving a cash account (groceries on debit,
+    # a Pix, fuel) was invisible, which made every projection structurally
+    # optimistic: the real months ran negative while the forecast climbed.
+    setup do
+      account = account_fixture(%{balance: "1000.00"})
+      variable = category_fixture(%{type: "variable", name: "Mercado livre de verdade"})
+      %{account: account, variable: variable}
+    end
+
+    defp spend(account, category, date, amount) do
+      transaction_fixture(%{
+        account_id: account.id,
+        category_id: category && category.id,
+        date: date,
+        amount: amount
+      })
+    end
+
+    test "averages variable outflows over the window as a daily rate", %{
+      account: account,
+      variable: variable
+    } do
+      # 180 days in the window, so 1800,00 of spending is exactly -10,00/day.
+      spend(account, variable, Date.add(Date.utc_today(), -10), "-1000.00")
+      spend(account, variable, Date.add(Date.utc_today(), -100), "-800.00")
+
+      rate = Forecast.variable_baseline_rate()
+
+      assert Decimal.equal?(rate.daily, Decimal.new("-10.00"))
+      assert Decimal.equal?(rate.monthly, Decimal.new("-300.00"))
+      assert rate.months == 6
+    end
+
+    test "returns nil when the window holds no variable spending" do
+      refute Forecast.variable_baseline_rate()
+    end
+
+    test "an uncategorized outflow counts -- unfiled money is still gone", %{account: account} do
+      spend(account, nil, Date.add(Date.utc_today(), -5), "-1800.00")
+
+      assert Decimal.equal?(Forecast.variable_baseline_rate().daily, Decimal.new("-10.00"))
+    end
+
+    test "ignores what the projection already models, and what never left", %{
+      account: account,
+      variable: variable
+    } do
+      fixed = category_fixture(%{type: "fixed", name: "Aluguel"})
+      card_category = category_fixture(%{slug: "cartao-de-credito-ourocard", name: "Ourocard"})
+      card_account = account_fixture(%{is_credit_card: true})
+
+      # Already a RecurringItem.
+      spend(account, fixed, Date.add(Date.utc_today(), -20), "-5000.00")
+      # Already a card_occurrences/2 bill.
+      spend(account, card_category, Date.add(Date.utc_today(), -20), "-5000.00")
+      # A purchase on the card itself, not money leaving a cash account.
+      spend(card_account, variable, Date.add(Date.utc_today(), -20), "-5000.00")
+      # Income, not spending.
+      spend(account, variable, Date.add(Date.utc_today(), -20), "5000.00")
+      # Outside the window.
+      spend(account, variable, Date.add(Date.utc_today(), -400), "-5000.00")
+
+      refute Forecast.variable_baseline_rate()
+    end
+
+    test "a transfer between the user's own accounts is not spending", %{
+      account: account,
+      variable: variable
+    } do
+      tx = spend(account, variable, Date.add(Date.utc_today(), -20), "-1800.00")
+      assert Decimal.equal?(Forecast.variable_baseline_rate().daily, Decimal.new("-10.00"))
+
+      {:ok, _} =
+        CashLens.Transactions.update_transaction(tx, %{transfer_key: Ecto.UUID.generate()})
+
+      refute Forecast.variable_baseline_rate()
+    end
+
+    test "project/1 charges the rate once per day, starting tomorrow", %{
+      account: account,
+      variable: variable
+    } do
+      spend(account, variable, Date.add(Date.utc_today(), -10), "-1800.00")
+
+      projection = Forecast.project(10)
+      baseline = Enum.filter(projection.occurrences, & &1[:baseline])
+
+      # Today's variable spending is already inside the starting balance, so
+      # charging the average on top of it would count the same day twice.
+      assert length(baseline) == 10
+      refute Enum.any?(baseline, &(&1.date == Date.utc_today()))
+      assert Enum.min_by(baseline, & &1.date, Date).date == Date.add(Date.utc_today(), 1)
+
+      # 10 days at -10,00 below wherever the balance starts. Asserted as a delta
+      # because the history that sets the rate is the same history that moved
+      # the balance -- pinning an absolute would test the fixture, not the rate.
+      assert Decimal.equal?(
+               Decimal.sub(Forecast.final_balance(projection), projection.starting_balance),
+               Decimal.new("-100.00")
+             )
+    end
+
+    test "the baseline can be what brings the balance to zero", %{
+      account: account,
+      variable: variable
+    } do
+      spend(account, variable, Date.add(Date.utc_today(), -10), "-18000.00")
+      # Income is not variable spending, so this lifts the balance back to
+      # 1000,00 without touching the -100,00/day rate the outflow above sets.
+      spend(account, variable, Date.add(Date.utc_today(), -10), "18000.00")
+
+      projection = Forecast.project(30)
+
+      assert Decimal.equal?(projection.starting_balance, Decimal.new("1000.00"))
+      assert projection.zero_date == Date.add(Date.utc_today(), 10)
+    end
+
+    test "ruler_occurrences/2 hides the baseline but keeps its drag in the balances", %{
+      account: account,
+      variable: variable
+    } do
+      spend(account, variable, Date.add(Date.utc_today(), -10), "-1800.00")
+
+      item =
+        recurring_item_fixture(%{
+          day_of_month: Date.add(Date.utc_today(), 5).day,
+          amount: "-100.00"
+        })
+
+      projection = Forecast.project(10)
+      ruler = Forecast.ruler_occurrences(projection, 10)
+
+      # The average is not an event: there is no bill to go look at behind any
+      # one of 365 identical cards, and listing them buries the real ones.
+      assert Enum.all?(ruler, &is_nil(&1[:baseline]))
+      refute Enum.empty?(ruler)
+      assert Enum.any?(Forecast.occurrences_within(projection, 10), & &1[:baseline])
+
+      # ... but the balance shown next to the recurring item still accounts for
+      # the days of average spending that preceded it.
+      occ = Enum.find(ruler, &(&1.item.id == item.id))
+      refute is_nil(occ)
+
+      # Four preceding days of average spending (-40,00) plus the item itself
+      # (-100,00), measured from the starting balance.
+      assert Decimal.equal?(
+               Decimal.sub(occ.balance_after, projection.starting_balance),
+               Decimal.new("-140.00")
+             )
+    end
+  end
+
   describe "list_categories_without_recurring_item/0" do
     test "returns only categories with no recurring item, excluding credit-card ones" do
       free = category_fixture(%{name: "Academia", type: "fixed"})

@@ -30,7 +30,7 @@ defmodule CashLensWeb.ForecastLive.Index do
     projection = Forecast.project(@horizon_days)
     income_date = Forecast.next_income_date(projection)
     income_balance = Forecast.balance_on(projection, Date.add(income_date, -1))
-    ruler_occurrences = Forecast.occurrences_within(projection, @ruler_days)
+    ruler_occurrences = Forecast.ruler_occurrences(projection, @ruler_days)
 
     socket
     |> assign(:today, today)
@@ -44,6 +44,7 @@ defmodule CashLensWeb.ForecastLive.Index do
     |> assign(:income_balance, income_balance)
     |> assign(:final_balance, Forecast.final_balance(projection))
     |> assign(:candidate_categories, Forecast.list_categories_without_recurring_item())
+    |> assign(:baseline_rate, Forecast.variable_baseline_rate())
   end
 
   defp critical_date([]), do: nil
@@ -381,6 +382,11 @@ defmodule CashLensWeb.ForecastLive.Index do
             </p>
             <p class="text-[11px] opacity-50 mt-1">
               <strong>Recorrência temporária</strong>: financiamento ou consórcio pago fora do cartão — tem fim conhecido e mostra a posição da parcela. Parcelas de cartão não aparecem aqui: elas já estão dentro da fatura.
+            </p>
+            <p :if={@baseline_rate} class="text-[11px] opacity-50 mt-1" data-role="baseline-note">
+              Os saldos abaixo já descontam uma média de gasto variável de
+              <strong>{format_currency(@baseline_rate.monthly)}/mês</strong>
+              ({format_currency(@baseline_rate.daily)}/dia), apurada nos últimos {@baseline_rate.months} meses. É uma estimativa, não um lançamento: por isso não aparece como evento na régua.
             </p>
           </div>
           <span class="text-xs font-semibold opacity-50">Ordenado por data de liquidação</span>
