@@ -663,8 +663,19 @@ defmodule CashLens.ForecastTest do
 
       assert [occ] = occurrences
       assert occ.origin == :estimado
-      # variable = -2000 + 500 = -1500 ; estimate = -1500 - 200 = -1700
-      assert Decimal.equal?(occ.item.amount, Decimal.new("-1700.00"))
+      # variable = -2000 + 500 = -1500. The month schedules 200, but this card
+      # typically carries 500 of parcels, so the usual load is what gets
+      # charged: -1500 - 500 = -2000.
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-2000.00"))
+      assert Decimal.equal?(occ.installment_total, Decimal.new("500.00"))
+
+      # The 300 the schedule does not account for is named as a trend, never
+      # attributed to FUTURE_PARCEL, which bills its own 200 and no more.
+      assert [scheduled, trend] = occ.installment_groups
+      assert scheduled.description == "FUTURE_PARCEL"
+      assert Decimal.equal?(scheduled.parcel_value, Decimal.new("200.00"))
+      assert trend.description == "Novas parcelas (tendência)"
+      assert Decimal.equal?(trend.parcel_value, Decimal.new("300.00"))
     end
 
     test "estimates from the average of the card's recent bills, not its last one", %{card: card} do
@@ -693,14 +704,16 @@ defmodule CashLens.ForecastTest do
       assert Decimal.equal?(occ.item.amount, Decimal.new("-1000.00"))
     end
 
-    test "averages each bill's variable part, keeping installments on their schedule", %{
-      card: card
-    } do
+    test "a finished plan keeps its level as a trend, without billing a parcel it does not have",
+         %{
+           card: card
+         } do
       # Two bills of 2000, each carrying one 500,00 parcel of a plan that ends
-      # before the projected month. Averaging the gross bills would charge
-      # -2000,00 every month forever, smearing a finished plan across the whole
-      # horizon. Averaging each bill's variable part gives -1500,00, and the
-      # target month's own installments -- none here -- are added back after.
+      # before the projected month. The schedule says the projected month owes
+      # nothing, but twelve months of history say a card that has been carrying
+      # 500,00 of parcels goes on carrying it -- a plan that ends is replaced by
+      # a new purchase. So the level is held, as a trend on its own line, and
+      # ENDED_PARCEL is never listed as billing a parcel after its last one.
       older_due = Date.add(Date.utc_today(), -60)
       older_competencia = Date.beginning_of_month(older_due)
       newer_due = Date.add(Date.utc_today(), -30)
@@ -738,7 +751,76 @@ defmodule CashLens.ForecastTest do
         CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
 
       assert [occ] = occurrences
-      assert Decimal.equal?(occ.item.amount, Decimal.new("-1500.00"))
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-2000.00"))
+
+      assert [trend] = occ.installment_groups
+      assert trend.description == "Novas parcelas (tendência)"
+      assert trend.parcel_number == nil
+      assert Decimal.equal?(trend.parcel_value, Decimal.new("500.00"))
+      refute Enum.any?(occ.installment_groups, &(&1.description == "ENDED_PARCEL"))
+    end
+
+    test "the usual parcel load is a floor, not a ceiling: a heavy month is charged in full",
+         %{card: card} do
+      # The floor holds a month UP to the card's usual load. It must never pull a
+      # month DOWN to it: a month that really does schedule more parcels than
+      # usual is the month most worth seeing, and averaging it away would hide
+      # exactly the spike the ruler exists to warn about.
+      due = Date.add(Date.utc_today(), -30)
+      competencia = Date.beginning_of_month(due)
+
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: due,
+        competencia: competencia,
+        total_a_pagar: Decimal.new("2000.00")
+      })
+
+      {:ok, past_group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "USUAL_PARCEL",
+          installments: 2,
+          start_date: competencia,
+          total_amount: Decimal.new("600.00")
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: past_group.id,
+        installment_number: 1,
+        date: competencia,
+        amount: Decimal.new("-300.00")
+      })
+
+      future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
+
+      {:ok, heavy_group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "HEAVY_PARCEL",
+          installments: 2,
+          start_date: future_first,
+          total_amount: Decimal.new("3000.00")
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: heavy_group.id,
+        installment_number: 1,
+        date: future_first,
+        amount: Decimal.new("-1500.00")
+      })
+
+      assert [occ] =
+               CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+
+      # variable = -2000 + 300 = -1700 ; the month's own 1500 beats the 300
+      # typical load, so it is charged whole: -1700 - 1500 = -3200.
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-3200.00"))
+      assert Decimal.equal?(occ.installment_total, Decimal.new("1500.00"))
+
+      # And nothing is disclosed as a trend, because the schedule covers the bill.
+      assert [disclosed] = occ.installment_groups
+      assert disclosed.description == "HEAVY_PARCEL"
     end
 
     test "a card with one bill estimates from it, unchanged", %{card: card} do
@@ -816,16 +898,37 @@ defmodule CashLens.ForecastTest do
       future_month = Date.add(Date.utc_today(), 60)
       future_first = Date.beginning_of_month(future_month)
 
+      # The projected month schedules MORE than the card typically carries, so
+      # `max(scheduled, typical)` resolves to the schedule. That is the branch
+      # where the competência keying is still visible in the amount: when the
+      # typical load wins instead, it cancels against the variable part it was
+      # subtracted from, and both keyings would give the same number.
+      {:ok, heavy_group} =
+        CashLens.Installments.create_installment_group(%{
+          description_pattern: "HEAVY_PARCEL",
+          installments: 2,
+          start_date: future_first,
+          total_amount: Decimal.new("1600.00")
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        installment_group_id: heavy_group.id,
+        installment_number: 1,
+        date: future_first,
+        amount: Decimal.new("-800.00")
+      })
+
       occurrences =
         CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
 
       assert [occ] = occurrences
       assert occ.origin == :estimado
-      # If keyed by competencia (correct): variable = -2000 + 500 = -1500, no future
-      # installments this month, so estimate stays -1500.00.
+      # If keyed by competencia (correct): variable = -2000 + 500 = -1500, and the
+      # month's 800 schedule outweighs the 500 typical load, giving -2300.00.
       # If keyed by due_date's month (the bug): the installment lands outside that
-      # month, recent_installments would be 0, giving -2000.00 instead.
-      assert Decimal.equal?(occ.item.amount, Decimal.new("-1500.00"))
+      # month, so variable = -2000 and typical = 0, giving -2800.00 instead.
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-2300.00"))
     end
 
     test "two statements due in the same month do not crash and resolve deterministically", %{

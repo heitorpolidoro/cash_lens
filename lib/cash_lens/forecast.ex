@@ -676,9 +676,9 @@ defmodule CashLens.Forecast do
           nil ->
             nil
 
-          amount ->
+          %{amount: amount, replacement: replacement} ->
             groups = Installments.account_installment_groups(account.id, month)
-            build_card_occurrence(account, date, amount, :estimado, {month, groups})
+            build_card_occurrence(account, date, amount, :estimado, {month, groups, replacement})
         end
     end
   end
@@ -710,10 +710,23 @@ defmodule CashLens.Forecast do
   # light year.
   #
   # What gets averaged is each bill's VARIABLE part -- the bill minus the
-  # installments known for its own competência. Installments are not an average:
-  # they are a schedule, so the target month's own installment total is added
-  # back afterwards. Averaging the gross bill instead would smear a parcel that
-  # ends in March across all twelve months.
+  # installments known for its own competência -- and the installments charged
+  # on top are `max(scheduled, typical)`: the parcels this month's plans
+  # actually bill, or the card's usual parcel load, whichever is larger.
+  #
+  # The floor is the whole point. Only the parcels already imported are
+  # knowable, so a schedule read on its own runs dry: the Ourocard's known
+  # parcels fall from 5.666,83 this month to 0 by set/2027. Twelve months of
+  # history say otherwise -- the total grew from 968,75 to 5.684,09 and then
+  # held there, because each plan that finishes is replaced by a new purchase.
+  # Projecting the run-off as a saving understated the next year's spending by
+  # about 3.800 a month. The excess over `scheduled` is disclosed separately,
+  # as a trend, so no finished plan is ever shown billing a parcel it does not
+  # have.
+  #
+  # Equivalently: the month is charged the gross bill average, plus only the
+  # part of its scheduled parcels that exceeds the usual load. A month carrying
+  # an unusually heavy schedule is still projected heavier than its neighbours.
   defp estimate_for_month(account, month) do
     since = Date.add(Date.utc_today(), -30 * @history_months)
 
@@ -730,10 +743,16 @@ defmodule CashLens.Forecast do
         nil
 
       statements ->
-        statements
-        |> Enum.map(&variable_part/1)
-        |> average()
-        |> Decimal.sub(Installments.account_installment_total(account.id, month))
+        parts = Enum.map(statements, &variable_part/1)
+        variable = parts |> Enum.map(& &1.variable) |> average()
+        typical = parts |> Enum.map(& &1.installments) |> average()
+        scheduled = Installments.account_installment_total(account.id, month)
+        replacement = Decimal.max(Decimal.sub(typical, scheduled), Decimal.new("0"))
+
+        %{
+          amount: variable |> Decimal.sub(scheduled) |> Decimal.sub(replacement),
+          replacement: replacement
+        }
     end
   end
 
@@ -741,7 +760,10 @@ defmodule CashLens.Forecast do
     competencia = statement.competencia || Date.beginning_of_month(statement.due_date)
     installments = Installments.account_installment_total(statement.account_id, competencia)
 
-    statement |> statement_amount() |> Decimal.add(installments)
+    %{
+      variable: statement |> statement_amount() |> Decimal.add(installments),
+      installments: installments
+    }
   end
 
   defp average(amounts) do
@@ -768,9 +790,10 @@ defmodule CashLens.Forecast do
   # total and no installment breakdown is computed for it.
   defp installment_disclosure(nil), do: {Decimal.new("0"), []}
 
-  defp installment_disclosure({month, groups}) do
+  defp installment_disclosure({month, groups, replacement}) do
     disclosed =
-      Enum.map(groups, fn group ->
+      groups
+      |> Enum.map(fn group ->
         %{
           id: group.id,
           description: group.description_pattern,
@@ -779,11 +802,33 @@ defmodule CashLens.Forecast do
           installments: group.installments
         }
       end)
+      |> maybe_disclose_replacement(replacement)
 
     total =
       Enum.reduce(disclosed, Decimal.new("0"), fn g, acc -> Decimal.add(acc, g.parcel_value) end)
 
     {total, disclosed}
+  end
+
+  # The replacement is charged, so it has to be shown -- but never attributed to
+  # a plan. It gets its own line, named for what it is: the parcels this card
+  # usually carries and that the known schedule no longer accounts for. Without
+  # it the breakdown would total less than the bill it claims to explain.
+  defp maybe_disclose_replacement(disclosed, replacement) do
+    if Decimal.positive?(replacement) do
+      disclosed ++
+        [
+          %{
+            id: :replacement,
+            description: "Novas parcelas (tendência)",
+            parcel_value: replacement,
+            parcel_number: nil,
+            installments: nil
+          }
+        ]
+    else
+      disclosed
+    end
   end
 
   @doc """
