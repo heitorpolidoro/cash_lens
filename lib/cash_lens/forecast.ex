@@ -439,6 +439,27 @@ defmodule CashLens.Forecast do
   end
 
   @doc """
+  The lowest point the daily curve reaches over `days`, as `%{date:, balance:}`.
+
+  When the balance never crosses zero the bankruptcy date is `nil` and the
+  screen has nothing to point at, yet the horizon still has a worst day. That
+  day is what a projection ending comfortably actually has to survive, so it is
+  worth naming even — especially — when the news is good.
+
+  Ties go to the earliest date: the first time the balance bottoms out is when
+  the money has to be there.
+  """
+  def trough(projection, days \\ @default_horizon_days) do
+    projection
+    |> daily_balances(days)
+    |> Enum.reduce(nil, fn point, lowest ->
+      if is_nil(lowest) or Decimal.lt?(point.balance, lowest.balance),
+        do: point,
+        else: lowest
+    end)
+  end
+
+  @doc """
   The change of the projected final balance against the current balance, as a
   signed whole percentage. `nil` when the starting balance is zero.
   """

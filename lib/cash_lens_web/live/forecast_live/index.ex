@@ -39,6 +39,9 @@ defmodule CashLensWeb.ForecastLive.Index do
     |> assign(:ruler_occurrences, ruler_occurrences)
     |> assign(:critical_date, critical_date(ruler_occurrences))
     |> assign(:bankruptcy, bankruptcy_status(projection.zero_date, today))
+    # Only meaningful while the curve stays above zero: once it crosses, the
+    # crossing is the worst news and the trough is just a point past it.
+    |> assign(:trough, projection.zero_date == nil && Forecast.trough(projection, @horizon_days))
     |> assign(:chart_points, chart_points(projection))
     |> assign(:income_date, income_date)
     |> assign(:income_balance, income_balance)
@@ -316,9 +319,11 @@ defmodule CashLensWeb.ForecastLive.Index do
           </span>
           <div class="flex items-baseline justify-between gap-2 mt-1">
             <span class={["text-2xl font-black", bankruptcy_figure_class(@bankruptcy)]}>
-              {if @bankruptcy.date,
-                do: format_date(@bankruptcy.date),
-                else: format_currency(@final_balance)}
+              {cond do
+                @bankruptcy.date -> format_date(@bankruptcy.date)
+                @trough -> format_currency(@trough.balance)
+                true -> format_currency(@final_balance)
+              end}
             </span>
             <span class={[
               "badge badge-sm text-[10px] font-black",
@@ -331,7 +336,7 @@ defmodule CashLensWeb.ForecastLive.Index do
             "text-[11px] font-medium mt-1 block",
             if(@bankruptcy.severity == :critical, do: "opacity-90", else: "opacity-60")
           ]}>
-            {bankruptcy_caption(@bankruptcy)}
+            {bankruptcy_caption(@bankruptcy, @trough)}
           </span>
         </div>
       </div>
@@ -350,9 +355,17 @@ defmodule CashLensWeb.ForecastLive.Index do
             Saldo Projetado Dia a Dia (12 Meses)
           </h2>
           <p class="text-[11px] opacity-50 mt-0.5">
-            {if @bankruptcy.date,
-              do: "A curva cruza zero em #{format_date(@bankruptcy.date)}",
-              else: "A curva não cruza zero no horizonte"}
+            {cond do
+              @bankruptcy.date ->
+                "A curva cruza zero em #{format_date(@bankruptcy.date)}"
+
+              @trough ->
+                "A curva não cruza zero; o ponto mais baixo é " <>
+                  "#{format_currency(@trough.balance)} em #{format_date(@trough.date)}"
+
+              true ->
+                "A curva não cruza zero no horizonte"
+            end}
           </p>
         </div>
         <div class="w-full h-64">
@@ -362,6 +375,7 @@ defmodule CashLensWeb.ForecastLive.Index do
             phx-update="ignore"
             data-points={@chart_points}
             data-zero-date={@bankruptcy.date && Date.to_iso8601(@bankruptcy.date)}
+            data-trough-date={@trough && Date.to_iso8601(@trough.date)}
           >
           </canvas>
         </div>
@@ -868,13 +882,18 @@ defmodule CashLensWeb.ForecastLive.Index do
   defp bankruptcy_badge_label(%{severity: :near}), do: "Em risco"
   defp bankruptcy_badge_label(%{severity: :critical}), do: "Crítico"
 
-  defp bankruptcy_caption(%{severity: :safe}), do: "Não zera em 12 meses"
+  # The headline figure is the trough's amount, so the caption carries its date:
+  # together they say how little is left on the worst day and when that day is.
+  defp bankruptcy_caption(%{severity: :safe}, %{date: %Date{} = date}),
+    do: "Menor saldo em #{format_date(date)} · não zera em 12 meses"
 
-  defp bankruptcy_caption(%{days: days}) when days <= 0,
+  defp bankruptcy_caption(%{severity: :safe}, _no_trough), do: "Não zera em 12 meses"
+
+  defp bankruptcy_caption(%{days: days}, _trough) when days <= 0,
     do: "Saldo já está zerado ou negativo"
 
-  defp bankruptcy_caption(%{days: 1}), do: "Saldo zera em 1 dia"
-  defp bankruptcy_caption(%{days: days}), do: "Saldo zera em #{days} dias"
+  defp bankruptcy_caption(%{days: 1}, _trough), do: "Saldo zera em 1 dia"
+  defp bankruptcy_caption(%{days: days}, _trough), do: "Saldo zera em #{days} dias"
 
   defp ruler_card_class(occ, critical_date) do
     cond do

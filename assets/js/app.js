@@ -86,47 +86,62 @@ const liveSocket = new LiveSocket("/live", Socket, {
         );
         const balances = points.map(p => Number(p.balance));
 
-        // A vertical rule on the day the balance first reaches zero. The date
-        // comes from the server, so this line and the bankruptcy card can
-        // never disagree about it.
-        const zeroDate = this.el.getAttribute("data-zero-date");
-        const zeroIndex = zeroDate ? points.findIndex(p => p.date === zeroDate) : -1;
+        // Vertical rules on the two days worth naming: where the balance first
+        // reaches zero, and — when it never does — where it comes closest. Both
+        // dates come from the server, so a rule and the bankruptcy card beside
+        // it can never disagree about them.
+        const ruleAt = (id, date, color, label) => {
+          const index = date ? points.findIndex(p => p.date === date) : -1;
 
-        const zeroLinePlugin = {
-          id: 'zeroLine',
-          afterDatasetsDraw(chart) {
-            if (zeroIndex < 0) return;
-            const x = chart.scales.x.getPixelForValue(zeroIndex);
-            const {top, bottom} = chart.chartArea;
-            const c = chart.ctx;
+          return {
+            id,
+            afterDatasetsDraw(chart) {
+              if (index < 0) return;
+              const x = chart.scales.x.getPixelForValue(index);
+              const {top, bottom} = chart.chartArea;
+              const c = chart.ctx;
 
-            c.save();
-            c.beginPath();
-            c.setLineDash([5, 4]);
-            c.lineWidth = 2;
-            c.strokeStyle = 'rgb(239, 68, 68)';
-            c.moveTo(x, top);
-            c.lineTo(x, bottom);
-            c.stroke();
+              c.save();
+              c.beginPath();
+              c.setLineDash([5, 4]);
+              c.lineWidth = 2;
+              c.strokeStyle = color;
+              c.moveTo(x, top);
+              c.lineTo(x, bottom);
+              c.stroke();
 
-            c.setLineDash([]);
-            c.fillStyle = 'rgb(239, 68, 68)';
-            c.font = 'bold 10px sans-serif';
-            c.textBaseline = 'top';
-            // Flip the label to the left of the rule when it would overflow.
-            const label = 'Saldo zera';
-            const width = c.measureText(label).width;
-            const overflows = x + width + 6 > chart.chartArea.right;
-            c.textAlign = overflows ? 'right' : 'left';
-            c.fillText(label, overflows ? x - 6 : x + 6, top + 2);
-            c.restore();
-          }
+              c.setLineDash([]);
+              c.fillStyle = color;
+              c.font = 'bold 10px sans-serif';
+              c.textBaseline = 'top';
+              // Flip the label to the left of the rule when it would overflow.
+              const width = c.measureText(label).width;
+              const overflows = x + width + 6 > chart.chartArea.right;
+              c.textAlign = overflows ? 'right' : 'left';
+              c.fillText(label, overflows ? x - 6 : x + 6, top + 2);
+              c.restore();
+            }
+          };
         };
+
+        const zeroLinePlugin = ruleAt(
+          'zeroLine',
+          this.el.getAttribute("data-zero-date"),
+          'rgb(239, 68, 68)',
+          'Saldo zera'
+        );
+
+        const troughLinePlugin = ruleAt(
+          'troughLine',
+          this.el.getAttribute("data-trough-date"),
+          'rgb(249, 115, 22)',
+          'Menor saldo'
+        );
 
         const ctx = this.el.getContext("2d");
         this.chart = new Chart(ctx, {
           type: 'line',
-          plugins: [zeroLinePlugin],
+          plugins: [zeroLinePlugin, troughLinePlugin],
           data: {
             labels,
             datasets: [{

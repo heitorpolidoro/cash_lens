@@ -1613,4 +1613,45 @@ defmodule CashLens.ForecastTest do
       refute Forecast.get_recurring_item!(item.id).active
     end
   end
+
+  describe "trough/2" do
+    import CashLens.AccountsFixtures
+
+    test "finds the lowest point of the daily curve, not the last one" do
+      account_fixture(%{balance: "10000.00"})
+      today = Date.utc_today()
+
+      # A big debit early, repaid by income later: the curve dips and recovers,
+      # so the worst day is in the middle and the final balance hides it.
+      recurring_item_fixture(%{
+        day_of_month: Date.add(today, 3).day,
+        amount: "-9000.00",
+        label: "Saida"
+      })
+
+      recurring_item_fixture(%{
+        day_of_month: Date.add(today, 20).day,
+        amount: "20000.00",
+        label: "Entrada",
+        is_salary: true
+      })
+
+      projection = Forecast.project(60)
+      trough = Forecast.trough(projection, 60)
+
+      assert Decimal.lt?(trough.balance, Forecast.final_balance(projection))
+      assert Decimal.lt?(trough.balance, projection.starting_balance)
+    end
+
+    test "settles on the earliest day when the low point repeats" do
+      account_fixture(%{balance: "500.00"})
+
+      # Nothing moves, so every day of the horizon ties at the same balance and
+      # the first of them must win.
+      projection = Forecast.project(30)
+      trough = Forecast.trough(projection, 30)
+
+      assert trough.date == Date.utc_today()
+    end
+  end
 end

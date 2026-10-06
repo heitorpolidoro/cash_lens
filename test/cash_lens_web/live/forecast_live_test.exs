@@ -42,17 +42,39 @@ defmodule CashLensWeb.ForecastLiveTest do
       assert html =~ "Saldo Pré-Salário"
       assert scoped(view, "[data-role='kpi-pre-salary']") =~ format_currency(pre_salary)
 
-      # The projection never reaches zero here, so the bankruptcy card falls
-      # back to the 12-month figure.
+      # The projection never reaches zero here, so the bankruptcy card names the
+      # worst day of the horizon instead.
       assert html =~ "Projeção de Falência"
       refute html =~ "Mínimo Projetado"
       refute html =~ "Projeção em 12 Meses"
 
+      trough = Forecast.trough(Forecast.project(365), 365)
+
       card = scoped(view, "[data-role='kpi-bankruptcy']")
-      assert card =~ format_currency(Forecast.final_balance(Forecast.project(365)))
-      assert card =~ "Não zera em 12 meses"
+      assert card =~ format_currency(trough.balance)
+      assert card =~ "Menor saldo em #{format_date(trough.date)}"
+      assert card =~ "não zera em 12 meses"
       assert card =~ "Seguro"
       assert minimum
+
+      # The chart is handed the same date, so its orange rule and this card can
+      # never point at different days.
+      # Asserted on the attribute, not the bare date: every date in the horizon
+      # also appears inside data-points.
+      assert scoped(view, "#forecast-balance-chart") =~
+               ~s(data-trough-date="#{Date.to_iso8601(trough.date)}")
+    end
+
+    test "names no trough once the balance actually crosses zero", %{conn: conn} do
+      account_fixture(%{balance: "100.00"})
+      today = Date.utc_today()
+      recurring_item_fixture(%{day_of_month: today.day, amount: "-5000.00"})
+
+      {:ok, view, _html} = live(conn, ~p"/forecast")
+
+      # Past the crossing the trough is just a point beyond the worst news.
+      refute scoped(view, "[data-role='kpi-bankruptcy']") =~ "Menor saldo"
+      refute scoped(view, "#forecast-balance-chart") =~ "data-trough-date=\""
     end
 
     test "shows the zero date, not a balance, when the projection runs out", %{conn: conn} do
