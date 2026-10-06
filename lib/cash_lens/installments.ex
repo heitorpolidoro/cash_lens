@@ -7,6 +7,7 @@ defmodule CashLens.Installments do
   alias CashLens.Repo
 
   alias CashLens.Accounts.Account
+  alias CashLens.CreditCards.Statement
   alias CashLens.Installments.InstallmentGroup
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.InstallmentDetector
@@ -380,16 +381,16 @@ defmodule CashLens.Installments do
   # Spreads one purchase's parcels to their billing months, drops not-yet-charged
   # future parcels, links the rest to a group, and returns how many were applied.
   defp apply_installment_group({base, total, amount_key}, items) do
-    # "PARC xx/yy" always denotes a single installment purchase whose parcels are
-    # each reported on their own purchase date (OFX DTPOSTED). Re-date every parcel
-    # to its billing month: add_months(its own DTPOSTED, number - 1), so parcel 1
-    # bills in the purchase month and parcel N bills (N - 1) months later.
+    # "PARC xx/yy" denotes one installment purchase whose parcels are each
+    # reported on the ORIGINAL purchase date, so every parcel of a plan carries
+    # the same date and must be re-dated to the month it is actually billed.
     today = Date.utc_today()
+    competencias = competencias_for(items)
+    closing_days = closing_days_for(items)
 
     dated =
       Enum.map(items, fn {tx, d} ->
-        billed = add_months(tx.date, d.number - 1)
-        {tx, d, billed}
+        {tx, d, billing_date(tx, d, competencias, closing_days)}
       end)
 
     # A parcel billed in a future month has not actually been charged yet, so it
@@ -402,16 +403,70 @@ defmodule CashLens.Installments do
     apply_present_parcels(base, total, amount_key, present)
   end
 
+  # The month a parcel is billed in. Preferred source: the statement the row was
+  # imported from. A card statement physically lists each parcel in the cycle
+  # that charges it, so the competência IS the billing month -- no inference
+  # needed, and it survives the two things inference cannot handle: a card whose
+  # cycle changed (this account's due day moved from 7 to 16 in May 2026, so
+  # today's closing_day is wrong for every older purchase) and a plan whose
+  # parcels skip a month, which real statements do.
+  #
+  # Fallback, for a row with no statement behind it (a hand-entered parcel, or
+  # one imported from an account-level extract): infer the cycle from the card's
+  # closing_day -- a purchase after closing belongs to the next month's bill --
+  # and advance (number - 1) months from there.
+  defp billing_date(tx, detection, competencias, closing_days) do
+    case Map.get(competencias, tx.import_batch_id) do
+      %Date{} = competencia -> on_day(competencia, tx.date.day)
+      nil -> inferred_billing_date(tx, detection, Map.get(closing_days, tx.account_id))
+    end
+  end
+
+  defp inferred_billing_date(tx, detection, closing_day) do
+    first =
+      if is_integer(closing_day) and tx.date.day > closing_day,
+        do: add_months(tx.date, 1),
+        else: tx.date
+
+    add_months(first, detection.number - 1)
+  end
+
+  defp on_day(%Date{year: year, month: month}, day) do
+    last_day = Date.days_in_month(Date.new!(year, month, 1))
+    Date.new!(year, month, min(day, last_day))
+  end
+
+  defp competencias_for(items) do
+    ids =
+      items
+      |> Enum.map(fn {tx, _d} -> tx.import_batch_id end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    if ids == [] do
+      %{}
+    else
+      from(s in Statement,
+        where: s.id in ^ids and not is_nil(s.competencia),
+        select: {s.id, s.competencia}
+      )
+      |> Repo.all()
+      |> Map.new()
+    end
+  end
+
+  defp closing_days_for(items) do
+    ids = items |> Enum.map(fn {tx, _d} -> tx.account_id end) |> Enum.uniq()
+
+    from(a in Account, where: a.id in ^ids, select: {a.id, a.closing_day})
+    |> Repo.all()
+    |> Map.new()
+  end
+
   defp apply_present_parcels(_base, _total, _amount_key, []), do: 0
 
   defp apply_present_parcels(base, total, amount_key, present) do
-    group =
-      find_or_create_group(
-        base,
-        total,
-        amount_key,
-        Enum.map(present, fn {tx, d, _} -> {tx, d} end)
-      )
+    group = find_or_create_group(base, total, amount_key, present)
 
     Enum.each(present, fn {tx, d, billed} -> link_and_clean(tx, group, d, billed) end)
 
@@ -469,16 +524,27 @@ defmodule CashLens.Installments do
     amount |> Decimal.abs() |> Decimal.round(0) |> Decimal.to_integer()
   end
 
+  # Where the plan starts: the month parcel 1 is billed in, which drives
+  # `parcel_due_in_month?/2` and therefore the whole forecast of this plan.
+  #
+  # Derived from the lowest-numbered parcel present, back-shifted to parcel 1,
+  # rather than from a purchase date -- the purchase month is not the billing
+  # month whenever the purchase falls after the cycle closes. The lowest number
+  # is used because it is the closest anchor to parcel 1 and so accumulates the
+  # least drift when a statement skips a parcel.
+  defp plan_start_date(items) do
+    {_tx, detection, billed} = Enum.min_by(items, fn {_tx, d, _billed} -> d.number end)
+
+    add_months(billed, -(detection.number - 1))
+  end
+
   defp find_or_create_group(base, total, amount_key, items) do
     pattern = "#{base} (#{total}x · R$#{amount_key})"
 
     case Repo.get_by(InstallmentGroup, description_pattern: pattern) do
       nil ->
-        {tx, _d} = hd(items)
-        # Each parcel's DTPOSTED is the original purchase date, so the plan's start
-        # (purchase month, where parcel 1 bills) is the earliest DTPOSTED seen — the
-        # basis for projecting the plan's end via add_months(start, installments - 1).
-        start_date = items |> Enum.map(fn {t, _} -> t.date end) |> Enum.min(Date)
+        {tx, _d, _billed} = hd(items)
+        start_date = plan_start_date(items)
         total_amount = tx.amount |> Decimal.abs() |> Decimal.mult(total)
 
         {:ok, group} =

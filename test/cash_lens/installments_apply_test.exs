@@ -56,6 +56,206 @@ defmodule CashLens.InstallmentsApplyTest do
       assert by_number[3].date == ~D[2026-03-10]
     end
 
+    test "bills each parcel in the competência of the statement it came from", %{
+      account: _account
+    } do
+      # The statement is the authority, not arithmetic over the purchase date: a
+      # card bill physically lists each parcel in the cycle that charges it.
+      card = account_fixture(%{is_credit_card: true, closing_day: 9, due_day: 16})
+      purchase = ~D[2026-04-29]
+
+      statements =
+        for month <- [~D[2026-05-01], ~D[2026-06-01], ~D[2026-07-01]] do
+          CashLens.CreditCardsFixtures.statement_fixture(%{
+            account: card,
+            competencia: month,
+            due_date: Date.new!(month.year, month.month, 16),
+            total_a_pagar: Decimal.new("1000.00")
+          })
+        end
+
+      txs =
+        for {statement, number} <- Enum.with_index(statements, 1) do
+          transaction_fixture(%{
+            account_id: card.id,
+            description: "DROGARIA SAO PARC 0#{number}/03 SAO JOSE DOSBR",
+            amount: "-157.25",
+            date: purchase,
+            import_batch_id: statement.id
+          })
+        end
+
+      assert Installments.detect_and_apply(txs) == 3
+
+      dates =
+        txs
+        |> Enum.map(&Repo.get!(Transaction, &1.id))
+        |> Enum.sort_by(& &1.installment_number)
+        |> Enum.map(& &1.date)
+
+      # The purchase fell on the 29th of a cycle closing on the 9th, so parcel 1
+      # bills in May -- not April, which plain add_months/2 over the purchase
+      # date would have produced.
+      assert dates == [~D[2026-05-29], ~D[2026-06-29], ~D[2026-07-29]]
+
+      [group] = Installments.list_installment_groups()
+      assert group.start_date == ~D[2026-05-29]
+    end
+
+    test "a statement that skips a parcel still places every parcel correctly", %{
+      account: _account
+    } do
+      # Real statements do this: one purchase's parcel 2 was absent from June and
+      # appeared in July. No uniform formula over the purchase date can express
+      # that -- reading each row's own statement can.
+      card = account_fixture(%{is_credit_card: true, closing_day: 9, due_day: 16})
+      purchase = ~D[2026-04-29]
+
+      txs =
+        for {month, number} <- [{~D[2026-05-01], 1}, {~D[2026-07-01], 2}, {~D[2026-08-01], 3}] do
+          statement =
+            CashLens.CreditCardsFixtures.statement_fixture(%{
+              account: card,
+              competencia: month,
+              due_date: Date.new!(month.year, month.month, 16),
+              total_a_pagar: Decimal.new("1000.00")
+            })
+
+          transaction_fixture(%{
+            account_id: card.id,
+            description: "DROGARIA SAO PARC 0#{number}/03 SAO JOSE DOSBR",
+            amount: "-157.25",
+            date: purchase,
+            import_batch_id: statement.id
+          })
+        end
+
+      assert Installments.detect_and_apply(txs) == 3
+
+      dates =
+        txs
+        |> Enum.map(&Repo.get!(Transaction, &1.id))
+        |> Enum.sort_by(& &1.installment_number)
+        |> Enum.map(& &1.date)
+
+      assert dates == [~D[2026-05-29], ~D[2026-07-29], ~D[2026-08-29]]
+
+      # The plan is anchored on the lowest-numbered parcel: parcel 1 billed in
+      # May. Anchoring on the highest instead would read August minus two months
+      # and claim the plan started in June, a month after it demonstrably did.
+      [group] = Installments.list_installment_groups()
+      assert group.start_date == ~D[2026-05-29]
+    end
+
+    test "with no statement behind the row, infers the cycle from closing_day" do
+      # A hand-entered parcel, or one imported from an account-level extract, has
+      # no competência to read. The card's closing day is then the best source:
+      # a purchase after closing belongs to the next month's bill.
+      card = account_fixture(%{is_credit_card: true, closing_day: 9, due_day: 16})
+      after_closing = ~D[2026-04-29]
+
+      txs =
+        for number <- 1..2 do
+          transaction_fixture(%{
+            account_id: card.id,
+            description: "WE PINK PARC 0#{number}/02 SAO JOSE DOSBR",
+            amount: "-51.00",
+            date: after_closing
+          })
+        end
+
+      assert Installments.detect_and_apply(txs) == 2
+
+      dates =
+        txs
+        |> Enum.map(&Repo.get!(Transaction, &1.id))
+        |> Enum.sort_by(& &1.installment_number)
+        |> Enum.map(& &1.date)
+
+      assert dates == [~D[2026-05-29], ~D[2026-06-29]]
+    end
+
+    test "a purchase on or before the closing day bills in its own month" do
+      card = account_fixture(%{is_credit_card: true, closing_day: 9, due_day: 16})
+      before_closing = ~D[2026-04-05]
+
+      txs =
+        for number <- 1..2 do
+          transaction_fixture(%{
+            account_id: card.id,
+            description: "POLI PET PARC 0#{number}/02 SAO JOSE DOSBR",
+            amount: "-76.00",
+            date: before_closing
+          })
+        end
+
+      assert Installments.detect_and_apply(txs) == 2
+
+      dates =
+        txs
+        |> Enum.map(&Repo.get!(Transaction, &1.id))
+        |> Enum.sort_by(& &1.installment_number)
+        |> Enum.map(& &1.date)
+
+      assert dates == [~D[2026-04-05], ~D[2026-05-05]]
+    end
+
+    test "a purchase on the closing day itself belongs to the bill that closes it" do
+      # The boundary: the cycle closes ON this day, so the purchase is inside it.
+      card = account_fixture(%{is_credit_card: true, closing_day: 9, due_day: 16})
+
+      txs =
+        for number <- 1..2 do
+          transaction_fixture(%{
+            account_id: card.id,
+            description: "BANHO PARC 0#{number}/02 SAO JOSE DOSBR",
+            amount: "-400.00",
+            date: ~D[2026-04-09]
+          })
+        end
+
+      assert Installments.detect_and_apply(txs) == 2
+
+      dates =
+        txs
+        |> Enum.map(&Repo.get!(Transaction, &1.id))
+        |> Enum.sort_by(& &1.installment_number)
+        |> Enum.map(& &1.date)
+
+      assert dates == [~D[2026-04-09], ~D[2026-05-09]]
+    end
+
+    test "the plan's start_date is parcel 1's month even when parcel 1 is absent" do
+      # Backfilling a card whose earliest statements were never imported starts
+      # mid-plan. start_date must still name where parcel 1 billed, because the
+      # forecast spans start_date .. start_date + installments - 1.
+      card = account_fixture(%{is_credit_card: true, closing_day: 9, due_day: 16})
+
+      statement =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-04-01],
+          due_date: ~D[2026-04-16],
+          total_a_pagar: Decimal.new("1000.00")
+        })
+
+      tx =
+        transaction_fixture(%{
+          account_id: card.id,
+          description: "CLINICA VETER PARC 03/04 SAO JOSE DOSBR",
+          amount: "-159.00",
+          date: ~D[2026-01-20],
+          import_batch_id: statement.id
+        })
+
+      assert Installments.detect_and_apply([tx]) == 1
+
+      [group] = Installments.list_installment_groups()
+      # The April statement charges parcel 3, so parcel 1 billed two months
+      # earlier -- in February, which no statement here ever mentioned.
+      assert group.start_date == ~D[2026-02-20]
+    end
+
     test "preserves the original fingerprint when cleaning/re-dating", %{account: account} do
       # Two parcels bunched on the purchase date → parcel 2 is re-dated to its month.
       ourocard_tx(account.id, "CVS PARC 01/03 CACAPAVA BR", "-50.00", ~D[2026-02-16])
