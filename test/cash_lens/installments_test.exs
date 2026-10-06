@@ -710,6 +710,54 @@ defmodule CashLens.InstallmentsTest do
       assert suggestion.description == "CONSORCIO PORTO SEGURO"
       assert suggestion.occurrences == 3
       assert Decimal.equal?(suggestion.amount, Decimal.new("850.00"))
+      assert suggestion.first_date == ~D[2026-05-10]
+      assert suggestion.last_date == ~D[2026-07-10]
+    end
+
+    test "reports the latest parcel, not the average, for a drifting amount" do
+      acc = account_fixture()
+
+      # A parcel that shrinks month to month, like a mortgage whose insurance
+      # premium follows the balance down.
+      for {date, amount} <- [
+            {~D[2026-05-10], "-3566.08"},
+            {~D[2026-06-10], "-3545.25"},
+            {~D[2026-07-10], "-3524.55"}
+          ] do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: amount,
+          description: "PRESTACAO DE CRED IMOB",
+          date: date
+        })
+      end
+
+      assert [suggestion] = Installments.suggest_commitment_patterns()
+      assert Decimal.equal?(suggestion.amount, Decimal.new("3524.55"))
+    end
+
+    test "narrows the list by substring, ignoring case" do
+      acc = account_fixture()
+
+      for description <- ["PRESTACAO DE CRED IMOB", "CONSORCIO PORTO SEGURO"],
+          date <- [~D[2026-05-10], ~D[2026-06-10], ~D[2026-07-10]] do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-500.00",
+          description: description,
+          date: date
+        })
+      end
+
+      assert length(Installments.suggest_commitment_patterns()) == 2
+
+      assert [%{description: "PRESTACAO DE CRED IMOB"}] =
+               Installments.suggest_commitment_patterns("prestacao")
+
+      assert [%{description: "PRESTACAO DE CRED IMOB"}] =
+               Installments.suggest_commitment_patterns("CRED IMOB")
+
+      assert Installments.suggest_commitment_patterns("NAO EXISTE") == []
     end
 
     test "ignores transactions already linked to a group" do

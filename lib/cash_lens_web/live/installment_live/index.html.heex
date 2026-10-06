@@ -501,10 +501,7 @@
         </div>
       </div>
 
-      <form
-        phx-change="apply_suggestion"
-        class="bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-1.5 mb-4"
-      >
+      <div class="bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-2 mb-4">
         <div class="flex items-center justify-between">
           <span class="text-[11px] font-bold flex items-center gap-1.5">
             <.icon name="hero-bolt" class="size-3.5 text-primary" />
@@ -512,17 +509,67 @@
           </span>
           <span class="text-[10px] text-primary font-semibold">Preenchimento automático</span>
         </div>
-        <select
-          id="quick-fill-select"
-          name="suggestion[description]"
-          class="select select-bordered select-sm rounded-lg w-full text-xs"
+
+        <form phx-change="search_suggestions">
+          <input
+            id="quick-fill-search"
+            type="text"
+            name="suggestion[q]"
+            value={@suggestion_query}
+            phx-debounce="200"
+            autocomplete="off"
+            placeholder="Busque no extrato: PRESTACAO, CONSORCIO, BANCO..."
+            class="input input-bordered input-sm rounded-lg w-full text-xs"
+          />
+        </form>
+
+        <div
+          :if={is_nil(@applied_suggestion)}
+          id="quick-fill-results"
+          class="max-h-52 overflow-y-auto space-y-1"
         >
-          <option value="">Selecione um padrão identificado no seu extrato...</option>
-          <option :for={suggestion <- @suggestions} value={suggestion.description}>
-            {suggestion_label(suggestion)}
-          </option>
-        </select>
-      </form>
+          <p :if={@suggestions == []} class="text-[11px] opacity-40 px-1 py-2">
+            Nenhum lançamento recorrente encontrado para essa busca.
+          </p>
+          <button
+            :for={suggestion <- @suggestions}
+            type="button"
+            phx-click="apply_suggestion"
+            phx-value-description={suggestion.description}
+            class="w-full text-left px-2 py-1.5 rounded-lg hover:bg-primary/10 transition"
+          >
+            <div class="text-xs font-bold truncate">{suggestion.description}</div>
+            <div class="text-[10px] opacity-50">
+              {format_currency(suggestion.amount)} na última · {suggestion.occurrences} lançamentos · {suggestion_period(
+                suggestion
+              )}
+            </div>
+          </button>
+        </div>
+
+        <div
+          :if={@applied_suggestion}
+          id="quick-fill-applied"
+          class="flex items-start justify-between gap-2 px-2 py-1.5 rounded-lg bg-primary/10"
+        >
+          <div>
+            <div class="text-xs font-bold truncate">{@applied_suggestion.description}</div>
+            <div class="text-[10px] opacity-60">
+              {@applied_suggestion.occurrences} parcelas pagas ({suggestion_period(
+                @applied_suggestion
+              )}), última de {format_currency(@applied_suggestion.amount)}.
+              Falta informar o total de parcelas do contrato.
+            </div>
+          </div>
+          <button
+            type="button"
+            phx-click="clear_suggestion"
+            class="text-[10px] font-bold opacity-50 hover:opacity-100 shrink-0"
+          >
+            Trocar
+          </button>
+        </div>
+      </div>
 
       <.form
         for={@form}

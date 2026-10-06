@@ -27,6 +27,8 @@ defmodule CashLensWeb.InstallmentLive.Index do
      |> assign(:commitment, %InstallmentGroup{})
      |> assign(:commitment_params, %{})
      |> assign(:suggestions, [])
+     |> assign(:suggestion_query, "")
+     |> assign(:applied_suggestion, nil)
      |> assign(:commitment_types, Installments.commitment_types())
      |> assign(:relief_preview, @relief_preview)
      |> assign_form()}
@@ -142,7 +144,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
      |> assign(:show_modal, true)
      |> assign(:commitment, %InstallmentGroup{})
      |> assign(:commitment_params, %{"commitment_type" => "credit_card"})
-     |> assign(:suggestions, Installments.suggest_commitment_patterns())
+     |> reset_suggestions()
      |> assign_form()}
   end
 
@@ -160,7 +162,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
      |> assign(:show_modal, true)
      |> assign(:commitment, group)
      |> assign(:commitment_params, %{"commitment_type" => Installments.commitment_type(group)})
-     |> assign(:suggestions, Installments.suggest_commitment_patterns())
+     |> reset_suggestions()
      |> assign_form()}
   end
 
@@ -176,24 +178,44 @@ defmodule CashLensWeb.InstallmentLive.Index do
   end
 
   @impl true
-  def handle_event("apply_suggestion", %{"suggestion" => %{"description" => ""}}, socket) do
+  def handle_event("search_suggestions", %{"suggestion" => %{"q" => query}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:suggestion_query, query)
+     |> assign(:suggestions, Installments.suggest_commitment_patterns(query))}
+  end
+
+  @impl true
+  def handle_event("apply_suggestion", %{"description" => ""}, socket) do
     {:noreply, socket}
   end
 
   @impl true
-  def handle_event("apply_suggestion", %{"suggestion" => %{"description" => description}}, socket) do
+  def handle_event("apply_suggestion", %{"description" => description}, socket) do
     case Enum.find(socket.assigns.suggestions, &(&1.description == description)) do
       nil ->
         {:noreply, socket}
 
       suggestion ->
+        # The term is deliberately NOT filled: the statement shows how many
+        # parcels were paid, never how many the contract has left.
         params =
           socket.assigns.commitment_params
           |> Map.put("description_pattern", suggestion.description)
           |> Map.put("installment_amount", Decimal.to_string(suggestion.amount, :normal))
+          |> Map.put("start_date", Date.to_iso8601(suggestion.first_date))
 
-        {:noreply, socket |> assign(:commitment_params, params) |> assign_form()}
+        {:noreply,
+         socket
+         |> assign(:commitment_params, params)
+         |> assign(:applied_suggestion, suggestion)
+         |> assign_form()}
     end
+  end
+
+  @impl true
+  def handle_event("clear_suggestion", _params, socket) do
+    {:noreply, reset_suggestions(socket)}
   end
 
   @impl true
@@ -384,8 +406,14 @@ defmodule CashLensWeb.InstallmentLive.Index do
   # coveralls-ignore-next-line — defensive: a transaction always carries a date.
   defp parcel_status(_parcel), do: "—"
 
-  defp suggestion_label(suggestion) do
-    "#{suggestion.description} (#{format_currency(suggestion.amount)}/mês · " <>
-      "#{suggestion.occurrences} lançamentos)"
+  defp reset_suggestions(socket) do
+    socket
+    |> assign(:suggestion_query, "")
+    |> assign(:suggestions, Installments.suggest_commitment_patterns())
+    |> assign(:applied_suggestion, nil)
+  end
+
+  defp suggestion_period(%{first_date: %Date{} = from, last_date: %Date{} = to}) do
+    "#{month_chip(from)} → #{month_chip(to)}"
   end
 end

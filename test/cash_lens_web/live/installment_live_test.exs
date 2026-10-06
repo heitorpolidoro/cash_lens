@@ -397,13 +397,67 @@ defmodule CashLensWeb.InstallmentLiveTest do
       assert html =~ "CONSORCIO PORTO SEGURO"
       assert html =~ "3"
 
-      html =
-        render_change(live, "apply_suggestion", %{
-          "suggestion" => %{"description" => "CONSORCIO PORTO SEGURO"}
-        })
+      html = render_click(live, "apply_suggestion", %{"description" => "CONSORCIO PORTO SEGURO"})
 
       assert html =~ "CONSORCIO PORTO SEGURO"
       assert html =~ "850.00"
+      # The first occurrence becomes the start date, so the parcels already
+      # paid are assimilated on save.
+      assert html =~ "2026-05-10"
+      # The term is the one thing the statement cannot know.
+      assert html =~ "Falta informar o total de parcelas"
+    end
+
+    test "searching narrows the history list", %{conn: conn} do
+      acc = account_fixture()
+
+      for description <- ["PRESTACAO DE CRED IMOB", "CONSORCIO PORTO SEGURO"],
+          date <- [~D[2026-05-10], ~D[2026-06-10], ~D[2026-07-10]] do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-500.00",
+          description: description,
+          date: date
+        })
+      end
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      html = render_click(live, "open_modal", %{})
+
+      assert html =~ "PRESTACAO DE CRED IMOB"
+      assert html =~ "CONSORCIO PORTO SEGURO"
+
+      html = render_change(live, "search_suggestions", %{"suggestion" => %{"q" => "prestacao"}})
+
+      assert html =~ "PRESTACAO DE CRED IMOB"
+      refute html =~ "CONSORCIO PORTO SEGURO"
+
+      html = render_change(live, "search_suggestions", %{"suggestion" => %{"q" => "NAO EXISTE"}})
+      assert html =~ "Nenhum lançamento recorrente encontrado"
+    end
+
+    test "'trocar' puts the picker back", %{conn: conn} do
+      acc = account_fixture()
+
+      for date <- [~D[2026-05-10], ~D[2026-06-10], ~D[2026-07-10]] do
+        transaction_fixture(%{
+          account_id: acc.id,
+          amount: "-850.00",
+          description: "CONSORCIO PORTO SEGURO",
+          date: date
+        })
+      end
+
+      {:ok, live, _html} = live(conn, ~p"/installments")
+      render_click(live, "open_modal", %{})
+
+      render_click(live, "apply_suggestion", %{"description" => "CONSORCIO PORTO SEGURO"})
+      assert has_element?(live, "#quick-fill-applied")
+      refute has_element?(live, "#quick-fill-results")
+
+      render_click(live, "clear_suggestion", %{})
+      refute has_element?(live, "#quick-fill-applied")
+      assert has_element?(live, "#quick-fill-results")
     end
 
     test "save with invalid data re-renders the form", %{conn: conn} do
@@ -452,14 +506,10 @@ defmodule CashLensWeb.InstallmentLiveTest do
       {:ok, live, _html} = live(conn, ~p"/installments")
       render_click(live, "open_modal", %{})
 
-      html = render_change(live, "apply_suggestion", %{"suggestion" => %{"description" => ""}})
+      html = render_click(live, "apply_suggestion", %{"description" => ""})
       refute html =~ "DESCONHECIDO"
 
-      html =
-        render_change(live, "apply_suggestion", %{
-          "suggestion" => %{"description" => "DESCONHECIDO"}
-        })
-
+      html = render_click(live, "apply_suggestion", %{"description" => "DESCONHECIDO"})
       refute html =~ "DESCONHECIDO"
     end
 

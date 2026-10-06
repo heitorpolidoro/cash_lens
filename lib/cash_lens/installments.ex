@@ -807,22 +807,60 @@ defmodule CashLens.Installments do
 
   @doc """
   Recurring debits in the statement that are not linked to any commitment yet,
-  used by the "new commitment" modal to auto-fill description and amount.
+  used by the "new commitment" modal to auto-fill the form.
 
   Only descriptions seen at least #{@suggestion_min_occurrences} times are
-  returned, most frequent first; `amount` is the average absolute value.
+  returned, most frequent first. `query` narrows them by substring, which is
+  what makes a long statement searchable instead of a 20-row dropdown.
+
+  `amount` is the value of the *latest* occurrence, not the average, so that a
+  parcel that drifts month to month — a mortgage whose insurance premium shrinks
+  with the balance — suggests what the next one will actually cost. That is also
+  the value `load_dynamic_fields/1` reads back once the group exists, so the form
+  and the screen agree.
   """
-  def suggest_commitment_patterns(limit \\ 20) do
+  def suggest_commitment_patterns(query \\ "", limit \\ 20) do
+    rows =
+      from(t in Transaction,
+        where: is_nil(t.installment_group_id) and t.amount < 0,
+        group_by: t.description,
+        having: count(t.id) >= @suggestion_min_occurrences,
+        order_by: [desc: count(t.id), asc: t.description],
+        limit: ^limit,
+        select: %{
+          description: t.description,
+          occurrences: count(t.id),
+          first_date: min(t.date),
+          last_date: max(t.date)
+        }
+      )
+      |> filter_by_description(query)
+      |> Repo.all()
+
+    latest = latest_amounts(Enum.map(rows, & &1.description))
+
+    Enum.map(rows, &Map.put(&1, :amount, Map.get(latest, &1.description, Decimal.new("0"))))
+  end
+
+  defp filter_by_description(queryable, blank) when blank in [nil, ""], do: queryable
+
+  defp filter_by_description(queryable, query) do
+    from(t in queryable, where: ilike(t.description, ^"%#{query}%"))
+  end
+
+  # The newest debit per description. Ordered exactly like `load_dynamic_fields/1`
+  # so both answer "the last parcel" with the same row when two share a date.
+  defp latest_amounts([]), do: %{}
+
+  defp latest_amounts(descriptions) do
     from(t in Transaction,
-      where: is_nil(t.installment_group_id) and t.amount < 0,
-      group_by: t.description,
-      having: count(t.id) >= @suggestion_min_occurrences,
-      order_by: [desc: count(t.id), asc: t.description],
-      limit: ^limit,
-      select: %{description: t.description, occurrences: count(t.id), amount: avg(t.amount)}
+      where: t.description in ^descriptions and t.amount < 0,
+      distinct: t.description,
+      order_by: [asc: t.description, desc: t.date, desc: t.inserted_at],
+      select: {t.description, t.amount}
     )
     |> Repo.all()
-    |> Enum.map(fn s -> %{s | amount: s.amount |> Decimal.abs() |> Decimal.round(2)} end)
+    |> Map.new(fn {description, amount} -> {description, Decimal.abs(amount)} end)
   end
 
   @doc """
