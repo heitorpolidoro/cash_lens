@@ -97,11 +97,49 @@ defmodule CashLensWeb.ImportLiveTest do
     end
 
     test "renders the empty state for a valid but empty root", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/imports")
+      {:ok, view, mounted} = live(conn, ~p"/imports")
+
+      # The scan no longer runs inside mount/3, so the first paint is the
+      # skeleton and the verdict arrives on the next render.
+      assert mounted =~ ~s(id="scan-loading")
+
+      html = render(view)
 
       assert html =~ ~s(id="scan-empty")
       assert html =~ "Nenhum arquivo encontrado"
       refute html =~ ~s(id="file-list")
+      refute html =~ ~s(id="scan-loading")
+    end
+
+    test "the dead render does no filesystem work", %{conn: conn} do
+      # mount/3 runs twice: once for the static render, once for the connected
+      # one. Only the connected mount can act on what it finds, so the static
+      # one must not scan the folder or sweep staging -- otherwise every visit
+      # pays for the slowest work on this screen twice.
+      stale = Path.join(Imports.drop_root(), "stale_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(stale)
+      on_exit(fn -> File.rm_rf(stale) end)
+      # The sweep only removes a session older than its staleness window.
+      File.touch!(stale, System.os_time(:second) - 48 * 60 * 60)
+
+      conn |> get(~p"/imports") |> html_response(200)
+      assert File.dir?(stale), "the static render swept staging"
+
+      {:ok, _view, _html} = live(conn, ~p"/imports")
+      refute File.dir?(stale), "the connected render never swept staging"
+    end
+
+    test "paints the screen before the scan, never a blank wait", %{conn: conn} do
+      # The scan reads and hashes every file in the folder, so holding the
+      # first paint for it is what made clicking "Importar Extratos" feel dead.
+      {:ok, _view, mounted} = live(conn, ~p"/imports")
+
+      assert mounted =~ ~s(data-role="scan-loading")
+      assert mounted =~ "Verificando arquivos"
+      # The shell is already there -- only the file list is pending.
+      assert mounted =~ ~s(id="import-root-form")
+      refute mounted =~ ~s(id="file-list")
+      refute mounted =~ ~s(id="scan-empty")
     end
   end
 
@@ -218,9 +256,13 @@ defmodule CashLensWeb.ImportLiveTest do
       missing = Path.join(System.tmp_dir!(), "missing_#{System.unique_integer([:positive])}")
       Settings.put(@root_setting, missing)
 
-      {:ok, _view, html} = live(conn, ~p"/imports")
+      {:ok, view, _mounted} = live(conn, ~p"/imports")
+      html = render(view)
 
       assert html =~ ~s(id="scan-error")
+      # A failed scan is a finished scan: the skeleton must not outlive it.
+      refute html =~ ~s(id="scan-loading")
+      refute html =~ ~s(id="scan-empty")
       assert html =~ "Pasta não encontrada"
       assert html =~ missing
     end

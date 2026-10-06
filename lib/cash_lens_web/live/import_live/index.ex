@@ -160,6 +160,29 @@ defmodule CashLensWeb.ImportLive.Index do
       </section>
 
       <section
+        :if={is_nil(@entries)}
+        id="scan-loading"
+        data-role="scan-loading"
+        class="card bg-base-100 shadow-sm border border-base-300 overflow-hidden"
+      >
+        <div class="px-5 py-4 border-b border-base-300 flex items-center gap-3">
+          <span class="loading loading-spinner loading-xs"></span>
+          <h2 class="text-sm font-black uppercase opacity-50">Verificando arquivos</h2>
+        </div>
+        <div class="p-5 space-y-3">
+          <p class="text-xs opacity-50">
+            Lendo a pasta monitorada e comparando cada arquivo com o que já foi importado. Em pastas
+            grandes isso leva alguns instantes.
+          </p>
+          <div :for={_row <- 1..4} class="flex items-center gap-3">
+            <div class="skeleton h-4 flex-1"></div>
+            <div class="skeleton h-4 w-24"></div>
+            <div class="skeleton h-4 w-20"></div>
+          </div>
+        </div>
+      </section>
+
+      <section
         :if={is_nil(@scan_error) and @entries == []}
         id="scan-empty"
         class="card bg-base-100 shadow-sm border border-base-300 p-10 text-center"
@@ -172,7 +195,7 @@ defmodule CashLensWeb.ImportLive.Index do
       </section>
 
       <section
-        :if={is_nil(@scan_error) and @entries != []}
+        :if={is_nil(@scan_error) and is_list(@entries) and @entries != []}
         id="file-list"
         class="card bg-base-100 shadow-sm border border-base-300 overflow-hidden"
       >
@@ -552,27 +575,47 @@ defmodule CashLensWeb.ImportLive.Index do
     # from sharing a staging directory: content-addressed staging alone is
     # shared, and one tab's cleanup would delete the other's file mid-preview.
     session_id = :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)
-    Imports.sweep_stale_drops(session_id)
 
-    {:ok,
-     socket
-     |> assign(:page_title, "Central de Importação")
-     |> assign(:using_default?, is_nil(stored_root))
-     |> assign(:preview_limit, @preview_limit)
-     |> assign(:inspect, nil)
-     |> assign(:history_limit, @history_limit)
-     |> assign(:session_id, session_id)
-     |> assign(:drop, nil)
-     |> assign(:drop_error, nil)
-     |> allow_upload(:drop,
-       accept: @drop_accept,
-       max_entries: 1,
-       max_file_size: @drop_max_size,
-       auto_upload: true,
-       progress: &handle_progress/3
-     )
-     |> assign_scan(root)
-     |> assign_history()}
+    socket =
+      socket
+      |> assign(:page_title, "Central de Importação")
+      |> assign(:using_default?, is_nil(stored_root))
+      |> assign(:preview_limit, @preview_limit)
+      |> assign(:inspect, nil)
+      |> assign(:history_limit, @history_limit)
+      |> assign(:session_id, session_id)
+      |> assign(:drop, nil)
+      |> assign(:drop_error, nil)
+      |> allow_upload(:drop,
+        accept: @drop_accept,
+        max_entries: 1,
+        max_file_size: @drop_max_size,
+        auto_upload: true,
+        progress: &handle_progress/3
+      )
+      |> assign_history()
+
+    # The scan reads and SHA-256s every file in the monitored folder, so it is
+    # the slowest thing this screen does and it grows with the folder. Running
+    # it here would hold the first paint: the operator clicks "Importar
+    # Extratos" and watches the previous page until it finishes.
+    #
+    # So the screen renders at once with `entries: nil` -- the skeleton state --
+    # and the scan runs in `handle_info/2`, after the socket is connected. The
+    # `connected?/1` guard matters on its own: `mount/3` runs twice, once for
+    # the dead render and once for the live one, and the dead render has no use
+    # for a file list it cannot update.
+    if connected?(socket) do
+      Imports.sweep_stale_drops(session_id)
+      send(self(), {:scan, root})
+    end
+
+    {:ok, assign_scanning(socket, root)}
+  end
+
+  @impl true
+  def handle_info({:scan, root}, socket) do
+    {:noreply, assign_scan(socket, root)}
   end
 
   # `terminate/2` is best-effort — it does not run on a crash, a `:brutal_kill`
@@ -1041,6 +1084,17 @@ defmodule CashLensWeb.ImportLive.Index do
 
   # The single scanning path: `mount/3` and `"rescan"` both go through it so
   # the two can never drift.
+  # `entries: nil` is the scanning state, distinct from `entries: []`, which is
+  # the answer "the folder holds nothing". The template tells them apart.
+  defp assign_scanning(socket, root) do
+    socket
+    |> assign(:root, root)
+    |> assign(:path_input, root)
+    |> assign(:entries, nil)
+    |> assign(:scan_error, nil)
+    |> assign(:counters, nil)
+  end
+
   defp assign_scan(socket, root) do
     {entries, error} =
       case Imports.scan(root) do
