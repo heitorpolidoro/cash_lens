@@ -305,4 +305,62 @@ defmodule CashLens.CategoriesTest do
     defp depth(%Category{parent: %Category{} = parent}), do: 1 + depth(parent)
     defp depth(%Category{}), do: 1
   end
+
+  describe "add_keyword/2" do
+    import CashLens.CategoriesFixtures
+
+    test "seeds the field on a category that has no keywords yet" do
+      category = category_fixture(%{keywords: nil})
+
+      assert {:ok, updated} = Categories.add_keyword(category, "COMGAS")
+      assert updated.keywords == "COMGAS"
+    end
+
+    test "appends to an existing list in the format the field already holds" do
+      category = category_fixture(%{keywords: "COMGAS"})
+
+      assert {:ok, updated} = Categories.add_keyword(category, "SABESP")
+      assert updated.keywords == "COMGAS, SABESP"
+    end
+
+    test "a keyword the category already carries changes nothing, whatever its case" do
+      category = category_fixture(%{keywords: "COMGAS, SABESP"})
+
+      assert {:ok, updated} = Categories.add_keyword(category, "comgas")
+      assert updated.keywords == "COMGAS, SABESP"
+    end
+
+    test "surrounding and inner whitespace never makes a near-duplicate" do
+      # The matcher collapses runs of whitespace before comparing, so a
+      # description pasted with a double space is the same rule, not a new one.
+      category = category_fixture(%{keywords: "PORTO SEGURO ADMINISTRADORA"})
+
+      assert {:ok, updated} = Categories.add_keyword(category, "  PORTO  SEGURO ADMINISTRADORA ")
+      assert updated.keywords == "PORTO SEGURO ADMINISTRADORA"
+    end
+
+    test "a blank keyword is a no-op rather than an error" do
+      category = category_fixture(%{keywords: "COMGAS"})
+
+      assert {:ok, updated} = Categories.add_keyword(category, "   ")
+      assert updated.keywords == "COMGAS"
+    end
+
+    test "reads newline separators too, the way AutoCategorizer does" do
+      # AutoCategorizer splits on commas AND newlines. A duplicate check that
+      # only knew about commas would read "COMGAS\nSABESP" as one long keyword
+      # and happily append a second SABESP.
+      category = category_fixture(%{keywords: "COMGAS\nSABESP"})
+
+      assert {:ok, updated} = Categories.add_keyword(category, "SABESP")
+      assert updated.keywords == "COMGAS\nSABESP"
+    end
+
+    test "normalizes the stored keyword, so a pasted description lands clean" do
+      category = category_fixture(%{keywords: nil})
+
+      assert {:ok, updated} = Categories.add_keyword(category, "  PAG*Restaurante   Silva ")
+      assert updated.keywords == "PAG*Restaurante Silva"
+    end
+  end
 end

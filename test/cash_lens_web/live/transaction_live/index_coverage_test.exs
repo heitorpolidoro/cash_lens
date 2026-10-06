@@ -72,6 +72,140 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       assert render(index_live) =~ "transações categorizadas!"
     end
 
+    test "the rule checkbox is offered unchecked, and no rule is created unless it is ticked",
+         %{conn: conn} do
+      cat = category_fixture(name: "Food", keywords: nil)
+      tx1 = transaction_fixture(description: "Restaurante A")
+      transaction_fixture(description: "Restaurante A")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_click(live, "update_category", %{"transaction_id" => tx1.id, "category_id" => cat.id})
+
+      html = render(live)
+      assert html =~ "Criar regra de categorização automática"
+      # Unchecked by default: creating a rule changes how every future import is
+      # read, so it is never something the user does by not noticing a default.
+      refute html =~ ~r/<input[^>]*type="checkbox"[^>]*phx-click="toggle_bulk_rule"[^>]*checked/
+      # And the keyword input only appears once the box is ticked.
+      refute html =~ "bulk-rule-keyword"
+
+      live |> element("button[phx-click='apply_bulk_category']") |> render_click()
+
+      assert CashLens.Categories.get_category!(cat.id).keywords in [nil, ""]
+    end
+
+    test "ticking the checkbox appends the description to the category's keywords",
+         %{conn: conn} do
+      cat = category_fixture(name: "Food", keywords: nil)
+      tx1 = transaction_fixture(description: "Restaurante A")
+      transaction_fixture(description: "Restaurante A")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_click(live, "update_category", %{"transaction_id" => tx1.id, "category_id" => cat.id})
+
+      render_click(live, "toggle_bulk_rule", %{})
+
+      # The keyword input appears, seeded with the description the modal is about.
+      assert render(live) =~ "bulk-rule-keyword"
+
+      live |> element("button[phx-click='apply_bulk_category']") |> render_click()
+
+      assert CashLens.Categories.get_category!(cat.id).keywords == "Restaurante A"
+      assert render(live) =~ "Regra criada para &quot;Restaurante A&quot;."
+    end
+
+    test "the keyword is editable, so a rule can be broader than the description that opened it",
+         %{conn: conn} do
+      # The case this exists for: two boletos of the same consortium arrive as
+      # "...PORTO SEGURO ADMINISTRADORA DE CONSORC" and "...ADMINISTRADORA DE".
+      # A rule built from either description in full matches only that one.
+      cat = category_fixture(name: "Consórcio", keywords: nil)
+
+      tx1 =
+        transaction_fixture(description: "Pagamento de Boleto - PORTO SEGURO ADMIN DE CONSORC")
+
+      transaction_fixture(description: "Pagamento de Boleto - PORTO SEGURO ADMIN DE CONSORC")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_click(live, "update_category", %{"transaction_id" => tx1.id, "category_id" => cat.id})
+
+      render_click(live, "toggle_bulk_rule", %{})
+      render_keyup(live, "update_bulk_rule_keyword", %{"value" => "PORTO SEGURO ADMIN"})
+
+      live |> element("button[phx-click='apply_bulk_category']") |> render_click()
+
+      assert CashLens.Categories.get_category!(cat.id).keywords == "PORTO SEGURO ADMIN"
+    end
+
+    test "the rule is appended to the keywords the category already had", %{conn: conn} do
+      cat = category_fixture(name: "Food", keywords: "IFOOD")
+      tx1 = transaction_fixture(description: "Restaurante A")
+      transaction_fixture(description: "Restaurante A")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_click(live, "update_category", %{"transaction_id" => tx1.id, "category_id" => cat.id})
+
+      render_click(live, "toggle_bulk_rule", %{})
+      live |> element("button[phx-click='apply_bulk_category']") |> render_click()
+
+      assert CashLens.Categories.get_category!(cat.id).keywords == "IFOOD, Restaurante A"
+    end
+
+    test "a blank keyword ticks the box but creates nothing, and says so", %{conn: conn} do
+      cat = category_fixture(name: "Food", keywords: nil)
+      tx1 = transaction_fixture(description: "Restaurante A")
+      transaction_fixture(description: "Restaurante A")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_click(live, "update_category", %{"transaction_id" => tx1.id, "category_id" => cat.id})
+
+      render_click(live, "toggle_bulk_rule", %{})
+      render_keyup(live, "update_bulk_rule_keyword", %{"value" => "   "})
+
+      live |> element("button[phx-click='apply_bulk_category']") |> render_click()
+
+      assert CashLens.Categories.get_category!(cat.id).keywords in [nil, ""]
+      # The categorization still happened, so the flash must not claim a rule.
+      html = render(live)
+      assert html =~ "transações categorizadas!"
+      refute html =~ "Regra criada"
+    end
+
+    test "the checkbox resets to unchecked for the next bulk modal", %{conn: conn} do
+      # The assign is global to the LiveView, so a rule ticked once would
+      # otherwise stay ticked and silently create a rule on the next, unrelated
+      # categorization.
+      cat = category_fixture(name: "Food", keywords: nil)
+      other = category_fixture(name: "Transporte", keywords: nil)
+      tx1 = transaction_fixture(description: "Restaurante A")
+      transaction_fixture(description: "Restaurante A")
+      tx3 = transaction_fixture(description: "Uber trip")
+      transaction_fixture(description: "Uber trip")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_click(live, "update_category", %{"transaction_id" => tx1.id, "category_id" => cat.id})
+
+      render_click(live, "toggle_bulk_rule", %{})
+      live |> element("button[phx-click='apply_bulk_category']") |> render_click()
+
+      render_click(live, "update_category", %{
+        "transaction_id" => tx3.id,
+        "category_id" => other.id
+      })
+
+      refute render(live) =~ "bulk-rule-keyword"
+
+      live |> element("button[phx-click='apply_bulk_category']") |> render_click()
+
+      assert CashLens.Categories.get_category!(other.id).keywords in [nil, ""]
+    end
+
     test "handle_info category_created with target_transaction_id", %{conn: conn} do
       tx = transaction_fixture(description: "New Shop")
       {:ok, index_live, _html} = live(conn, ~p"/transactions")

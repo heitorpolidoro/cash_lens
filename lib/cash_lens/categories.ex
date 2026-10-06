@@ -199,6 +199,56 @@ defmodule CashLens.Categories do
   end
 
   @doc """
+  Appends `keyword` to a category's `keywords`, the list `AutoCategorizer`
+  matches every imported description against.
+
+  Idempotent and whitespace-forgiving: a blank keyword, or one the category
+  already carries, leaves the record untouched and still returns `{:ok, ...}`.
+  Comparison mirrors the matcher -- it upcases and collapses runs of
+  whitespace -- so "COMGAS " never lands beside an existing "comgas".
+
+  The separator is `", "`, the format the field already holds.
+  """
+  def add_keyword(%Category{} = category, keyword) when is_binary(keyword) do
+    trimmed = normalize_keyword(keyword)
+
+    cond do
+      trimmed == "" -> {:ok, category}
+      keyword?(category, trimmed) -> {:ok, category}
+      true -> update_category(category, %{keywords: append_keyword(category.keywords, trimmed)})
+    end
+  end
+
+  defp keyword?(%Category{keywords: keywords}, trimmed) do
+    keywords
+    |> split_keywords()
+    |> Enum.any?(&(String.upcase(&1) == String.upcase(trimmed)))
+  end
+
+  defp append_keyword(keywords, trimmed) do
+    case split_keywords(keywords) do
+      [] -> trimmed
+      existing -> Enum.join(existing ++ [trimmed], ", ")
+    end
+  end
+
+  # `AutoCategorizer` splits on commas and newlines alike, so both have to be
+  # read as separators here or a rule appended after a newline-separated list
+  # would be invisible to the duplicate check.
+  defp split_keywords(nil), do: []
+
+  defp split_keywords(keywords) do
+    keywords
+    |> String.split([",", "\n", "\r\n"])
+    |> Enum.map(&normalize_keyword/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp normalize_keyword(keyword) do
+    keyword |> String.replace(~r/\s+/u, " ") |> String.trim()
+  end
+
+  @doc """
   Deletes a category.
 
   ## Examples

@@ -1218,6 +1218,48 @@
         </table>
       </div>
 
+      <div
+        id="bulk-create-rule"
+        class="mb-4 p-3 rounded-xl border border-base-300 bg-base-200/40"
+      >
+        <%!--
+          The label wraps the checkbox and its text ONLY. A label wrapping the
+          keyword input as well would hand every click on that input to the
+          checkbox, unchecking the very rule the user is editing.
+        --%>
+        <label class="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-primary checkbox-sm mt-0.5"
+            checked={@bulk_create_rule}
+            phx-click="toggle_bulk_rule"
+          />
+          <span class="min-w-0 flex-1">
+            <span class="block text-xs font-bold">
+              Criar regra de categorização automática
+            </span>
+            <span class="block text-[11px] opacity-60 mt-0.5">
+              Importações futuras cuja descrição contenha o texto abaixo entram direto em <strong>{@bulk_confirmation.category_name}</strong>, sem perguntar.
+            </span>
+          </span>
+        </label>
+
+        <div :if={@bulk_create_rule} class="mt-2 pl-8">
+          <input
+            id="bulk-rule-keyword"
+            type="text"
+            value={@bulk_rule_keyword}
+            phx-keyup="update_bulk_rule_keyword"
+            phx-debounce="300"
+            class="input input-bordered input-sm w-full font-mono text-xs"
+            placeholder="Texto que a descrição deve conter"
+          />
+          <span class="block text-[11px] opacity-50 mt-1">
+            Encurte para um trecho estável: o boleto inteiro casa com uma cobrança só.
+          </span>
+        </div>
+      </div>
+
       <div class="flex flex-col sm:flex-row gap-3">
         <button
           phx-click="apply_bulk_category"

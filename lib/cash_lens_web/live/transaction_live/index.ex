@@ -31,6 +31,8 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:pending_reimbursements, [])
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())
+     |> assign(:bulk_create_rule, false)
+     |> assign(:bulk_rule_keyword, "")
      |> assign(:pending_transaction_id, nil)
      |> assign(
        :category_form,
@@ -427,13 +429,26 @@ defmodule CashLensWeb.TransactionLive.Index do
     selected_items = Enum.filter(items, &MapSet.member?(selected_ids, &1.id))
     Enum.each(selected_items, &Transactions.update_transaction_category(&1.id, category_id))
 
+    rule = maybe_create_rule(socket, category_id)
+
     {:noreply,
      socket
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())
+     |> assign(:categories, Categories.list_categories())
      |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> put_flash(:success, "#{length(selected_items)} transações categorizadas!")
+     |> put_flash(:success, bulk_flash(length(selected_items), rule))
      |> refresh_transactions_page1(socket.assigns.filters)}
+  end
+
+  @impl true
+  def handle_event("toggle_bulk_rule", _params, socket) do
+    {:noreply, assign(socket, :bulk_create_rule, !socket.assigns.bulk_create_rule)}
+  end
+
+  @impl true
+  def handle_event("update_bulk_rule_keyword", %{"value" => value}, socket) do
+    {:noreply, assign(socket, :bulk_rule_keyword, value)}
   end
 
   @impl true
@@ -824,6 +839,7 @@ defmodule CashLensWeb.TransactionLive.Index do
           description: tx.description
         })
         |> assign(:bulk_selected_ids, selected_ids)
+        |> reset_bulk_rule(tx.description)
       else
         socket
       end
@@ -940,10 +956,44 @@ defmodule CashLensWeb.TransactionLive.Index do
           description: tx.description
         })
         |> assign(:bulk_selected_ids, selected_ids)
+        |> reset_bulk_rule(tx.description)
       else
         socket
       end
     end
+  end
+
+  # The checkbox opens unchecked every time, and the keyword starts as the
+  # description the modal is about. Creating a rule is a lasting change to how
+  # every future import is read, so it is never the default -- but the text is
+  # editable, because the description that opened the modal is often too
+  # specific to make a rule worth keeping: "Pagamento de Boleto - PORTO SEGURO
+  # ADMINISTRADORA DE CONSORC" matches one boleto, while the prefix matches
+  # every one of them.
+  defp reset_bulk_rule(socket, description) do
+    socket
+    |> assign(:bulk_create_rule, false)
+    |> assign(:bulk_rule_keyword, description || "")
+  end
+
+  defp maybe_create_rule(%{assigns: %{bulk_create_rule: true, bulk_rule_keyword: keyword}}, id) do
+    # Re-read the category instead of taking it from `@categories`: the assign
+    # was loaded when the page rendered, and appending to a stale `keywords`
+    # would silently drop any rule added since.
+    case Categories.add_keyword(Categories.get_category!(id), keyword) do
+      {:ok, _updated} -> String.trim(keyword)
+      {:error, _changeset} -> nil
+    end
+  end
+
+  defp maybe_create_rule(_socket, _category_id), do: nil
+
+  defp bulk_flash(count, nil), do: "#{count} transações categorizadas!"
+
+  defp bulk_flash(count, ""), do: bulk_flash(count, nil)
+
+  defp bulk_flash(count, keyword) do
+    "#{count} transações categorizadas. Regra criada para \"#{keyword}\"."
   end
 
   defp should_skip_bulk?(nil, _), do: true
