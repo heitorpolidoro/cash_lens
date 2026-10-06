@@ -241,13 +241,15 @@
           ]}>
             {format_currency(month.total)}
           </span>
-          <div class="mt-1 space-y-0.5 text-[9px] font-mono opacity-60">
-            <div :for={type <- @commitment_types} class="flex items-center justify-between gap-2">
+          <div class="mt-1.5 space-y-1 text-[9px] font-mono opacity-60">
+            <div :for={type <- @commitment_types}>
               <span class="flex items-center gap-1">
-                <span class={["w-1.5 h-1.5 rounded-full", dot_class(type)]}></span>
+                <span class={["w-1.5 h-1.5 rounded-full shrink-0", dot_class(type)]}></span>
                 {type_label(type)}
               </span>
-              <span>{format_currency(projected_amount(month, type))}</span>
+              <span class="block text-right">
+                {format_currency(projected_amount(month, type))}
+              </span>
             </div>
           </div>
         </div>
