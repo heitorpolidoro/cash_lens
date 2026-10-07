@@ -30,6 +30,12 @@ defmodule CashLens.Transactions do
   # Maximum number of manual-link candidates shown at once.
   @transfer_link_candidate_limit 50
 
+  # How far a confirmed manual duplicate will walk looking for a free occurrence
+  # index. A charge repeated fifty times in one day with the same amount and
+  # description is a data problem, not a purchase history, and the search gives
+  # up rather than scanning forever.
+  @max_occurrence_index 50
+
   @doc """
   Rows returned per page by `list_transactions/3`. Exposed so the transactions
   LiveView can tell a full page (there may be more) from a short one (the
@@ -956,8 +962,16 @@ defmodule CashLens.Transactions do
   N legitimately-identical lines within one statement are all preserved. A
   manual create has no batch context to distinguish a genuine repeat from an
   accidental resubmit, so it errs toward not creating a duplicate.
+
+  `allow_duplicate: true` is the caller saying it HAS that context -- a person
+  who was shown the existing row and confirmed this is a second, real charge.
+  The row is then written at the next free occurrence index, exactly as the
+  importer would have done, so a genuine double charge stops being something
+  that can only be recorded by falsifying its date.
   """
-  def create_transaction(attrs) do
+  def create_transaction(attrs, opts \\ []) do
+    attrs = maybe_allow_duplicate(attrs, Keyword.get(opts, :allow_duplicate, false))
+
     %Transaction{}
     |> Transaction.changeset(attrs)
     |> Repo.insert()
@@ -994,6 +1008,94 @@ defmodule CashLens.Transactions do
         else
           {:error, changeset}
         end
+    end
+  end
+
+  @doc """
+  Whether a transaction identical to `attrs` already exists -- same account,
+  date, time, amount and normalized description.
+
+  The question the manual-create form asks before writing a second one, and the
+  reason it can ask at all: `dedup_key` is stored and indexed, so the existing
+  charge is one lookup away.
+  """
+  def duplicate_of(attrs) do
+    case identity_of(attrs) do
+      nil ->
+        nil
+
+      %{dedup_key: key} ->
+        from(t in Transaction,
+          where: t.dedup_key == ^key,
+          order_by: [asc: t.inserted_at],
+          limit: 1
+        )
+        |> Repo.one()
+    end
+  end
+
+  # Form params arrive with string keys and uncast values -- a date as
+  # "2026-09-08", an amount as a string -- while `Transaction.dedup_key/1`
+  # requires atom keys and real structs. Running them through the changeset
+  # normalizes both, and uses the very same casting the insert will, so the key
+  # computed here cannot disagree with the one stored.
+  defp identity_of(attrs) do
+    changeset = Transaction.changeset(%Transaction{}, attrs)
+
+    case Ecto.Changeset.get_field(changeset, :dedup_key) do
+      nil ->
+        nil
+
+      key ->
+        %{
+          dedup_key: key,
+          attrs: %{
+            date: Ecto.Changeset.get_field(changeset, :date),
+            time: Ecto.Changeset.get_field(changeset, :time),
+            description: Ecto.Changeset.get_field(changeset, :description),
+            amount: Ecto.Changeset.get_field(changeset, :amount),
+            account_id: Ecto.Changeset.get_field(changeset, :account_id)
+          }
+        }
+    end
+  end
+
+  # The importer knows each line's ordinal within its batch; a confirmed manual
+  # duplicate has to find the first ordinal nobody has taken. Walking upward
+  # from zero is exact where counting rows is not: a deleted middle row leaves a
+  # free index that a count would skip straight past, onto one already in use.
+  defp maybe_allow_duplicate(attrs, false), do: attrs
+
+  defp maybe_allow_duplicate(attrs, true) do
+    case identity_of(attrs) do
+      nil -> attrs
+      %{attrs: identity} -> put_attr(attrs, :occurrence_index, next_occurrence_index(identity))
+    end
+  end
+
+  defp next_occurrence_index(attrs, index \\ 0)
+
+  defp next_occurrence_index(_attrs, index) when index >= @max_occurrence_index, do: index
+
+  defp next_occurrence_index(attrs, index) do
+    fingerprint = Transaction.fingerprint(attrs, index)
+
+    if Repo.exists?(from(t in Transaction, where: t.fingerprint == ^fingerprint)) do
+      next_occurrence_index(attrs, index + 1)
+    else
+      index
+    end
+  end
+
+  # The form hands params with string keys; everything else uses atoms. Ecto
+  # rejects a map that mixes the two outright, so the key style is read from
+  # what the map already holds -- not from whether this particular key is
+  # present, which it never is, since nothing upstream sets the index.
+  defp put_attr(attrs, key, value) do
+    if Enum.any?(Map.keys(attrs), &is_binary/1) do
+      Map.put(attrs, Atom.to_string(key), value)
+    else
+      Map.put(attrs, key, value)
     end
   end
 

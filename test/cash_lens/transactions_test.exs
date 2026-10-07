@@ -1653,4 +1653,119 @@ defmodule CashLens.TransactionsTest do
       assert Decimal.equal?(summary.cards.expenses, Decimal.new("0"))
     end
   end
+
+  describe "create_transaction/2 with allow_duplicate" do
+    import CashLens.AccountsFixtures
+
+    defp charge_attrs(account) do
+      %{
+        account_id: account.id,
+        date: ~D[2026-09-08],
+        description: "AMAZONMKTPLC*BKSCOMERC",
+        amount: Decimal.new("-245.90")
+      }
+    end
+
+    test "a confirmed duplicate is written instead of being swallowed" do
+      # Paying the same bill twice by mistake is a real pair of charges. Without
+      # this the only way to record the second was to falsify its date, which
+      # breaks reconciliation against the statement it belongs to.
+      account = AccountsFixtures.account_fixture()
+      attrs = charge_attrs(account)
+
+      assert {:ok, %Transaction{} = first} = Transactions.create_transaction(attrs)
+      assert {:ok, :duplicate} = Transactions.create_transaction(attrs)
+
+      assert {:ok, %Transaction{} = second} =
+               Transactions.create_transaction(attrs, allow_duplicate: true)
+
+      refute second.id == first.id
+      assert second.date == first.date
+      assert second.description == first.description
+      assert Decimal.equal?(second.amount, first.amount)
+      refute second.fingerprint == first.fingerprint
+      assert second.dedup_key == first.dedup_key
+    end
+
+    test "a third identical charge still finds a free index" do
+      account = AccountsFixtures.account_fixture()
+      attrs = charge_attrs(account)
+
+      {:ok, _} = Transactions.create_transaction(attrs)
+      {:ok, _} = Transactions.create_transaction(attrs, allow_duplicate: true)
+
+      assert {:ok, %Transaction{}} = Transactions.create_transaction(attrs, allow_duplicate: true)
+
+      assert Repo.aggregate(
+               from(t in Transaction, where: t.account_id == ^account.id),
+               :count
+             ) == 3
+    end
+
+    test "the freed index of a deleted middle row is reused" do
+      # Counting rows would skip past the gap and land on an index already in
+      # use, failing the unique constraint. The search walks upward instead.
+      account = AccountsFixtures.account_fixture()
+      attrs = charge_attrs(account)
+
+      {:ok, first} = Transactions.create_transaction(attrs)
+      {:ok, _second} = Transactions.create_transaction(attrs, allow_duplicate: true)
+
+      Repo.delete!(first)
+
+      assert {:ok, %Transaction{} = replacement} =
+               Transactions.create_transaction(attrs, allow_duplicate: true)
+
+      assert replacement.fingerprint == first.fingerprint
+    end
+
+    test "without the flag the behaviour is unchanged" do
+      account = AccountsFixtures.account_fixture()
+      attrs = charge_attrs(account)
+
+      {:ok, _} = Transactions.create_transaction(attrs)
+
+      assert {:ok, :duplicate} = Transactions.create_transaction(attrs)
+      assert {:ok, :duplicate} = Transactions.create_transaction(attrs, allow_duplicate: false)
+    end
+  end
+
+  describe "duplicate_of/1" do
+    import CashLens.AccountsFixtures
+
+    test "finds the charge a manual create is about to repeat" do
+      account = AccountsFixtures.account_fixture()
+
+      attrs = %{
+        account_id: account.id,
+        date: ~D[2026-09-08],
+        description: "AMAZONMKTPLC*BKSCOMERC",
+        amount: Decimal.new("-245.90")
+      }
+
+      {:ok, existing} = Transactions.create_transaction(attrs)
+
+      assert %Transaction{id: id} = Transactions.duplicate_of(attrs)
+      assert id == existing.id
+    end
+
+    test "a differing amount is not the same charge" do
+      account = AccountsFixtures.account_fixture()
+
+      attrs = %{
+        account_id: account.id,
+        date: ~D[2026-09-08],
+        description: "AMAZONMKTPLC*BKSCOMERC",
+        amount: Decimal.new("-245.90")
+      }
+
+      {:ok, _} = Transactions.create_transaction(attrs)
+
+      assert Transactions.duplicate_of(%{attrs | amount: Decimal.new("-245.91")}) == nil
+    end
+
+    test "incomplete attrs have no identity, so nothing is claimed" do
+      assert Transactions.duplicate_of(%{description: "SEM CONTA"}) == nil
+    end
+  end
 end

@@ -25,8 +25,33 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
      |> assign(:amount_input, AmountInput.to_input_value(transaction.amount))
      |> assign(:amount_kind, AmountInput.kind(transaction.amount))
      |> assign(:amount_error, nil)
+     |> assign(:duplicate_of, nil)
+     |> assign(:pending_params, nil)
      |> assign(:links, if(action == :edit, do: build_links(transaction), else: []))
      |> assign(:form, to_form(Transactions.change_transaction(transaction)))}
+  end
+
+  @impl true
+  def handle_event("confirm_duplicate", _params, socket) do
+    case Transactions.create_transaction(socket.assigns.pending_params, allow_duplicate: true) do
+      {:ok, %{} = transaction} ->
+        send(self(), {:transaction_saved, transaction, :new})
+        {:noreply, socket}
+
+      {:ok, :duplicate} ->
+        {:noreply, assign(socket, :duplicate_error, "Não foi possível criar a segunda cobrança.")}
+
+      {:error, changeset} ->
+        {:noreply,
+         socket
+         |> assign(:duplicate_of, nil)
+         |> assign(:pending_params, nil)
+         |> assign(:form, to_form(changeset))}
+    end
+  end
+
+  def handle_event("cancel_duplicate", _params, socket) do
+    {:noreply, socket |> assign(:duplicate_of, nil) |> assign(:pending_params, nil)}
   end
 
   @impl true
@@ -57,11 +82,19 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
     end
   end
 
+  # A fingerprint collision used to close the form with "nothing was created",
+  # which is right for a double-clicked submit and wrong for a charge that
+  # genuinely happened twice -- paying the same bill by mistake, say. The form
+  # now shows the existing row and asks, because only the person typing knows
+  # which of the two it is. Falsifying the date to get past it, the other way
+  # out, breaks reconciliation against the statement the charge belongs to.
   defp persist(socket, :new, params) do
     case Transactions.create_transaction(params) do
       {:ok, :duplicate} ->
-        send(self(), {:transaction_duplicate})
-        {:noreply, socket}
+        {:noreply,
+         socket
+         |> assign(:duplicate_of, Transactions.duplicate_of(params))
+         |> assign(:pending_params, params)}
 
       {:ok, transaction} ->
         send(self(), {:transaction_saved, transaction, :new})
@@ -306,6 +339,50 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
             label="Observações / Recibos"
             placeholder="Informações adicionais, número de protocolo..."
           />
+
+          <%!--
+            The duplicate question, asked where the answer is: the form stays
+            open with everything typed, so confirming costs one click and
+            cancelling loses nothing.
+          --%>
+          <div
+            :if={@duplicate_of}
+            id="duplicate-confirmation"
+            class="rounded-2xl border border-warning/40 bg-warning/10 p-4 space-y-2"
+          >
+            <p class="text-xs font-black flex items-center gap-1.5">
+              <.icon name="hero-exclamation-triangle" class="size-4 text-warning" />
+              Já existe um lançamento idêntico
+            </p>
+            <p class="text-[11px] opacity-70">
+              {format_date(@duplicate_of.date)} · {@duplicate_of.description} ·
+              <span class="font-mono font-bold">{format_currency(@duplicate_of.amount)}</span>
+            </p>
+            <p class="text-[11px] opacity-70">
+              Se foi cobrado duas vezes de verdade, crie assim mesmo — não mude a data para
+              contornar, porque isso quebra a conciliação com a fatura.
+            </p>
+            <div class="flex flex-wrap gap-2 pt-1">
+              <button
+                id="confirm-duplicate"
+                type="button"
+                phx-click="confirm_duplicate"
+                phx-target={@myself}
+                class="btn btn-warning btn-sm rounded-xl"
+              >
+                Sim, foi cobrado duas vezes
+              </button>
+              <button
+                id="cancel-duplicate"
+                type="button"
+                phx-click="cancel_duplicate"
+                phx-target={@myself}
+                class="btn btn-ghost btn-sm rounded-xl"
+              >
+                Não, era engano
+              </button>
+            </div>
+          </div>
 
           <div class="flex items-center justify-end gap-2 pt-2 border-t border-base-200">
             <button type="button" phx-click="close_transaction_modal" class="btn btn-ghost">

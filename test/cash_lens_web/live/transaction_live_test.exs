@@ -5,6 +5,9 @@ defmodule CashLensWeb.TransactionLiveTest do
   import CashLens.TransactionsFixtures
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
+  import Ecto.Query
+
+  alias CashLens.Repo
 
   @create_attrs %{
     date: Date.utc_today(),
@@ -950,10 +953,14 @@ defmodule CashLensWeb.TransactionLiveTest do
       assert html =~ "01/06/2026"
     end
 
-    test "a duplicate manual entry is reported instead of silently created", %{
+    test "a duplicate manual entry is questioned instead of silently created", %{
       conn: conn,
       account: account
     } do
+      # This used to close the form on "nothing was created". That reading is
+      # right for a double-clicked submit and wrong for a charge that really
+      # happened twice, and the form cannot tell the two apart -- so it now asks
+      # rather than deciding. Nothing is written until the question is answered.
       attrs = %{
         amount: "-42,00",
         description: "Lancamento repetido",
@@ -967,9 +974,9 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       {:ok, live, _html} = live(conn, ~p"/transactions/new")
       live |> form("#transaction-form", transaction: attrs) |> render_submit()
-      assert_patch(live, ~p"/transactions")
 
-      assert render(live) =~ "já existe"
+      assert has_element?(live, "#duplicate-confirmation")
+      assert render(live) =~ "Já existe um lançamento idêntico"
 
       assert CashLens.Transactions.list_all_transactions()
              |> Enum.count(&(&1.description == "Lancamento repetido")) == 1
@@ -984,6 +991,90 @@ defmodule CashLensWeb.TransactionLiveTest do
       {:ok, live, _html} = live(conn, ~p"/transactions/#{transaction}/edit")
 
       refute has_element?(live, "#transaction-links")
+    end
+  end
+
+  describe "duplicate confirmation on manual create" do
+    setup do
+      %{account: account_fixture(%{name: "Amazon", is_credit_card: true})}
+    end
+
+    defp submit_charge(live, account) do
+      live
+      |> form("#transaction-form",
+        transaction: %{
+          date: "2026-09-08",
+          description: "AMAZONMKTPLC*BKSCOMERC",
+          amount: "-245,90",
+          account_id: account.id
+        }
+      )
+      |> render_submit()
+    end
+
+    test "an identical charge asks instead of silently discarding", %{
+      conn: conn,
+      account: account
+    } do
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      submit_charge(live, account)
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      submit_charge(live, account)
+
+      # The form stays open with the existing row shown, rather than closing on
+      # "nothing was created" -- which cannot be told apart from a double-click.
+      assert has_element?(live, "#duplicate-confirmation")
+      assert has_element?(live, "#transaction-form-modal")
+      assert render(live) =~ "AMAZONMKTPLC*BKSCOMERC"
+    end
+
+    test "confirming writes the second charge, with the same date", %{
+      conn: conn,
+      account: account
+    } do
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      submit_charge(live, account)
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      submit_charge(live, account)
+      live |> element("#confirm-duplicate") |> render_click()
+
+      rows =
+        Repo.all(
+          from(t in CashLens.Transactions.Transaction,
+            where: t.account_id == ^account.id,
+            order_by: t.inserted_at
+          )
+        )
+
+      assert length(rows) == 2
+      assert Enum.map(rows, & &1.date) == [~D[2026-09-08], ~D[2026-09-08]]
+      assert Enum.uniq(Enum.map(rows, & &1.dedup_key)) |> length() == 1
+      assert Enum.uniq(Enum.map(rows, & &1.fingerprint)) |> length() == 2
+    end
+
+    test "declining leaves exactly one charge", %{conn: conn, account: account} do
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      submit_charge(live, account)
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      submit_charge(live, account)
+      live |> element("#cancel-duplicate") |> render_click()
+
+      refute has_element?(live, "#duplicate-confirmation")
+
+      assert Repo.aggregate(
+               from(t in CashLens.Transactions.Transaction, where: t.account_id == ^account.id),
+               :count
+             ) == 1
+    end
+
+    test "a first-of-its-kind charge never asks", %{conn: conn, account: account} do
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      submit_charge(live, account)
+
+      refute has_element?(live, "#duplicate-confirmation")
     end
   end
 end
