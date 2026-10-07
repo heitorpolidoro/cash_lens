@@ -959,4 +959,148 @@ defmodule CashLens.CreditCardsTest do
       assert ids == [setembro.id]
     end
   end
+
+  describe "absorption only rolls forward" do
+    import CashLens.AccountsFixtures
+    import CashLens.CreditCardsFixtures
+    import CashLens.TransactionsFixtures
+
+    setup do
+      card = account_fixture(%{is_credit_card: true, name: "CARTAO"})
+
+      julho =
+        statement_fixture(%{account: card, competencia: ~D[2026-07-01], due_date: ~D[2026-07-15]})
+
+      agosto =
+        statement_fixture(%{account: card, competencia: ~D[2026-08-01], due_date: ~D[2026-08-15]})
+
+      %{card: card, julho: julho, agosto: agosto}
+    end
+
+    test "refuses an earlier cycle as the target", %{julho: julho, agosto: agosto} do
+      # A cycle rolls what it did not settle onto the NEXT bill. Backwards reads
+      # as a bill paid before it existed.
+      assert {:error, :target_earlier} = CreditCards.absorb_into(agosto, julho)
+      assert CreditCards.get_statement!(agosto.id).absorbed_by_statement_id == nil
+    end
+
+    test "refuses a target in the same cycle", %{card: card, julho: julho} do
+      # Two rows for one competência happen (two files for the same month), and
+      # neither rolls into the other: they are the same cycle.
+      gemea =
+        %Statement{}
+        |> Statement.changeset(%{
+          account_id: card.id,
+          competencia: ~D[2026-07-01],
+          due_date: ~D[2026-07-20],
+          total_a_pagar: Decimal.new("10.00"),
+          source_file: "gemea.pdf"
+        })
+        |> CashLens.Repo.insert!()
+
+      assert {:error, :target_earlier} = CreditCards.absorb_into(julho, gemea)
+    end
+
+    test "allows a later cycle", %{julho: julho, agosto: agosto} do
+      assert {:ok, _} = CreditCards.absorb_into(julho, agosto)
+      assert CreditCards.get_statement!(julho.id).absorbed_by_statement_id == agosto.id
+    end
+
+    test "offers only later cycles as targets, nearest first", %{
+      card: card,
+      julho: julho,
+      agosto: agosto
+    } do
+      setembro =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-09-01],
+          due_date: ~D[2026-09-15]
+        })
+
+      statement_fixture(%{account: card, competencia: ~D[2026-06-01], due_date: ~D[2026-06-15]})
+
+      ids = julho |> CreditCards.absorption_targets() |> Enum.map(& &1.id)
+
+      assert ids == [agosto.id, setembro.id]
+    end
+
+    test "a pending statement with no competência is placed by its due date", %{
+      card: card,
+      agosto: agosto
+    } do
+      pendente = statement_fixture(%{account: card, competencia: nil, due_date: ~D[2026-09-20]})
+
+      assert {:error, :target_earlier} = CreditCards.absorb_into(pendente, agosto)
+      assert {:ok, _} = CreditCards.absorb_into(agosto, pendente)
+    end
+  end
+
+  describe "absorbed_groups/1" do
+    import CashLens.AccountsFixtures
+    import CashLens.CreditCardsFixtures
+    import CashLens.TransactionsFixtures
+
+    test "groups each absorbed cycle's lines under that cycle, oldest first" do
+      card = account_fixture(%{is_credit_card: true, name: "CARTAO"})
+
+      boleto =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-08-01],
+          due_date: ~D[2026-08-10],
+          total_a_pagar: Decimal.new("300.00")
+        })
+
+      junho = statement_fixture(%{account: card, competencia: ~D[2026-06-01], due_date: nil})
+      julho = statement_fixture(%{account: card, competencia: ~D[2026-07-01], due_date: nil})
+
+      jun_line =
+        transaction_fixture(%{
+          account_id: card.id,
+          amount: "-100.00",
+          description: "JUNHO",
+          import_batch_id: junho.id
+        })
+
+      jul_line =
+        transaction_fixture(%{
+          account_id: card.id,
+          amount: "-200.00",
+          description: "JULHO",
+          import_batch_id: julho.id
+        })
+
+      {:ok, _} = CreditCards.absorb_into(junho, boleto)
+      {:ok, _} = CreditCards.absorb_into(julho, boleto)
+
+      assert [jun, jul] = CreditCards.absorbed_groups(boleto.id)
+
+      assert jun.statement.id == junho.id
+      assert Enum.map(jun.transactions, & &1.id) == [jun_line.id]
+      assert Decimal.equal?(jun.line_total, Decimal.new("-100.00"))
+
+      assert jul.statement.id == julho.id
+      assert Enum.map(jul.transactions, & &1.id) == [jul_line.id]
+      assert Decimal.equal?(jul.line_total, Decimal.new("-200.00"))
+    end
+
+    test "the detail of an absorbing statement carries the groups" do
+      card = account_fixture(%{is_credit_card: true, name: "CARTAO"})
+
+      boleto =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-08-01],
+          due_date: ~D[2026-08-10]
+        })
+
+      julho = statement_fixture(%{account: card, competencia: ~D[2026-07-01], due_date: nil})
+      {:ok, _} = CreditCards.absorb_into(julho, boleto)
+
+      assert [%{statement: %{id: id}}] = CreditCards.get_statement_detail(boleto.id).absorbed
+      assert id == julho.id
+      assert CreditCards.get_statement_detail(julho.id).absorbed == []
+    end
+  end
 end

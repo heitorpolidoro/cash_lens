@@ -677,8 +677,36 @@ defmodule CashLens.CreditCards do
       lifecycle: lifecycle_status(statement),
       amount: statement.total_a_pagar || line_total,
       absorbed_into: statement.absorbed_by && statement.absorbed_by.competencia,
-      absorbed_by_id: statement.absorbed_by_statement_id
+      absorbed_by_id: statement.absorbed_by_statement_id,
+      absorbed: absorbed_groups(id)
     }
+  end
+
+  @doc """
+  The cycles folded into this statement, each with its own lines, oldest first.
+
+  The absorbing bill is the one that gets paid, so its screen is where someone
+  goes to see what they are paying for -- and until this it showed only its own
+  lines, with the absorbed months' spend nowhere but on screens the hub marks
+  "Incorporada". Keeping each cycle's lines under its own heading answers the
+  question the flat list could not: which month a charge came from.
+  """
+  def absorbed_groups(statement_id) do
+    from(s in Statement,
+      where: s.absorbed_by_statement_id == ^statement_id,
+      order_by: [asc: s.competencia, asc: s.due_date]
+    )
+    |> Repo.all()
+    |> Enum.map(fn absorbed ->
+      transactions = statement_transactions(absorbed.id)
+
+      %{
+        statement: absorbed,
+        transactions: transactions,
+        line_total: Enum.reduce(transactions, Decimal.new(0), &Decimal.add(&2, &1.amount)),
+        amount: absorbed.total_a_pagar
+      }
+    end)
   end
 
   def link_payment(%Statement{} = statement, payment_id) do
@@ -965,9 +993,10 @@ defmodule CashLens.CreditCards do
   the parser read as a line, a cycle the card rolled over for its own reasons.
   Those are the ones that need saying so by hand.
 
-  Refuses to absorb a statement into itself, across cards, or into one that is
+  Refuses to absorb a statement into itself, across cards, into one that is
   itself absorbed — a chain would leave the first statement pointing at something
-  that no longer stands on its own.
+  that no longer stands on its own — or backwards in time: a cycle rolls its
+  balance forward onto a later bill, never onto one that closed before it.
   """
   def absorb_into(%Statement{id: id}, %Statement{id: id}),
     do: {:error, :same_statement}
@@ -979,6 +1008,9 @@ defmodule CashLens.CreditCards do
 
       not is_nil(target.absorbed_by_statement_id) ->
         {:error, :target_absorbed}
+
+      earlier_or_same_cycle?(target, statement) ->
+        {:error, :target_earlier}
 
       true ->
         statement
@@ -998,18 +1030,37 @@ defmodule CashLens.CreditCards do
   end
 
   @doc """
-  Statements of the same card that `statement` could be folded into: anything
-  else on that account that is not itself absorbed, newest competência first.
+  Statements of the same card that `statement` could be folded into: a later
+  cycle on that account that is not itself absorbed, nearest competência first.
+
+  Only later ones, because absorption is a rollover: the balance a cycle did
+  not settle shows up on the next bill. Offering an earlier cycle invited
+  recording it the wrong way round, which then reads as a bill that was paid
+  before it existed.
   """
   def absorption_targets(%Statement{} = statement) do
     from(s in Statement,
       where: s.account_id == ^statement.account_id,
       where: s.id != ^statement.id,
       where: is_nil(s.absorbed_by_statement_id),
-      order_by: [desc: s.competencia, desc: s.due_date]
+      order_by: [asc: s.competencia, asc: s.due_date]
     )
     |> Repo.all()
+    |> Enum.reject(&earlier_or_same_cycle?(&1, statement))
   end
+
+  # Which cycle comes first, by competência, falling back to the due date when
+  # a statement has no competência of its own.
+  defp earlier_or_same_cycle?(target, statement) do
+    case {statement_cycle(target), statement_cycle(statement)} do
+      {nil, _} -> false
+      {_, nil} -> false
+      {a, b} -> Date.compare(a, b) != :gt
+    end
+  end
+
+  defp statement_cycle(%Statement{competencia: nil, due_date: due}), do: due
+  defp statement_cycle(%Statement{competencia: competencia}), do: competencia
 
   @doc """
   Absorbs a boleto's eligible earlier pending statements when the accounts

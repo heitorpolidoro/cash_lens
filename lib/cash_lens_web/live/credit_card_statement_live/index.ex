@@ -478,11 +478,62 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   defp payable?(%{statement: %{total_a_pagar: %Decimal{} = total}}), do: Decimal.positive?(total)
   defp payable?(_selected), do: true
 
+  attr :transactions, :list, required: true
+  attr :detachable, :boolean, required: true
+
+  # One table for the statement's own lines and for each absorbed cycle's. Only
+  # the owning statement detaches a line: an absorbed cycle is reached through
+  # its own screen, where detaching belongs.
+  defp lines_table(assigns) do
+    ~H"""
+    <table :if={@transactions != []} class="table table-sm w-full text-xs">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Descrição</th>
+          <th>Categoria</th>
+          <th class="text-right">Valor</th>
+          <th class="w-8"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr :for={t <- @transactions} class="hover">
+          <td class="font-mono opacity-60 whitespace-nowrap">{format_date(t.date)}</td>
+          <td>
+            {t.description}
+            <span :if={installment_label(t)} class="badge badge-ghost badge-xs ml-2">
+              {installment_label(t)}
+            </span>
+          </td>
+          <td>{t.category && t.category.name}</td>
+          <td class="text-right font-mono font-black">{format_currency(t.amount)}</td>
+          <td class="text-right w-8">
+            <button
+              :if={@detachable}
+              type="button"
+              id={"detach-#{t.id}"}
+              phx-click="detach_transaction"
+              phx-value-id={t.id}
+              class="btn btn-ghost btn-xs text-error p-0"
+              title="Remover da fatura"
+            >
+              <.icon name="hero-x-mark" class="size-3.5" />
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    """
+  end
+
   defp absorb_error(:same_statement), do: "Uma fatura não pode ser incorporada nela mesma."
   defp absorb_error(:different_account), do: "As duas faturas precisam ser do mesmo cartão."
 
   defp absorb_error(:target_absorbed),
     do: "A fatura escolhida já está incorporada em outra. Escolha a que de fato será cobrada."
+
+  defp absorb_error(:target_earlier),
+    do: "Uma fatura só pode ser incorporada em um ciclo posterior."
 
   defp absorb_error(_reason), do: "Não foi possível incorporar a fatura."
 
@@ -1146,42 +1197,43 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
           <div :if={@selected.transactions == []} class="px-6 py-12 text-center opacity-40 text-sm">
             Nenhum lançamento encontrado.
           </div>
-          <table :if={@selected.transactions != []} class="table table-sm w-full text-xs">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Descrição</th>
-                <th>Categoria</th>
-                <th class="text-right">Valor</th>
-                <th class="w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={t <- @selected.transactions} class="hover">
-                <td class="font-mono opacity-60 whitespace-nowrap">{format_date(t.date)}</td>
-                <td>
-                  {t.description}
-                  <span :if={installment_label(t)} class="badge badge-ghost badge-xs ml-2">
-                    {installment_label(t)}
-                  </span>
-                </td>
-                <td>{t.category && t.category.name}</td>
-                <td class="text-right font-mono font-black">{format_currency(t.amount)}</td>
-                <td class="text-right w-8">
-                  <button
-                    type="button"
-                    id={"detach-#{t.id}"}
-                    phx-click="detach_transaction"
-                    phx-value-id={t.id}
-                    class="btn btn-ghost btn-xs text-error p-0"
-                    title="Remover da fatura"
-                  >
-                    <.icon name="hero-x-mark" class="size-3.5" />
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <.lines_table transactions={@selected.transactions} detachable={true} />
+
+          <%!--
+            The cycles folded into this one, each under its own heading. This
+            bill is what gets paid, so this screen is where someone looks to
+            see what they are paying for; a flat list could not say which month
+            a charge came from, and the absorbed months' lines appeared nowhere
+            else but on screens the hub marks "Incorporada".
+          --%>
+          <div
+            :for={group <- @selected.absorbed}
+            id={"absorbed-group-#{group.statement.id}"}
+            class="border-t-4 border-base-200"
+          >
+            <div class="px-6 py-3 bg-base-200/40 flex flex-wrap items-baseline justify-between gap-2">
+              <p class="text-xs font-black uppercase tracking-tight flex items-baseline gap-2">
+                <.icon name="hero-arrow-turn-down-right" class="size-4 opacity-50" />
+                Incorporada · {format_competencia(group.statement.competencia)}
+                <.link
+                  patch={~p"/statements?id=#{group.statement.id}"}
+                  class="link text-[11px] font-normal"
+                >
+                  ver fatura
+                </.link>
+              </p>
+              <p class="font-mono font-black text-xs">
+                {format_currency(group.amount || group.line_total)}
+              </p>
+            </div>
+            <p
+              :if={group.transactions == []}
+              class="px-6 py-6 text-center opacity-40 text-sm"
+            >
+              Nenhum lançamento nesta fatura.
+            </p>
+            <.lines_table transactions={group.transactions} detachable={false} />
+          </div>
 
           <%!--
             A purchase joins a statement through `import_batch_id`, which only an

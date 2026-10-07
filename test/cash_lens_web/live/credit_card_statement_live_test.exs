@@ -919,4 +919,101 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       assert render(live) =~ "Nenhuma compra avulsa neste cartão."
     end
   end
+
+  describe "absorbed cycles on the absorbing statement" do
+    setup do
+      card = card_account("Amazon")
+
+      boleto =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-10-01],
+          due_date: ~D[2026-10-10],
+          total_a_pagar: Decimal.new("300.00")
+        })
+
+      setembro = statement_fixture(%{account: card, competencia: ~D[2026-09-01], due_date: nil})
+      agosto = statement_fixture(%{account: card, competencia: ~D[2026-08-01], due_date: nil})
+
+      cycle_transaction(setembro, %{description: "COMPRA DE SETEMBRO", amount: "-66.28"})
+      cycle_transaction(agosto, %{description: "COMPRA DE AGOSTO", amount: "-120.00"})
+
+      {:ok, _} = CreditCards.absorb_into(setembro, boleto)
+      {:ok, _} = CreditCards.absorb_into(agosto, boleto)
+
+      %{card: card, boleto: boleto, setembro: setembro, agosto: agosto}
+    end
+
+    test "each absorbed cycle gets its own group, with its lines", %{
+      conn: conn,
+      boleto: boleto,
+      setembro: setembro,
+      agosto: agosto
+    } do
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{boleto.id}")
+
+      assert has_element?(live, "#absorbed-group-#{agosto.id}")
+      assert has_element?(live, "#absorbed-group-#{setembro.id}")
+
+      html = render(live)
+      assert html =~ "COMPRA DE AGOSTO"
+      assert html =~ "COMPRA DE SETEMBRO"
+    end
+
+    test "the groups run oldest first", %{
+      conn: conn,
+      boleto: boleto,
+      setembro: setembro,
+      agosto: agosto
+    } do
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{boleto.id}")
+      html = render(live)
+
+      assert :binary.match(html, "absorbed-group-#{agosto.id}") <
+               :binary.match(html, "absorbed-group-#{setembro.id}")
+    end
+
+    test "an absorbed line is not offered for detaching here", %{
+      conn: conn,
+      boleto: boleto,
+      setembro: setembro
+    } do
+      # Detaching belongs on that cycle's own screen; from here it would move a
+      # line out of a statement this screen is not editing.
+      [line] = CreditCards.statement_transactions(setembro.id)
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{boleto.id}")
+
+      refute has_element?(live, "#detach-#{line.id}")
+    end
+
+    test "a statement that absorbs nothing shows no groups", %{conn: conn, card: card} do
+      solta =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-11-01],
+          due_date: ~D[2026-11-10]
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{solta.id}")
+
+      refute has_element?(live, "[id^='absorbed-group-']")
+    end
+  end
+
+  describe "absorbing only rolls forward" do
+    test "an earlier cycle is not offered as a target", %{conn: conn} do
+      card = card_account("Amazon")
+
+      julho =
+        statement_fixture(%{account: card, competencia: ~D[2026-07-01], due_date: ~D[2026-07-15]})
+
+      agosto =
+        statement_fixture(%{account: card, competencia: ~D[2026-08-01], due_date: ~D[2026-08-15]})
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{agosto.id}")
+
+      refute render(live) =~ "value=\"#{julho.id}\""
+    end
+  end
 end
