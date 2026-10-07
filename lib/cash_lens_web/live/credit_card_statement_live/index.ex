@@ -18,8 +18,6 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
      |> assign(:new_error, nil)
      |> assign(:editing_total, nil)
      |> assign(:total_error, nil)
-     |> assign(:new_line, blank_line())
-     |> assign(:line_error, nil)
      |> assign(:search, "")
      |> assign(:card_filter, "")
      |> assign(:status_filter, "")
@@ -38,9 +36,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
      |> assign(:suggestion, nil)
      |> assign(:candidates, [])
      |> assign(:editing_total, nil)
-     |> assign(:total_error, nil)
-     |> assign(:new_line, blank_line())
-     |> assign(:line_error, nil)}
+     |> assign(:total_error, nil)}
   end
 
   @impl true
@@ -73,38 +69,6 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
 
   def handle_event("cancel_total", _params, socket) do
     {:noreply, socket |> assign(:editing_total, nil) |> assign(:total_error, nil)}
-  end
-
-  def handle_event("add_line", params, socket) do
-    statement = socket.assigns.selected.statement
-
-    case build_manual_lines([params]) do
-      [line] ->
-        case CreditCards.add_manual_line(statement, line) do
-          {:ok, _transaction} ->
-            {:noreply,
-             socket
-             |> assign(:new_line, blank_line())
-             |> assign(:line_error, nil)
-             |> load_statements()
-             |> reload_selected()
-             |> put_flash(:info, "Lançamento adicionado à fatura.")}
-
-          {:error, :duplicate} ->
-            {:noreply,
-             assign(
-               socket,
-               :line_error,
-               "Já existe um lançamento idêntico nesta fatura. Mude a descrição para distinguir as duas cobranças."
-             )}
-
-          {:error, _reason} ->
-            {:noreply, assign(socket, :line_error, "Não foi possível adicionar o lançamento.")}
-        end
-
-      [] ->
-        {:noreply, assign(socket, :line_error, "Preencha data, descrição e valor.")}
-    end
   end
 
   def handle_event("save_total", %{"total_a_pagar" => raw}, socket) do
@@ -1179,62 +1143,6 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
             <h2 class="font-black uppercase tracking-tight text-sm">Lançamentos do ciclo</h2>
           </div>
 
-          <%!--
-            Typing a line into a statement that already exists. Creating one by
-            hand and forgetting its lines left no way back: the lines could only
-            be typed at birth, so the fix was to delete and retype the whole
-            statement, or to create the transactions on another screen and
-            attach them here.
-          --%>
-          <form
-            :if={editable_total?(@selected)}
-            id="add-line-form"
-            phx-submit="add_line"
-            class="px-6 py-4 border-b border-base-200 bg-base-200/30"
-          >
-            <p class="text-xs font-bold uppercase opacity-60 mb-2">Adicionar lançamento</p>
-            <div class="flex flex-wrap items-end gap-2">
-              <label class="form-control">
-                <span class="label-text text-[11px]">Data</span>
-                <input
-                  type="date"
-                  name="date"
-                  value={@new_line["date"]}
-                  class="input input-bordered input-sm"
-                />
-              </label>
-              <label class="form-control flex-1 min-w-48">
-                <span class="label-text text-[11px]">Descrição</span>
-                <input
-                  type="text"
-                  name="description"
-                  value={@new_line["description"]}
-                  class="input input-bordered input-sm w-full"
-                />
-              </label>
-              <label class="form-control">
-                <span class="label-text text-[11px]">Tipo</span>
-                <select name="kind" class="select select-bordered select-sm">
-                  <option value="compra" selected={@new_line["kind"] == "compra"}>Compra</option>
-                  <option value="credito" selected={@new_line["kind"] == "credito"}>Crédito</option>
-                </select>
-              </label>
-              <label class="form-control">
-                <span class="label-text text-[11px]">Valor</span>
-                <input
-                  type="text"
-                  name="amount"
-                  value={@new_line["amount"]}
-                  placeholder="0,00"
-                  class="input input-bordered input-sm w-28 text-right font-mono"
-                />
-              </label>
-              <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
-            </div>
-            <p :if={@line_error} id="line-error" class="text-[11px] text-error mt-2">
-              {@line_error}
-            </p>
-          </form>
           <div :if={@selected.transactions == []} class="px-6 py-12 text-center opacity-40 text-sm">
             Nenhum lançamento encontrado.
           </div>
