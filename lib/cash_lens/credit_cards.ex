@@ -404,6 +404,32 @@ defmodule CashLens.CreditCards do
     end
   end
 
+  @doc """
+  Types one line into a statement that already exists.
+
+  `create_manual_statement/2` takes its lines at birth, and until this there was
+  no second chance: a statement created without them could only be fixed by
+  deleting and retyping it, or by creating the transactions elsewhere and
+  attaching them from the detail screen -- two screens for what is one thought.
+
+  Refused on a `:paid` or `:absorbed` statement, the same boundary attachment
+  and absorption keep: both are settled history, and adding spend to them moves
+  a total already reconciled against the bank.
+  """
+  def add_manual_line(%Statement{} = statement, attrs) do
+    case lifecycle_status(statement) do
+      lifecycle when lifecycle in [:open, :closed] ->
+        case insert_manual_lines(statement, [attrs]) do
+          {:ok, [transaction]} -> {:ok, transaction}
+          {:ok, []} -> {:error, :duplicate}
+          {:error, changeset} -> {:error, changeset}
+        end
+
+      lifecycle ->
+        {:error, lifecycle}
+    end
+  end
+
   defp insert_manual_lines(_statement, []), do: {:ok, []}
 
   defp insert_manual_lines(statement, lines) do

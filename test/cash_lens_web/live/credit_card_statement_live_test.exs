@@ -782,4 +782,250 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
     conn = get(conn, ~p"/credit_card_links")
     assert redirected_to(conn) == ~p"/statements"
   end
+
+  describe "editing the statement total" do
+    test "a closed statement offers the pencil, and saving a negative total sticks", %{conn: conn} do
+      # The bank app produces no PDF for a negative bill, so the only way such a
+      # statement exists is by hand -- and until now the total could only be
+      # typed at creation.
+      account = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          total_a_pagar: Decimal.new("0.00")
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      assert has_element?(live, "#edit-total")
+      live |> element("#edit-total") |> render_click()
+
+      live |> form("#total-form", %{"total_a_pagar" => "-112,28"}) |> render_submit()
+
+      assert Repo.get!(Statement, statement.id).total_a_pagar
+             |> Decimal.equal?(Decimal.new("-112.28"))
+    end
+
+    test "an empty total clears it to nil rather than storing zero", %{conn: conn} do
+      # Blank and zero are different states: `nil` makes the forecast sum the
+      # statement's own lines, while a stored 0 is taken as the bill itself and
+      # projects nothing no matter what the statement holds.
+      account = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          total_a_pagar: Decimal.new("50.00")
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      live |> element("#edit-total") |> render_click()
+      live |> form("#total-form", %{"total_a_pagar" => ""}) |> render_submit()
+
+      assert Repo.get!(Statement, statement.id).total_a_pagar == nil
+    end
+
+    test "zero is stored as zero, not read as blank", %{conn: conn} do
+      account = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          total_a_pagar: Decimal.new("50.00")
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      live |> element("#edit-total") |> render_click()
+      live |> form("#total-form", %{"total_a_pagar" => "0"}) |> render_submit()
+
+      total = Repo.get!(Statement, statement.id).total_a_pagar
+      refute is_nil(total)
+      assert Decimal.equal?(total, Decimal.new("0"))
+    end
+
+    test "a value that is not a number is refused, leaving the total untouched", %{conn: conn} do
+      account = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          total_a_pagar: Decimal.new("50.00")
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      live |> element("#edit-total") |> render_click()
+      live |> form("#total-form", %{"total_a_pagar" => "abc"}) |> render_submit()
+
+      assert has_element?(live, "#total-error")
+
+      assert Repo.get!(Statement, statement.id).total_a_pagar
+             |> Decimal.equal?(Decimal.new("50.00"))
+    end
+
+    test "a paid statement does not offer the pencil", %{conn: conn} do
+      # Its total has been reconciled against the bank; editing it would move a
+      # number the payment was matched against.
+      account = card_account("Amazon")
+      payment_category()
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          due_date: ~D[2026-09-10],
+          total_a_pagar: Decimal.new("50.00")
+        })
+
+      payment =
+        transaction_fixture(%{
+          account_id: account_fixture(%{name: "Conta"}).id,
+          amount: "-50.00",
+          date: ~D[2026-09-10],
+          description: "PAGAMENTO FATURA"
+        })
+
+      {:ok, _} = CreditCards.update_statement(statement, %{payment_transaction_id: payment.id})
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      refute has_element?(live, "#edit-total")
+    end
+  end
+
+  describe "adding a line to an existing statement" do
+    test "a typed line lands inside the statement", %{conn: conn} do
+      # The gap this closes: a statement created by hand without its lines could
+      # only be fixed by deleting it, or by creating the transactions on the
+      # transactions screen and attaching them back here.
+      account = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          total_a_pagar: Decimal.new("0.00")
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      live
+      |> form("#add-line-form", %{
+        "date" => "2026-09-08",
+        "description" => "AMAZONMKTPLC*BKSCOMERC",
+        "kind" => "compra",
+        "amount" => "245,90"
+      })
+      |> render_submit()
+
+      assert [line] =
+               Repo.all(from(t in Transaction, where: t.import_batch_id == ^statement.id))
+
+      assert line.description == "AMAZONMKTPLC*BKSCOMERC"
+      assert line.account_id == account.id
+      assert Decimal.equal?(line.amount, Decimal.new("-245.90"))
+    end
+
+    test "a credit is stored positive, a purchase negative", %{conn: conn} do
+      account = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          total_a_pagar: Decimal.new("0.00")
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      live
+      |> form("#add-line-form", %{
+        "date" => "2026-09-08",
+        "description" => "ESTORNO",
+        "kind" => "credito",
+        "amount" => "100,00"
+      })
+      |> render_submit()
+
+      assert [line] = Repo.all(from(t in Transaction, where: t.import_batch_id == ^statement.id))
+      assert Decimal.equal?(line.amount, Decimal.new("100.00"))
+    end
+
+    test "an incomplete line is refused with a message, writing nothing", %{conn: conn} do
+      account = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          total_a_pagar: Decimal.new("0.00")
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      live
+      |> form("#add-line-form", %{
+        "date" => "2026-09-08",
+        "description" => "",
+        "kind" => "compra",
+        "amount" => "10,00"
+      })
+      |> render_submit()
+
+      assert has_element?(live, "#line-error")
+      assert Repo.all(from(t in Transaction, where: t.import_batch_id == ^statement.id)) == []
+    end
+
+    test "a paid statement offers no line form", %{conn: conn} do
+      account = card_account("Amazon")
+      payment_category()
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          due_date: ~D[2026-09-10],
+          total_a_pagar: Decimal.new("50.00")
+        })
+
+      payment =
+        transaction_fixture(%{
+          account_id: account_fixture(%{name: "Conta"}).id,
+          amount: "-50.00",
+          date: ~D[2026-09-10],
+          description: "PAGAMENTO FATURA"
+        })
+
+      {:ok, _} = CreditCards.update_statement(statement, %{payment_transaction_id: payment.id})
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      refute has_element?(live, "#add-line-form")
+    end
+
+    test "the attach section is shown empty rather than hidden", %{conn: conn} do
+      # Hiding it made the feature look absent: someone looking for where to add
+      # a purchase found no section at all and concluded it could not be done.
+      account = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: account,
+          competencia: ~D[2026-09-01],
+          total_a_pagar: Decimal.new("0.00")
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      assert has_element?(live, "#attachable-transactions")
+      assert render(live) =~ "Nenhuma compra avulsa neste cartão."
+    end
+  end
 end

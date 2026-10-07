@@ -959,4 +959,91 @@ defmodule CashLens.CreditCardsTest do
       assert ids == [setembro.id]
     end
   end
+
+  describe "add_manual_line/2" do
+    import CashLens.AccountsFixtures
+    import CashLens.CreditCardsFixtures
+    import CashLens.TransactionsFixtures
+
+    setup do
+      card = account_fixture(%{is_credit_card: true, name: "CARTAO"})
+      %{card: card}
+    end
+
+    test "types a line into an open statement", %{card: card} do
+      statement = statement_fixture(%{account: card, total_a_pagar: nil})
+
+      assert {:ok, line} =
+               CreditCards.add_manual_line(statement, %{
+                 date: ~D[2026-09-08],
+                 description: "AMAZONMKTPLC",
+                 amount: Decimal.new("-245.90")
+               })
+
+      assert line.import_batch_id == statement.id
+      assert line.account_id == card.id
+      assert CreditCards.statement_transactions(statement.id) |> Enum.map(& &1.id) == [line.id]
+    end
+
+    test "refuses a paid statement", %{card: card} do
+      # A settled total was already reconciled against the bank; typing spend
+      # into it moves a number nobody will re-check.
+      statement = statement_fixture(%{account: card, total_a_pagar: Decimal.new("50.00")})
+
+      payment =
+        transaction_fixture(%{
+          account_id: account_fixture(%{name: "Conta"}).id,
+          amount: "-50.00",
+          description: "PAGAMENTO FATURA"
+        })
+
+      {:ok, paid} =
+        CreditCards.update_statement(statement, %{payment_transaction_id: payment.id})
+
+      assert {:error, :paid} =
+               CreditCards.add_manual_line(paid, %{
+                 date: ~D[2026-09-08],
+                 description: "ATRASADA",
+                 amount: Decimal.new("-10.00")
+               })
+
+      assert CreditCards.statement_transactions(paid.id) == []
+    end
+
+    test "refuses an absorbed statement", %{card: card} do
+      julho = statement_fixture(%{account: card, competencia: ~D[2026-07-01]})
+
+      agosto =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-08-01],
+          due_date: ~D[2026-08-15]
+        })
+
+      {:ok, _} = CreditCards.absorb_into(julho, agosto)
+      absorbed = CreditCards.get_statement!(julho.id)
+
+      assert {:error, :absorbed} =
+               CreditCards.add_manual_line(absorbed, %{
+                 date: ~D[2026-07-08],
+                 description: "ATRASADA",
+                 amount: Decimal.new("-10.00")
+               })
+
+      assert CreditCards.statement_transactions(absorbed.id) == []
+    end
+
+    test "reports a duplicate instead of inserting it twice", %{card: card} do
+      statement = statement_fixture(%{account: card, total_a_pagar: nil})
+
+      attrs = %{
+        date: ~D[2026-09-08],
+        description: "AMAZONMKTPLC",
+        amount: Decimal.new("-245.90")
+      }
+
+      assert {:ok, _} = CreditCards.add_manual_line(statement, attrs)
+      assert {:error, :duplicate} = CreditCards.add_manual_line(statement, attrs)
+    end
+  end
 end

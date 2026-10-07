@@ -16,6 +16,10 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
      |> assign(:new_statement, nil)
      |> assign(:new_lines, [])
      |> assign(:new_error, nil)
+     |> assign(:editing_total, nil)
+     |> assign(:total_error, nil)
+     |> assign(:new_line, blank_line())
+     |> assign(:line_error, nil)
      |> assign(:search, "")
      |> assign(:card_filter, "")
      |> assign(:status_filter, "")
@@ -32,7 +36,11 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
      socket
      |> assign(:selected, nil)
      |> assign(:suggestion, nil)
-     |> assign(:candidates, [])}
+     |> assign(:candidates, [])
+     |> assign(:editing_total, nil)
+     |> assign(:total_error, nil)
+     |> assign(:new_line, blank_line())
+     |> assign(:line_error, nil)}
   end
 
   @impl true
@@ -51,6 +59,71 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
 
   def handle_event("close_new", _params, socket) do
     {:noreply, socket |> assign(:new_statement, nil) |> assign(:new_error, nil)}
+  end
+
+  def handle_event("edit_total", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(
+       :editing_total,
+       format_total_input(socket.assigns.selected.statement.total_a_pagar)
+     )
+     |> assign(:total_error, nil)}
+  end
+
+  def handle_event("cancel_total", _params, socket) do
+    {:noreply, socket |> assign(:editing_total, nil) |> assign(:total_error, nil)}
+  end
+
+  def handle_event("add_line", params, socket) do
+    statement = socket.assigns.selected.statement
+
+    case build_manual_lines([params]) do
+      [line] ->
+        case CreditCards.add_manual_line(statement, line) do
+          {:ok, _transaction} ->
+            {:noreply,
+             socket
+             |> assign(:new_line, blank_line())
+             |> assign(:line_error, nil)
+             |> load_statements()
+             |> reload_selected()
+             |> put_flash(:info, "Lançamento adicionado à fatura.")}
+
+          {:error, :duplicate} ->
+            {:noreply,
+             assign(
+               socket,
+               :line_error,
+               "Já existe um lançamento idêntico nesta fatura. Mude a descrição para distinguir as duas cobranças."
+             )}
+
+          {:error, _reason} ->
+            {:noreply, assign(socket, :line_error, "Não foi possível adicionar o lançamento.")}
+        end
+
+      [] ->
+        {:noreply, assign(socket, :line_error, "Preencha data, descrição e valor.")}
+    end
+  end
+
+  def handle_event("save_total", %{"total_a_pagar" => raw}, socket) do
+    case parse_total(raw) do
+      {:ok, total} ->
+        {:ok, _} =
+          CreditCards.update_statement(socket.assigns.selected.statement, %{total_a_pagar: total})
+
+        {:noreply,
+         socket
+         |> assign(:editing_total, nil)
+         |> assign(:total_error, nil)
+         |> load_statements()
+         |> reload_selected()
+         |> put_flash(:info, total_flash(total))}
+
+      {:error, message} ->
+        {:noreply, assign(socket, :total_error, message)}
+    end
   end
 
   def handle_event("absorb_into", %{"target_id" => target_id}, socket) do
@@ -335,6 +408,34 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
       _ -> nil
     end
   end
+
+  # Blank is not zero. A `nil` total means "I do not know this bill yet", and
+  # `card_occurrences/2` then projects the sum of the lines inside it; a number,
+  # zero included, is taken as the bill itself. Collapsing the two is how a
+  # hand-built statement ends up projected at R$ 0,00 no matter what it holds.
+  defp parse_total(raw) do
+    case String.trim(to_string(raw)) do
+      "" ->
+        {:ok, nil}
+
+      trimmed ->
+        case trimmed |> String.replace(".", "") |> String.replace(",", ".") |> Decimal.parse() do
+          {decimal, ""} -> {:ok, decimal}
+          _ -> {:error, "Valor inválido. Use por exemplo -112,28 ou 0."}
+        end
+    end
+  end
+
+  defp format_total_input(nil), do: ""
+  defp format_total_input(%Decimal{} = total), do: total |> Decimal.to_string(:normal)
+
+  defp total_flash(nil), do: "Total limpo: a fatura volta a valer a soma dos lançamentos."
+  defp total_flash(total), do: "Total atualizado para #{format_currency(total)}."
+
+  # Editing the total of a settled statement would move a number already
+  # reconciled against the bank, the same reason absorption and attachment are
+  # refused there.
+  defp editable_total?(%{lifecycle: lifecycle}), do: lifecycle in [:open, :closed]
 
   defp parse_decimal(value) when value in [nil, ""], do: nil
 
@@ -880,7 +981,48 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
               <div class="mt-2"><.badge lifecycle={@selected.lifecycle} /></div>
             </div>
             <div class="text-right">
-              <p class="text-2xl font-black font-mono">{format_currency(@selected.amount)}</p>
+              <div :if={is_nil(@editing_total)} class="flex items-center justify-end gap-2">
+                <p class="text-2xl font-black font-mono">{format_currency(@selected.amount)}</p>
+                <button
+                  :if={editable_total?(@selected)}
+                  id="edit-total"
+                  type="button"
+                  phx-click="edit_total"
+                  title="Editar total da fatura"
+                  class="btn btn-ghost btn-xs p-1 min-h-0 h-6 opacity-50 hover:opacity-100"
+                >
+                  <.icon name="hero-pencil-square" class="size-4" />
+                </button>
+              </div>
+
+              <form
+                :if={@editing_total}
+                id="total-form"
+                phx-submit="save_total"
+                class="flex items-center justify-end gap-2"
+              >
+                <input
+                  type="text"
+                  name="total_a_pagar"
+                  value={@editing_total}
+                  autocomplete="off"
+                  placeholder="vazio = somar lançamentos"
+                  class="input input-bordered input-sm w-48 text-right font-mono"
+                />
+                <button type="submit" class="btn btn-primary btn-sm">Salvar</button>
+                <button type="button" phx-click="cancel_total" class="btn btn-ghost btn-sm">
+                  Cancelar
+                </button>
+              </form>
+
+              <p :if={@total_error} id="total-error" class="text-[11px] text-error mt-1">
+                {@total_error}
+              </p>
+              <p :if={@editing_total} class="text-[10px] opacity-50 mt-1 max-w-xs">
+                Aceita negativo. Em branco, a previsão passa a usar a soma dos lançamentos em vez
+                de um total fixo.
+              </p>
+
               <p class="text-[10px] opacity-50 mt-1">
                 Soma dos lançamentos: {format_currency(@selected.line_total)}
               </p>
@@ -1036,6 +1178,63 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
           <div class="px-6 py-4 border-b border-base-300">
             <h2 class="font-black uppercase tracking-tight text-sm">Lançamentos do ciclo</h2>
           </div>
+
+          <%!--
+            Typing a line into a statement that already exists. Creating one by
+            hand and forgetting its lines left no way back: the lines could only
+            be typed at birth, so the fix was to delete and retype the whole
+            statement, or to create the transactions on another screen and
+            attach them here.
+          --%>
+          <form
+            :if={editable_total?(@selected)}
+            id="add-line-form"
+            phx-submit="add_line"
+            class="px-6 py-4 border-b border-base-200 bg-base-200/30"
+          >
+            <p class="text-xs font-bold uppercase opacity-60 mb-2">Adicionar lançamento</p>
+            <div class="flex flex-wrap items-end gap-2">
+              <label class="form-control">
+                <span class="label-text text-[11px]">Data</span>
+                <input
+                  type="date"
+                  name="date"
+                  value={@new_line["date"]}
+                  class="input input-bordered input-sm"
+                />
+              </label>
+              <label class="form-control flex-1 min-w-48">
+                <span class="label-text text-[11px]">Descrição</span>
+                <input
+                  type="text"
+                  name="description"
+                  value={@new_line["description"]}
+                  class="input input-bordered input-sm w-full"
+                />
+              </label>
+              <label class="form-control">
+                <span class="label-text text-[11px]">Tipo</span>
+                <select name="kind" class="select select-bordered select-sm">
+                  <option value="compra" selected={@new_line["kind"] == "compra"}>Compra</option>
+                  <option value="credito" selected={@new_line["kind"] == "credito"}>Crédito</option>
+                </select>
+              </label>
+              <label class="form-control">
+                <span class="label-text text-[11px]">Valor</span>
+                <input
+                  type="text"
+                  name="amount"
+                  value={@new_line["amount"]}
+                  placeholder="0,00"
+                  class="input input-bordered input-sm w-28 text-right font-mono"
+                />
+              </label>
+              <button type="submit" class="btn btn-primary btn-sm">Adicionar</button>
+            </div>
+            <p :if={@line_error} id="line-error" class="text-[11px] text-error mt-2">
+              {@line_error}
+            </p>
+          </form>
           <div :if={@selected.transactions == []} class="px-6 py-12 text-center opacity-40 text-sm">
             Nenhum lançamento encontrado.
           </div>
@@ -1082,13 +1281,21 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
             route is stranded outside every bill until it is adopted here.
           --%>
           <div
-            :if={@attachable != []}
+            :if={editable_total?(@selected)}
             id="attachable-transactions"
             class="px-6 py-4 border-t border-base-200"
           >
             <p class="text-xs font-bold uppercase opacity-60 mb-1">Incluir lançamentos na fatura</p>
             <p class="text-[11px] opacity-40 mb-2">
               Compras deste cartão que não pertencem a nenhuma fatura.
+            </p>
+            <%!--
+              Shown empty rather than hidden. Hiding it made the feature look
+              absent: someone looking for where to add a purchase found no
+              section at all and concluded the app could not do it.
+            --%>
+            <p :if={@attachable == []} class="text-sm opacity-40 italic">
+              Nenhuma compra avulsa neste cartão.
             </p>
             <div class="divide-y divide-base-200 max-h-64 overflow-y-auto">
               <div
