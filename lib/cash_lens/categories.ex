@@ -249,6 +249,80 @@ defmodule CashLens.Categories do
   end
 
   @doc """
+  Every pair of keywords, on different categories, that makes a description
+  ambiguous -- as `[%{text:, category:, shadowed_by_text:, shadowed_by:}]`.
+
+  `AutoCategorizer` matches by substring and takes the FIRST category the
+  database hands back, with no `order_by`: the winner is the physical row
+  order, which an ordinary `UPDATE` reshuffles. So whenever one keyword
+  contains another, descriptions matching the longer one match both rules and
+  the category that wins is not something anyone chose. "HAIR" on Cuidados
+  Pessoais and "ALEX HAIR" on Cabeleireiro is exactly that: "PAG*ALEX HAIR
+  STUDIO" currently lands on Cuidados Pessoais, and editing either category
+  could silently flip it.
+
+  Equal keywords are reported once, in the order the categories come back, so
+  a plain duplicate produces one finding rather than two mirrored ones.
+
+  Reported, never resolved: which category should own an ambiguous description
+  is a judgement about meaning, and the app does not get to make it quietly.
+  """
+  def keyword_conflicts(categories \\ nil) do
+    categories = categories || list_categories()
+
+    indexed =
+      for category <- categories,
+          text <- split_keywords(category.keywords),
+          do: %{text: text, upcased: String.upcase(text), category: category}
+
+    for a <- indexed,
+        b <- indexed,
+        a.category.id != b.category.id,
+        conflict?(a, b),
+        do: %{
+          text: a.text,
+          category: a.category,
+          shadowed_by_text: b.text,
+          shadowed_by: b.category,
+          # Two categories claiming the SAME text is a different sentence from
+          # one keyword swallowing another, and reads as nonsense in the shared
+          # phrasing ("HAIR e HAIR casam com a mesma descrição"). The screens
+          # branch on this rather than comparing the two strings themselves.
+          exact?: String.upcase(a.text) == String.upcase(b.text)
+        }
+  end
+
+  @doc """
+  The conflicts `keyword` would create, as if it belonged to `category_id`.
+
+  Used by the forms to warn before the keyword is saved, so the same rule that
+  describes an existing clash also describes one about to be made.
+  """
+  def keyword_conflicts_for(keyword, category_id) when is_binary(keyword) do
+    case normalize_keyword(keyword) do
+      "" ->
+        []
+
+      trimmed ->
+        candidate = %Category{id: category_id, name: "", keywords: trimmed}
+
+        list_categories()
+        |> Enum.reject(&(&1.id == category_id))
+        |> then(&keyword_conflicts([candidate | &1]))
+        |> Enum.filter(&(&1.category.id == category_id or &1.shadowed_by.id == category_id))
+    end
+  end
+
+  # `b` conflicts with `a` when a description matching `b` also matches `a`.
+  #
+  # Two identical keywords shadow each other, so the pair would be reported
+  # twice; the id comparison picks one side and reports it once. It is an
+  # arbitrary tie-break, but a stable one, which is what keeps the warning from
+  # listing the same clash in both directions.
+  defp conflict?(%{upcased: same} = a, %{upcased: same} = b), do: a.category.id < b.category.id
+  defp conflict?(a, b), do: String.contains?(b.upcased, a.upcased)
+
+  @doc """
   Deletes a category.
 
   ## Examples

@@ -1257,6 +1257,33 @@
           <span class="block text-[11px] opacity-50 mt-1">
             Encurte para um trecho estável: o boleto inteiro casa com uma cobrança só.
           </span>
+
+          <div
+            :if={@bulk_rule_conflicts != []}
+            id="bulk-rule-conflicts"
+            class="rounded-lg border border-warning/40 bg-warning/10 p-2 mt-2"
+          >
+            <p class="text-[11px] font-black flex items-center gap-1.5">
+              <.icon name="hero-exclamation-triangle" class="size-3.5 text-warning" />
+              Outra categoria já reivindica esse texto
+            </p>
+            <ul class="mt-1 space-y-0.5">
+              <li
+                :for={conflict <- @bulk_rule_conflicts}
+                class="text-[11px] opacity-80 flex flex-wrap items-baseline gap-1"
+              >
+                <span class="font-mono font-bold">{conflict.text}</span>
+                <span :if={conflict.exact?} class="opacity-60">já é usada por</span>
+                <span :if={!conflict.exact?} class="opacity-60">também casa com</span>
+                <span :if={!conflict.exact?} class="font-mono font-bold">
+                  {conflict.shadowed_by_text}
+                </span>
+                <span :if={!conflict.exact?} class="opacity-60">de</span>
+                <span class="font-bold">{bulk_conflict_other(conflict, @bulk_confirmation)}</span>
+                <span class="opacity-60">— a categoria que vence é imprevisível.</span>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 

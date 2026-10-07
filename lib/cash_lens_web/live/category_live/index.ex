@@ -74,6 +74,47 @@ defmodule CashLensWeb.CategoryLive.Index do
         </div>
       </div>
 
+      <%!--
+        Reported, never resolved. `AutoCategorizer` takes the first category the
+        database returns and the query has no `order_by`, so an ambiguous
+        description lands wherever physical row order puts it -- and an ordinary
+        edit to either category can flip it. Which one should own the
+        description is a judgement about meaning, so the screen names the clash
+        and leaves the call to the person reading it.
+      --%>
+      <div
+        :if={@keyword_conflicts != []}
+        id="keyword-conflicts"
+        class="rounded-2xl border border-warning/40 bg-warning/10 p-4 space-y-2"
+      >
+        <div class="flex items-start gap-2">
+          <.icon name="hero-exclamation-triangle" class="size-4 text-warning shrink-0 mt-0.5" />
+          <div class="min-w-0">
+            <p class="text-xs font-black">
+              {length(@keyword_conflicts)} palavra{if length(@keyword_conflicts) != 1,
+                do: "s"}-chave em conflito
+            </p>
+            <p class="text-[11px] opacity-70 mt-0.5">
+              Descrições que casam com as duas regras vão para uma categoria imprevisível, que pode
+              mudar sozinha ao editar qualquer uma delas. Encurte ou remova uma das palavras.
+            </p>
+          </div>
+        </div>
+
+        <ul class="space-y-1 pl-6">
+          <li :for={conflict <- @keyword_conflicts} class="text-[11px]">
+            <span class="font-mono font-bold">{conflict.shadowed_by_text}</span>
+            <span class="opacity-60">em</span>
+            <span class="font-bold">{conflict.shadowed_by.name}</span>
+            <span :if={conflict.exact?} class="opacity-60">está também em</span>
+            <span :if={!conflict.exact?} class="opacity-60">também casa com</span>
+            <span :if={!conflict.exact?} class="font-mono font-bold">{conflict.text}</span>
+            <span :if={!conflict.exact?} class="opacity-60">em</span>
+            <span class="font-bold">{conflict.category.name}</span>
+          </li>
+        </ul>
+      </div>
+
       <div class="bg-base-100 rounded-2xl border border-base-300 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div class="flex items-center gap-1.5 p-1 bg-base-200 rounded-xl overflow-x-auto text-xs font-bold">
           <button
@@ -411,7 +452,11 @@ defmodule CashLensWeb.CategoryLive.Index do
   end
 
   defp load_categories(socket) do
-    assign(socket, :categories, Categories.list_categories())
+    categories = Categories.list_categories()
+
+    socket
+    |> assign(:categories, categories)
+    |> assign(:keyword_conflicts, Categories.keyword_conflicts(categories))
   end
 
   # The tree is derived on every render pass from the loaded list plus the

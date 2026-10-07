@@ -33,6 +33,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:bulk_selected_ids, MapSet.new())
      |> assign(:bulk_create_rule, false)
      |> assign(:bulk_rule_keyword, "")
+     |> assign(:bulk_rule_conflicts, [])
      |> assign(:pending_transaction_id, nil)
      |> assign(
        :category_form,
@@ -448,7 +449,10 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("update_bulk_rule_keyword", %{"value" => value}, socket) do
-    {:noreply, assign(socket, :bulk_rule_keyword, value)}
+    {:noreply,
+     socket
+     |> assign(:bulk_rule_keyword, value)
+     |> assign_rule_conflicts(value)}
   end
 
   @impl true
@@ -971,9 +975,23 @@ defmodule CashLensWeb.TransactionLive.Index do
   # ADMINISTRADORA DE CONSORC" matches one boleto, while the prefix matches
   # every one of them.
   defp reset_bulk_rule(socket, description) do
+    keyword = description || ""
+
     socket
     |> assign(:bulk_create_rule, false)
-    |> assign(:bulk_rule_keyword, description || "")
+    |> assign(:bulk_rule_keyword, keyword)
+    |> assign_rule_conflicts(keyword)
+  end
+
+  # A keyword another category already claims makes the import ambiguous:
+  # `AutoCategorizer` matches by substring and keeps the first category the
+  # database returns, in no particular order. The modal says so before the rule
+  # exists, and still lets it be created -- which category should own an
+  # ambiguous description is the user's call, not a validation.
+  defp assign_rule_conflicts(socket, keyword) do
+    category_id = socket.assigns.bulk_confirmation && socket.assigns.bulk_confirmation.category_id
+
+    assign(socket, :bulk_rule_conflicts, Categories.keyword_conflicts_for(keyword, category_id))
   end
 
   defp maybe_create_rule(%{assigns: %{bulk_create_rule: true, bulk_rule_keyword: keyword}}, id) do
@@ -987,6 +1005,13 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   defp maybe_create_rule(_socket, _category_id), do: nil
+
+  # The warning is read from inside the category being applied, so it names the
+  # OTHER one -- the category the user is not currently choosing.
+  defp bulk_conflict_other(%{category: %{id: id}, shadowed_by: other}, %{category_id: id}),
+    do: other.name
+
+  defp bulk_conflict_other(%{category: category}, _bulk), do: category.name
 
   defp bulk_flash(count, nil), do: "#{count} transações categorizadas!"
 

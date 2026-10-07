@@ -594,4 +594,131 @@ defmodule CashLensWeb.CategoryLiveTest do
       assert has_element?(index_live, "#category-form")
     end
   end
+
+  describe "keyword conflict warnings" do
+    test "the screen stays quiet when no keyword overlaps another category", %{conn: conn} do
+      category_fixture(%{name: "Gás", keywords: "COMGAS"})
+      category_fixture(%{name: "Água", keywords: "SABESP"})
+
+      {:ok, live, _html} = live(conn, ~p"/categories")
+
+      refute has_element?(live, "#keyword-conflicts")
+    end
+
+    test "the screen names both sides of a clash", %{conn: conn} do
+      category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR"})
+      category_fixture(%{name: "Cabeleireiro", keywords: "ALEX HAIR"})
+
+      {:ok, live, _html} = live(conn, ~p"/categories")
+
+      assert has_element?(live, "#keyword-conflicts")
+      html = live |> element("#keyword-conflicts") |> render()
+      assert html =~ "ALEX HAIR"
+      assert html =~ "Cabeleireiro"
+      assert html =~ "HAIR"
+      assert html =~ "Cuidados Pessoais"
+    end
+
+    test "the form warns while the keyword is being typed, and still lets it be saved",
+         %{conn: conn} do
+      category_fixture(%{name: "Cabeleireiro", keywords: "ALEX HAIR"})
+
+      {:ok, live, _html} = live(conn, ~p"/categories/new")
+
+      refute has_element?(live, "#form-keyword-conflicts")
+
+      live
+      |> form("#category-form", category: %{name: "Cuidados Pessoais", keywords: "HAIR"})
+      |> render_change()
+
+      assert has_element?(live, "#form-keyword-conflicts")
+
+      warning = live |> element("#form-keyword-conflicts") |> render()
+      assert warning =~ "Cabeleireiro"
+      assert warning =~ "também casa com"
+
+      # A warning, not a validation: the user decides which category should own
+      # the description, so saving is never blocked.
+      live
+      |> form("#category-form", category: %{name: "Cuidados Pessoais", keywords: "HAIR"})
+      |> render_submit()
+
+      assert_patch(live, ~p"/categories")
+      assert Repo.get_by(Category, name: "Cuidados Pessoais").keywords == "HAIR"
+    end
+
+    test "two categories claiming the same text read as a duplicate, not as a shadow" do
+      # The shadow phrasing names both keywords, which for identical text reads
+      # "HAIR e HAIR casam com a mesma descrição" -- nonsense to anyone reading it.
+      pessoais = category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR"})
+      cabelo = category_fixture(%{name: "Cabeleireiro", keywords: "HAIR"})
+
+      assert [conflict] = Categories.keyword_conflicts()
+      assert conflict.exact?
+      assert conflict.text == conflict.shadowed_by_text
+
+      assert Enum.sort([conflict.category.id, conflict.shadowed_by.id]) ==
+               Enum.sort([pessoais.id, cabelo.id])
+    end
+
+    test "a shadow is not flagged as an exact duplicate" do
+      category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR"})
+      category_fixture(%{name: "Cabeleireiro", keywords: "ALEX HAIR"})
+
+      assert [conflict] = Categories.keyword_conflicts()
+      refute conflict.exact?
+    end
+
+    test "the form says 'já é usada por' for an identical keyword", %{conn: conn} do
+      category_fixture(%{name: "Cabeleireiro", keywords: "HAIR"})
+
+      {:ok, live, _html} = live(conn, ~p"/categories/new")
+
+      live
+      |> form("#category-form", category: %{name: "Cuidados Pessoais", keywords: "HAIR"})
+      |> render_change()
+
+      warning = live |> element("#form-keyword-conflicts") |> render()
+      assert warning =~ "já é usada por"
+      assert warning =~ "Cabeleireiro"
+      refute warning =~ "também casa com"
+    end
+
+    test "the form checks every keyword in the field, not only the first", %{conn: conn} do
+      category_fixture(%{name: "Cabeleireiro", keywords: "ALEX HAIR"})
+
+      {:ok, live, _html} = live(conn, ~p"/categories/new")
+
+      live
+      |> form("#category-form", category: %{name: "Pessoais", keywords: "SEPHORA, GRANADO, HAIR"})
+      |> render_change()
+
+      assert has_element?(live, "#form-keyword-conflicts")
+    end
+
+    test "editing a category does not warn about its own keywords", %{conn: conn} do
+      category = category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR, ALEX HAIR"})
+
+      {:ok, live, _html} = live(conn, ~p"/categories/#{category.id}/edit")
+
+      refute has_element?(live, "#form-keyword-conflicts")
+    end
+
+    test "the banner clears once the clash is edited away", %{conn: conn} do
+      category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR"})
+      cabelo = category_fixture(%{name: "Cabeleireiro", keywords: "ALEX HAIR"})
+
+      {:ok, live, _html} = live(conn, ~p"/categories")
+      assert has_element?(live, "#keyword-conflicts")
+
+      {:ok, live, _html} = live(conn, ~p"/categories/#{cabelo.id}/edit")
+
+      live
+      |> form("#category-form", category: %{name: "Cabeleireiro", keywords: "ALEX STUDIO"})
+      |> render_submit()
+
+      assert_patch(live, ~p"/categories")
+      refute has_element?(live, "#keyword-conflicts")
+    end
+  end
 end

@@ -206,6 +206,64 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       assert CashLens.Categories.get_category!(other.id).keywords in [nil, ""]
     end
 
+    test "the rule field warns when another category already claims the text", %{conn: conn} do
+      # `AutoCategorizer` keeps the first category the database returns, so a
+      # keyword two categories both claim sends the import somewhere nobody
+      # chose. The modal says so before the rule exists.
+      category_fixture(name: "Cabeleireiro", keywords: "ALEX HAIR")
+      cat = category_fixture(name: "Cuidados Pessoais", keywords: nil)
+      tx1 = transaction_fixture(description: "PAG*ALEX HAIR STUDIO")
+      transaction_fixture(description: "PAG*ALEX HAIR STUDIO")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_click(live, "update_category", %{"transaction_id" => tx1.id, "category_id" => cat.id})
+
+      render_click(live, "toggle_bulk_rule", %{})
+      render_keyup(live, "update_bulk_rule_keyword", %{"value" => "HAIR"})
+
+      assert has_element?(live, "#bulk-rule-conflicts")
+      assert live |> element("#bulk-rule-conflicts") |> render() =~ "ALEX HAIR"
+
+      # A warning, not a block: the rule is still created if the user wants it.
+      live |> element("button[phx-click='apply_bulk_category']") |> render_click()
+      assert CashLens.Categories.get_category!(cat.id).keywords == "HAIR"
+    end
+
+    test "the rule field stays quiet when the text clashes with nothing", %{conn: conn} do
+      category_fixture(name: "Cabeleireiro", keywords: "ALEX HAIR")
+      cat = category_fixture(name: "Mercado", keywords: nil)
+      tx1 = transaction_fixture(description: "GRUPO FARTURA DE HORT")
+      transaction_fixture(description: "GRUPO FARTURA DE HORT")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_click(live, "update_category", %{"transaction_id" => tx1.id, "category_id" => cat.id})
+
+      render_click(live, "toggle_bulk_rule", %{})
+
+      refute has_element?(live, "#bulk-rule-conflicts")
+    end
+
+    test "the warning follows the text as it is edited", %{conn: conn} do
+      category_fixture(name: "Cabeleireiro", keywords: "ALEX HAIR")
+      cat = category_fixture(name: "Cuidados Pessoais", keywords: nil)
+      tx1 = transaction_fixture(description: "PAG*ALEX HAIR STUDIO")
+      transaction_fixture(description: "PAG*ALEX HAIR STUDIO")
+
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_click(live, "update_category", %{"transaction_id" => tx1.id, "category_id" => cat.id})
+
+      render_click(live, "toggle_bulk_rule", %{})
+
+      render_keyup(live, "update_bulk_rule_keyword", %{"value" => "HAIR"})
+      assert has_element?(live, "#bulk-rule-conflicts")
+
+      render_keyup(live, "update_bulk_rule_keyword", %{"value" => "SEPHORA"})
+      refute has_element?(live, "#bulk-rule-conflicts")
+    end
+
     test "handle_info category_created with target_transaction_id", %{conn: conn} do
       tx = transaction_fixture(description: "New Shop")
       {:ok, index_live, _html} = live(conn, ~p"/transactions")

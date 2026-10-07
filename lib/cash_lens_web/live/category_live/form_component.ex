@@ -35,6 +35,7 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
      |> assign(:category, category)
      |> assign(:fixo_hint, @fixo_hint)
      |> assign(:parent_options, parent_options(category, action))
+     |> assign(:keyword_conflicts, conflicts_for(category.keywords, category.id))
      |> assign(:form, to_form(Categories.change_category(category, %{})))}
   end
 
@@ -158,6 +159,33 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
             vinculadas a esta categoria.
           </p>
 
+          <div
+            :if={@keyword_conflicts != []}
+            id="form-keyword-conflicts"
+            class="rounded-xl border border-warning/40 bg-warning/10 p-3 -mt-2"
+          >
+            <p class="text-[11px] font-black flex items-center gap-1.5">
+              <.icon name="hero-exclamation-triangle" class="size-3.5 text-warning" />
+              Conflito com outra categoria
+            </p>
+            <ul class="mt-1 space-y-0.5">
+              <li
+                :for={conflict <- @keyword_conflicts}
+                class="text-[11px] opacity-80 flex flex-wrap items-baseline gap-1"
+              >
+                <span class="font-mono font-bold">{conflict.text}</span>
+                <span :if={conflict.exact?} class="opacity-60">já é usada por</span>
+                <span :if={!conflict.exact?} class="opacity-60">também casa com</span>
+                <span :if={!conflict.exact?} class="font-mono font-bold">
+                  {conflict.shadowed_by_text}
+                </span>
+                <span :if={!conflict.exact?} class="opacity-60">de</span>
+                <span class="font-bold">{other_category_name(conflict, @category)}</span>
+                <span class="opacity-60">— a categoria que vence é imprevisível.</span>
+              </li>
+            </ul>
+          </div>
+
           <div class="flex items-center justify-end gap-2 pt-6">
             <button type="button" phx-click="close_form_modal" class="btn btn-ghost rounded-xl">
               Cancelar
@@ -172,6 +200,23 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
     """
   end
 
+  # Every keyword in the field is checked, not just the one being typed: a
+  # conflict created by the third term is as silent as one created by the
+  # first, and the field holds the whole list.
+  defp conflicts_for(nil, _category_id), do: []
+
+  defp conflicts_for(keywords, category_id) do
+    keywords
+    |> String.split([",", "\n", "\r\n"])
+    |> Enum.flat_map(&Categories.keyword_conflicts_for(&1, category_id))
+    |> Enum.uniq_by(&{&1.text, &1.category.id, &1.shadowed_by_text, &1.shadowed_by.id})
+  end
+
+  # The warning is read from inside one category, so it names the OTHER one --
+  # the side the person is not currently editing.
+  defp other_category_name(%{category: %{id: id}, shadowed_by: other}, %{id: id}), do: other.name
+  defp other_category_name(%{category: category}, _editing), do: category.name
+
   defp modal_title(:edit), do: "Editar Categoria"
   defp modal_title(_action), do: "Nova Categoria"
 
@@ -179,7 +224,13 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
   def handle_event("validate", %{"category" => category_params}, socket) do
     changeset = Categories.change_category(socket.assigns.category, category_params)
 
-    {:noreply, assign(socket, :form, to_form(changeset, action: :validate))}
+    {:noreply,
+     socket
+     |> assign(:form, to_form(changeset, action: :validate))
+     |> assign(
+       :keyword_conflicts,
+       conflicts_for(category_params["keywords"], socket.assigns.category.id)
+     )}
   end
 
   def handle_event("save", %{"category" => category_params}, socket) do

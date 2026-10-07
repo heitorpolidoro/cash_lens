@@ -363,4 +363,93 @@ defmodule CashLens.CategoriesTest do
       assert updated.keywords == "PAG*Restaurante Silva"
     end
   end
+
+  describe "keyword_conflicts/1" do
+    import CashLens.CategoriesFixtures
+
+    test "a clean board reports nothing" do
+      category_fixture(%{name: "Gás", keywords: "COMGAS"})
+      category_fixture(%{name: "Água", keywords: "SABESP"})
+
+      assert Categories.keyword_conflicts() == []
+    end
+
+    test "a keyword contained in another category's keyword is reported, shadowed side first" do
+      # The real case: "PAG*ALEX HAIR STUDIO" matches both rules, and which one
+      # wins is the physical row order, not a decision anyone made.
+      pessoais = category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR, SEPHORA"})
+      cabelo = category_fixture(%{name: "Cabeleireiro", keywords: "ALEX HAIR"})
+
+      assert [conflict] = Categories.keyword_conflicts()
+      assert conflict.text == "HAIR"
+      assert conflict.category.id == pessoais.id
+      assert conflict.shadowed_by_text == "ALEX HAIR"
+      assert conflict.shadowed_by.id == cabelo.id
+    end
+
+    test "two categories claiming the very same keyword are reported once, not twice" do
+      category_fixture(%{name: "Mercado", keywords: "CARREFOUR"})
+      category_fixture(%{name: "Combustível", keywords: "CARREFOUR"})
+
+      assert [conflict] = Categories.keyword_conflicts()
+      assert conflict.text == "CARREFOUR"
+      assert conflict.shadowed_by_text == "CARREFOUR"
+      assert conflict.category.id != conflict.shadowed_by.id
+    end
+
+    test "case and spacing never hide a conflict" do
+      category_fixture(%{name: "Mercado", keywords: "carrefour"})
+      category_fixture(%{name: "Combustível", keywords: "  CARREFOUR  "})
+
+      assert [_conflict] = Categories.keyword_conflicts()
+    end
+
+    test "a category's own keywords never conflict with each other" do
+      # Overlapping keywords inside one category are harmless: whichever
+      # matches, the transaction lands in the same place.
+      category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR, ALEX HAIR"})
+
+      assert Categories.keyword_conflicts() == []
+    end
+  end
+
+  describe "keyword_conflicts_for/2" do
+    import CashLens.CategoriesFixtures
+
+    test "warns about a keyword another category already claims" do
+      mercado = category_fixture(%{name: "Mercado", keywords: "CARREFOUR"})
+      combustivel = category_fixture(%{name: "Combustível", keywords: nil})
+
+      assert [conflict] = Categories.keyword_conflicts_for("CARREFOUR", combustivel.id)
+      assert conflict.shadowed_by.id == mercado.id or conflict.category.id == mercado.id
+    end
+
+    test "warns when the new keyword would shadow another category's" do
+      cabelo = category_fixture(%{name: "Cabeleireiro", keywords: "ALEX HAIR"})
+      pessoais = category_fixture(%{name: "Cuidados Pessoais", keywords: nil})
+
+      assert [conflict] = Categories.keyword_conflicts_for("HAIR", pessoais.id)
+      assert conflict.text == "HAIR"
+      assert conflict.shadowed_by.id == cabelo.id
+    end
+
+    test "a keyword the category itself already has is not a conflict with itself" do
+      pessoais = category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR"})
+
+      assert Categories.keyword_conflicts_for("ALEX HAIR", pessoais.id) == []
+    end
+
+    test "a blank keyword warns about nothing" do
+      category_fixture(%{name: "Mercado", keywords: "CARREFOUR"})
+
+      assert Categories.keyword_conflicts_for("   ", Ecto.UUID.generate()) == []
+    end
+
+    test "an unrelated keyword warns about nothing" do
+      category_fixture(%{name: "Mercado", keywords: "CARREFOUR"})
+      outra = category_fixture(%{name: "Combustível", keywords: nil})
+
+      assert Categories.keyword_conflicts_for("IPIRANGA", outra.id) == []
+    end
+  end
 end
