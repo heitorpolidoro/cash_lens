@@ -50,10 +50,6 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
     end
   end
 
-  def handle_event("cancel_duplicate", _params, socket) do
-    {:noreply, socket |> assign(:duplicate_of, nil) |> assign(:pending_params, nil)}
-  end
-
   @impl true
   def handle_event("validate", %{"transaction" => params}, socket) do
     {socket, params} = take_amount(socket, params)
@@ -63,7 +59,14 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
       |> Transactions.change_transaction(params)
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, :form, to_form(changeset))}
+    # Typing again withdraws the question. Without this the warning would
+    # outlive the values it was asked about, and "Sim" would confirm the old
+    # ones -- the single button has no other way out.
+    {:noreply,
+     socket
+     |> assign(:form, to_form(changeset))
+     |> assign(:duplicate_of, nil)
+     |> assign(:pending_params, nil)}
   end
 
   @impl true
@@ -362,7 +365,7 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
               Se foi cobrado duas vezes de verdade, crie assim mesmo — não mude a data para
               contornar, porque isso quebra a conciliação com a fatura.
             </p>
-            <div class="flex flex-wrap gap-2 pt-1">
+            <div class="pt-1">
               <button
                 id="confirm-duplicate"
                 type="button"
@@ -370,16 +373,7 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
                 phx-target={@myself}
                 class="btn btn-warning btn-sm rounded-xl"
               >
-                Sim, foi cobrado duas vezes
-              </button>
-              <button
-                id="cancel-duplicate"
-                type="button"
-                phx-click="cancel_duplicate"
-                phx-target={@myself}
-                class="btn btn-ghost btn-sm rounded-xl"
-              >
-                Não, era engano
+                Sim, são duas entradas iguais mesmo
               </button>
             </div>
           </div>

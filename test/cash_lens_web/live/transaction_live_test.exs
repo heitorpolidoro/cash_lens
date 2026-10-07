@@ -1054,13 +1054,30 @@ defmodule CashLensWeb.TransactionLiveTest do
       assert Enum.uniq(Enum.map(rows, & &1.fingerprint)) |> length() == 2
     end
 
-    test "declining leaves exactly one charge", %{conn: conn, account: account} do
+    test "typing again withdraws the question and writes nothing", %{
+      conn: conn,
+      account: account
+    } do
+      # The only way out of the question, now that it offers a single button:
+      # correct what you typed and the warning goes with it, so "Sim" can never
+      # confirm values that are no longer on screen.
       {:ok, live, _html} = live(conn, ~p"/transactions/new")
       submit_charge(live, account)
 
       {:ok, live, _html} = live(conn, ~p"/transactions/new")
       submit_charge(live, account)
-      live |> element("#cancel-duplicate") |> render_click()
+      assert has_element?(live, "#duplicate-confirmation")
+
+      live
+      |> form("#transaction-form",
+        transaction: %{
+          date: "2026-09-08",
+          description: "AMAZONMKTPLC*BKSCOMERC",
+          amount: "-245,91",
+          account_id: account.id
+        }
+      )
+      |> render_change()
 
       refute has_element?(live, "#duplicate-confirmation")
 
@@ -1068,6 +1085,17 @@ defmodule CashLensWeb.TransactionLiveTest do
                from(t in CashLens.Transactions.Transaction, where: t.account_id == ^account.id),
                :count
              ) == 1
+    end
+
+    test "the question offers only the affirmative", %{conn: conn, account: account} do
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      submit_charge(live, account)
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+      submit_charge(live, account)
+
+      assert has_element?(live, "#confirm-duplicate", "Sim, são duas entradas iguais mesmo")
+      refute has_element?(live, "#cancel-duplicate")
     end
 
     test "a first-of-its-kind charge never asks", %{conn: conn, account: account} do
