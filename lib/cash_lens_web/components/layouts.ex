@@ -60,6 +60,12 @@ defmodule CashLensWeb.Layouts do
           nav_item("Contas & Cartões", "/accounts", "hero-building-office-2", "/accounts"),
           nav_item("Categorias", "/categories", "hero-tag", "/categories"),
           nav_item(
+            "Contas Recorrentes",
+            "/recurring_items",
+            "hero-arrow-path-rounded-square",
+            "/recurring_items"
+          ),
+          nav_item(
             "Automações & Regras",
             "/automation",
             "hero-adjustments-horizontal",

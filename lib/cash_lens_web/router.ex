@@ -63,6 +63,13 @@ defmodule CashLensWeb.Router do
       live "/installments", InstallmentLive.Index, :index
       live "/forecast", ForecastLive.Index, :index
 
+      # The registered monthly accounts are read by the forecast, the dashboard
+      # and the projection, so they get a screen of their own. The form opens as
+      # an overlaid modal, like the other cadastros.
+      live "/recurring_items", RecurringItemLive.Index, :index
+      live "/recurring_items/new", RecurringItemLive.Index, :new
+      live "/recurring_items/:id/edit", RecurringItemLive.Index, :edit
+
       live "/admin/db", AdminDatabaseLive, :index
       live "/admin/db/:table", AdminDatabaseLive, :show
 

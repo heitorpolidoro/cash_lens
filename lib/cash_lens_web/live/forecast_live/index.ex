@@ -21,6 +21,14 @@ defmodule CashLensWeb.ForecastLive.Index do
   # The ruler (90 days), the minimum KPI (30 days) and the 12-month KPI are three
   # date slices of ONE projection. The windows are deliberately different: 30 days
   # is the short-term risk gauge, 90 days is the forward visibility of the ruler.
+  defp sync_flash(%{created: 0, updated: 0, deactivated: 0}),
+    do: "Histórico sincronizado: nada mudou."
+
+  defp sync_flash(%{created: created, updated: updated, deactivated: deactivated}) do
+    "Histórico sincronizado: #{created} incluídas, #{updated} atualizadas, " <>
+      "#{deactivated} desativadas."
+  end
+
   # This screen shows what a background sync changes, so it hands the flash hook
   # the way to rebuild itself (see CashLensWeb.RecurringSyncFlash).
   defp assign_sync_refresh(socket) do
@@ -70,14 +78,6 @@ defmodule CashLensWeb.ForecastLive.Index do
   def handle_event("sync_all", _params, socket) do
     result = Forecast.sync_all()
     {:noreply, socket |> assign_projection() |> put_flash(:info, sync_flash(result))}
-  end
-
-  defp sync_flash(%{created: 0, updated: 0, deactivated: 0}),
-    do: "Histórico sincronizado: nada mudou."
-
-  defp sync_flash(%{created: created, updated: updated, deactivated: deactivated}) do
-    "Histórico sincronizado: #{created} incluídas, #{updated} atualizadas, " <>
-      "#{deactivated} desativadas."
   end
 
   @impl true

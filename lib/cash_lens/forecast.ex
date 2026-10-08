@@ -121,6 +121,35 @@ defmodule CashLens.Forecast do
   end
 
   @doc """
+  The same list with each item's category preloaded, for a screen that shows
+  which category an item is the recurrence of.
+  """
+  def list_recurring_items_with_category do
+    RecurringItem
+    |> order_by([r], asc: r.day_of_month)
+    |> Repo.all()
+    |> Repo.preload(:category)
+  end
+
+  @doc """
+  Deletes a recurring item.
+
+  Deleting is not the same as switching one off: an item that is off keeps its
+  label, its edits and its place on the screen, and the sync will switch it back
+  on if the bill returns. Deleting means the category is free again, and the
+  next sync may well recreate the item from history -- which is the point when
+  the item was wrong rather than finished.
+  """
+  def delete_recurring_item(%RecurringItem{} = item), do: Repo.delete(item)
+
+  @doc """
+  A changeset for a recurring item, for the form to render errors from.
+  """
+  def change_recurring_item(%RecurringItem{} = item, attrs \\ %{}) do
+    RecurringItem.changeset(item, attrs)
+  end
+
+  @doc """
   Gets a single recurring item by id.
   """
   def get_recurring_item!(id), do: Repo.get!(RecurringItem, id)
