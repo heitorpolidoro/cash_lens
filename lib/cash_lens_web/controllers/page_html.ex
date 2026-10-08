@@ -43,7 +43,15 @@ defmodule CashLensWeb.PageHTML do
   end
 
   @doc """
-  Colour for a payable row, by urgency.
+  Where a bill row points: a real statement opens on its own screen, and
+  anything the projection dated opens on the forecast, which is where its
+  registration lives.
+  """
+  def bill_link(%{statement_id: id}) when not is_nil(id), do: ~p"/statements?id=#{id}"
+  def bill_link(_bill), do: ~p"/forecast"
+
+  @doc """
+  Colour for a bill row, by urgency.
   """
   def due_classes(:overdue), do: "text-rose-600"
   def due_classes(:soon), do: "text-amber-600"

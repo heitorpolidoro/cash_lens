@@ -3,6 +3,7 @@ defmodule CashLensWeb.PageController do
 
   alias CashLens.Accounting
   alias CashLens.CreditCards
+  alias CashLens.Forecast
   alias CashLens.Accounts
   alias CashLens.Transactions
 
@@ -71,7 +72,7 @@ defmodule CashLensWeb.PageController do
       chart_data: chart_data,
       historical: historical,
       closed_statements: CreditCards.closed_without_statement(),
-      payable: CreditCards.payable_statements(CreditCards.list_statements()),
+      upcoming: Forecast.upcoming_bills(),
       today: Date.utc_today()
     )
   end

@@ -20,6 +20,11 @@ defmodule CashLens.Forecast do
   @history_months 6
   @min_occurrences 2
   @default_horizon_days 365
+
+  # A month is the window a bill list is read in: it covers one full cycle of
+  # every card and every registered account exactly once.
+  @upcoming_days 30
+  @upcoming_limit 8
   @baseline_months 6
   @volatility_months 12
 
@@ -294,6 +299,77 @@ defmodule CashLens.Forecast do
     projection
     |> occurrences_within(days)
     |> Enum.reject(& &1[:baseline])
+  end
+
+  @doc """
+  The bills falling due in the next `days` days, soonest first.
+
+  Everything that leaves the account on a date it is already possible to name:
+  the card bills, the registered monthly accounts, and the off-card commitments
+  -- the three the projection already dates. Income is left out; this answers
+  "what do I owe soon", not "what does the month look like".
+
+  A month whose statement has not been imported is still a bill that is coming,
+  so the projection's estimate for it is listed and marked as one. Reading an
+  estimate as a bill is the mistake the flag exists to prevent, and leaving the
+  card out entirely is the bigger one: it reads as nothing to pay.
+  """
+  def upcoming_bills(days \\ @upcoming_days, limit \\ @upcoming_limit) do
+    rows =
+      days
+      |> project()
+      |> ruler_occurrences(days)
+      |> Enum.filter(&Decimal.negative?(&1.item.amount))
+      |> Enum.map(&bill_row/1)
+
+    {shown, hidden} = Enum.split(rows, limit)
+
+    %{
+      shown: shown,
+      hidden_count: length(hidden),
+      # What is cut off still has to be a number. A list that stops at eight
+      # would otherwise hide the month's largest bill behind "e mais 17".
+      hidden_total: sum_amounts(hidden),
+      last_date: rows |> List.last() |> then(&(&1 && &1.date)),
+      total: sum_amounts(rows),
+      days: days
+    }
+  end
+
+  defp sum_amounts(rows), do: Enum.reduce(rows, Decimal.new(0), &Decimal.add(&2, &1.amount))
+
+  defp bill_row(occurrence) do
+    base = %{
+      date: occurrence.date,
+      label: occurrence.item.label,
+      amount: Decimal.abs(occurrence.item.amount)
+    }
+
+    cond do
+      Map.has_key?(occurrence, :origin) ->
+        Map.merge(base, %{
+          key: "card-#{occurrence.item.id}-#{occurrence.date}",
+          kind: :statement,
+          estimated?: occurrence.origin == :estimado,
+          statement_id: Map.get(occurrence, :statement_id)
+        })
+
+      Map.has_key?(occurrence, :commitment) ->
+        Map.merge(base, %{
+          key: "commitment-#{occurrence.commitment.group_id}-#{occurrence.date}",
+          kind: :commitment,
+          estimated?: false,
+          statement_id: nil
+        })
+
+      true ->
+        Map.merge(base, %{
+          key: "recurring-#{occurrence.item.id}-#{occurrence.date}",
+          kind: :recurring,
+          estimated?: false,
+          statement_id: nil
+        })
+    end
   end
 
   @doc """
@@ -666,7 +742,9 @@ defmodule CashLens.Forecast do
 
     case statement_for_month(account.id, month) do
       %Statement{payment_transaction_id: nil} = s ->
-        build_card_occurrence(account, s.due_date, statement_amount(s), :boleto, nil)
+        account
+        |> build_card_occurrence(s.due_date, statement_amount(s), :boleto, nil)
+        |> Map.put(:statement_id, s.id)
 
       %Statement{} ->
         nil

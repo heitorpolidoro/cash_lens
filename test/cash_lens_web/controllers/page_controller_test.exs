@@ -244,137 +244,95 @@ defmodule CashLensWeb.PageControllerTest do
     defp months_ago(%Date{year: y, month: m}, n), do: months_ago(Date.new!(y, m - 1, 1), n - 1)
   end
 
-  describe "faturas a pagar" do
-    test "lists each closed unpaid statement with its due date", %{conn: conn} do
-      card = account_fixture(%{is_credit_card: true, name: "Ourocard"})
+  describe "contas a pagar" do
+    import CashLens.ForecastFixtures
+    import CashLens.CategoriesFixtures
+
+    defp bill_on(days_ahead, label, amount) do
+      day = Date.utc_today() |> Date.add(days_ahead) |> Map.fetch!(:day)
+
+      recurring_item_fixture(%{
+        label: label,
+        day_of_month: day,
+        amount: amount,
+        category_id: category_fixture(%{type: "fixed", name: label}).id
+      })
+    end
+
+    test "lists the next bills with how their date reads from today", %{conn: conn} do
+      bill_on(2, "Internet", "-241.99")
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert html =~ "upcoming-bills"
+      assert html =~ "Contas a pagar"
+      assert html =~ "Internet"
+      assert html =~ "vence em 2 dias"
+      assert html =~ "241,99"
+      assert html =~ "nos próximos 30 dias"
+    end
+
+    test "a card bill links to its statement, a registered account to the forecast",
+         %{conn: conn} do
+      bill_on(2, "Internet", "-241.99")
+
+      card =
+        account_fixture(%{is_credit_card: true, name: "Ourocard", closing_day: 3, due_day: 10})
+
+      due = Date.add(Date.utc_today(), 4)
 
       statement =
         statement_fixture(%{
           account: card,
-          competencia: ~D[2026-10-01],
-          due_date: Date.add(Date.utc_today(), 8),
+          competencia: Date.beginning_of_month(due),
+          due_date: due,
           total_a_pagar: Decimal.new("14075.87")
         })
 
       html = conn |> get(~p"/") |> html_response(200)
 
-      assert html =~ "payable-statements"
-      assert html =~ "payable-#{statement.id}"
-      assert html =~ "Faturas a pagar"
-      assert html =~ "Ourocard"
-      assert html =~ "vence em 8 dias"
-      assert html =~ "14.075,87"
+      assert html =~ "/statements?id=#{statement.id}"
+      assert html =~ "/forecast"
     end
 
-    test "says a bill has slipped, and colours it apart from one still ahead",
-         %{conn: conn} do
-      # The colour is read off the row itself: `text-rose-600` also dresses the
-      # Despesas KPI, so asserting it against the whole page proves nothing.
-      amex = account_fixture(%{is_credit_card: true, name: "Amex"})
-      ouro = account_fixture(%{is_credit_card: true, name: "Ourocard"})
+    test "an estimated card bill says so", %{conn: conn} do
+      # No statement for the month, so the projection guesses from history. It is
+      # a bill that is coming, but it is not a bill that arrived.
+      card =
+        account_fixture(%{is_credit_card: true, name: "Ourocard", closing_day: 3, due_day: 10})
 
-      atrasada =
-        statement_fixture(%{
-          account: amex,
-          competencia: ~D[2026-09-01],
-          due_date: Date.add(Date.utc_today(), -3),
-          total_a_pagar: Decimal.new("100.00")
-        })
+      for months_back <- 1..3 do
+        due = Date.add(Date.utc_today(), -30 * months_back)
 
-      distante =
-        statement_fixture(%{
-          account: ouro,
-          competencia: ~D[2026-10-01],
-          due_date: Date.add(Date.utc_today(), 30),
-          total_a_pagar: Decimal.new("200.00")
-        })
-
-      html = conn |> get(~p"/") |> html_response(200)
-
-      assert html =~ "venceu há 3 dias"
-      assert due_row_class(html, atrasada) =~ "text-rose-600"
-      refute due_row_class(html, distante) =~ "text-rose-600"
-    end
-
-    test "a bill due within the week is set apart from one further out", %{conn: conn} do
-      amex = account_fixture(%{is_credit_card: true, name: "Amex"})
-      ouro = account_fixture(%{is_credit_card: true, name: "Ourocard"})
-
-      proxima =
-        statement_fixture(%{
-          account: amex,
-          competencia: ~D[2026-10-01],
-          due_date: Date.add(Date.utc_today(), 3),
-          total_a_pagar: Decimal.new("100.00")
-        })
-
-      distante =
-        statement_fixture(%{
-          account: ouro,
-          competencia: ~D[2026-10-01],
-          due_date: Date.add(Date.utc_today(), 30),
-          total_a_pagar: Decimal.new("200.00")
-        })
-
-      html = conn |> get(~p"/") |> html_response(200)
-
-      assert due_row_class(html, proxima) =~ "text-amber-600"
-      refute due_row_class(html, distante) =~ "text-amber-600"
-    end
-
-    defp due_row_class(html, statement) do
-      {:ok, re} = Regex.compile(~s{id="payable-due-#{statement.id}"\s+class="([^"]*)"})
-
-      case Regex.run(re, html) do
-        [_, classes] -> classes
-        nil -> flunk("no due row rendered for statement #{statement.id}")
-      end
-    end
-
-    test "names a credit rather than showing a bill of minus money", %{conn: conn} do
-      card = account_fixture(%{is_credit_card: true, name: "Amazon"})
-
-      statement_fixture(%{
-        account: card,
-        competencia: ~D[2026-10-01],
-        due_date: Date.add(Date.utc_today(), 2),
-        total_a_pagar: Decimal.new("-226.32")
-      })
-
-      html = conn |> get(~p"/") |> html_response(200)
-
-      assert html =~ "crédito a favor"
-    end
-
-    test "is absent when nothing is owed", %{conn: conn} do
-      account_fixture(%{name: "Conta Corrente"})
-
-      refute conn |> get(~p"/") |> html_response(200) =~ "payable-statements"
-    end
-
-    test "leaves out a statement already paid", %{conn: conn} do
-      card = account_fixture(%{is_credit_card: true, name: "Amazon"})
-      conta = account_fixture(%{name: "Conta"})
-
-      statement =
         statement_fixture(%{
           account: card,
-          competencia: ~D[2026-10-01],
-          due_date: Date.add(Date.utc_today(), 5),
-          total_a_pagar: Decimal.new("80.00")
+          competencia: Date.beginning_of_month(due),
+          due_date: due,
+          total_a_pagar: Decimal.new("1000.00")
         })
+      end
 
-      payment =
-        transaction_fixture(%{
-          account_id: conta.id,
-          amount: "-80.00",
-          description: "PAGAMENTO FATURA"
-        })
+      html = conn |> get(~p"/") |> html_response(200)
 
-      {:ok, _} =
-        CashLens.CreditCards.update_statement(statement, %{payment_transaction_id: payment.id})
+      assert html =~ "estimativa"
+    end
 
-      refute conn |> get(~p"/") |> html_response(200) =~ "payable-statements"
+    test "the tail carries its own amount, not just a count", %{conn: conn} do
+      for day <- 1..10, do: bill_on(day, "Conta #{day}", "-10.00")
+
+      bill_on(12, "Conta grande", "-9000.00")
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert html =~ "upcoming-rest"
+      assert html =~ "e mais 3"
+      assert html =~ "9.020,00"
+    end
+
+    test "is absent when nothing is due", %{conn: conn} do
+      account_fixture(%{name: "Conta Corrente"})
+
+      refute conn |> get(~p"/") |> html_response(200) =~ "upcoming-bills"
     end
   end
 end

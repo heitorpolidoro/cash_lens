@@ -1821,4 +1821,123 @@ defmodule CashLens.ForecastTest do
       refute Forecast.monthly_volatility(12, today)
     end
   end
+
+  describe "upcoming_bills/2" do
+    import CashLens.AccountsFixtures
+    import CashLens.CreditCardsFixtures
+
+    setup do
+      account_fixture(%{balance: "1000.00"})
+      today = Date.utc_today()
+      %{today: today}
+    end
+
+    defp bill_on(days_ahead, label, amount) do
+      day = Date.utc_today() |> Date.add(days_ahead) |> Map.fetch!(:day)
+
+      recurring_item_fixture(%{
+        label: label,
+        day_of_month: day,
+        amount: amount,
+        category_id: category_fixture(%{type: "fixed", name: label}).id
+      })
+    end
+
+    test "lists the registered accounts falling due, soonest first" do
+      # Days 1..3 ahead so the month cannot roll over mid-test.
+      bill_on(3, "Condomínio", "-461.39")
+      bill_on(1, "Gás", "-47.48")
+
+      bills = Forecast.upcoming_bills(10)
+
+      assert Enum.map(bills.shown, & &1.label) == ["Gás", "Condomínio"]
+      assert Enum.map(bills.shown, & &1.kind) == [:recurring, :recurring]
+      assert Decimal.equal?(bills.total, Decimal.new("508.87"))
+    end
+
+    test "leaves income out: this answers what is owed, not what the month looks like" do
+      bill_on(1, "Luz", "-334.16")
+      bill_on(2, "Salário", "35000.00")
+
+      bills = Forecast.upcoming_bills(10)
+
+      assert Enum.map(bills.shown, & &1.label) == ["Luz"]
+      assert Decimal.equal?(bills.total, Decimal.new("334.16"))
+    end
+
+    test "a real unpaid statement is listed as a bill, and links to itself" do
+      card =
+        account_fixture(%{is_credit_card: true, name: "Ourocard", closing_day: 3, due_day: 10})
+
+      due = Date.add(Date.utc_today(), 4)
+
+      statement =
+        statement_fixture(%{
+          account: card,
+          competencia: Date.beginning_of_month(due),
+          due_date: due,
+          total_a_pagar: Decimal.new("14075.87")
+        })
+
+      bills = Forecast.upcoming_bills(20)
+
+      assert [bill] = Enum.filter(bills.shown, &(&1.kind == :statement))
+      assert bill.label == "Fatura Ourocard"
+      assert bill.statement_id == statement.id
+      refute bill.estimated?
+      assert Decimal.equal?(bill.amount, Decimal.new("14075.87"))
+    end
+
+    test "a statement already paid is not a bill to pay" do
+      card = account_fixture(%{is_credit_card: true, name: "Amex", closing_day: 3, due_day: 10})
+      conta = account_fixture(%{name: "Conta"})
+      due = Date.add(Date.utc_today(), 4)
+
+      statement =
+        statement_fixture(%{
+          account: card,
+          competencia: Date.beginning_of_month(due),
+          due_date: due,
+          total_a_pagar: Decimal.new("100.00")
+        })
+
+      payment =
+        CashLens.TransactionsFixtures.transaction_fixture(%{
+          account_id: conta.id,
+          amount: "-100.00",
+          description: "PAGAMENTO FATURA"
+        })
+
+      {:ok, _} =
+        CashLens.CreditCards.update_statement(statement, %{payment_transaction_id: payment.id})
+
+      bills = Forecast.upcoming_bills(20)
+
+      assert Enum.filter(bills.shown, &(&1.kind == :statement)) == []
+    end
+
+    test "what does not fit is counted and totalled, not dropped" do
+      # The whole point of the tail: eight small bills can hold a fraction of
+      # the month's money, and a tail that only counted rows would leave the
+      # largest bill invisible behind a number of items.
+      for day <- 1..4, do: bill_on(day, "Conta #{day}", "-10.00")
+
+      bills = Forecast.upcoming_bills(10, 2)
+
+      assert length(bills.shown) == 2
+      assert bills.hidden_count == 2
+      assert Decimal.equal?(bills.hidden_total, Decimal.new("20.00"))
+      assert Decimal.equal?(bills.total, Decimal.new("40.00"))
+      assert bills.last_date == Date.add(Date.utc_today(), 4)
+    end
+
+    test "nothing due is an empty list and a zero total" do
+      bills = Forecast.upcoming_bills(10)
+
+      assert bills.shown == []
+      assert bills.hidden_count == 0
+      assert Decimal.equal?(bills.total, Decimal.new(0))
+      assert bills.last_date == nil
+    end
+  end
 end
