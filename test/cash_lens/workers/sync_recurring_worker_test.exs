@@ -46,6 +46,45 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
     assert_enqueued(worker: SyncRecurringWorker)
   end
 
+  test "the job is queued to run now, not after the uniqueness window" do
+    # The window deduplicates; it does not delay. Reading it as a delay is the
+    # easy mistake, and the one this pins down.
+    assert :ok = SyncRecurringWorker.enqueue()
+
+    assert [job] = Repo.all(Oban.Job)
+    assert job.state == "available"
+    assert DateTime.diff(job.scheduled_at, DateTime.utc_now()) <= 1
+  end
+
+  test "a second request while the first is still waiting is the same request" do
+    assert :ok = SyncRecurringWorker.enqueue()
+    assert :ok = SyncRecurringWorker.enqueue()
+
+    assert Repo.aggregate(Oban.Job, :count) == 1
+  end
+
+  test "a request made after a run is a new request" do
+    # Otherwise the last file of a batch would go unaccounted for: a finished
+    # job never saw the rows written after it.
+    assert :ok = SyncRecurringWorker.enqueue()
+    Oban.drain_queue(queue: :default)
+    assert :ok = SyncRecurringWorker.enqueue()
+
+    assert Repo.aggregate(Oban.Job, :count) == 2
+  end
+
+  test "a request made while a run is in flight is not swallowed by it" do
+    # A job that has already started cannot see rows written after it started,
+    # so it must not stand in for a later request.
+    assert :ok = SyncRecurringWorker.enqueue()
+
+    [job] = Repo.all(Oban.Job)
+    {:ok, _} = job |> Ecto.Changeset.change(state: "executing") |> Repo.update()
+
+    assert :ok = SyncRecurringWorker.enqueue()
+    assert Repo.aggregate(Oban.Job, :count) == 2
+  end
+
   test "enqueue/0 never fails the import that called it" do
     # An import that wrote its rows has done its job: a projection that
     # refreshes on the next import is the smaller problem.

@@ -7,14 +7,23 @@ defmodule CashLens.Workers.SyncRecurringWorker do
   meant the forecast quietly described last season's bills until someone
   remembered to press it.
 
-  `unique` collapses a directory import -- thirty files, thirty results -- into
-  one run, and `sync_all/0` is idempotent anyway: it skips manually edited items
-  and writes the same day and amount for everything else.
+  `unique` collapses the pile-up of a directory import: thirty files enqueue
+  thirty times, and the ones still waiting their turn are the same request, so
+  one of them runs. `sync_all/0` is idempotent anyway -- it skips manually
+  edited items and writes the same day and amount for everything else.
+
+  `:executing` is deliberately NOT in that list. A job that has already started
+  cannot see rows written after it started, so letting it stand in for a later
+  request would leave the last file of a batch unaccounted for until the next
+  import. A run that overlaps the one before it is the cheaper mistake.
+
+  The window is a deduplication window, not a delay: the job is inserted
+  `available` and runs as soon as the queue picks it up.
   """
   use Oban.Worker,
     queue: :default,
     max_attempts: 3,
-    unique: [period: 300, states: [:available, :scheduled, :executing]]
+    unique: [period: 300, states: [:available, :scheduled]]
 
   alias CashLens.Forecast
 
