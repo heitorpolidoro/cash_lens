@@ -8,6 +8,15 @@ defmodule CashLens.ForecastTest do
   import CashLens.CategoriesFixtures
   import CashLens.ForecastFixtures
 
+  # Detection now requires a recent occurrence, so a fixed date drifts out of
+  # range as the calendar moves. Every history fixture is anchored to today.
+  defp history_date(n, day) do
+    today = Date.utc_today()
+    month = today.month - n
+    {year, month} = if month <= 0, do: {today.year - 1, month + 12}, else: {today.year, month}
+    Date.new!(year, month, min(day, Date.days_in_month(Date.new!(year, month, 1))))
+  end
+
   describe "suggest_for_category/1" do
     import CashLens.AccountsFixtures
     import CashLens.TransactionsFixtures
@@ -33,21 +42,21 @@ defmodule CashLens.ForecastTest do
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-04-10],
+        date: history_date(2, 10),
         amount: "-50.00"
       })
 
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-05-12],
+        date: history_date(1, 12),
         amount: "-52.00"
       })
 
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-06-15],
+        date: history_date(0, 15),
         amount: "-55.00"
       })
 
@@ -157,6 +166,126 @@ defmodule CashLens.ForecastTest do
     end
   end
 
+  describe "detection requires a recent occurrence" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    defp three_months(category, account, newest_months_back) do
+      for n <- newest_months_back..(newest_months_back + 2) do
+        transaction_fixture(%{
+          account_id: account.id,
+          category_id: category.id,
+          date: history_date(n, 10),
+          amount: "-50.00"
+        })
+      end
+    end
+
+    test "a bill that stopped appearing is not a recurrence" do
+      # Three occurrences four, five and six months back clears the minimum and
+      # is still not recurring: it stopped.
+      category = category_fixture(%{type: "fixed", name: "Parou"})
+      account = account_fixture()
+      three_months(category, account, 4)
+
+      assert Forecast.suggest_for_category(category) == :no_recent_occurrence
+    end
+
+    test "last month counts, because this month may not be imported yet" do
+      # The cut-off is the first of LAST month on purpose: on the first days of
+      # a month nothing has been loaded yet, and measuring against the current
+      # month would drop every account at once.
+      category = category_fixture(%{type: "fixed", name: "Luz"})
+      account = account_fixture()
+      three_months(category, account, 1)
+
+      assert {:ok, _} = Forecast.suggest_for_category(category)
+    end
+
+    test "two months back is already too old" do
+      category = category_fixture(%{type: "fixed", name: "Antiga"})
+      account = account_fixture()
+      three_months(category, account, 2)
+
+      assert Forecast.suggest_for_category(category) == :no_recent_occurrence
+    end
+
+    test "sync_all creates nothing for a bill that stopped" do
+      category = category_fixture(%{type: "fixed", name: "Parou"})
+      account = account_fixture()
+      three_months(category, account, 4)
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0}
+      assert Forecast.list_recurring_items() == []
+    end
+
+    test "resync says why it cannot, rather than reporting no history" do
+      category = category_fixture(%{type: "fixed", name: "Parou"})
+      account = account_fixture()
+      three_months(category, account, 4)
+
+      item = recurring_item_fixture(%{category_id: category.id})
+
+      assert Forecast.resync_item(item) == {:error, :no_recent_occurrence}
+    end
+  end
+
+  describe "the suggested day" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    defp on_days(category, account, days) do
+      days
+      |> Enum.with_index()
+      |> Enum.each(fn {day, index} ->
+        transaction_fixture(%{
+          account_id: account.id,
+          category_id: category.id,
+          date: history_date(index, day),
+          amount: "-50.00"
+        })
+      end)
+    end
+
+    test "is the day the bill most often lands on" do
+      # 14, 14, 20: the median would say 14 too, so the day that separates them
+      # is 20 -- here the most frequent wins outright.
+      category = category_fixture(%{type: "fixed", name: "Luz"})
+      account = account_fixture()
+      on_days(category, account, [20, 14, 14])
+
+      assert {:ok, %{"day_of_month" => 14}} = Forecast.suggest_for_category(category)
+    end
+
+    test "a repeated late day beats a single early one" do
+      category = category_fixture(%{type: "fixed", name: "Seguro"})
+      account = account_fixture()
+      on_days(category, account, [25, 25, 3])
+
+      assert {:ok, %{"day_of_month" => 25}} = Forecast.suggest_for_category(category)
+    end
+
+    test "the most frequent day wins even when it sits at one end" do
+      # Five months: the 28th twice, then three scattered days. The median of
+      # them is the 15th, which is a day this bill never once landed on.
+      category = category_fixture(%{type: "fixed", name: "Seguro"})
+      account = account_fixture()
+      on_days(category, account, [28, 28, 3, 10, 15])
+
+      assert {:ok, %{"day_of_month" => 28}} = Forecast.suggest_for_category(category)
+    end
+
+    test "falls back to the median when every day is distinct" do
+      # Bills shift around weekends, so with a handful of samples there is often
+      # no most frequent day at all.
+      category = category_fixture(%{type: "fixed", name: "Água"})
+      account = account_fixture()
+      on_days(category, account, [18, 15, 12])
+
+      assert {:ok, %{"day_of_month" => 15}} = Forecast.suggest_for_category(category)
+    end
+  end
+
   describe "sync_all/0" do
     import CashLens.AccountsFixtures
     import CashLens.TransactionsFixtures
@@ -168,14 +297,14 @@ defmodule CashLens.ForecastTest do
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-05-10],
+        date: history_date(1, 10),
         amount: "-50.00"
       })
 
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-06-10],
+        date: history_date(0, 10),
         amount: "-52.00"
       })
 
@@ -205,14 +334,14 @@ defmodule CashLens.ForecastTest do
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-05-10],
+        date: history_date(1, 10),
         amount: "-50.00"
       })
 
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-06-15],
+        date: history_date(0, 15),
         amount: "-60.00"
       })
 
@@ -233,14 +362,14 @@ defmodule CashLens.ForecastTest do
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-05-10],
+        date: history_date(1, 10),
         amount: "-50.00"
       })
 
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-06-15],
+        date: history_date(0, 15),
         amount: "-60.00"
       })
 
@@ -294,14 +423,14 @@ defmodule CashLens.ForecastTest do
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-05-10],
+        date: history_date(1, 10),
         amount: "-50.00"
       })
 
       transaction_fixture(%{
         account_id: account.id,
         category_id: category.id,
-        date: ~D[2026-06-20],
+        date: history_date(0, 20),
         amount: "-99.00"
       })
 

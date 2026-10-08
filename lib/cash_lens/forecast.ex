@@ -49,10 +49,23 @@ defmodule CashLens.Forecast do
   Derives a {day_of_month, amount} suggestion for a fixed category from its
   transaction history (the `CashLens.Accounts.Scopes` cash-accounts scope only,
   last 6 months).
-  Returns `:insufficient_history` when fewer than 2 occurrences exist.
+
+  Returns `:insufficient_history` when fewer than 2 occurrences exist, and
+  `:no_recent_occurrence` when the last one is older than last month.
+
+  Two occurrences anywhere in six months is not a recurrence: a bill seen in
+  January, February and March and never again still cleared that bar, and the
+  projection went on charging it all year. What makes it recurring is that it
+  is still happening.
+
+  The cut-off is the first of LAST month, not of this one, because a month's
+  transactions are only here once its statement has been imported. Measuring
+  against the current month would drop every account whose file has not been
+  loaded yet -- which, on the first days of a month, is all of them.
   """
   def suggest_for_category(%Category{} = category) do
-    since = Date.add(Date.utc_today(), -30 * @history_months)
+    today = Date.utc_today()
+    since = Date.add(today, -30 * @history_months)
 
     rows =
       from(t in Transaction,
@@ -62,12 +75,39 @@ defmodule CashLens.Forecast do
       |> Scopes.cash_accounts_only()
       |> Repo.all()
 
-    if length(rows) < @min_occurrences do
-      :insufficient_history
-    else
-      days = rows |> Enum.map(& &1.date.day) |> Enum.sort()
-      latest = Enum.max_by(rows, & &1.date, Date)
-      {:ok, %{"day_of_month" => median(days), "amount" => latest.amount}}
+    cond do
+      length(rows) < @min_occurrences ->
+        :insufficient_history
+
+      stale?(rows, today) ->
+        :no_recent_occurrence
+
+      true ->
+        latest = Enum.max_by(rows, & &1.date, Date)
+        days = Enum.map(rows, & &1.date.day)
+        {:ok, %{"day_of_month" => typical_day(days), "amount" => latest.amount}}
+    end
+  end
+
+  defp stale?(rows, today) do
+    cutoff = today |> Date.beginning_of_month() |> Date.add(-1) |> Date.beginning_of_month()
+    latest = rows |> Enum.max_by(& &1.date, Date) |> Map.fetch!(:date)
+
+    Date.compare(latest, cutoff) == :lt
+  end
+
+  # The day the bill most often lands on. Bills shift around weekends, so with
+  # a handful of samples every day is often distinct and there is no single
+  # most frequent one -- the median of them all settles it, which is both
+  # well defined and resistant to one outlying month.
+  defp typical_day(days) do
+    days
+    |> Enum.frequencies()
+    |> Enum.group_by(fn {_day, count} -> count end)
+    |> Enum.max_by(fn {count, _pairs} -> count end)
+    |> case do
+      {_count, [{day, _}]} -> day
+      {_count, _tied} -> days |> Enum.sort() |> median()
     end
   end
 
@@ -114,7 +154,7 @@ defmodule CashLens.Forecast do
 
         %{acc | created: acc.created + 1}
 
-      :insufficient_history ->
+      reason when reason in [:insufficient_history, :no_recent_occurrence] ->
         acc
     end
   end
@@ -125,7 +165,7 @@ defmodule CashLens.Forecast do
         {:ok, _} = item |> RecurringItem.changeset(suggestion) |> Repo.update()
         %{acc | updated: acc.updated + 1}
 
-      :insufficient_history ->
+      reason when reason in [:insufficient_history, :no_recent_occurrence] ->
         acc
     end
   end
@@ -195,8 +235,8 @@ defmodule CashLens.Forecast do
         |> RecurringItem.changeset(Map.put(suggestion, "manually_edited", false))
         |> Repo.update()
 
-      :insufficient_history ->
-        {:error, :insufficient_history}
+      reason when reason in [:insufficient_history, :no_recent_occurrence] ->
+        {:error, reason}
     end
   end
 

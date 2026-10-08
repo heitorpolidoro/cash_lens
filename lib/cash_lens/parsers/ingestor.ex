@@ -11,6 +11,7 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Parsers.OurocardTXTParser
   alias CashLens.Parsers.PDFParser
   alias CashLens.Transactions.AutoCategorizer
+  alias CashLens.Workers.SyncRecurringWorker
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.TransferRuleApplier
@@ -110,7 +111,9 @@ defmodule CashLens.Parsers.Ingestor do
 
     case File.read(file_path) do
       {:ok, content} ->
-        process_imported_content(content, account, file_path, notify_fn, dry_run, opts)
+        content
+        |> process_imported_content(account, file_path, notify_fn, dry_run, opts)
+        |> maybe_sync_recurring(dry_run)
 
       {:error, reason} ->
         message = "Could not read file: #{reason}"
@@ -118,6 +121,16 @@ defmodule CashLens.Parsers.Ingestor do
         {:error, message}
     end
   end
+
+  # Detection reads transactions, so an import is the moment its answer can have
+  # changed. A dry run wrote nothing, and a run that imported nothing changed no
+  # history, so neither has anything to re-derive.
+  defp maybe_sync_recurring({:ok, %{imported: imported}} = result, false) when imported > 0 do
+    SyncRecurringWorker.enqueue()
+    result
+  end
+
+  defp maybe_sync_recurring(result, _dry_run), do: result
 
   @doc """
   Imports all supported files from a directory.

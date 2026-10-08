@@ -129,6 +129,14 @@ defmodule CashLensWeb.ForecastLive.Index do
 
       {:error, :insufficient_history} ->
         {:noreply, assign(socket, :form_error, "Histórico insuficiente para ressincronizar.")}
+
+      {:error, :no_recent_occurrence} ->
+        {:noreply,
+         assign(
+           socket,
+           :form_error,
+           "Sem ocorrência desde antes do mês passado: não dá para ressincronizar uma conta que parou de aparecer."
+         )}
     end
   end
 

@@ -770,4 +770,39 @@ defmodule CashLens.Parsers.IngestorTest do
       assert msg =~ "files failed to import"
     end
   end
+
+  describe "an import refreshes the registered monthly accounts" do
+    use Oban.Testing, repo: CashLens.Repo
+
+    import CashLens.AccountsFixtures
+
+    alias CashLens.Workers.SyncRecurringWorker
+
+    test "a real import queues the sync" do
+      # Detection reads transactions, so an import is the moment its answer can
+      # have changed. On a button, the forecast described last season's bills
+      # until someone remembered to press it.
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      assert_enqueued(worker: SyncRecurringWorker)
+    end
+
+    test "a dry run queues nothing: it wrote no history to re-derive from" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {:ok, _} = Ingestor.import_file(account, @bb_sample, dry_run: true)
+      refute_enqueued(worker: SyncRecurringWorker)
+    end
+
+    test "an import that wrote nothing queues nothing" do
+      account = account_fixture(parser_type: "bb_csv")
+
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      Oban.drain_queue(queue: :default)
+
+      assert {:ok, %{imported: 0}} = Ingestor.import_file(account, @bb_sample)
+      refute_enqueued(worker: SyncRecurringWorker)
+    end
+  end
 end
