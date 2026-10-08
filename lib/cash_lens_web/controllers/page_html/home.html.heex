@@ -91,83 +91,93 @@
     the projection already dates. It sits between the KPIs and the chart,
     beside the warning about bills not yet imported: one says a bill is
     missing, this one says a bill is coming.
+
+    A table, because every row answers the same three questions in the same
+    order. Aligned columns read down as fast as across, and the space a
+    headline block would have taken is a few more bills.
   --%>
   <div
     :if={@upcoming.shown != []}
     id="upcoming-bills"
-    class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm grid grid-cols-1 lg:grid-cols-3 gap-6 items-start"
+    class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm"
   >
-    <div>
-      <h2 class="text-xs font-black uppercase tracking-wider text-slate-500">Contas a pagar</h2>
-      <div class="text-2xl font-black text-rose-600 mt-2">
-        {format_currency(@upcoming.total)}
-      </div>
-      <p class="text-xs text-slate-400 mt-1">
-        nos próximos {@upcoming.days} dias
-      </p>
-      <.link
-        href={~p"/forecast"}
-        class="text-xs font-bold text-blue-600 hover:underline mt-3 inline-block"
-      >
-        Ver previsão
-      </.link>
-    </div>
+    <h2 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">
+      Contas a pagar
+    </h2>
 
-    <div class="lg:col-span-2">
-      <div class="divide-y divide-slate-100">
-        <.link
+    <table class="w-full text-sm">
+      <tbody class="divide-y divide-slate-100">
+        <tr
           :for={bill <- @upcoming.shown}
-          href={bill_link(bill)}
           id={"upcoming-#{bill.key}"}
-          class="py-2.5 flex flex-wrap items-center justify-between gap-2 hover:bg-slate-50 rounded-lg px-2 -mx-2 transition"
+          class="hover:bg-slate-50 transition"
         >
-          <div class="min-w-0">
-            <p class="font-bold text-sm text-slate-900 truncate">
-              {bill.label}
-              <%!--
-                An estimate is the projection's guess for a month whose bill has
-                not arrived. Reading it as a bill is the mistake this says out
-                loud; leaving the card out entirely would read as nothing to pay.
-              --%>
-              <span
-                :if={bill.estimated?}
-                class="ml-1 align-middle text-[10px] font-black uppercase tracking-wide bg-slate-100 text-slate-500 rounded px-1.5 py-0.5"
-              >
-                estimativa
-              </span>
-            </p>
-            <p
-              id={"upcoming-due-#{bill.key}"}
-              class={["text-xs font-medium", due_classes(due_urgency(bill.date, @today))]}
+          <td class="py-2 pr-3 font-bold text-slate-900">
+            <.link href={bill_link(bill)} class="hover:underline">{bill.label}</.link>
+            <%!--
+              An estimate is the projection's guess for a month whose bill has
+              not arrived. Reading it as a bill is the mistake this says out
+              loud; leaving the card out entirely would read as nothing to pay.
+            --%>
+            <span
+              :if={bill.estimated?}
+              class="ml-1 align-middle text-[10px] font-black uppercase tracking-wide bg-slate-100 text-slate-500 rounded px-1.5 py-0.5"
             >
-              {due_label(bill.date, @today)}
-              <span class="text-slate-400 font-normal">· {format_date(bill.date)}</span>
-            </p>
-          </div>
-          <p class="font-extrabold text-sm text-slate-900 whitespace-nowrap">
+              estimativa
+            </span>
+          </td>
+          <td
+            id={"upcoming-due-#{bill.key}"}
+            class={[
+              "py-2 pr-3 text-xs font-medium whitespace-nowrap",
+              due_classes(due_urgency(bill.date, @today))
+            ]}
+          >
+            {due_label(bill.date, @today)}
+          </td>
+          <td class="py-2 pr-3 text-xs text-slate-400 whitespace-nowrap">
+            {format_date(bill.date)}
+          </td>
+          <td class="py-2 text-right font-extrabold text-slate-900 whitespace-nowrap">
             {format_currency(bill.amount)}
-          </p>
-        </.link>
-      </div>
+          </td>
+        </tr>
 
-      <%!--
-        The rest carries its own amount, and is a link. Eight rows of small
-        bills can hold a fraction of the month's money, so a tail that only
-        counted rows would leave the largest bill invisible behind a number of
-        items.
-      --%>
-      <.link
-        :if={@upcoming.hidden_count > 0}
-        href={~p"/forecast"}
-        id="upcoming-rest"
-        class="pt-3 mt-1 border-t border-slate-200 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-2 hover:text-slate-800 transition"
-      >
-        <span>
-          e mais {@upcoming.hidden_count} até {format_date(@upcoming.last_date)}
-        </span>
-        <span class="font-black text-slate-900">{format_currency(@upcoming.hidden_total)}</span>
-      </.link>
-    </div>
+        <%!--
+          The tail carries its own amount. The rows that fit can hold a fraction
+          of the month's money, so a tail that only counted items would leave
+          the largest bill invisible behind a number.
+        --%>
+        <tr
+          :if={@upcoming.hidden_count > 0}
+          id="upcoming-rest"
+          class="hover:bg-slate-50 transition"
+        >
+          <td colspan="3" class="py-2 pr-3 text-xs text-slate-500">
+            <.link href={~p"/forecast"} class="hover:underline">
+              e mais {@upcoming.hidden_count} até {format_date(@upcoming.last_date)}
+            </.link>
+          </td>
+          <td class="py-2 text-right font-extrabold text-slate-500 whitespace-nowrap">
+            {format_currency(@upcoming.hidden_total)}
+          </td>
+        </tr>
+      </tbody>
+
+      <tfoot>
+        <tr class="border-t-2 border-slate-200">
+          <td colspan="3" class="pt-3 text-xs font-black uppercase tracking-wider text-slate-500">
+            Total · {@upcoming.days} dias
+          </td>
+          <td
+            id="upcoming-total"
+            class="pt-3 text-right text-lg font-black text-rose-600 whitespace-nowrap"
+          >
+            {format_currency(@upcoming.total)}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
   </div>
   
 <!-- Evolução Financeira + Minhas Contas -->

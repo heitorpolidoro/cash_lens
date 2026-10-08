@@ -24,7 +24,10 @@ defmodule CashLens.Forecast do
   # A month is the window a bill list is read in: it covers one full cycle of
   # every card and every registered account exactly once.
   @upcoming_days 30
-  @upcoming_limit 8
+  # Enough rows to reach past the middle of the month, where the card bills
+  # fall: at eight, a list of small accounts pushed the largest bill of the
+  # month into the tail.
+  @upcoming_limit 14
   @baseline_months 6
   @volatility_months 12
 

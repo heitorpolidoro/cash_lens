@@ -269,7 +269,17 @@ defmodule CashLensWeb.PageControllerTest do
       assert html =~ "Internet"
       assert html =~ "vence em 2 dias"
       assert html =~ "241,99"
-      assert html =~ "nos próximos 30 dias"
+      assert html =~ "Total · 30 dias"
+      assert total_cell(html) =~ "241,99"
+    end
+
+    defp total_cell(html) do
+      {:ok, re} = Regex.compile(~s{id="upcoming-total"[^>]*>(.*?)</td>}, "s")
+
+      case Regex.run(re, html) do
+        [_, cell] -> cell
+        nil -> flunk("no total row rendered")
+      end
     end
 
     test "a card bill links to its statement, a registered account to the forecast",
@@ -318,9 +328,9 @@ defmodule CashLensWeb.PageControllerTest do
     end
 
     test "the tail carries its own amount, not just a count", %{conn: conn} do
-      for day <- 1..10, do: bill_on(day, "Conta #{day}", "-10.00")
+      for day <- 1..16, do: bill_on(day, "Conta #{day}", "-10.00")
 
-      bill_on(12, "Conta grande", "-9000.00")
+      bill_on(18, "Conta grande", "-9000.00")
 
       html = conn |> get(~p"/") |> html_response(200)
 
