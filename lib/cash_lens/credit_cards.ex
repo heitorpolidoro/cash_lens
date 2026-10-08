@@ -591,6 +591,32 @@ defmodule CashLens.CreditCards do
     }
   end
 
+  @doc """
+  The statements still to be paid, soonest due first, with their total.
+
+  A `:closed` statement is one with a total of its own that is neither absorbed
+  nor matched to a payment -- exactly "a pagar". One without a due date cannot be
+  placed in time but is owed all the same, so it is listed last rather than
+  dropped: the total must equal the sum of what is shown, or it invites
+  reconciling the dashboard against itself.
+  """
+  def payable_statements(entries) do
+    payable =
+      entries
+      |> Enum.filter(&(&1.lifecycle == :closed))
+      |> Enum.sort_by(&payable_order/1, :asc)
+
+    %{
+      entries: payable,
+      total: Enum.reduce(payable, Decimal.new(0), &Decimal.add(&2, &1.amount))
+    }
+  end
+
+  # Date structs compared as terms sort by their field order (calendar, day,
+  # month, year), which is not chronological. The erl tuple is.
+  defp payable_order(%{statement: %{due_date: nil}}), do: {1, nil}
+  defp payable_order(%{statement: %{due_date: due}}), do: {0, Date.to_erl(due)}
+
   defp total_due_in_month(closed, today) do
     closed
     |> Enum.filter(&same_month?(&1.statement.due_date, today))

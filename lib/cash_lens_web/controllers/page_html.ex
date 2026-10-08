@@ -7,4 +7,46 @@ defmodule CashLensWeb.PageHTML do
   use CashLensWeb, :html
 
   embed_templates "page_html/*"
+
+  @due_soon_days 7
+
+  @doc """
+  How a statement's due date reads against today: overdue, due soon, or ahead.
+
+  Overdue comes first because it is the only one that costs money -- interest
+  starts the day after, and a bill that slipped is the thing the dashboard most
+  needs to say out loud.
+  """
+  def due_urgency(nil, _today), do: :undated
+
+  def due_urgency(%Date{} = due, %Date{} = today) do
+    case Date.diff(due, today) do
+      days when days < 0 -> :overdue
+      days when days <= @due_soon_days -> :soon
+      _ -> :ahead
+    end
+  end
+
+  @doc """
+  Reading of a due date in words, relative to today.
+  """
+  def due_label(nil, _today), do: "sem vencimento"
+
+  def due_label(%Date{} = due, %Date{} = today) do
+    case Date.diff(due, today) do
+      0 -> "vence hoje"
+      1 -> "vence amanhã"
+      days when days > 0 -> "vence em #{days} dias"
+      -1 -> "venceu ontem"
+      days -> "venceu há #{abs(days)} dias"
+    end
+  end
+
+  @doc """
+  Colour for a payable row, by urgency.
+  """
+  def due_classes(:overdue), do: "text-rose-600"
+  def due_classes(:soon), do: "text-amber-600"
+  def due_classes(:ahead), do: "text-slate-500"
+  def due_classes(:undated), do: "text-slate-400 italic"
 end

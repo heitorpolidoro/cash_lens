@@ -1103,4 +1103,150 @@ defmodule CashLens.CreditCardsTest do
       assert CreditCards.get_statement_detail(julho.id).absorbed == []
     end
   end
+
+  describe "payable_statements/1" do
+    import CashLens.AccountsFixtures
+    import CashLens.CreditCardsFixtures
+    import CashLens.TransactionsFixtures
+
+    defp payable_card(name), do: account_fixture(%{is_credit_card: true, name: name})
+
+    test "lists the closed unpaid statements, soonest due first" do
+      # The two dates are chosen so a Date compared as a plain term sorts wrong:
+      # term order reads the day field before the month, which would put 05/10
+      # ahead of 20/09.
+      amex = payable_card("Amex")
+      ouro = payable_card("Ourocard")
+
+      setembro =
+        statement_fixture(%{
+          account: ouro,
+          competencia: ~D[2026-09-01],
+          due_date: ~D[2026-09-20],
+          total_a_pagar: Decimal.new("100.00")
+        })
+
+      outubro =
+        statement_fixture(%{
+          account: amex,
+          competencia: ~D[2026-10-01],
+          due_date: ~D[2026-10-05],
+          total_a_pagar: Decimal.new("200.00")
+        })
+
+      payable = CreditCards.payable_statements(CreditCards.list_statements())
+
+      assert Enum.map(payable.entries, & &1.statement.id) == [setembro.id, outubro.id]
+      assert Decimal.equal?(payable.total, Decimal.new("300.00"))
+    end
+
+    test "a statement without a due date is listed last, not dropped" do
+      card = payable_card("Amazon")
+
+      datada =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-10-01],
+          due_date: ~D[2026-10-10],
+          total_a_pagar: Decimal.new("50.00")
+        })
+
+      sem_data =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-09-01],
+          due_date: nil,
+          total_a_pagar: Decimal.new("30.00")
+        })
+
+      payable = CreditCards.payable_statements(CreditCards.list_statements())
+
+      assert Enum.map(payable.entries, & &1.statement.id) == [datada.id, sem_data.id]
+      assert Decimal.equal?(payable.total, Decimal.new("80.00"))
+    end
+
+    test "leaves out what is paid, absorbed, or has no total of its own" do
+      card = payable_card("Amazon")
+      conta = account_fixture(%{name: "Conta"})
+
+      aberta =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-06-01],
+          due_date: ~D[2026-06-10],
+          total_a_pagar: nil
+        })
+
+      paga =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-07-01],
+          due_date: ~D[2026-07-10],
+          total_a_pagar: Decimal.new("40.00")
+        })
+
+      payment =
+        transaction_fixture(%{
+          account_id: conta.id,
+          amount: "-40.00",
+          description: "PAGAMENTO FATURA"
+        })
+
+      {:ok, _} = CreditCards.update_statement(paga, %{payment_transaction_id: payment.id})
+
+      incorporada =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-08-01],
+          due_date: nil,
+          total_a_pagar: Decimal.new("60.00")
+        })
+
+      devedora =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-09-01],
+          due_date: ~D[2026-09-10],
+          total_a_pagar: Decimal.new("70.00")
+        })
+
+      {:ok, _} = CreditCards.absorb_into(incorporada, devedora)
+
+      payable = CreditCards.payable_statements(CreditCards.list_statements())
+      ids = Enum.map(payable.entries, & &1.statement.id)
+
+      assert ids == [devedora.id]
+      refute aberta.id in ids
+      refute paga.id in ids
+      refute incorporada.id in ids
+      assert Decimal.equal?(payable.total, Decimal.new("70.00"))
+    end
+
+    test "a credit lowers the total rather than being skipped" do
+      card = payable_card("Amazon")
+
+      statement_fixture(%{
+        account: card,
+        competencia: ~D[2026-10-01],
+        due_date: ~D[2026-10-10],
+        total_a_pagar: Decimal.new("-226.32")
+      })
+
+      statement_fixture(%{
+        account: payable_card("Amex"),
+        competencia: ~D[2026-10-01],
+        due_date: ~D[2026-10-16],
+        total_a_pagar: Decimal.new("3273.10")
+      })
+
+      payable = CreditCards.payable_statements(CreditCards.list_statements())
+
+      assert length(payable.entries) == 2
+      assert Decimal.equal?(payable.total, Decimal.new("3046.78"))
+    end
+
+    test "nothing payable is an empty list and a zero total" do
+      assert CreditCards.payable_statements([]) == %{entries: [], total: Decimal.new(0)}
+    end
+  end
 end

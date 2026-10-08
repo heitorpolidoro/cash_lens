@@ -84,6 +84,81 @@
       <div class="text-xs text-slate-400 mt-1">Resultado líquido do mês</div>
     </div>
   </div>
+
+  <%!--
+    What the cards are owing, next due first. It sits here, between the KPIs and
+    the chart, because it is the same kind of news as the warning above it: one
+    says a bill has not been imported, this one says a bill has not been paid.
+    A fifth KPI card could only have carried the total, and the date is what
+    decides whether anything needs doing today.
+  --%>
+  <div
+    :if={@payable.entries != []}
+    id="payable-statements"
+    class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm grid grid-cols-1 lg:grid-cols-3 gap-6 items-start"
+  >
+    <div>
+      <h2 class="text-xs font-black uppercase tracking-wider text-slate-500">Faturas a pagar</h2>
+      <div class="text-2xl font-black text-rose-600 mt-2">
+        {format_currency(@payable.total)}
+      </div>
+      <p class="text-xs text-slate-400 mt-1">
+        {length(@payable.entries)} {if length(@payable.entries) == 1,
+          do: "fatura fechada",
+          else: "faturas fechadas"} sem pagamento
+      </p>
+      <.link
+        href={~p"/statements"}
+        class="text-xs font-bold text-blue-600 hover:underline mt-3 inline-block"
+      >
+        Ver faturas
+      </.link>
+    </div>
+
+    <div class="lg:col-span-2 divide-y divide-slate-100">
+      <.link
+        :for={entry <- @payable.entries}
+        href={~p"/statements?id=#{entry.statement.id}"}
+        id={"payable-#{entry.statement.id}"}
+        class="py-2.5 flex flex-wrap items-center justify-between gap-2 hover:bg-slate-50 rounded-lg px-2 -mx-2 transition"
+      >
+        <div class="min-w-0">
+          <p class="font-bold text-sm text-slate-900 truncate">
+            {entry.account.name}
+            <span class="font-normal text-slate-400">
+              · {format_competencia(entry.statement.competencia)}
+            </span>
+          </p>
+          <p
+            id={"payable-due-#{entry.statement.id}"}
+            class={[
+              "text-xs font-medium",
+              due_classes(due_urgency(entry.statement.due_date, @today))
+            ]}
+          >
+            {due_label(entry.statement.due_date, @today)}
+            <span :if={entry.statement.due_date} class="text-slate-400 font-normal">
+              · {format_date(entry.statement.due_date)}
+            </span>
+          </p>
+        </div>
+        <%!--
+          A cycle can close owing nothing and holding a credit -- a refund larger
+          than the month's spend. Shown like the others it reads as a bill of
+          minus money, so it is named for what it is.
+        --%>
+        <p class={[
+          "font-extrabold text-sm whitespace-nowrap text-right",
+          if(Decimal.negative?(entry.amount), do: "text-emerald-600", else: "text-slate-900")
+        ]}>
+          {format_currency(entry.amount)}
+          <span :if={Decimal.negative?(entry.amount)} class="block text-[11px] font-bold">
+            crédito a favor
+          </span>
+        </p>
+      </.link>
+    </div>
+  </div>
   
 <!-- Evolução Financeira + Minhas Contas -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">

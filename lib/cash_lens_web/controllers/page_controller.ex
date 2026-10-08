@@ -70,7 +70,9 @@ defmodule CashLensWeb.PageController do
       summary_month: month_name,
       chart_data: chart_data,
       historical: historical,
-      closed_statements: CreditCards.closed_without_statement()
+      closed_statements: CreditCards.closed_without_statement(),
+      payable: CreditCards.payable_statements(CreditCards.list_statements()),
+      today: Date.utc_today()
     )
   end
 
