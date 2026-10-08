@@ -1016,4 +1016,53 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       refute render(live) =~ "value=\"#{julho.id}\""
     end
   end
+
+  describe "the global new-transaction button" do
+    test "carries the card while a statement is open", %{conn: conn} do
+      card = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-10-01],
+          due_date: ~D[2026-10-10]
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+
+      assert has_element?(live, ~s{a[href="/transactions/new?for_account=#{card.id}"]})
+    end
+
+    test "drops the card when the user goes back to the hub", %{conn: conn} do
+      # Leaving the detail is a patch, so the assign survives unless the no-id
+      # clause clears it -- and the button would keep offering a card that is no
+      # longer on screen.
+      card = card_account("Amazon")
+
+      statement =
+        statement_fixture(%{
+          account: card,
+          competencia: ~D[2026-10-01],
+          due_date: ~D[2026-10-10]
+        })
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
+      assert has_element?(live, ~s{a[href*="for_account"]})
+
+      live |> element(~s{a[href="/statements"]}, "Voltar") |> render_click()
+
+      refute has_element?(live, ~s{a[href*="for_account"]})
+      assert has_element?(live, ~s{a[href="/transactions/new"]})
+    end
+
+    test "carries no card on the hub, where no statement is open", %{conn: conn} do
+      card = card_account("Amazon")
+      statement_fixture(%{account: card, competencia: ~D[2026-10-01]})
+
+      {:ok, live, _html} = live(conn, ~p"/statements")
+
+      assert has_element?(live, ~s{a[href="/transactions/new"]})
+      refute has_element?(live, ~s{a[href*="for_account"]})
+    end
+  end
 end

@@ -1105,4 +1105,89 @@ defmodule CashLensWeb.TransactionLiveTest do
       refute has_element?(live, "#duplicate-confirmation")
     end
   end
+
+  describe "the new-transaction form opens on the screen's account" do
+    test "a for_account param preselects that account", %{conn: conn} do
+      conta = account_fixture(%{name: "Conta Corrente"})
+      cartao = account_fixture(%{name: "Amazon", is_credit_card: true})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new?for_account=#{cartao.id}")
+
+      assert has_element?(
+               live,
+               "#transaction-form select[name='transaction[account_id]'] option[value='#{cartao.id}'][selected]"
+             )
+
+      refute has_element?(
+               live,
+               "#transaction-form select[name='transaction[account_id]'] option[value='#{conta.id}'][selected]"
+             )
+    end
+
+    test "without the param nothing is preselected", %{conn: conn} do
+      account_fixture(%{name: "Conta Corrente"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new")
+
+      refute has_element?(
+               live,
+               "#transaction-form select[name='transaction[account_id]'] option[selected]"
+             )
+    end
+
+    test "an unknown account id opens the form on no account", %{conn: conn} do
+      # A stale or hand-edited link must not raise, and must not quietly file the
+      # charge somewhere.
+      account_fixture(%{name: "Conta Corrente"})
+
+      {:ok, live, _html} =
+        live(conn, ~p"/transactions/new?for_account=#{Ecto.UUID.generate()}")
+
+      refute has_element?(
+               live,
+               "#transaction-form select[name='transaction[account_id]'] option[selected]"
+             )
+    end
+
+    test "a malformed account id opens the form on no account", %{conn: conn} do
+      account_fixture(%{name: "Conta Corrente"})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new?for_account=nao-e-uuid")
+
+      refute has_element?(
+               live,
+               "#transaction-form select[name='transaction[account_id]'] option[selected]"
+             )
+    end
+
+    test "preselecting does not make the screen look filtered", %{conn: conn} do
+      # `filters_active?` reads every value in the filters map, so a param left
+      # in there swaps the statement-health bar for the filter-summary card and
+      # the screen claims a filter nobody set.
+      cartao = account_fixture(%{name: "Amazon", is_credit_card: true})
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new?for_account=#{cartao.id}")
+
+      assert has_element?(live, "#statement-health-bar")
+      refute has_element?(live, "#filter-summary-card")
+    end
+
+    test "preselecting does not filter the list behind the modal", %{conn: conn} do
+      # The account filter is a separate thing the user set deliberately; opening
+      # a form must not rewrite it.
+      conta = account_fixture(%{name: "Conta Corrente"})
+      cartao = account_fixture(%{name: "Amazon", is_credit_card: true})
+
+      transaction_fixture(%{
+        account_id: conta.id,
+        description: "COMPRA NO BANCO",
+        amount: "-10.00"
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/transactions/new?for_account=#{cartao.id}")
+
+      refute render(live) =~ "Filtrando por conta"
+      assert render(live) =~ "COMPRA NO BANCO"
+    end
+  end
 end

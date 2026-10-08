@@ -34,6 +34,9 @@ defmodule CashLensWeb.AccountLive.Show do
     {:ok,
      socket
      |> assign(:page_title, "Detalhes da Conta")
-     |> assign(:account, Accounts.get_account!(id))}
+     |> assign(:account, Accounts.get_account!(id))
+     # Same reason as the statement screen: a transaction typed from an
+     # account's own page belongs to that account.
+     |> assign(:new_transaction_account_id, id)}
   end
 end

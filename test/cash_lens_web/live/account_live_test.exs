@@ -536,4 +536,23 @@ defmodule CashLensWeb.AccountLiveTest do
       assert has_element?(live, "#account-form")
     end
   end
+
+  describe "the global new-transaction button" do
+    test "carries the account on its own page", %{conn: conn} do
+      account = account_fixture(%{name: "Conta Corrente"})
+
+      {:ok, live, _html} = live(conn, ~p"/accounts/#{account.id}")
+
+      assert has_element?(live, ~s{a[href="/transactions/new?for_account=#{account.id}"]})
+    end
+
+    test "carries no account on the accounts list", %{conn: conn} do
+      account_fixture(%{name: "Conta Corrente"})
+
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+
+      assert has_element?(live, ~s{a[href="/transactions/new"]})
+      refute has_element?(live, ~s{a[href*="for_account"]})
+    end
+  end
 end

@@ -69,7 +69,11 @@ defmodule CashLensWeb.TransactionLive.Index do
   def handle_params(params, _url, socket) do
     {return_to, params} = Map.pop(params, "return_to")
     # `:id` addresses the overlaid show/edit modal — it is never a filter.
-    {id, filters_param} = Map.pop(params, "id")
+    {id, params} = Map.pop(params, "id")
+    # Which account the new-transaction form should open on. A param of its own
+    # rather than the `account_id` filter, so arriving from a statement does not
+    # silently leave the list behind the modal filtered to that card.
+    {for_account, filters_param} = Map.pop(params, "for_account")
 
     previous_filters = socket.assigns.filters
 
@@ -84,7 +88,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> assign(:filters, filters)
       |> assign(:return_to, return_to)
       |> maybe_refresh_stream(filters, previous_filters)
-      |> apply_action(socket.assigns.live_action, id)
+      |> apply_action(socket.assigns.live_action, id, for_account)
 
     {:noreply, socket}
   end
@@ -104,15 +108,19 @@ defmodule CashLensWeb.TransactionLive.Index do
     end
   end
 
-  defp apply_action(socket, :new, _id) do
+  defp apply_action(socket, :new, _id, for_account) do
     socket
     |> assign(:page_title, "Nova Transação")
     |> assign(:form_action, :new)
-    |> assign(:form_transaction, %Transaction{date: Date.utc_today()})
+    # An id from the URL only ever chooses an option in the account select, which
+    # no longer exists for one that is not an account -- so an unknown or
+    # malformed id lands on the old behaviour of opening with none chosen, and
+    # never on the insert, which takes the account from what was submitted.
+    |> assign(:form_transaction, %Transaction{date: Date.utc_today(), account_id: for_account})
     |> assign(:show_transaction, nil)
   end
 
-  defp apply_action(socket, :edit, id) do
+  defp apply_action(socket, :edit, id, _for_account) do
     transaction = Transactions.get_transaction!(id)
 
     socket
@@ -123,7 +131,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     |> assign(:show_transaction, nil)
   end
 
-  defp apply_action(socket, :show, id) do
+  defp apply_action(socket, :show, id, _for_account) do
     socket
     |> assign(:page_title, "Detalhes da Transação")
     |> assign(:form_action, nil)
@@ -131,7 +139,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     |> assign(:show_transaction, Transactions.get_transaction!(id))
   end
 
-  defp apply_action(socket, _index, _id) do
+  defp apply_action(socket, _index, _id, _for_account) do
     socket
     |> assign(:page_title, "Transações")
     |> assign(:form_action, nil)

@@ -11,6 +11,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
      socket
      |> assign(:page_title, "Faturas de Cartão")
      |> assign(:selected, nil)
+     |> assign(:new_transaction_account_id, nil)
      |> assign(:suggestion, nil)
      |> assign(:candidates, [])
      |> assign(:new_statement, nil)
@@ -33,6 +34,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     {:noreply,
      socket
      |> assign(:selected, nil)
+     |> assign(:new_transaction_account_id, nil)
      |> assign(:suggestion, nil)
      |> assign(:candidates, [])
      |> assign(:editing_total, nil)
@@ -267,6 +269,9 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
 
     socket
     |> assign(:selected, detail)
+    # The card this statement belongs to, so the global "Nova Transação" button
+    # opens on it: a charge typed from here always belongs to this card.
+    |> assign(:new_transaction_account_id, detail.account.id)
     |> assign(:suggestion, suggestion)
     |> assign(:candidates, candidates)
     |> assign(:attachable, attachable_for(detail))

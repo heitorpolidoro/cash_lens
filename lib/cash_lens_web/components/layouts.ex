@@ -89,6 +89,22 @@ defmodule CashLensWeb.Layouts do
   end
 
   @doc """
+  Where the global "Nova Transação" button points from the current screen.
+
+  A screen about a single account -- a statement, an account's own page -- sets
+  `:new_transaction_account_id`, and the form then opens with that account
+  already chosen. Typing the card again was the most common first step of every
+  charge entered by hand, and getting it wrong files the charge on the bank
+  account instead.
+  """
+  def new_transaction_path(assigns) do
+    case assigns[:new_transaction_account_id] do
+      nil -> ~p"/transactions/new"
+      id -> ~p"/transactions/new?for_account=#{id}"
+    end
+  end
+
+  @doc """
   Whether a nav item should be rendered as the active route.
   """
   def nav_active?(_item, nil), do: false
