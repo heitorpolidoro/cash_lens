@@ -215,8 +215,71 @@ defmodule CashLens.ForecastTest do
       account = account_fixture()
       three_months(category, account, 4)
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0}
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
       assert Forecast.list_recurring_items() == []
+    end
+
+    test "sync_all switches off an item whose bill stopped arriving" do
+      category = category_fixture(%{type: "fixed", name: "Streaming"})
+      account = account_fixture()
+      three_months(category, account, 4)
+
+      item = recurring_item_fixture(%{category_id: category.id})
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 1}
+      refute Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "switching off is not deleting: the label and the edits survive" do
+      # A recurrence that stops is usually a service that ended, but it is
+      # sometimes a month nobody imported yet.
+      category = category_fixture(%{type: "fixed", name: "Streaming"})
+      account = account_fixture()
+      three_months(category, account, 4)
+
+      item = recurring_item_fixture(%{category_id: category.id, label: "Netflix"})
+
+      Forecast.sync_all()
+
+      reloaded = Forecast.get_recurring_item!(item.id)
+      assert reloaded.label == "Netflix"
+      assert Decimal.equal?(reloaded.amount, item.amount)
+    end
+
+    test "an item already switched off is not counted again" do
+      category = category_fixture(%{type: "fixed", name: "Streaming"})
+      account = account_fixture()
+      three_months(category, account, 4)
+
+      recurring_item_fixture(%{category_id: category.id, active: false})
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+    end
+
+    test "a manually edited item is left on, like the rest of the sync leaves it" do
+      # Its numbers are the person's, and so is the decision to switch it off.
+      category = category_fixture(%{type: "fixed", name: "Streaming"})
+      account = account_fixture()
+      three_months(category, account, 4)
+
+      item = recurring_item_fixture(%{category_id: category.id, manually_edited: true})
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "an item that is still arriving is updated, not switched off" do
+      category = category_fixture(%{type: "fixed", name: "Luz"})
+      account = account_fixture()
+      three_months(category, account, 0)
+
+      item = recurring_item_fixture(%{category_id: category.id, day_of_month: 1})
+
+      assert Forecast.sync_all() == %{created: 0, updated: 1, deactivated: 0}
+
+      reloaded = Forecast.get_recurring_item!(item.id)
+      assert reloaded.active
+      assert reloaded.day_of_month == 10
     end
 
     test "resync says why it cannot, rather than reporting no history" do
@@ -308,7 +371,7 @@ defmodule CashLens.ForecastTest do
         amount: "-52.00"
       })
 
-      assert Forecast.sync_all() == %{created: 1, updated: 0}
+      assert Forecast.sync_all() == %{created: 1, updated: 0, deactivated: 0}
       assert [item] = Forecast.list_recurring_items()
       assert item.label == "Água"
       assert item.day_of_month == 10
@@ -317,14 +380,14 @@ defmodule CashLens.ForecastTest do
     test "does not create an item for a category with insufficient history" do
       category_fixture(%{type: "fixed", name: "Sem histórico"})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0}
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
       assert Forecast.list_recurring_items() == []
     end
 
     test "ignores variable categories" do
       category_fixture(%{type: "variable", name: "Mercado"})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0}
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
     end
 
     test "updates an existing non-manually-edited item, leaves manually-edited ones alone" do
@@ -348,7 +411,7 @@ defmodule CashLens.ForecastTest do
       auto_item =
         recurring_item_fixture(%{category_id: category.id, day_of_month: 1, amount: "-1.00"})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 1}
+      assert Forecast.sync_all() == %{created: 0, updated: 1, deactivated: 0}
 
       reloaded = Forecast.get_recurring_item!(auto_item.id)
       assert reloaded.day_of_month == 10
@@ -381,7 +444,7 @@ defmodule CashLens.ForecastTest do
           manually_edited: true
         })
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0}
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
 
       reloaded = Forecast.get_recurring_item!(edited_item.id)
       assert reloaded.day_of_month == 1
@@ -407,7 +470,7 @@ defmodule CashLens.ForecastTest do
         })
       end
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0}
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
       assert Forecast.list_recurring_items() == []
     end
   end
@@ -1672,7 +1735,7 @@ defmodule CashLens.ForecastTest do
         amount: "-30.00"
       })
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0}
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
       assert Forecast.list_recurring_items() == []
     end
 
@@ -1690,7 +1753,7 @@ defmodule CashLens.ForecastTest do
       end
 
       assert Forecast.suggest_for_category(category) == :insufficient_history
-      assert Forecast.sync_all() == %{created: 0, updated: 0}
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
     end
 
     test "a manually edited item keeps its day and amount across sync_all/0" do

@@ -36,6 +36,28 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
     assert item.day_of_month == 14
   end
 
+  test "perform/1 announces what it did, so the screen in front of someone says so" do
+    # The run happens seconds after the import, in another process. Without the
+    # broadcast its result reaches nobody.
+    category = category_fixture(%{type: "fixed", name: "Luz"})
+    account = account_fixture()
+
+    for n <- 0..2 do
+      transaction_fixture(%{
+        account_id: account.id,
+        category_id: category.id,
+        date: history_date(n, 14),
+        amount: "-334.16"
+      })
+    end
+
+    Phoenix.PubSub.subscribe(CashLens.PubSub, CashLensWeb.RecurringSyncFlash.topic())
+
+    assert :ok = perform_job(SyncRecurringWorker, %{})
+
+    assert_receive {:recurring_synced, %{created: 1, updated: 0, deactivated: 0}}
+  end
+
   test "perform/1 with nothing to derive still succeeds" do
     assert :ok = perform_job(SyncRecurringWorker, %{})
     assert Forecast.list_recurring_items() == []

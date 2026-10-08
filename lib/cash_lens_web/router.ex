@@ -28,7 +28,7 @@ defmodule CashLensWeb.Router do
 
     live_session :default,
       layout: {CashLensWeb.Layouts, :app},
-      on_mount: CashLensWeb.ActivePath do
+      on_mount: [CashLensWeb.ActivePath, CashLensWeb.RecurringSyncFlash] do
       # The create and edit routes are an overlaid modal on top of the accounts
       # screen, not standalone pages: they mount `Index` so a `live_patch`
       # opens/closes the account settings form without leaving the cards

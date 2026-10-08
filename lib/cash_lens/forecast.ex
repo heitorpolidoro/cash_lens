@@ -127,8 +127,15 @@ defmodule CashLens.Forecast do
 
   @doc """
   Syncs all fixed categories against recurring_items: creates items for
-  fixed categories that don't have one yet, and refreshes day/amount for
-  existing items that haven't been manually edited.
+  fixed categories that don't have one yet, refreshes day/amount for existing
+  items that haven't been manually edited, and switches off the ones whose bill
+  stopped arriving.
+
+  Switched off, not deleted. A recurrence that stops is usually a service that
+  ended, but it is sometimes a month that has not been imported yet, and
+  deleting would take a hand-written label and a history of edits with it. An
+  inactive item stays on the screen, out of the projection, one click from
+  coming back.
   """
   def sync_all do
     fixed_categories =
@@ -137,7 +144,7 @@ defmodule CashLens.Forecast do
 
     existing_by_category = Map.new(list_recurring_items(), &{&1.category_id, &1})
 
-    Enum.reduce(fixed_categories, %{created: 0, updated: 0}, fn category, acc ->
+    Enum.reduce(fixed_categories, %{created: 0, updated: 0, deactivated: 0}, fn category, acc ->
       sync_one(category, Map.get(existing_by_category, category.id), acc)
     end)
   end
@@ -165,9 +172,23 @@ defmodule CashLens.Forecast do
         {:ok, _} = item |> RecurringItem.changeset(suggestion) |> Repo.update()
         %{acc | updated: acc.updated + 1}
 
-      reason when reason in [:insufficient_history, :no_recent_occurrence] ->
+      :no_recent_occurrence ->
+        deactivate_stale(item, acc)
+
+      :insufficient_history ->
         acc
     end
+  end
+
+  # An item with no recent occurrence is no longer a recurrence, so it stops
+  # being projected. A manually edited one never reaches here: `sync_one/3`
+  # returns before asking, which is the same boundary the rest of the sync
+  # keeps -- its numbers are the person's, and so is switching it off.
+  defp deactivate_stale(%RecurringItem{active: false}, acc), do: acc
+
+  defp deactivate_stale(item, acc) do
+    {:ok, _} = item |> RecurringItem.changeset(%{"active" => false}) |> Repo.update()
+    %{acc | deactivated: acc.deactivated + 1}
   end
 
   @doc """

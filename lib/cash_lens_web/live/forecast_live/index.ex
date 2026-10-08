@@ -14,12 +14,19 @@ defmodule CashLensWeb.ForecastLive.Index do
      |> assign(:edit_item, nil)
      |> assign(:form_params, %{})
      |> assign(:form_error, nil)
+     |> assign_sync_refresh()
      |> assign_projection()}
   end
 
   # The ruler (90 days), the minimum KPI (30 days) and the 12-month KPI are three
   # date slices of ONE projection. The windows are deliberately different: 30 days
   # is the short-term risk gauge, 90 days is the forward visibility of the ruler.
+  # This screen shows what a background sync changes, so it hands the flash hook
+  # the way to rebuild itself (see CashLensWeb.RecurringSyncFlash).
+  defp assign_sync_refresh(socket) do
+    Phoenix.Component.assign(socket, :recurring_sync_refresh, &assign_projection/1)
+  end
+
   defp assign_projection(socket) do
     today = Date.utc_today()
 
@@ -61,8 +68,16 @@ defmodule CashLensWeb.ForecastLive.Index do
 
   @impl true
   def handle_event("sync_all", _params, socket) do
-    Forecast.sync_all()
-    {:noreply, assign_projection(socket)}
+    result = Forecast.sync_all()
+    {:noreply, socket |> assign_projection() |> put_flash(:info, sync_flash(result))}
+  end
+
+  defp sync_flash(%{created: 0, updated: 0, deactivated: 0}),
+    do: "Histórico sincronizado: nada mudou."
+
+  defp sync_flash(%{created: created, updated: updated, deactivated: deactivated}) do
+    "Histórico sincronizado: #{created} incluídas, #{updated} atualizadas, " <>
+      "#{deactivated} desativadas."
   end
 
   @impl true
@@ -258,36 +273,24 @@ defmodule CashLensWeb.ForecastLive.Index do
             Projeção do saldo disponível em contas correntes com base nos lançamentos recorrentes cadastrados.
           </p>
         </div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs opacity-60 font-medium">Saldo Atual em Contas:</span>
-          <strong class="text-base font-black">
-            {format_currency(@projection.starting_balance)}
-          </strong>
-        </div>
-      </div>
-
-      <%!-- Sync action + always-visible explanation of what it does and does not do --%>
-      <div class="card bg-base-100 border border-base-300 shadow-sm rounded-2xl p-4 flex flex-col md:flex-row md:items-start gap-4">
-        <button
-          phx-click="sync_all"
-          class="btn btn-sm btn-outline rounded-xl font-bold shrink-0 gap-1.5"
-        >
-          <.icon name="hero-arrow-path" class="size-4" /> Sincronizar Histórico
-        </button>
-        <div class="text-xs opacity-70 leading-relaxed" data-role="sync-explanation">
-          <p class="font-bold opacity-100">
-            Sincronização manual — só acontece quando você clica aqui.
-          </p>
-          <p class="mt-1">
-            Percorre apenas categorias marcadas como <strong>Fixo (Contas Essenciais)</strong>
-            — cartões de crédito ficam de fora — e precisa de pelo menos
-            <strong>2 lançamentos nos últimos 180 dias</strong>
-            em contas que não sejam cartão. O dia vem da <strong>mediana</strong>
-            dos lançamentos; o valor vem do <strong>lançamento mais recente</strong>.
-            Esta sincronização não altera itens editados à mão; para atualizar um deles, use
-            <strong>Ressincronizar com Histórico</strong>
-            no próprio item. Nenhuma recorrência é descoberta sozinha: marcar a categoria como Fixo é o que a torna elegível.
-          </p>
+        <div class="flex items-center gap-4 shrink-0">
+          <div class="flex items-center gap-2">
+            <span class="text-xs opacity-60 font-medium">Saldo Atual em Contas:</span>
+            <strong class="text-base font-black">
+              {format_currency(@projection.starting_balance)}
+            </strong>
+          </div>
+          <%!--
+            The sync runs by itself after every import now, so the button is a
+            manual re-run, not the only way in. It no longer needs a paragraph
+            explaining when to press it.
+          --%>
+          <button
+            phx-click="sync_all"
+            class="btn btn-sm btn-outline rounded-xl font-bold shrink-0 gap-1.5"
+          >
+            <.icon name="hero-arrow-path" class="size-4" /> Sincronizar Histórico
+          </button>
         </div>
       </div>
 

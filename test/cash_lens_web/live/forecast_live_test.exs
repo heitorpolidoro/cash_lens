@@ -842,17 +842,41 @@ defmodule CashLensWeb.ForecastLiveTest do
   end
 
   describe "history sync" do
-    test "explains what the sync does, unconditionally, on the initial render", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/forecast")
+    test "offers the manual re-run without a paragraph about it", %{conn: conn} do
+      # The sync runs by itself after every import now, so the button is a
+      # manual re-run rather than the only way in, and the copy that explained
+      # when to press it described a world that no longer exists.
+      {:ok, view, html} = live(conn, ~p"/forecast")
 
       assert html =~ "Sincronizar Histórico"
-      assert html =~ "Sincronização manual — só acontece quando você clica aqui."
-      assert html =~ "Fixo (Contas Essenciais)"
-      assert html =~ "2 lançamentos nos últimos 180 dias"
-      assert html =~ "mediana"
-      assert html =~ "lançamento mais recente"
-      assert html =~ "Esta sincronização não altera itens editados à mão"
-      assert html =~ "marcar a categoria como Fixo é o que a torna elegível"
+      refute has_element?(view, "[data-role='sync-explanation']")
+      refute html =~ "só acontece quando você clica aqui"
+    end
+
+    test "a manual sync says what it changed", %{conn: conn} do
+      category = category_fixture(%{type: "fixed", name: "Água"})
+      account = account_fixture()
+
+      for ago <- [10, 40] do
+        transaction_fixture(%{
+          account_id: account.id,
+          category_id: category.id,
+          date: Date.add(Date.utc_today(), -ago),
+          amount: "-50.00"
+        })
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/forecast")
+      html = view |> element("button[phx-click='sync_all']") |> render_click()
+
+      assert html =~ "Histórico sincronizado: 1 incluídas"
+    end
+
+    test "a manual sync that changed nothing says so", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/forecast")
+      html = view |> element("button[phx-click='sync_all']") |> render_click()
+
+      assert html =~ "Histórico sincronizado: nada mudou."
     end
 
     test "sync_all creates items from history", %{conn: conn} do

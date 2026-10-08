@@ -29,6 +29,7 @@ defmodule CashLens.Workers.SyncRecurringWorker do
     unique: [period: 300, states: [:available, :scheduled]]
 
   alias CashLens.Forecast
+  alias CashLensWeb.RecurringSyncFlash
 
   require Logger
 
@@ -38,11 +39,18 @@ defmodule CashLens.Workers.SyncRecurringWorker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
-    %{created: created, updated: updated} = Forecast.sync_all()
+    result = Forecast.sync_all()
+    %{created: created, updated: updated, deactivated: deactivated} = result
 
-    if created + updated > 0 do
-      Logger.info("RECURRING SYNC: #{created} criadas, #{updated} atualizadas")
+    if created + updated + deactivated > 0 do
+      Logger.info(
+        "RECURRING SYNC: #{created} criadas, #{updated} atualizadas, #{deactivated} desativadas"
+      )
     end
+
+    # The person who triggered this has usually moved on by now, so the result
+    # goes to whatever screen they are on rather than nowhere.
+    RecurringSyncFlash.broadcast(result)
 
     :ok
   end
