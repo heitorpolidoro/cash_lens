@@ -7,18 +7,21 @@ defmodule CashLens.Workers.SyncRecurringWorker do
   meant the forecast quietly described last season's bills until someone
   remembered to press it.
 
-  `unique` collapses the pile-up of a directory import: thirty files enqueue
-  thirty times, and the ones still waiting their turn are the same request, so
-  one of them runs. `sync_all/0` is idempotent anyway -- it skips manually
-  edited items and writes the same day and amount for everything else.
+  The job waits a few seconds before running, which is what lets `unique`
+  collapse a directory import: thirty files enqueue thirty times, and while the
+  first is still `scheduled` the rest are recognised as the same request. With
+  no delay the job finished between files and each one queued its own run.
 
-  `:executing` is deliberately NOT in that list. A job that has already started
-  cannot see rows written after it started, so letting it stand in for a later
-  request would leave the last file of a batch unaccounted for until the next
-  import. A run that overlaps the one before it is the cheaper mistake.
+  `:executing` is deliberately NOT in the uniqueness states. A job that has
+  already started cannot see rows written after it started, so letting it stand
+  in for a later request would leave the last file of a batch unaccounted for
+  until the next import. A run that overlaps the one before it is the cheaper
+  mistake, and `sync_all/0` is idempotent anyway -- it skips manually edited
+  items and writes the same day and amount for everything else.
 
-  The window is a deduplication window, not a delay: the job is inserted
-  `available` and runs as soon as the queue picks it up.
+  The two numbers answer different questions: @delay_seconds is how long to
+  wait for the rest of a batch, and the uniqueness period is how far back to
+  look for a request already waiting.
   """
   use Oban.Worker,
     queue: :default,
@@ -28,6 +31,10 @@ defmodule CashLens.Workers.SyncRecurringWorker do
   alias CashLens.Forecast
 
   require Logger
+
+  # Long enough to cover the gap between two files of the same import, short
+  # enough that nobody waiting on the forecast notices it.
+  @delay_seconds 5
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
@@ -40,6 +47,9 @@ defmodule CashLens.Workers.SyncRecurringWorker do
     :ok
   end
 
+  @doc "How long a queued sync waits before running, in seconds."
+  def delay_seconds, do: @delay_seconds
+
   @doc """
   Queues a sync. Never fails the caller: an import that wrote its rows has done
   its job, and a projection that refreshes on the next import is a smaller
@@ -47,7 +57,7 @@ defmodule CashLens.Workers.SyncRecurringWorker do
   """
   def enqueue do
     %{}
-    |> __MODULE__.new()
+    |> __MODULE__.new(schedule_in: @delay_seconds)
     |> oban().insert()
     |> case do
       {:ok, _job} ->

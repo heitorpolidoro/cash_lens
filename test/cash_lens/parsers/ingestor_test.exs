@@ -799,7 +799,7 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture(parser_type: "bb_csv")
 
       assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
-      Oban.drain_queue(queue: :default)
+      Oban.drain_queue(queue: :default, with_scheduled: true)
 
       assert {:ok, %{imported: 0}} = Ingestor.import_file(account, @bb_sample)
       refute_enqueued(worker: SyncRecurringWorker)

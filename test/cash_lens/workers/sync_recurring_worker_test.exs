@@ -46,17 +46,27 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
     assert_enqueued(worker: SyncRecurringWorker)
   end
 
-  test "the job is queued to run now, not after the uniqueness window" do
-    # The window deduplicates; it does not delay. Reading it as a delay is the
-    # easy mistake, and the one this pins down.
+  test "the job waits a few seconds, so the rest of a batch can join it" do
+    # The two numbers are different things: this delay is how long to wait for
+    # the rest of an import, the uniqueness period is how far back to look for a
+    # request already waiting.
     assert :ok = SyncRecurringWorker.enqueue()
 
     assert [job] = Repo.all(Oban.Job)
-    assert job.state == "available"
-    assert DateTime.diff(job.scheduled_at, DateTime.utc_now()) <= 1
+    assert job.state == "scheduled"
+
+    # The bound is written out rather than read from the worker: comparing the
+    # constant against itself would accept any value, including the minutes that
+    # would make the forecast look broken to whoever just imported.
+    waited = DateTime.diff(job.scheduled_at, DateTime.utc_now())
+    assert waited > 0
+    assert waited <= 30
+    assert SyncRecurringWorker.delay_seconds() <= 30
   end
 
   test "a second request while the first is still waiting is the same request" do
+    # The delay is what makes this bite on a real import: without it the first
+    # job ran and finished between two files, and every file queued its own.
     assert :ok = SyncRecurringWorker.enqueue()
     assert :ok = SyncRecurringWorker.enqueue()
 
@@ -67,7 +77,7 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
     # Otherwise the last file of a batch would go unaccounted for: a finished
     # job never saw the rows written after it.
     assert :ok = SyncRecurringWorker.enqueue()
-    Oban.drain_queue(queue: :default)
+    Oban.drain_queue(queue: :default, with_scheduled: true)
     assert :ok = SyncRecurringWorker.enqueue()
 
     assert Repo.aggregate(Oban.Job, :count) == 2
