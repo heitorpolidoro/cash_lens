@@ -316,48 +316,72 @@
         in that month". Most recent month first, because that is the one
         being read.
       -->
-      <div class="overflow-x-auto border-t border-slate-100 pt-4">
-        <table id="monthly-balance-table" class="w-full text-sm">
-          <thead>
-            <tr class="text-xs font-black uppercase tracking-wider text-slate-500">
-              <th class="text-left pb-2 font-black">Mês</th>
-              <th class="text-right pb-2 font-black">Receitas</th>
-              <th class="text-right pb-2 font-black">Despesas</th>
-              <th class="text-right pb-2 font-black">Balanço</th>
-              <th class="text-right pb-2 font-black">Saldo Final</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              :for={item <- Enum.reverse(@historical)}
-              class="border-t border-slate-100 hover:bg-slate-50"
-            >
-              <td class="py-2">
-                <.link
-                  navigate={~p"/months/#{item.year}/#{item.month}"}
-                  class="font-bold text-slate-900 hover:underline"
-                >
-                  {month_label(item.month)} {item.year}
-                </.link>
-              </td>
-              <td class="py-2 text-right text-emerald-600 tabular-nums">
-                {format_currency(item.income)}
-              </td>
-              <td class="py-2 text-right text-rose-600 tabular-nums">
-                {format_currency(item.expenses)}
-              </td>
-              <td class={[
-                "py-2 text-right font-black tabular-nums",
-                if(item.balance >= 0, do: "text-emerald-600", else: "text-rose-600")
-              ]}>
-                {format_currency(item.balance)}
-              </td>
-              <td class="py-2 text-right font-bold text-slate-900 tabular-nums">
-                {format_currency(item.final_balance)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <%!--
+        Six months open, the rest behind "ver mais". Twelve rows of figures
+        under a chart that already draws them is a lot of table to scroll past
+        to reach the accounts; the half you are likely to be reading is the
+        recent half. The hidden rows stay in the document -- they are one
+        toggle away, and no request.
+      --%>
+      <div id="monthly-balance-history" class="border-t border-slate-100 pt-4">
+        <input type="checkbox" id="monthly-balance-more" class="expander sr-only" />
+
+        <div class="overflow-x-auto">
+          <table id="monthly-balance-table" class="w-full text-sm">
+            <thead>
+              <tr class="text-xs font-black uppercase tracking-wider text-slate-500">
+                <th class="text-left pb-2 font-black">Mês</th>
+                <th class="text-right pb-2 font-black">Receitas</th>
+                <th class="text-right pb-2 font-black">Despesas</th>
+                <th class="text-right pb-2 font-black">Balanço</th>
+                <th class="text-right pb-2 font-black">Saldo Final</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                :for={{item, index} <- @historical |> Enum.reverse() |> Enum.with_index()}
+                class={[
+                  "border-t border-slate-100 hover:bg-slate-50",
+                  index >= visible_months() && "hidden expanded:table-row"
+                ]}
+              >
+                <td class="py-2">
+                  <.link
+                    navigate={~p"/months/#{item.year}/#{item.month}"}
+                    class="font-bold text-slate-900 hover:underline"
+                  >
+                    {month_label(item.month)} {item.year}
+                  </.link>
+                </td>
+                <td class="py-2 text-right text-emerald-600 tabular-nums">
+                  {format_currency(item.income)}
+                </td>
+                <td class="py-2 text-right text-rose-600 tabular-nums">
+                  {format_currency(item.expenses)}
+                </td>
+                <td class={[
+                  "py-2 text-right font-black tabular-nums",
+                  if(item.balance >= 0, do: "text-emerald-600", else: "text-rose-600")
+                ]}>
+                  {format_currency(item.balance)}
+                </td>
+                <td class="py-2 text-right font-bold text-slate-900 tabular-nums">
+                  {format_currency(item.final_balance)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <label
+          :if={hidden_months(@historical) > 0}
+          id="monthly-balance-toggle"
+          for="monthly-balance-more"
+          class="block cursor-pointer pt-3 text-center text-xs font-bold text-blue-600 hover:underline"
+        >
+          <span class="expanded:hidden">ver mais {hidden_months(@historical)} meses</span>
+          <span class="hidden expanded:inline">ver menos</span>
+        </label>
       </div>
     </div>
 

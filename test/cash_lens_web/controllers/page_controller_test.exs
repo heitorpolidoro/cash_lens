@@ -412,6 +412,63 @@ defmodule CashLensWeb.PageControllerTest do
     end
   end
 
+  describe "histórico mensal abaixo do gráfico" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    defp month_of_spending(months_back) do
+      Enum.reduce(0..months_back//1, Date.beginning_of_month(Date.utc_today()), fn _i, acc ->
+        acc |> Date.add(-1) |> Date.beginning_of_month()
+      end)
+    end
+
+    test "shows six months open and keeps the rest behind ver mais", %{conn: conn} do
+      account = account_fixture()
+
+      for months_back <- 0..8 do
+        transaction_fixture(%{
+          account_id: account.id,
+          date: month_of_spending(months_back),
+          amount: "-100.00"
+        })
+      end
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      rows = history_rows(html)
+      # Twelve months are always rendered -- the series is a fixed window --
+      # and exactly six of them are open.
+      assert length(rows) == 12
+      assert Enum.count(rows, &(&1 =~ "hidden expanded:table-row")) == 6
+
+      assert html =~ ~s(id="monthly-balance-toggle")
+      assert html =~ "ver mais 6 meses"
+      assert html =~ "ver menos"
+    end
+
+    # The rows the toggle reveals must already be in the document: a "ver mais"
+    # that needs a request is a different feature, and a slower one.
+    test "the hidden months are rendered, not fetched", %{conn: conn} do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: month_of_spending(8),
+        amount: "-4321.00"
+      })
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert html =~ "4.321,00"
+    end
+
+    defp history_rows(html) do
+      {:ok, re} = Regex.compile(~s{<tr([^>]*)>(?:(?!</tr>).)*?/months/}, "s")
+
+      re |> Regex.scan(html) |> Enum.map(fn [_, attrs] -> attrs end)
+    end
+  end
+
   describe "ritmo de gasto no card de despesas" do
     import CashLens.AccountsFixtures
     import CashLens.TransactionsFixtures

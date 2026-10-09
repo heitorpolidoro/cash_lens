@@ -97,6 +97,13 @@
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
 @custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
 
+/* A checkbox-driven expander, for "ver mais" on a long list that is already in
+   the document. `.expander` is the hidden checkbox; anything after it in the
+   same container reacts with `expanded:`. A <details> cannot do this job: it
+   hides every child but its <summary>, so the rows meant to stay visible go
+   with the rest. */
+@custom-variant expanded (.expander:checked ~ &, .expander:checked ~ * &);
+
 /* Use the data attribute for dark mode  */
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 

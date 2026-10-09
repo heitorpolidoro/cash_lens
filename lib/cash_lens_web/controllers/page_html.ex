@@ -81,6 +81,18 @@ defmodule CashLensWeb.PageHTML do
   def bucket_note(%{count: 0}), do: "nada"
   def bucket_note(%{count: n, last_date: date}), do: "#{bill_count(n)} · até #{format_date(date)}"
 
+  @visible_months 6
+
+  @doc """
+  How many months of history the table shows before "ver mais".
+  """
+  def visible_months, do: @visible_months
+
+  @doc """
+  How many months "ver mais" would reveal.
+  """
+  def hidden_months(historical), do: max(length(historical) - @visible_months, 0)
+
   @doc """
   How many bills a summary line stands for.
   """
