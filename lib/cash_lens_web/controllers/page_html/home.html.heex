@@ -153,8 +153,11 @@
       <table id="upcoming-summary" class="w-full text-sm group-open:hidden">
         <tbody class="divide-y divide-slate-100">
           <tr id="upcoming-next">
-            <td class="py-2 pr-3 font-bold text-slate-900">
-              Próximo vencimento
+            <td class={[
+              "py-2 pr-3 font-bold",
+              if(@upcoming.summary.next.overdue?, do: "text-rose-600", else: "text-slate-900")
+            ]}>
+              {if @upcoming.summary.next.overdue?, do: "Em atraso", else: "Próximo vencimento"}
             </td>
             <td class={[
               "py-2 pr-3 text-xs font-medium whitespace-nowrap",

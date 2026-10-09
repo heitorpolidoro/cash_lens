@@ -324,9 +324,8 @@ defmodule CashLens.Forecast do
   applying every active recurring item's future occurrences within
   `horizon_days`.
   """
-  def project(horizon_days \\ @default_horizon_days) do
+  def project(horizon_days \\ @default_horizon_days, today \\ Date.utc_today()) do
     starting_balance = current_balance()
-    today = Date.utc_today()
     horizon_end = Date.add(today, horizon_days)
 
     recurring_occurrences =
@@ -335,7 +334,8 @@ defmodule CashLens.Forecast do
       |> Enum.flat_map(&future_occurrences(&1, today, horizon_end))
 
     occurrences =
-      (recurring_occurrences ++
+      (overdue_occurrences(today) ++
+         recurring_occurrences ++
          card_occurrences(today, horizon_end) ++
          commitment_occurrences(today, horizon_end) ++
          variable_baseline(today, horizon_end))
@@ -452,7 +452,14 @@ defmodule CashLens.Forecast do
     {soon, later} = Enum.split_with(rest, &(Date.compare(&1.date, soon_until) != :gt))
 
     %{
-      next: %{date: first.date, count: length(next), total: sum_amounts(next)},
+      next: %{
+        date: first.date,
+        count: length(next),
+        total: sum_amounts(next),
+        # A date already past is not the next thing to pay, it is the thing
+        # that should already have been paid, and the line has to say so.
+        overdue?: Date.compare(first.date, today) == :lt
+      },
       soon: bucket(soon),
       later: bucket(later),
       soon_days: @soon_days
@@ -800,6 +807,76 @@ defmodule CashLens.Forecast do
       end)
 
     result
+  end
+
+  @doc """
+  The bills whose day has already passed this month with nothing to show for it.
+
+  Past the day, `future_occurrences/3` jumps to next month -- it has to, because
+  the usual reason a bill's day has passed is that the bill was paid, and
+  projecting it again would charge it twice. But "paid" and "not paid" look
+  identical to a model that only knows when money usually leaves, so the one
+  that was not paid simply disappeared: on the 9th of out/2026, four of the five
+  bills past their day had really left the account and the fifth, Gás, had not,
+  and nothing on any screen said so. Late in a month that has not been imported
+  the gap reaches five figures.
+
+  So the ledger is asked. A bill whose category has no transaction this month is
+  still owed, and is projected on the day it was due -- in the past, where the
+  dashboard already reads a past date as "venceu há N dias", in red.
+
+  Two guards keep this from inventing debts:
+
+  * **Only money going out.** A salary that has not landed is money you are
+    waiting for, not money you owe; projecting it would be the optimistic
+    mistake rather than the pessimistic one.
+  * **Only as far as the ledger reaches.** If the newest transaction on file
+    predates the bill's due date, the month simply has not been imported, and
+    every bill in it would look unpaid. Nothing is claimed past that date.
+  """
+  def overdue_occurrences(today \\ Date.utc_today()) do
+    case CashLens.Transactions.get_latest_transaction_date() do
+      nil -> []
+      latest -> overdue_occurrences(today, latest)
+    end
+  end
+
+  defp overdue_occurrences(today, latest) do
+    settled = settled_categories(Date.beginning_of_month(today), today)
+
+    list_recurring_items()
+    |> Enum.filter(&overdue?(&1, today, latest, settled))
+    |> Enum.map(fn item ->
+      %{
+        date: clamp_day(today.year, today.month, item.day_of_month),
+        item: item,
+        balance_after: nil,
+        overdue: true
+      }
+    end)
+  end
+
+  defp overdue?(item, today, latest, settled) do
+    due = clamp_day(today.year, today.month, item.day_of_month)
+
+    item.active and
+      Decimal.negative?(item.amount) and
+      Date.compare(due, today) == :lt and
+      Date.compare(latest, due) != :lt and
+      not MapSet.member?(settled, item.category_id)
+  end
+
+  # Which categories already have something on them this month. One row is
+  # enough: this answers "did this bill happen", not "how much of it".
+  defp settled_categories(from, to) do
+    Transaction
+    |> Scopes.cash_accounts_only()
+    |> where([t], t.date >= ^from and t.date <= ^to)
+    |> where([t], not is_nil(t.category_id))
+    |> select([t], t.category_id)
+    |> distinct(true)
+    |> Repo.all()
+    |> MapSet.new()
   end
 
   defp future_occurrences(%RecurringItem{} = item, today, horizon_end) do

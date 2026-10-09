@@ -2082,6 +2082,119 @@ defmodule CashLens.ForecastTest do
     end
   end
 
+  describe "overdue_occurrences/1" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    setup do
+      account = account_fixture(%{balance: "1000.00"})
+
+      # On the 1st no day of the month has passed yet, so the scenario these
+      # tests describe cannot exist. Reading a day later keeps every assertion
+      # running on every date instead of quietly skipping one day in thirty.
+      today = Date.utc_today()
+      reference = if today.day == 1, do: Date.add(today, 1), else: today
+
+      %{account: account, today: reference}
+    end
+
+    defp bill_due(day, label, amount) do
+      recurring_item_fixture(%{
+        label: label,
+        day_of_month: day,
+        amount: amount,
+        category_id: category_fixture(%{type: "fixed", name: label}).id
+      })
+    end
+
+    defp ledger_reaches(account, date) do
+      transaction_fixture(%{account_id: account.id, date: date, amount: "-1.00"})
+    end
+
+    test "a bill past its day with nothing on its category is still owed", %{
+      account: account,
+      today: today
+    } do
+      bill_due(1, "Gás", "-47.48")
+      ledger_reaches(account, today)
+
+      assert [occurrence] = Forecast.overdue_occurrences(today)
+      assert occurrence.item.label == "Gás"
+      assert occurrence.date == Date.new!(today.year, today.month, 1)
+      assert occurrence.overdue
+    end
+
+    test "a bill that already left the account is not owed twice", %{
+      account: account,
+      today: today
+    } do
+      item = bill_due(1, "Plano de Saúde", "-6258.28")
+      ledger_reaches(account, today)
+
+      transaction_fixture(%{
+        account_id: account.id,
+        category_id: item.category_id,
+        date: Date.beginning_of_month(today),
+        amount: "-6258.28"
+      })
+
+      assert Forecast.overdue_occurrences(today) == []
+    end
+
+    # Money you are waiting for is not money you owe. Projecting a salary that
+    # has not landed would be the optimistic mistake, which is the worse one.
+    test "an income that has not arrived is not an overdue bill", %{
+      account: account,
+      today: today
+    } do
+      bill_due(1, "APRASVI", "2167.25")
+      ledger_reaches(account, today)
+
+      assert Forecast.overdue_occurrences(today) == []
+    end
+
+    # The whole check rests on "no transaction means not paid", which only
+    # holds where the ledger actually reaches. In a month nobody has imported,
+    # every bill in it would look unpaid.
+    test "nothing is claimed past the newest transaction on file", %{
+      account: account,
+      today: today
+    } do
+      bill_due(1, "Gás", "-47.48")
+      ledger_reaches(account, Date.add(today, -40))
+
+      assert Forecast.overdue_occurrences(today) == []
+    end
+
+    test "with an empty ledger nothing is overdue", %{today: today} do
+      bill_due(1, "Gás", "-47.48")
+
+      assert Forecast.overdue_occurrences(today) == []
+    end
+
+    test "a bill due today has not passed its day", %{account: account, today: today} do
+      bill_due(today.day, "Gás", "-47.48")
+      ledger_reaches(account, today)
+
+      assert Forecast.overdue_occurrences(today) == []
+    end
+
+    test "the projection carries it, so the balance stops being optimistic", %{
+      account: account,
+      today: today
+    } do
+      bill_due(1, "Gás", "-47.48")
+      ledger_reaches(account, today)
+
+      with_overdue = Forecast.project(30, today)
+      bills = Forecast.upcoming_bills(with_overdue, 30, 14, today)
+
+      assert Enum.any?(bills.shown, &(&1.label == "Gás"))
+      assert bills.summary.next.overdue?
+      assert bills.summary.next.date == Date.new!(today.year, today.month, 1)
+    end
+  end
+
   describe "upcoming_bills/2" do
     import CashLens.AccountsFixtures
     import CashLens.CreditCardsFixtures

@@ -378,6 +378,34 @@ defmodule CashLensWeb.PageControllerTest do
       assert html =~ "Condomínio"
     end
 
+    # A bill whose day passed with nothing on its category is still owed, and
+    # the first line has to stop calling it the *next* thing to pay.
+    # The dashboard reads the real clock, and on the 1st no day of the month has
+    # passed yet -- the scenario cannot exist. Skipped out loud rather than
+    # wrapped in an `if` that would pass having asserted nothing.
+    @tag skip: Date.utc_today().day == 1 && "no day has passed yet on the 1st"
+    test "an overdue bill leads the card, and says it is late", %{conn: conn} do
+      account = account_fixture()
+
+      recurring_item_fixture(%{
+        label: "Gás",
+        day_of_month: 1,
+        amount: "-47.48",
+        category_id: category_fixture(%{type: "fixed", name: "Gás"}).id
+      })
+
+      # The ledger has to reach the due date, or nothing is claimed.
+      transaction_fixture(%{account_id: account.id, date: Date.utc_today(), amount: "-1.00"})
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      next_row = bill_row(html, "upcoming-next")
+      assert next_row =~ "Em atraso"
+      assert next_row =~ "venceu"
+      assert next_row =~ "47,48"
+      refute next_row =~ "Próximo vencimento"
+    end
+
     test "an empty bucket says so instead of showing nothing against zero", %{conn: conn} do
       bill_on(1, "Internet", "-241.99")
 
