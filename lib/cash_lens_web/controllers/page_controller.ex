@@ -76,6 +76,7 @@ defmodule CashLensWeb.PageController do
       total_balance: total_balance,
       monthly_income: summary.income,
       monthly_expenses: summary.expenses,
+      spend_rate: Transactions.spend_rate(summary.month, summary.expenses, today),
       monthly_balance: Decimal.sub(total_balance, initial_balance_total),
       accounts: accounts_with_data,
       summary_month: month_name,

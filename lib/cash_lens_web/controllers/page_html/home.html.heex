@@ -68,7 +68,22 @@
       <div class="text-2xl font-black text-rose-600 mt-2">
         {format_currency(@monthly_expenses)}
       </div>
-      <div class="text-xs text-slate-400 mt-1">Saídas do mês</div>
+      <%!--
+        The total answers nothing mid-month: eight thousand is a disaster in a
+        week and a quiet month in four. The rate per elapsed day is comparable
+        from the first day on, and the arrow says whether it is worse than usual.
+      --%>
+      <div id="spend-rate" class="text-xs text-slate-400 mt-1">
+        <span class="font-bold text-slate-600">
+          {format_currency(@spend_rate.per_day)}/dia
+        </span>
+        <span :if={@spend_rate.delta} class={["font-bold", delta_class(@spend_rate.delta)]}>
+          {delta_label(@spend_rate.delta)}
+        </span>
+        <span :if={@spend_rate.months > 0}>
+          vs. média de {@spend_rate.months} {if @spend_rate.months == 1, do: "mês", else: "meses"}
+        </span>
+      </div>
     </div>
 
     <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">

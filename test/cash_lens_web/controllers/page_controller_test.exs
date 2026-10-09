@@ -350,11 +350,11 @@ defmodule CashLensWeb.PageControllerTest do
       html = conn |> get(~p"/") |> html_response(200)
 
       assert html =~ ~s(id="upcoming-summary")
-      assert cell(html, "upcoming-next") =~ "Internet"
-      assert cell(html, "upcoming-soon") =~ "216,59"
-      assert cell(html, "upcoming-later") =~ "147,69"
+      assert bill_row(html, "upcoming-next") =~ "Internet"
+      assert bill_row(html, "upcoming-soon") =~ "216,59"
+      assert bill_row(html, "upcoming-later") =~ "147,69"
       # 241,99 + 216,59 + 147,69
-      assert cell(html, "upcoming-summary-total") =~ "606,27"
+      assert bill_row(html, "upcoming-summary-total") =~ "606,27"
       assert total_cell(html) =~ "606,27"
     end
 
@@ -368,7 +368,7 @@ defmodule CashLensWeb.PageControllerTest do
       assert html =~ "detalhar"
       assert html =~ "resumir"
       # Every bill, by name, not only the ones the summary happens to name.
-      assert cell(html, "upcoming-recurring-", :prefix) =~ "Internet"
+      assert bill_row(html, "upcoming-recurring-", :prefix) =~ "Internet"
       assert html =~ "Condomínio"
     end
 
@@ -377,11 +377,11 @@ defmodule CashLensWeb.PageControllerTest do
 
       html = conn |> get(~p"/") |> html_response(200)
 
-      assert cell(html, "upcoming-soon") =~ "nada"
-      assert cell(html, "upcoming-later") =~ "nada"
+      assert bill_row(html, "upcoming-soon") =~ "nada"
+      assert bill_row(html, "upcoming-later") =~ "nada"
     end
 
-    defp cell(html, id, :prefix) do
+    defp bill_row(html, id, :prefix) do
       {:ok, re} = Regex.compile(~s{id="#{id}[^"]*"(.*?)</tr>}, "s")
 
       case Regex.run(re, html) do
@@ -390,7 +390,7 @@ defmodule CashLensWeb.PageControllerTest do
       end
     end
 
-    defp cell(html, id) do
+    defp bill_row(html, id) do
       {:ok, re} = Regex.compile(~s{id="#{id}"[^>]*>(.*?)</tr>}, "s")
 
       case Regex.run(re, html) do
@@ -403,6 +403,55 @@ defmodule CashLensWeb.PageControllerTest do
       account_fixture(%{name: "Conta Corrente"})
 
       refute conn |> get(~p"/") |> html_response(200) =~ "upcoming-bills"
+    end
+  end
+
+  describe "ritmo de gasto no card de despesas" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    test "the expenses card says the daily rate and how it compares", %{conn: conn} do
+      account = account_fixture()
+      today = Date.utc_today()
+      month = Date.beginning_of_month(today)
+      previous = month |> Date.add(-1) |> Date.beginning_of_month()
+
+      transaction_fixture(%{account_id: account.id, date: previous, amount: "-300.00"})
+      transaction_fixture(%{account_id: account.id, date: month, amount: "-100.00"})
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      rate = cell(html, "spend-rate")
+      assert rate =~ "/dia"
+      assert rate =~ "vs. média de 1 mês"
+      # An arrow, either way -- the direction is the point of the comparison.
+      assert rate =~ "▲" or rate =~ "▼"
+    end
+
+    test "with no earlier month there is a rate but nothing to compare it to", %{conn: conn} do
+      account = account_fixture()
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: Date.beginning_of_month(Date.utc_today()),
+        amount: "-100.00"
+      })
+
+      rate = conn |> get(~p"/") |> html_response(200) |> cell("spend-rate")
+
+      assert rate =~ "/dia"
+      refute rate =~ "vs. média"
+      refute rate =~ "▲"
+      refute rate =~ "▼"
+    end
+
+    defp cell(html, id) do
+      {:ok, re} = Regex.compile(~s{id="#{id}"[^>]*>(.*?)</div>}, "s")
+
+      case Regex.run(re, html) do
+        [_, block] -> block
+        nil -> flunk("no #{id} rendered")
+      end
     end
   end
 

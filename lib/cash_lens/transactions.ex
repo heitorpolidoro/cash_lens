@@ -1882,4 +1882,71 @@ defmodule CashLens.Transactions do
 
   def change_transaction(%Transaction{} = transaction, attrs \\ %{}),
     do: Transaction.changeset(transaction, attrs)
+
+  @spend_rate_months 6
+
+  @doc """
+  How fast money is leaving this month, against how fast it usually leaves.
+
+  The month's total answers nothing on the 9th: eight thousand spent is a
+  disaster in a week and a quiet month in four. The rate per elapsed day is
+  comparable from the first day of the month, which is when the number is
+  worth acting on.
+
+  It reads the same history the Despesas figure does -- cash accounts only,
+  transfers, initial values and both legs of a reimbursement excluded -- so the
+  rate is money that really left, and the comparison is like for like.
+
+  The average deliberately spans whole months only. A month still running
+  would drag the baseline towards whatever today happens to be, which is the
+  very thing being measured.
+  """
+  def spend_rate(month, expenses, today \\ Date.utc_today(), months \\ @spend_rate_months)
+
+  def spend_rate(%Date{} = month, expenses, %Date{} = today, months) do
+    previous =
+      [limit: months + 2]
+      |> get_historical_summary()
+      |> Enum.filter(&earlier_month?(&1, month))
+      |> Enum.take(-months)
+
+    {total, days} =
+      Enum.reduce(previous, {Decimal.new(0), 0}, fn row, {total, days} ->
+        {Decimal.add(total, row.expenses),
+         days + Date.days_in_month(Date.new!(row.year, row.month, 1))}
+      end)
+
+    per_day = per_day(expenses, elapsed_days(month, today))
+    average = per_day(total, days)
+
+    %{
+      per_day: per_day,
+      average: average,
+      delta: delta(per_day, average),
+      months: length(previous)
+    }
+  end
+
+  defp earlier_month?(%{year: year, month: month}, %Date{} = reference),
+    do: {year, month} < {reference.year, reference.month}
+
+  # A month still running has only run as far as today; a month already past
+  # ran all the way to its end.
+  defp elapsed_days(%Date{year: year, month: month}, %Date{year: year, month: month} = today),
+    do: today.day
+
+  defp elapsed_days(%Date{} = month, _today), do: Date.days_in_month(month)
+
+  defp per_day(_total, 0), do: Decimal.new("0")
+  defp per_day(total, days), do: Decimal.div(total, days)
+
+  # Without a baseline there is nothing to compare to, and saying "+100%"
+  # against zero would be a claim the history does not support.
+  defp delta(per_day, average) do
+    if Decimal.equal?(average, 0) do
+      nil
+    else
+      per_day |> Decimal.sub(average) |> Decimal.div(average)
+    end
+  end
 end

@@ -53,6 +53,25 @@ defmodule CashLensWeb.PageHTML do
   def bill_link(_bill), do: ~p"/forecast"
 
   @doc """
+  The spending rate's distance from its baseline, as a signed percentage.
+
+  Rounded to whole points: the figure is a direction, and a tenth of a point
+  of it would be read as precision the baseline does not have.
+  """
+  def delta_label(delta) do
+    pct = delta |> Decimal.mult(100) |> Decimal.round(0) |> Decimal.to_integer()
+
+    if pct >= 0, do: "▲ #{pct}%", else: "▼ #{abs(pct)}%"
+  end
+
+  @doc """
+  Colour for that percentage. Spending faster than usual is the bad direction.
+  """
+  def delta_class(delta) do
+    if Decimal.negative?(delta), do: "text-emerald-600", else: "text-rose-600"
+  end
+
+  @doc """
   What a summary bucket says beside its amount.
 
   An empty bucket says so rather than showing "0 contas" against R$ 0,00, and a

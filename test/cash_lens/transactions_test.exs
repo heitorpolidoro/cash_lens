@@ -1768,4 +1768,110 @@ defmodule CashLens.TransactionsTest do
       assert Transactions.duplicate_of(%{description: "SEM CONTA"}) == nil
     end
   end
+
+  describe "spend_rate/4" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    defp spent(date, amount) do
+      transaction_fixture(%{account_id: account_fixture().id, date: date, amount: amount})
+    end
+
+    test "divides the month by the days it has actually run, not by its length" do
+      # 900 spent by the 9th is 100/day. Dividing by the month's 31 days would
+      # read it as 29/day -- a quiet month, right up to the overdraft.
+      spent(~D[2026-10-03], "-400.00")
+      spent(~D[2026-10-08], "-500.00")
+
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("900.00"), ~D[2026-10-09])
+
+      assert Decimal.equal?(rate.per_day, Decimal.new("100"))
+    end
+
+    test "a month already closed is divided by all of its days" do
+      rate = Transactions.spend_rate(~D[2026-09-01], Decimal.new("900.00"), ~D[2026-10-09])
+
+      assert Decimal.equal?(rate.per_day, Decimal.new("30"))
+    end
+
+    test "compares against whole months only, and says how far off it is" do
+      # August: 31 days, 3100 spent. September: 30 days, 3000 spent. Baseline
+      # is 6100/61 = 100/day. October is running at 150/day: half as fast again.
+      spent(~D[2026-08-10], "-3100.00")
+      spent(~D[2026-09-10], "-3000.00")
+      spent(~D[2026-10-05], "-1500.00")
+
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("1500.00"), ~D[2026-10-10])
+
+      assert Decimal.equal?(rate.average, Decimal.new("100"))
+      assert Decimal.equal?(Decimal.round(rate.delta, 2), Decimal.new("0.50"))
+      assert rate.months == 2
+    end
+
+    test "the month being measured never counts towards its own baseline" do
+      # Without the cutoff, October's own spending would be averaged into the
+      # average October is compared against, and a spike would partly hide
+      # itself.
+      spent(~D[2026-09-10], "-3000.00")
+      spent(~D[2026-10-05], "-9000.00")
+
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("9000.00"), ~D[2026-10-10])
+
+      assert Decimal.equal?(rate.average, Decimal.new("100"))
+      assert rate.months == 1
+    end
+
+    test "transfers and initial values are not money leaving, and do not count" do
+      account = account_fixture()
+      other = account_fixture(%{name: "Poupança"})
+      transfer = CashLens.CategoriesFixtures.category_fixture(%{slug: "transfer"})
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-09-10],
+        amount: "-5000.00",
+        category_id: transfer.id
+      })
+
+      transaction_fixture(%{account_id: other.id, date: ~D[2026-09-11], amount: "-3000.00"})
+
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("0"), ~D[2026-10-10])
+
+      # 3000 over September's 30 days. The 5000 that only moved between the
+      # user's own accounts is not spending.
+      assert Decimal.equal?(rate.average, Decimal.new("100"))
+    end
+
+    test "the baseline is the most recent months, not the oldest ones on file" do
+      # Nine months of history for a six-month baseline. March was an outlier
+      # at 1000/day; everything since has run at 100. A baseline that reached
+      # for the oldest months instead of the newest would read the quiet month
+      # as a 60% improvement on a spike that is half a year gone.
+      spent(~D[2026-03-15], "-31000.00")
+
+      for {month, amount} <- [
+            {4, "-3000.00"},
+            {5, "-3100.00"},
+            {6, "-3000.00"},
+            {7, "-3100.00"},
+            {8, "-3100.00"},
+            {9, "-3000.00"}
+          ] do
+        spent(Date.new!(2026, month, 15), amount)
+      end
+
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("1000.00"), ~D[2026-10-10])
+
+      assert rate.months == 6
+      assert Decimal.equal?(rate.average, Decimal.new("100"))
+    end
+
+    test "with no history there is no comparison to make" do
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("900.00"), ~D[2026-10-10])
+
+      assert rate.delta == nil
+      assert rate.months == 0
+      assert Decimal.equal?(rate.average, Decimal.new("0"))
+    end
+  end
 end
