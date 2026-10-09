@@ -73,7 +73,7 @@ defmodule CashLensWeb.BankruptcyCard do
       class={[
         "card border shadow-sm rounded-2xl p-5 block",
         @navigate && "hover:shadow-md transition cursor-pointer",
-        card_class(@bankruptcy)
+        card_class(@bankruptcy, fragile?(@trough, @volatility))
       ]}
       data-role="kpi-bankruptcy"
       data-severity={@bankruptcy.severity}
@@ -98,7 +98,10 @@ defmodule CashLensWeb.BankruptcyCard do
         </span>
       </div>
       <div class="mt-1">
-        <span class={["text-2xl font-black", figure_class(@bankruptcy)]}>
+        <span class={[
+          "text-2xl font-black",
+          figure_class(@bankruptcy, fragile?(@trough, @volatility))
+        ]}>
           {cond do
             @bankruptcy.date -> format_date(@bankruptcy.date)
             @trough -> format_currency(@trough.balance)
@@ -115,7 +118,7 @@ defmodule CashLensWeb.BankruptcyCard do
       <span
         :if={fragile?(@trough, @volatility)}
         data-role="volatility-warning"
-        class="text-[11px] font-bold text-warning mt-1 block"
+        class="text-[11px] font-bold opacity-80 mt-1 block"
       >
         Pode zerar: a folga é menor que a variação mensal típica
         (±{format_currency(@volatility.sigma)} em {@volatility.months} meses).
@@ -124,13 +127,28 @@ defmodule CashLensWeb.BankruptcyCard do
     """
   end
 
-  defp card_class(%{severity: :critical}), do: "bg-error border-error text-error-content"
-  defp card_class(_), do: "bg-base-100 border-base-300"
+  # The whole card carries the severity, as one scale: green, amber, strong
+  # amber, red. The theme's `warning` is already an orange hue, so the strong
+  # step reads as orange without bringing a colour in from outside the theme.
+  #
+  # A fragile `:safe` takes the amber of `:distant`: it is not safe, and the
+  # card would otherwise be green while its own badge said "Pode zerar".
+  defp card_class(%{severity: :critical}, _fragile),
+    do: "bg-error border-error text-error-content"
 
-  defp figure_class(%{severity: :safe}), do: "text-success"
-  defp figure_class(%{severity: :distant}), do: "text-warning"
-  defp figure_class(%{severity: :near}), do: "text-error"
-  defp figure_class(%{severity: :critical}), do: "text-error-content"
+  defp card_class(%{severity: :near}, _fragile), do: "bg-warning/45 border-warning/90"
+  defp card_class(%{severity: :distant}, _fragile), do: "bg-warning/15 border-warning/50"
+  defp card_class(%{severity: :safe}, true), do: "bg-warning/15 border-warning/50"
+  defp card_class(%{severity: :safe}, _solid), do: "bg-success/10 border-success/40"
+
+  # The figure's ink has to clear the tint behind it, and the tint is now the
+  # hue the ink used to be: `text-warning` on `bg-warning/45` is amber on amber,
+  # and the theme has no darker amber to fall back on -- its `warning-content`
+  # is the near-white meant for a solid amber fill. So every tinted band drops
+  # the hue and reads the figure in `base-content`. The card and the badge
+  # already say which band it is; the number's job is to be read.
+  defp figure_class(%{severity: :critical}, _fragile), do: "text-error-content"
+  defp figure_class(_severity, _fragile), do: "text-base-content"
 
   # A projection that never crosses zero is only as safe as its thinnest moment.
   # When the trough is smaller than how much an ordinary month swings, the line
@@ -144,7 +162,7 @@ defmodule CashLensWeb.BankruptcyCard do
   defp badge_class(%{severity: :safe}, true), do: "badge-warning"
   defp badge_class(%{severity: :safe}, _solid), do: "badge-success"
   defp badge_class(%{severity: :distant}, _fragile), do: "badge-warning"
-  defp badge_class(%{severity: :near}, _fragile), do: "badge-error"
+  defp badge_class(%{severity: :near}, _fragile), do: "badge-neutral"
   defp badge_class(%{severity: :critical}, _fragile), do: "badge-neutral"
 
   defp badge_label(%{severity: :safe}, true), do: "Pode zerar"
