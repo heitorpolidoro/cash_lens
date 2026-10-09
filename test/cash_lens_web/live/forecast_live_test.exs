@@ -9,6 +9,7 @@ defmodule CashLensWeb.ForecastLiveTest do
   import CashLensWeb.Formatters
 
   alias CashLens.Forecast
+  alias CashLensWeb.BankruptcyCard
   alias CashLensWeb.ForecastLive.Index
 
   # Counts how many times a marker appears in the rendered HTML. Simpler and more
@@ -260,32 +261,32 @@ defmodule CashLensWeb.ForecastLiveTest do
     end
 
     test "no zero date in the horizon is safe", %{today: today} do
-      assert %{severity: :safe, date: nil, days: nil} = Index.bankruptcy_status(nil, today)
+      assert %{severity: :safe, date: nil, days: nil} = BankruptcyCard.status(nil, today)
     end
 
     test "more than 120 days away is distant", %{today: today} do
       assert %{severity: :distant, days: 121} =
-               Index.bankruptcy_status(Date.add(today, 121), today)
+               BankruptcyCard.status(Date.add(today, 121), today)
     end
 
     test "exactly 120 days away is already near, not distant", %{today: today} do
-      assert %{severity: :near, days: 120} = Index.bankruptcy_status(Date.add(today, 120), today)
+      assert %{severity: :near, days: 120} = BankruptcyCard.status(Date.add(today, 120), today)
     end
 
     test "exactly 60 days away is still near, not critical", %{today: today} do
-      assert %{severity: :near, days: 60} = Index.bankruptcy_status(Date.add(today, 60), today)
+      assert %{severity: :near, days: 60} = BankruptcyCard.status(Date.add(today, 60), today)
     end
 
     test "fewer than 60 days away is critical", %{today: today} do
       assert %{severity: :critical, days: 59} =
-               Index.bankruptcy_status(Date.add(today, 59), today)
+               BankruptcyCard.status(Date.add(today, 59), today)
     end
 
     test "a zero date already reached or passed is critical", %{today: today} do
-      assert %{severity: :critical, days: 0} = Index.bankruptcy_status(today, today)
+      assert %{severity: :critical, days: 0} = BankruptcyCard.status(today, today)
 
       assert %{severity: :critical, days: -5} =
-               Index.bankruptcy_status(Date.add(today, -5), today)
+               BankruptcyCard.status(Date.add(today, -5), today)
     end
   end
 

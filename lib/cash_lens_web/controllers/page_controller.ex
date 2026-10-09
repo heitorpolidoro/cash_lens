@@ -4,12 +4,22 @@ defmodule CashLensWeb.PageController do
   alias CashLens.Accounting
   alias CashLens.CreditCards
   alias CashLens.Forecast
+  alias CashLensWeb.BankruptcyCard
   alias CashLens.Accounts
   alias CashLens.Transactions
 
   @history_months 12
 
+  # The same 12-month window the forecast screen projects over, so the card says
+  # the same thing on both.
+  @forecast_horizon_days 365
+
   def home(conn, _params) do
+    # One projection serves both the bill list and the bankruptcy card: a
+    # 30-day slice of a 365-day projection is the same slice, so building two
+    # would only cost twice.
+    projection = Forecast.project(@forecast_horizon_days)
+
     # Get all accounts
     all_accounts = Accounts.list_accounts()
 
@@ -72,7 +82,8 @@ defmodule CashLensWeb.PageController do
       chart_data: chart_data,
       historical: historical,
       closed_statements: CreditCards.closed_without_statement(),
-      upcoming: Forecast.upcoming_bills(),
+      upcoming: Forecast.upcoming_bills(projection),
+      bankruptcy_card: BankruptcyCard.assigns_from(projection, @forecast_horizon_days),
       today: Date.utc_today()
     )
   end

@@ -6,6 +6,8 @@ defmodule CashLensWeb.PageHTML do
   """
   use CashLensWeb, :html
 
+  import CashLensWeb.BankruptcyCard, only: [bankruptcy_card: 1]
+
   embed_templates "page_html/*"
 
   @due_soon_days 7

@@ -345,4 +345,49 @@ defmodule CashLensWeb.PageControllerTest do
       refute conn |> get(~p"/") |> html_response(200) =~ "upcoming-bills"
     end
   end
+
+  describe "projeção de falência no painel" do
+    import CashLens.CategoriesFixtures
+
+    test "shows the card beside the month's balance", %{conn: conn} do
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert html =~ "Projeção de Falência"
+      assert html =~ ~s(data-role="kpi-bankruptcy")
+    end
+
+    test "the whole card links to the screen that explains it", %{conn: conn} do
+      # A figure this alarming should not be a dead end.
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert Regex.match?(
+               ~r{<a[^>]*href="/forecast"[^>]*data-role="kpi-bankruptcy"},
+               html
+             )
+    end
+
+    test "says the same thing the forecast screen says", %{conn: conn} do
+      # Two renderings of this would drift, and the dashboard's would be the one
+      # that drifted wrong.
+      account = account_fixture(%{balance: "100.00"})
+      category = category_fixture(%{type: "fixed", name: "Aluguel"})
+
+      {:ok, _} =
+        CashLens.Forecast.create_recurring_item(%{
+          "category_id" => category.id,
+          "label" => "Aluguel",
+          "day_of_month" => Date.utc_today().day,
+          "amount" => "-5000.00"
+        })
+
+      balance_fixture(%{account_id: account.id, final_balance: "100.00"})
+
+      dashboard = conn |> get(~p"/") |> html_response(200)
+
+      severity = Regex.run(~r{data-severity="(\w+)"}, dashboard) |> Enum.at(1)
+
+      assert severity in ~w(critical near distant safe)
+      assert dashboard =~ "Projeção de Falência"
+    end
+  end
 end

@@ -2040,7 +2040,7 @@ defmodule CashLens.ForecastTest do
       bill_on(3, "Condomínio", "-461.39")
       bill_on(1, "Gás", "-47.48")
 
-      bills = Forecast.upcoming_bills(10)
+      bills = Forecast.upcoming_bills(Forecast.project(10), 10)
 
       assert Enum.map(bills.shown, & &1.label) == ["Gás", "Condomínio"]
       assert Enum.map(bills.shown, & &1.kind) == [:recurring, :recurring]
@@ -2051,7 +2051,7 @@ defmodule CashLens.ForecastTest do
       bill_on(1, "Luz", "-334.16")
       bill_on(2, "Salário", "35000.00")
 
-      bills = Forecast.upcoming_bills(10)
+      bills = Forecast.upcoming_bills(Forecast.project(10), 10)
 
       assert Enum.map(bills.shown, & &1.label) == ["Luz"]
       assert Decimal.equal?(bills.total, Decimal.new("334.16"))
@@ -2071,7 +2071,7 @@ defmodule CashLens.ForecastTest do
           total_a_pagar: Decimal.new("14075.87")
         })
 
-      bills = Forecast.upcoming_bills(20)
+      bills = Forecast.upcoming_bills(Forecast.project(20), 20)
 
       assert [bill] = Enum.filter(bills.shown, &(&1.kind == :statement))
       assert bill.label == "Fatura Ourocard"
@@ -2103,7 +2103,7 @@ defmodule CashLens.ForecastTest do
       {:ok, _} =
         CashLens.CreditCards.update_statement(statement, %{payment_transaction_id: payment.id})
 
-      bills = Forecast.upcoming_bills(20)
+      bills = Forecast.upcoming_bills(Forecast.project(20), 20)
 
       assert Enum.filter(bills.shown, &(&1.kind == :statement)) == []
     end
@@ -2114,7 +2114,7 @@ defmodule CashLens.ForecastTest do
       # largest bill invisible behind a number of items.
       for day <- 1..4, do: bill_on(day, "Conta #{day}", "-10.00")
 
-      bills = Forecast.upcoming_bills(10, 2)
+      bills = Forecast.upcoming_bills(Forecast.project(10), 10, 2)
 
       assert length(bills.shown) == 2
       assert bills.hidden_count == 2
@@ -2124,7 +2124,7 @@ defmodule CashLens.ForecastTest do
     end
 
     test "nothing due is an empty list and a zero total" do
-      bills = Forecast.upcoming_bills(10)
+      bills = Forecast.upcoming_bills(Forecast.project(10), 10)
 
       assert bills.shown == []
       assert bills.hidden_count == 0

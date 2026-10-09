@@ -406,11 +406,14 @@ defmodule CashLens.Forecast do
   so the projection's estimate for it is listed and marked as one. Reading an
   estimate as a bill is the mistake the flag exists to prevent, and leaving the
   card out entirely is the bigger one: it reads as nothing to pay.
+
+  Takes the projection rather than building one, so a caller that also shows the
+  bankruptcy card pays for a single projection: a 30-day slice of a 365-day
+  projection is the same slice.
   """
-  def upcoming_bills(days \\ @upcoming_days, limit \\ @upcoming_limit) do
+  def upcoming_bills(projection, days \\ @upcoming_days, limit \\ @upcoming_limit) do
     rows =
-      days
-      |> project()
+      projection
       |> ruler_occurrences(days)
       |> Enum.filter(&Decimal.negative?(&1.item.amount))
       |> Enum.map(&bill_row/1)

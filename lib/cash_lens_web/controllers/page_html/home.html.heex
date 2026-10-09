@@ -44,7 +44,7 @@
   </div>
   
 <!-- KPI Cards -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
     <div id="kpi-saldo-atual" class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
       <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Saldo Atual</span>
       <div class="text-2xl font-black text-blue-600 mt-2">{format_currency(@total_balance)}</div>
@@ -83,6 +83,20 @@
       </div>
       <div class="text-xs text-slate-400 mt-1">Resultado líquido do mês</div>
     </div>
+
+    <%!--
+      Beside the month's balance, because it is the same question asked further
+      out: the balance says how this month ended, this says whether the next
+      twelve have an end. The whole card is the link to the screen that explains
+      it -- a figure this alarming should not be a dead end.
+    --%>
+    <.bankruptcy_card
+      bankruptcy={@bankruptcy_card.bankruptcy}
+      trough={@bankruptcy_card.trough}
+      volatility={@bankruptcy_card.volatility}
+      final_balance={@bankruptcy_card.final_balance}
+      navigate={~p"/forecast"}
+    />
   </div>
 
   <%!--
