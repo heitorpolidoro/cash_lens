@@ -412,6 +412,32 @@ defmodule CashLensWeb.PageControllerTest do
     end
   end
 
+  describe "lista de contas no painel" do
+    import CashLens.AccountsFixtures
+
+    test "follows the order arranged on the accounts screen", %{conn: conn} do
+      alfa = account_fixture(%{name: "Alfa"})
+      bravo = account_fixture(%{name: "Bravo"})
+
+      :ok = CashLens.Accounts.reorder_accounts([bravo.id, alfa.id])
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert :binary.match(html, "Bravo") < :binary.match(html, "Alfa")
+    end
+
+    test "an investment is tagged, and still counted", %{conn: conn} do
+      account_fixture(%{name: "Conta", balance: "100.00"})
+      account_fixture(%{name: "Tesouro", balance: "5000.00", is_investment: true})
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert html =~ "investimento"
+      # The flag is a label: 100 + 5000 is still the balance the screen shows.
+      assert html =~ "5.100,00"
+    end
+  end
+
   describe "histórico mensal abaixo do gráfico" do
     import CashLens.AccountsFixtures
     import CashLens.TransactionsFixtures

@@ -124,6 +124,100 @@ defmodule CashLensWeb.AccountLiveTest do
     end
   end
 
+  describe "Reordering" do
+    defp names_in(live, section) do
+      live
+      |> render()
+      |> then(fn html ->
+        {:ok, re} = Regex.compile(~s{id="#{section}".*?</section>}, "s")
+        [block] = Regex.run(re, html)
+        {:ok, name_re} = Regex.compile(~s{<h3[^>]*>\\s*([^<\\n]+?)\\s*\\n}, "s")
+        name_re |> Regex.scan(block) |> Enum.map(fn [_, name] -> name end)
+      end)
+    end
+
+    test "the arrows move one account one place, and the order sticks", %{conn: conn} do
+      account_fixture(%{name: "Alfa"})
+      account_fixture(%{name: "Bravo"})
+      charlie = account_fixture(%{name: "Charlie"})
+
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+      assert names_in(live, "bank-accounts") == ["Alfa", "Bravo", "Charlie"]
+
+      live
+      |> element("#account-#{charlie.id} button[phx-value-direction='up']")
+      |> render_click()
+
+      assert names_in(live, "bank-accounts") == ["Alfa", "Charlie", "Bravo"]
+
+      # Written, not merely assigned: a reload shows the same order.
+      {:ok, reloaded, _html} = live(conn, ~p"/accounts")
+      assert names_in(reloaded, "bank-accounts") == ["Alfa", "Charlie", "Bravo"]
+    end
+
+    test "the ends are disabled rather than missing", %{conn: conn} do
+      first = account_fixture(%{name: "Alfa"})
+      last = account_fixture(%{name: "Bravo"})
+
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+
+      assert has_element?(live, "#account-#{first.id} button[phx-value-direction='up'][disabled]")
+
+      refute has_element?(
+               live,
+               "#account-#{first.id} button[phx-value-direction='down'][disabled]"
+             )
+
+      assert has_element?(
+               live,
+               "#account-#{last.id} button[phx-value-direction='down'][disabled]"
+             )
+    end
+
+    # Each section is ordered on its own. Moving the top investment up must not
+    # reach into the bank accounts, where the screen could not show the result.
+    test "an account only moves within its own section", %{conn: conn} do
+      account_fixture(%{name: "Conta"})
+      first_investment = account_fixture(%{name: "Tesouro", is_investment: true})
+      account_fixture(%{name: "CDB", is_investment: true})
+
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+
+      assert names_in(live, "investment-accounts") == ["CDB", "Tesouro"]
+
+      live
+      |> element("#account-#{first_investment.id} button[phx-value-direction='up']")
+      |> render_click()
+
+      assert names_in(live, "investment-accounts") == ["Tesouro", "CDB"]
+      assert names_in(live, "bank-accounts") == ["Conta"]
+    end
+  end
+
+  describe "Investments" do
+    test "investment accounts get their own section, with their own total", %{conn: conn} do
+      bank = account_fixture(%{name: "Conta Corrente", balance: "100.00"})
+      investment = account_fixture(%{name: "Tesouro", balance: "5000.00", is_investment: true})
+
+      {:ok, live, html} = live(conn, ~p"/accounts")
+
+      assert html =~ "Investimentos"
+      assert has_element?(live, "#investment-accounts #account-#{investment.id}", "Tesouro")
+      refute has_element?(live, "#bank-accounts #account-#{investment.id}")
+      assert has_element?(live, "#bank-accounts #account-#{bank.id}")
+
+      assert render(live) =~ "investment-accounts-total"
+    end
+
+    test "with no investments the section is absent, not empty", %{conn: conn} do
+      account_fixture(%{name: "Conta Corrente"})
+
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+
+      refute has_element?(live, "#investment-accounts")
+    end
+  end
+
   describe "Closed accounts" do
     test "hides closed accounts until the toggle is enabled", %{conn: conn} do
       closed = account_fixture(%{name: "Conta Encerrada", is_closed: true})

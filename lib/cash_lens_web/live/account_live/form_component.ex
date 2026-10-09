@@ -201,6 +201,17 @@ defmodule CashLensWeb.AccountLive.FormComponent do
               type="checkbox"
               label="Esta conta é um Cartão de Crédito"
             />
+            <%!--
+              A label, not an exclusion: the balance goes on counting in every
+              total it already counts in, and in the forecast. It only moves
+              the account to its own section of the list.
+            --%>
+            <.input
+              :if={!credit_card?(@form)}
+              field={@form[:is_investment]}
+              type="checkbox"
+              label="Esta conta é um investimento"
+            />
           </div>
 
           <div :if={credit_card?(@form)} class="space-y-2 border-t border-base-200 pt-4">

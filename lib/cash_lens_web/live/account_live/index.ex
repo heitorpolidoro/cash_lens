@@ -68,82 +68,43 @@ defmodule CashLensWeb.AccountLive.Index do
         </p>
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          <div
-            :for={account <- @bank_accounts}
-            id={"account-#{account.id}"}
-            class={[
-              "bg-base-100 rounded-2xl border border-base-300 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition",
-              account.is_closed && "opacity-60"
-            ]}
-          >
-            <div class="space-y-4">
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex items-center gap-3">
-                  <div
-                    class="size-11 rounded-xl text-white flex items-center justify-center font-bold text-sm overflow-hidden bg-neutral"
-                    style={account.color && "background-color: #{account.color}"}
-                  >
-                    <img
-                      :if={filled?(account.icon)}
-                      src={account.icon}
-                      alt={account.name}
-                      class="w-full h-full object-cover"
-                    />
-                    <span :if={!filled?(account.icon)} class="uppercase">
-                      {initials(account)}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 class="font-bold text-sm flex items-center gap-2">
-                      {account.name}
-                      <span
-                        :if={account.is_closed}
-                        class="badge badge-ghost badge-xs text-[9px] uppercase font-black tracking-wider"
-                      >
-                        Encerrada
-                      </span>
-                    </h3>
-                    <span class="text-xs text-base-content/50">{account.bank}</span>
-                  </div>
-                </div>
-                <.card_actions account={account} />
-              </div>
+          <.account_card
+            :for={{account, index} <- Enum.with_index(@bank_accounts)}
+            account={account}
+            current_balances={@current_balances}
+            first?={index == 0}
+            last?={index == length(@bank_accounts) - 1}
+          />
+        </div>
+      </section>
 
-              <div>
-                <span class="text-[11px] font-semibold text-base-content/40 uppercase tracking-wider block">
-                  Saldo Atual
-                </span>
-                <div class="text-2xl font-black font-mono">
-                  {format_currency(current_balance(@current_balances, account))}
-                </div>
-                <span class="text-[11px] text-base-content/40">
-                  Saldo inicial: {format_currency(account.balance)}
-                </span>
-              </div>
+      <%!--
+        Investments are kept apart because they read differently, not because
+        they count differently: the balance here goes on being part of every
+        total it was already part of. Its own section and its own order, and
+        nothing else changes.
+      --%>
+      <section :if={@investment_accounts != []} id="investment-accounts" class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-black uppercase tracking-wider">
+            Investimentos ({length(@investment_accounts)})
+          </h2>
+          <span id="investment-accounts-total" class="text-xs font-bold text-base-content/60">
+            Saldo Total:
+            <strong class="text-primary font-black text-sm font-mono">
+              {format_currency(@investment_total)}
+            </strong>
+          </span>
+        </div>
 
-              <button
-                :if={!account.is_closed}
-                type="button"
-                phx-click="open_update_balance_modal"
-                phx-value-id={account.id}
-                class="btn btn-ghost btn-xs normal-case font-normal"
-              >
-                <.icon name="hero-banknotes" class="size-3 mr-1" /> Rendimentos
-              </button>
-            </div>
-
-            <div class="mt-4 pt-3 border-t border-base-200 flex items-center justify-between text-xs gap-2">
-              <span class="text-base-content/50 truncate">
-                Extrator: <strong>{translate_parser_type(account.parser_type)}</strong>
-              </span>
-              <.link
-                navigate={~p"/transactions?account_id=#{account.id}&return_to=accounts"}
-                class="font-bold text-primary hover:underline whitespace-nowrap"
-              >
-                Ver Extrato ➔
-              </.link>
-            </div>
-          </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <.account_card
+            :for={{account, index} <- Enum.with_index(@investment_accounts)}
+            account={account}
+            current_balances={@current_balances}
+            first?={index == 0}
+            last?={index == length(@investment_accounts) - 1}
+          />
         </div>
       </section>
 
@@ -336,6 +297,123 @@ defmodule CashLensWeb.AccountLive.Index do
     Map.get(current_balances, account.id, account.balance)
   end
 
+  attr :account, :map, required: true
+  attr :current_balances, :map, required: true
+  attr :first?, :boolean, default: false
+  attr :last?, :boolean, default: false
+
+  defp account_card(assigns) do
+    ~H"""
+    <div
+      id={"account-#{@account.id}"}
+      class={[
+        "bg-base-100 rounded-2xl border border-base-300 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition",
+        @account.is_closed && "opacity-60"
+      ]}
+    >
+      <div class="space-y-4">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-3">
+            <div
+              class="size-11 rounded-xl text-white flex items-center justify-center font-bold text-sm overflow-hidden bg-neutral"
+              style={@account.color && "background-color: #{@account.color}"}
+            >
+              <img
+                :if={filled?(@account.icon)}
+                src={@account.icon}
+                alt={@account.name}
+                class="w-full h-full object-cover"
+              />
+              <span :if={!filled?(@account.icon)} class="uppercase">
+                {initials(@account)}
+              </span>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm flex items-center gap-2">
+                {@account.name}
+                <span
+                  :if={@account.is_closed}
+                  class="badge badge-ghost badge-xs text-[9px] uppercase font-black tracking-wider"
+                >
+                  Encerrada
+                </span>
+              </h3>
+              <span class="text-xs text-base-content/50">{@account.bank}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <%!--
+              The order is the user's, so it is changed where the accounts are:
+              one place at a time, within this account's own section. Disabled
+              at the ends rather than hidden, so the two buttons do not jump
+              around as a card moves.
+            --%>
+            <div class="flex flex-col">
+              <button
+                type="button"
+                phx-click="move_account"
+                phx-value-id={@account.id}
+                phx-value-direction="up"
+                disabled={@first?}
+                title="Subir"
+                class="btn btn-ghost btn-xs px-1 h-4 min-h-0 disabled:opacity-20"
+              >
+                <.icon name="hero-chevron-up" class="size-3" />
+              </button>
+              <button
+                type="button"
+                phx-click="move_account"
+                phx-value-id={@account.id}
+                phx-value-direction="down"
+                disabled={@last?}
+                title="Descer"
+                class="btn btn-ghost btn-xs px-1 h-4 min-h-0 disabled:opacity-20"
+              >
+                <.icon name="hero-chevron-down" class="size-3" />
+              </button>
+            </div>
+            <.card_actions account={@account} />
+          </div>
+        </div>
+
+        <div>
+          <span class="text-[11px] font-semibold text-base-content/40 uppercase tracking-wider block">
+            Saldo Atual
+          </span>
+          <div class="text-2xl font-black font-mono">
+            {format_currency(current_balance(@current_balances, @account))}
+          </div>
+          <span class="text-[11px] text-base-content/40">
+            Saldo inicial: {format_currency(@account.balance)}
+          </span>
+        </div>
+
+        <button
+          :if={!@account.is_closed}
+          type="button"
+          phx-click="open_update_balance_modal"
+          phx-value-id={@account.id}
+          class="btn btn-ghost btn-xs normal-case font-normal"
+        >
+          <.icon name="hero-banknotes" class="size-3 mr-1" /> Rendimentos
+        </button>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-base-200 flex items-center justify-between text-xs gap-2">
+        <span class="text-base-content/50 truncate">
+          Extrator: <strong>{translate_parser_type(@account.parser_type)}</strong>
+        </span>
+        <.link
+          navigate={~p"/transactions?account_id=#{@account.id}&return_to=accounts"}
+          class="font-bold text-primary hover:underline whitespace-nowrap"
+        >
+          Ver Extrato ➔
+        </.link>
+      </div>
+    </div>
+    """
+  end
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -382,13 +460,17 @@ defmodule CashLensWeb.AccountLive.Index do
   defp load_accounts(socket) do
     opts = [include_closed: socket.assigns.show_closed]
     current_balances = current_balances_map()
-    bank_accounts = Accounts.list_bank_accounts(opts)
+
+    {investment_accounts, bank_accounts} =
+      opts |> Accounts.list_bank_accounts() |> Enum.split_with(& &1.is_investment)
 
     socket
     |> assign(:current_balances, current_balances)
     |> assign(:bank_accounts, bank_accounts)
+    |> assign(:investment_accounts, investment_accounts)
     |> assign(:credit_cards, Accounts.list_credit_cards(opts))
     |> assign(:bank_total, bank_total(bank_accounts, current_balances))
+    |> assign(:investment_total, bank_total(investment_accounts, current_balances))
   end
 
   defp bank_total(bank_accounts, current_balances) do
@@ -400,6 +482,25 @@ defmodule CashLensWeb.AccountLive.Index do
   end
 
   @impl true
+  def handle_event("move_account", %{"id" => id, "direction" => direction}, socket) do
+    # The section the account is in is the list that gets reordered: moving a
+    # card past the end of its own section into another one would be a move the
+    # screen cannot show.
+    section =
+      if Enum.any?(socket.assigns.investment_accounts, &(&1.id == id)) do
+        socket.assigns.investment_accounts
+      else
+        socket.assigns.bank_accounts
+      end
+
+    section
+    |> Accounts.move(id, if(direction == "up", do: :up, else: :down))
+    |> Enum.map(& &1.id)
+    |> Accounts.reorder_accounts()
+
+    {:noreply, load_accounts(socket)}
+  end
+
   def handle_event("toggle_closed", params, socket) do
     {:noreply,
      socket

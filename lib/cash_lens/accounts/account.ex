@@ -14,6 +14,12 @@ defmodule CashLens.Accounts.Account do
     field :parser_type, :string
     field :is_closed, :boolean, default: false
     field :is_credit_card, :boolean, default: false
+    # A label, not an exclusion: an investment account's balance counts
+    # everywhere a bank account's does.
+    field :is_investment, :boolean, default: false
+    # Where the account sits in the lists. Null means never placed, and sorts
+    # behind everything the user has arranged.
+    field :position, :integer
     field :closing_day, :integer
     field :due_day, :integer
 
@@ -33,6 +39,8 @@ defmodule CashLens.Accounts.Account do
       :parser_type,
       :is_closed,
       :is_credit_card,
+      :is_investment,
+      :position,
       :closing_day,
       :due_day
     ])

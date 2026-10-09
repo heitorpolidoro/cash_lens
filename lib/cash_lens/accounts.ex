@@ -15,31 +15,100 @@ defmodule CashLens.Accounts do
   """
   def list_accounts(opts \\ []) do
     Account
+    |> in_display_order()
     |> filter_closed(opts)
     |> Repo.all()
   end
 
   @doc """
   Returns the bank accounts and digital wallets (`is_credit_card: false`),
-  ordered by name.
+  in the order the user arranged.
 
   Pass `include_closed: false` to leave closed (archived) accounts out.
   """
   def list_bank_accounts(opts \\ []) do
-    from(a in Account, where: a.is_credit_card == false, order_by: a.name)
+    from(a in Account, where: a.is_credit_card == false)
+    |> in_display_order()
     |> filter_closed(opts)
     |> Repo.all()
   end
 
   @doc """
-  Returns the credit-card accounts (`is_credit_card: true`), ordered by name.
+  Returns the credit-card accounts (`is_credit_card: true`), in the order the
+  user arranged.
 
   Pass `include_closed: false` to leave closed (archived) accounts out.
   """
   def list_credit_cards(opts \\ []) do
-    from(a in Account, where: a.is_credit_card == true, order_by: a.name)
+    from(a in Account, where: a.is_credit_card == true)
+    |> in_display_order()
     |> filter_closed(opts)
     |> Repo.all()
+  end
+
+  # The order the user arranged, then everything never placed, by name. Name
+  # last so a new account lands somewhere predictable instead of wherever
+  # Postgres felt like putting it -- which is what every list did before there
+  # was a position at all.
+  defp in_display_order(query) do
+    from a in query, order_by: [asc_nulls_last: a.position, asc: a.name]
+  end
+
+  @doc """
+  Writes the given ids' order, as positions 0..n.
+
+  Takes the whole list rather than "move this one up" so the caller's screen is
+  the source of truth: the rows it is looking at, in the order it wants them.
+  A per-account swap would have to guess what sits beside an account that was
+  never placed, and two accounts could hold the same position forever.
+
+  Accounts not named here keep whatever position they had.
+  """
+  def reorder_accounts(ids) when is_list(ids) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    Repo.transaction(fn ->
+      ids
+      |> Enum.with_index()
+      |> Enum.each(fn {id, position} ->
+        from(a in Account, where: a.id == ^id)
+        |> Repo.update_all(set: [position: position, updated_at: now])
+      end)
+    end)
+
+    :ok
+  end
+
+  @doc """
+  The same list with one account moved one place towards `:up` or `:down`.
+
+  Pure: it answers "what would the new order be", and `reorder_accounts/1`
+  writes it. At either end the list comes back unchanged, so a button at the
+  top of the list is a no-op rather than an error.
+  """
+  def move(accounts, account_id, direction) when direction in [:up, :down] do
+    case Enum.find_index(accounts, &(&1.id == account_id)) do
+      nil -> accounts
+      index -> swap(accounts, index, target_index(index, direction, length(accounts)))
+    end
+  end
+
+  defp target_index(index, :up, _length), do: index - 1
+  defp target_index(index, :down, _length), do: index + 1
+
+  defp swap(accounts, _index, target) when target < 0, do: accounts
+
+  defp swap(accounts, index, target) do
+    if target >= length(accounts) do
+      accounts
+    else
+      moved = Enum.at(accounts, index)
+      displaced = Enum.at(accounts, target)
+
+      accounts
+      |> List.replace_at(index, displaced)
+      |> List.replace_at(target, moved)
+    end
   end
 
   defp filter_closed(query, opts) do

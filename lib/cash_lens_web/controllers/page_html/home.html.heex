@@ -421,7 +421,21 @@
               </div>
             </div>
             <div class="min-w-0">
-              <p class="font-bold text-sm text-slate-900 truncate">{account.name}</p>
+              <p class="font-bold text-sm text-slate-900 truncate">
+                {account.name}
+                <%!--
+                  Marked, not moved or subtracted: an investment's balance is
+                  part of every total on this screen, exactly as before. The
+                  tag only says which money is not sitting in a current
+                  account.
+                --%>
+                <span
+                  :if={account.is_investment}
+                  class="align-middle text-[9px] font-black uppercase tracking-wide bg-slate-200 text-slate-600 rounded px-1.5 py-0.5"
+                >
+                  investimento
+                </span>
+              </p>
               <p class="text-xs text-slate-500 truncate">{account.bank}</p>
             </div>
           </div>

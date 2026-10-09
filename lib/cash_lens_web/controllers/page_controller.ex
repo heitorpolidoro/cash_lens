@@ -51,6 +51,7 @@ defmodule CashLensWeb.PageController do
           bank: account.bank,
           color: account.color,
           icon: account.icon,
+          is_investment: account.is_investment,
           display_balance: if(balance, do: balance.final_balance, else: account.balance)
         }
       end)

@@ -185,4 +185,85 @@ defmodule CashLens.AccountsTest do
       assert length(Accounts.find_accounts_by_bank_and_name("Banco X", "Conta Corrente")) == 2
     end
   end
+
+  describe "display order" do
+    import CashLens.AccountsFixtures
+
+    test "accounts come back in the order they were arranged" do
+      # Alphabetical on purpose, so a list that merely looks sorted is not
+      # mistaken for one that is ordered.
+      a = account_fixture(%{name: "Alfa"})
+      b = account_fixture(%{name: "Bravo"})
+      c = account_fixture(%{name: "Charlie"})
+
+      :ok = Accounts.reorder_accounts([c.id, a.id, b.id])
+
+      assert Enum.map(Accounts.list_accounts(), & &1.name) == ["Charlie", "Alfa", "Bravo"]
+      assert Enum.map(Accounts.list_bank_accounts(), & &1.name) == ["Charlie", "Alfa", "Bravo"]
+    end
+
+    test "an account never placed sorts behind the arranged ones, by name" do
+      placed = account_fixture(%{name: "Zulu"})
+      account_fixture(%{name: "Mike"})
+      account_fixture(%{name: "Bravo"})
+
+      :ok = Accounts.reorder_accounts([placed.id])
+
+      assert Enum.map(Accounts.list_accounts(), & &1.name) == ["Zulu", "Bravo", "Mike"]
+    end
+
+    test "cards are ordered the same way, and apart from the bank accounts" do
+      card = account_fixture(%{name: "Zulu", is_credit_card: true})
+      other_card = account_fixture(%{name: "Alfa", is_credit_card: true})
+
+      :ok = Accounts.reorder_accounts([card.id, other_card.id])
+
+      assert Enum.map(Accounts.list_credit_cards(), & &1.name) == ["Zulu", "Alfa"]
+    end
+  end
+
+  describe "move/3" do
+    setup do
+      %{accounts: Enum.map(["a", "b", "c"], &%{id: &1})}
+    end
+
+    test "moves one place towards the top", %{accounts: accounts} do
+      assert Enum.map(Accounts.move(accounts, "c", :up), & &1.id) == ["a", "c", "b"]
+    end
+
+    test "moves one place towards the bottom", %{accounts: accounts} do
+      assert Enum.map(Accounts.move(accounts, "a", :down), & &1.id) == ["b", "a", "c"]
+    end
+
+    # A button at either end is a no-op, not an error: the screen keeps both
+    # buttons in place rather than making the card's controls move as it moves.
+    test "the first account cannot go up", %{accounts: accounts} do
+      assert Accounts.move(accounts, "a", :up) == accounts
+    end
+
+    test "the last account cannot go down", %{accounts: accounts} do
+      assert Accounts.move(accounts, "c", :down) == accounts
+    end
+
+    test "an id that is not in the list changes nothing", %{accounts: accounts} do
+      assert Accounts.move(accounts, "zzz", :up) == accounts
+    end
+  end
+
+  describe "the investment flag" do
+    import CashLens.AccountsFixtures
+
+    test "is a label: it changes no balance and no total" do
+      account = account_fixture(%{name: "Tesouro", balance: "5000.00", is_investment: true})
+
+      assert account.is_investment
+      # Still a bank account, still listed, still carrying its balance.
+      assert account.id in Enum.map(Accounts.list_bank_accounts(), & &1.id)
+      assert Decimal.equal?(account.balance, Decimal.new("5000.00"))
+    end
+
+    test "defaults to false" do
+      refute account_fixture().is_investment
+    end
+  end
 end
