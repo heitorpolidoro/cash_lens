@@ -40,8 +40,8 @@ defmodule CashLensWeb.BankruptcyCardTest do
 
     test "near is a stronger amber, not the same tint as distant" do
       html = render_band(Date.add(@today, 90))
-      assert html =~ "bg-warning/45"
-      assert html =~ "border-warning/90"
+      assert html =~ "bg-warning/75"
+      assert html =~ ~s(border-warning")
       refute html =~ "bg-warning/15"
     end
 
@@ -58,8 +58,8 @@ defmodule CashLensWeb.BankruptcyCardTest do
     test "no tinted band writes the figure in its own hue" do
       for zero_date <- [nil, Date.add(@today, 200), Date.add(@today, 90)] do
         html = render_band(zero_date)
-        refute html =~ "text-warning\""
-        refute html =~ "text-error\""
+        refute html =~ ~s(text-warning")
+        refute html =~ ~s(text-error")
         assert html =~ "text-base-content"
       end
     end

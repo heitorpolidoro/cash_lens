@@ -53,6 +53,17 @@ defmodule CashLensWeb.PageHTML do
   def bill_link(_bill), do: ~p"/forecast"
 
   @doc """
+  What a summary bucket says beside its amount.
+
+  An empty bucket says so rather than showing "0 contas" against R$ 0,00, and a
+  bucket that holds something says how far out it reaches -- without the date,
+  "mais de 7 dias" could be next week or next month.
+  """
+  def bucket_note(%{count: 0}), do: "nada"
+  def bucket_note(%{count: 1, last_date: date}), do: "1 conta · até #{format_date(date)}"
+  def bucket_note(%{count: n, last_date: date}), do: "#{n} contas · até #{format_date(date)}"
+
+  @doc """
   Colour for a bill row, by urgency.
   """
   def due_classes(:overdue), do: "text-rose-600"

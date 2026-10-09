@@ -412,6 +412,10 @@ defmodule CashLens.Forecast do
   projection is the same slice.
   """
   def upcoming_bills(projection, days \\ @upcoming_days, limit \\ @upcoming_limit) do
+    upcoming_bills(projection, days, limit, Date.utc_today())
+  end
+
+  def upcoming_bills(projection, days, limit, today) do
     rows =
       projection
       |> ruler_occurrences(days)
@@ -428,7 +432,45 @@ defmodule CashLens.Forecast do
       hidden_total: sum_amounts(hidden),
       last_date: rows |> List.last() |> then(&(&1 && &1.date)),
       total: sum_amounts(rows),
-      days: days
+      days: days,
+      summary: bill_summary(rows, today)
+    }
+  end
+
+  @soon_days 7
+
+  # The three lines the dashboard leads with. They partition the same money the
+  # full list adds up -- the soonest due date, then the rest of the week, then
+  # everything after it -- so the three amounts and the total agree without the
+  # reader checking. A bucket that merely highlighted the next bill and then
+  # counted it again inside "até 7 dias" would not.
+  defp bill_summary([], _today), do: nil
+
+  defp bill_summary([first | _] = rows, today) do
+    {next, rest} = Enum.split_with(rows, &(&1.date == first.date))
+    soon_until = Date.add(today, @soon_days)
+    {soon, later} = Enum.split_with(rest, &(Date.compare(&1.date, soon_until) != :gt))
+
+    %{
+      next: %{
+        date: first.date,
+        count: length(next),
+        # Named only when there is one bill to name; two bills on the same day
+        # are a count, not a label.
+        label: if(match?([_single], next), do: first.label),
+        total: sum_amounts(next)
+      },
+      soon: bucket(soon),
+      later: bucket(later),
+      soon_days: @soon_days
+    }
+  end
+
+  defp bucket(rows) do
+    %{
+      count: length(rows),
+      total: sum_amounts(rows),
+      last_date: rows |> List.last() |> then(&(&1 && &1.date))
     }
   end
 

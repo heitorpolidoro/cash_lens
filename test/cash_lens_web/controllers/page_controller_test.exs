@@ -339,6 +339,66 @@ defmodule CashLensWeb.PageControllerTest do
       assert html =~ "9.020,00"
     end
 
+    # The card leads with three lines and keeps the list behind "detalhar". The
+    # risk of a <details> is that the summary and the list disagree, or that the
+    # list is simply gone, so both are asserted here.
+    test "leads with three lines that add up to the same total as the list", %{conn: conn} do
+      bill_on(1, "Internet", "-241.99")
+      bill_on(4, "Imposto", "-216.59")
+      bill_on(20, "Seguro", "-147.69")
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert html =~ ~s(id="upcoming-summary")
+      assert cell(html, "upcoming-next") =~ "Internet"
+      assert cell(html, "upcoming-soon") =~ "216,59"
+      assert cell(html, "upcoming-later") =~ "147,69"
+      # 241,99 + 216,59 + 147,69
+      assert cell(html, "upcoming-summary-total") =~ "606,27"
+      assert total_cell(html) =~ "606,27"
+    end
+
+    test "the full list is still there, one click behind the summary", %{conn: conn} do
+      bill_on(2, "Internet", "-241.99")
+      bill_on(5, "Condomínio", "-461.39")
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert html =~ "<details"
+      assert html =~ "detalhar"
+      assert html =~ "resumir"
+      # Every bill, by name, not only the ones the summary happens to name.
+      assert cell(html, "upcoming-recurring-", :prefix) =~ "Internet"
+      assert html =~ "Condomínio"
+    end
+
+    test "an empty bucket says so instead of showing nothing against zero", %{conn: conn} do
+      bill_on(1, "Internet", "-241.99")
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      assert cell(html, "upcoming-soon") =~ "nada"
+      assert cell(html, "upcoming-later") =~ "nada"
+    end
+
+    defp cell(html, id, :prefix) do
+      {:ok, re} = Regex.compile(~s{id="#{id}[^"]*"(.*?)</tr>}, "s")
+
+      case Regex.run(re, html) do
+        [_, row] -> row
+        nil -> flunk("no row whose id starts with #{id}")
+      end
+    end
+
+    defp cell(html, id) do
+      {:ok, re} = Regex.compile(~s{id="#{id}"[^>]*>(.*?)</tr>}, "s")
+
+      case Regex.run(re, html) do
+        [_, row] -> row
+        nil -> flunk("no #{id} rendered")
+      end
+    end
+
     test "is absent when nothing is due", %{conn: conn} do
       account_fixture(%{name: "Conta Corrente"})
 

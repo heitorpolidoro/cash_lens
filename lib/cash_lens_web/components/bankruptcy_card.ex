@@ -136,13 +136,13 @@ defmodule CashLensWeb.BankruptcyCard do
   defp card_class(%{severity: :critical}, _fragile),
     do: "bg-error border-error text-error-content"
 
-  defp card_class(%{severity: :near}, _fragile), do: "bg-warning/45 border-warning/90"
+  defp card_class(%{severity: :near}, _fragile), do: "bg-warning/75 border-warning"
   defp card_class(%{severity: :distant}, _fragile), do: "bg-warning/15 border-warning/50"
   defp card_class(%{severity: :safe}, true), do: "bg-warning/15 border-warning/50"
   defp card_class(%{severity: :safe}, _solid), do: "bg-success/10 border-success/40"
 
   # The figure's ink has to clear the tint behind it, and the tint is now the
-  # hue the ink used to be: `text-warning` on `bg-warning/45` is amber on amber,
+  # hue the ink used to be: `text-warning` on `bg-warning/75` is amber on amber,
   # and the theme has no darker amber to fall back on -- its `warning-content`
   # is the near-white meant for a solid amber fill. So every tinted band drops
   # the hue and reads the figure in `base-content`. The card and the badge

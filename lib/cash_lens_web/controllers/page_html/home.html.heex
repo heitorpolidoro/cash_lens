@@ -110,14 +110,95 @@
     order. Aligned columns read down as fast as across, and the space a
     headline block would have taken is a few more bills.
   --%>
-  <div
+  <details
     :if={@upcoming.shown != []}
     id="upcoming-bills"
-    class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm"
+    class="group bg-white border border-slate-200 rounded-2xl p-6 shadow-sm"
   >
-    <h2 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">
-      Contas a pagar
-    </h2>
+    <%!--
+      Closed, the card is three lines that partition the same money: what is due
+      next, the rest of the week, everything after it. The full list is the same
+      table as before, one click away -- fifteen rows of detail is what you open,
+      not what you land on.
+    --%>
+    <summary class="list-none cursor-pointer [&::-webkit-details-marker]:hidden">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xs font-black uppercase tracking-wider text-slate-500">
+          Contas a pagar
+        </h2>
+        <span
+          id="upcoming-toggle"
+          class="text-xs font-bold text-blue-600 hover:underline whitespace-nowrap"
+        >
+          <span class="group-open:hidden">detalhar</span>
+          <span class="hidden group-open:inline">resumir</span>
+        </span>
+      </div>
+
+      <table id="upcoming-summary" class="w-full text-sm group-open:hidden">
+        <tbody class="divide-y divide-slate-100">
+          <tr id="upcoming-next">
+            <td class="py-2 pr-3 font-bold text-slate-900">
+              {@upcoming.summary.next.label ||
+                "Próximas #{@upcoming.summary.next.count} contas"}
+            </td>
+            <td class={[
+              "py-2 pr-3 text-xs font-medium whitespace-nowrap",
+              due_classes(due_urgency(@upcoming.summary.next.date, @today))
+            ]}>
+              {due_label(@upcoming.summary.next.date, @today)}
+            </td>
+            <td class="py-2 pr-3 text-xs text-slate-400 whitespace-nowrap">
+              {format_date(@upcoming.summary.next.date)}
+            </td>
+            <td class="py-2 text-right font-extrabold text-slate-900 whitespace-nowrap">
+              {format_currency(@upcoming.summary.next.total)}
+            </td>
+          </tr>
+
+          <tr id="upcoming-soon">
+            <td class="py-2 pr-3 font-bold text-slate-900">
+              Vence em até {@upcoming.summary.soon_days} dias
+            </td>
+            <td colspan="2" class="py-2 pr-3 text-xs text-slate-400 whitespace-nowrap">
+              {bucket_note(@upcoming.summary.soon)}
+            </td>
+            <td class="py-2 text-right font-extrabold text-slate-900 whitespace-nowrap">
+              {format_currency(@upcoming.summary.soon.total)}
+            </td>
+          </tr>
+
+          <tr id="upcoming-later">
+            <td class="py-2 pr-3 font-bold text-slate-900">
+              Vence em mais de {@upcoming.summary.soon_days} dias
+            </td>
+            <td colspan="2" class="py-2 pr-3 text-xs text-slate-400 whitespace-nowrap">
+              {bucket_note(@upcoming.summary.later)}
+            </td>
+            <td class="py-2 text-right font-extrabold text-slate-900 whitespace-nowrap">
+              {format_currency(@upcoming.summary.later.total)}
+            </td>
+          </tr>
+        </tbody>
+
+        <tfoot>
+          <tr class="border-t-2 border-slate-200">
+            <td
+              colspan="3"
+              class="pt-3 text-xs font-black uppercase tracking-wider text-slate-500"
+            >
+              Total · {@upcoming.days} dias
+            </td>
+            <td
+              id="upcoming-summary-total"
+              class="pt-3 text-right text-lg font-black text-rose-600 whitespace-nowrap"
+            >
+              {format_currency(@upcoming.total)}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </summary>
 
     <table class="w-full text-sm">
       <tbody class="divide-y divide-slate-100">
@@ -192,7 +273,7 @@
         </tr>
       </tfoot>
     </table>
-  </div>
+  </details>
   
 <!-- Evolução Financeira + Minhas Contas -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
