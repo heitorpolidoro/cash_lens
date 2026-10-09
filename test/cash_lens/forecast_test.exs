@@ -783,6 +783,74 @@ defmodule CashLens.ForecastTest do
       assert occ.item.id == card.id
     end
 
+    test "a bill with nothing to pay takes nothing out, and never puts anything in", %{card: card} do
+      # A negative total is a credit on the card -- a refund, an overpayment. It
+      # settles against the next bill, not against the current account, so a
+      # projection that reads it as money arriving invents cash no bank will
+      # move: the real Amazon bill of out/2026, at -226,32, was projected as a
+      # deposit of 226,32 sitting beside the salary.
+      CashLens.CreditCardsFixtures.statement_fixture(%{
+        account: card,
+        due_date: ~D[2026-08-10],
+        competencia: ~D[2026-08-01],
+        total_a_pagar: Decimal.new("-226.32")
+      })
+
+      [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      assert occ.origin == :boleto
+      assert Decimal.equal?(occ.item.amount, Decimal.new("0"))
+      refute Decimal.positive?(occ.item.amount)
+    end
+
+    test "a bill without a total adds up its own lines, and still never pays in", %{card: card} do
+      # The fallback for a bill whose total was never read: it sums the lines.
+      # A statement holding only a refund sums positive, and the same rule has
+      # to hold there -- the money the card owes the account is zero, not a
+      # deposit.
+      statement =
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: ~D[2026-08-10],
+          competencia: ~D[2026-08-01],
+          total_a_pagar: nil
+        })
+
+      CashLens.TransactionsFixtures.transaction_fixture(%{
+        account_id: card.id,
+        import_batch_id: statement.id,
+        date: ~D[2026-07-20],
+        amount: Decimal.new("80.00")
+      })
+
+      [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      assert occ.origin == :boleto
+      assert Decimal.equal?(occ.item.amount, Decimal.new("0"))
+    end
+
+    test "a credit bill does not drag the estimate below the card's real spending", %{card: card} do
+      # Same rule inside the average: a month that billed nothing is a month of
+      # zero, not a month of negative spending to be subtracted from the others.
+      for {offset, total} <- [{-30, "1200.00"}, {-60, "-300.00"}, {-90, "900.00"}] do
+        due = Date.add(Date.utc_today(), offset)
+
+        CashLens.CreditCardsFixtures.statement_fixture(%{
+          account: card,
+          due_date: due,
+          competencia: Date.beginning_of_month(due),
+          total_a_pagar: Decimal.new(total)
+        })
+      end
+
+      future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
+
+      [occ] =
+        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+
+      assert occ.origin == :estimado
+      # (1200 + 0 + 900) / 3 = 700. Counting the credit as -300 gives 600.
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-700.00"))
+    end
+
     test "paid boleto produces no occurrence for its month", %{card: card} do
       payment =
         CashLens.TransactionsFixtures.transaction_fixture(%{

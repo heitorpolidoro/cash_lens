@@ -868,14 +868,27 @@ defmodule CashLens.Forecast do
     |> Repo.one()
   end
 
+  # What a bill takes out of the account, as a negative number -- and never a
+  # positive one. A bill whose total comes out at or below zero takes nothing
+  # out; it does not put anything in. A card settles against the next bill, not
+  # against the current account, so projecting a credit as money arriving on the
+  # due date invents cash that no bank will move: the Amazon bill of out/2026
+  # was projected as a deposit of 226,32 beside the salary.
+  #
+  # It reaches the estimate too, through `variable_part/1`, where a bill with
+  # nothing to pay now counts as a month of zero spending instead of a month of
+  # negative spending that drags the card's whole average down.
   defp statement_amount(%Statement{total_a_pagar: total}) when not is_nil(total),
-    do: Decimal.negate(total)
+    do: outflow(Decimal.negate(total))
 
   defp statement_amount(%Statement{id: id}) do
     id
     |> CreditCards.statement_transactions()
     |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
+    |> outflow()
   end
+
+  defp outflow(amount), do: Decimal.min(amount, Decimal.new("0"))
 
   # The estimate is the average of this card's recent bills, not its last one.
   # A single bill is a sample of one: the Ourocard's last four came in at
