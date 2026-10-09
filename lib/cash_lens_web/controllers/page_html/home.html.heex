@@ -154,14 +154,16 @@
         <tbody class="divide-y divide-slate-100">
           <tr id="upcoming-next">
             <td class="py-2 pr-3 font-bold text-slate-900">
-              {@upcoming.summary.next.label ||
-                "Próximas #{@upcoming.summary.next.count} contas"}
+              Próximo vencimento
             </td>
             <td class={[
               "py-2 pr-3 text-xs font-medium whitespace-nowrap",
               due_classes(due_urgency(@upcoming.summary.next.date, @today))
             ]}>
-              {due_label(@upcoming.summary.next.date, @today)}
+              {bill_count(@upcoming.summary.next.count)} · {due_label(
+                @upcoming.summary.next.date,
+                @today
+              )}
             </td>
             <td class="py-2 pr-3 text-xs text-slate-400 whitespace-nowrap">
               {format_date(@upcoming.summary.next.date)}

@@ -2124,9 +2124,7 @@ defmodule CashLens.ForecastTest do
       bills = Forecast.upcoming_bills(Forecast.project(20), 20, 14, Date.utc_today())
       s = bills.summary
 
-      # Two bills share the soonest date, so that line counts rather than names.
       assert s.next.count == 2
-      assert s.next.label == nil
       assert s.next.date == Date.add(Date.utc_today(), 1)
       assert Decimal.equal?(s.next.total, Decimal.new("381.64"))
 
@@ -2142,14 +2140,16 @@ defmodule CashLens.ForecastTest do
       assert Decimal.equal?(sum, bills.total)
     end
 
-    test "a lone soonest bill is named, not counted" do
+    test "the soonest date is a date, not the whole of the first week" do
       bill_on(2, "Condomínio", "-461.39")
       bill_on(3, "Internet", "-241.99")
 
       summary = Forecast.upcoming_bills(Forecast.project(10), 10, 14, Date.utc_today()).summary
 
       assert summary.next.count == 1
-      assert summary.next.label == "Condomínio"
+      assert summary.next.date == Date.add(Date.utc_today(), 2)
+      assert Decimal.equal?(summary.next.total, Decimal.new("461.39"))
+      assert summary.soon.count == 1
     end
 
     test "with nothing due there is no summary to show" do

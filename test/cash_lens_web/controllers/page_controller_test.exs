@@ -350,7 +350,13 @@ defmodule CashLensWeb.PageControllerTest do
       html = conn |> get(~p"/") |> html_response(200)
 
       assert html =~ ~s(id="upcoming-summary")
-      assert bill_row(html, "upcoming-next") =~ "Internet"
+
+      next_row = bill_row(html, "upcoming-next")
+      assert next_row =~ "Próximo vencimento"
+      assert next_row =~ "1 conta · vence amanhã"
+      assert next_row =~ "241,99"
+      # The bill's own name belongs to the list, not to the summary line.
+      refute next_row =~ "Internet"
       assert bill_row(html, "upcoming-soon") =~ "216,59"
       assert bill_row(html, "upcoming-later") =~ "147,69"
       # 241,99 + 216,59 + 147,69

@@ -452,14 +452,7 @@ defmodule CashLens.Forecast do
     {soon, later} = Enum.split_with(rest, &(Date.compare(&1.date, soon_until) != :gt))
 
     %{
-      next: %{
-        date: first.date,
-        count: length(next),
-        # Named only when there is one bill to name; two bills on the same day
-        # are a count, not a label.
-        label: if(match?([_single], next), do: first.label),
-        total: sum_amounts(next)
-      },
+      next: %{date: first.date, count: length(next), total: sum_amounts(next)},
       soon: bucket(soon),
       later: bucket(later),
       soon_days: @soon_days

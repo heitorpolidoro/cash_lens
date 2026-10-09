@@ -79,8 +79,13 @@ defmodule CashLensWeb.PageHTML do
   "mais de 7 dias" could be next week or next month.
   """
   def bucket_note(%{count: 0}), do: "nada"
-  def bucket_note(%{count: 1, last_date: date}), do: "1 conta · até #{format_date(date)}"
-  def bucket_note(%{count: n, last_date: date}), do: "#{n} contas · até #{format_date(date)}"
+  def bucket_note(%{count: n, last_date: date}), do: "#{bill_count(n)} · até #{format_date(date)}"
+
+  @doc """
+  How many bills a summary line stands for.
+  """
+  def bill_count(1), do: "1 conta"
+  def bill_count(n), do: "#{n} contas"
 
   @doc """
   Colour for a bill row, by urgency.
