@@ -1103,4 +1103,69 @@ defmodule CashLens.CreditCardsTest do
       assert CreditCards.get_statement_detail(julho.id).absorbed == []
     end
   end
+
+  describe "pending_cycles/2" do
+    import CashLens.AccountsFixtures
+
+    @today ~D[2026-10-09]
+
+    test "a card past its closing day with no statement is waiting for one" do
+      card = account_fixture(%{name: "Ourocard", is_credit_card: true, closing_day: 3})
+
+      assert [pending] = CreditCards.pending_cycles([], @today)
+      assert pending.account.id == card.id
+      assert pending.lifecycle == :awaiting
+      assert pending.competencia == ~D[2026-10-01]
+      assert pending.statement == nil
+      assert pending.amount == nil
+    end
+
+    test "a card whose cycle has not closed yet is not late" do
+      account_fixture(%{name: "Amex", is_credit_card: true, closing_day: 20})
+
+      assert [pending] = CreditCards.pending_cycles([], @today)
+      assert pending.lifecycle == :not_closed
+    end
+
+    # Without a closing day there is no day to be past, and accusing an import
+    # of being late would be a claim the data does not support.
+    test "a card with no closing day is never accused of a late statement" do
+      account_fixture(%{name: "Sem ciclo", is_credit_card: true, closing_day: nil})
+
+      assert [pending] = CreditCards.pending_cycles([], @today)
+      assert pending.lifecycle == :not_closed
+    end
+
+    test "a card that already has this cycle's statement is not listed" do
+      card = account_fixture(%{name: "Ourocard", is_credit_card: true, closing_day: 3})
+
+      statement =
+        statement_fixture(%{account: card, competencia: ~D[2026-10-01], due_date: ~D[2026-10-10]})
+
+      entries = Enum.filter(CreditCards.list_statements(), &(&1.statement.id == statement.id))
+
+      assert CreditCards.pending_cycles(entries, @today) == []
+    end
+
+    # Last month's statement says nothing about this month's.
+    test "a statement from another cycle does not cover the current one" do
+      card = account_fixture(%{name: "Ourocard", is_credit_card: true, closing_day: 3})
+      statement_fixture(%{account: card, competencia: ~D[2026-09-01], due_date: ~D[2026-09-10]})
+
+      assert [pending] = CreditCards.pending_cycles(CreditCards.list_statements(), @today)
+      assert pending.account.id == card.id
+    end
+
+    test "archived cards are waiting for nothing" do
+      account_fixture(%{name: "Antigo", is_credit_card: true, closing_day: 3, is_closed: true})
+
+      assert CreditCards.pending_cycles([], @today) == []
+    end
+
+    test "bank accounts are not cards and are never listed" do
+      account_fixture(%{name: "Conta Corrente", is_credit_card: false})
+
+      assert CreditCards.pending_cycles([], @today) == []
+    end
+  end
 end

@@ -4,6 +4,7 @@ defmodule CashLens.CreditCards do
   alias CashLens.Repo
   alias CashLens.CreditCards.Statement
   alias CashLens.Transactions.Transaction
+  alias CashLens.Accounts
   alias CashLens.Accounts.Account
   alias Ecto.Multi
 
@@ -326,6 +327,54 @@ defmodule CashLens.CreditCards do
   def lifecycle_status(%Statement{payment_transaction_id: id}) when not is_nil(id), do: :paid
   def lifecycle_status(%Statement{total_a_pagar: nil}), do: :open
   def lifecycle_status(%Statement{}), do: :closed
+
+  @doc """
+  A row for every card that has no statement for the current cycle yet.
+
+  The list only ever showed statements, so a card whose bill has not arrived
+  was simply absent -- indistinguishable from a card with nothing to pay, and
+  invisible exactly when it is worth chasing. These rows carry no statement:
+  they say which cycle is missing and why.
+
+  Two states, and the closing day is what separates them. Before it, there is
+  nothing to expect yet -- the cycle is still accumulating. After it, the bill
+  exists at the bank and is not here, which is a bill to go and fetch.
+
+  A card with no closing day configured cannot be said to have closed, so it
+  stays in the first state rather than accusing an import that was never late.
+  Archived cards are left out; a card nobody uses is not waiting for anything.
+  """
+  def pending_cycles(entries, today \\ Date.utc_today()) do
+    competencia = Date.beginning_of_month(today)
+
+    covered =
+      entries
+      |> Enum.filter(&(&1.statement.competencia == competencia))
+      |> MapSet.new(& &1.account.id)
+
+    [include_closed: false]
+    |> Accounts.list_credit_cards()
+    |> Enum.reject(&MapSet.member?(covered, &1.id))
+    |> Enum.map(&pending_entry(&1, competencia, today))
+    |> Enum.sort_by(& &1.account.name)
+  end
+
+  defp pending_entry(card, competencia, today) do
+    %{
+      statement: nil,
+      account: card,
+      competencia: competencia,
+      lifecycle: if(cycle_closed?(card, today), do: :awaiting, else: :not_closed),
+      line_total: Decimal.new(0),
+      line_count: 0,
+      amount: nil,
+      payment: nil,
+      absorbed_into: nil
+    }
+  end
+
+  defp cycle_closed?(%{closing_day: nil}, _today), do: false
+  defp cycle_closed?(%{closing_day: closing_day}, today), do: today.day > closing_day
 
   def list_statements do
     statements =

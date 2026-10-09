@@ -293,6 +293,9 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
 
     socket
     |> assign(:entries, entries)
+    # Kept apart from `entries`: the metrics, the gap report and the
+    # reconciliation suggestions are all about statements that exist.
+    |> assign(:pending, CreditCards.pending_cycles(entries))
     |> assign(:metrics, CreditCards.hub_metrics(entries))
     |> assign(:gaps, CreditCards.statement_gaps(entries))
     # Every credit-card account, not just those that already have a statement:
@@ -418,11 +421,12 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   # The table is filtered in memory: the whole statement list is already loaded
   # for the metrics and the gap scan, and it is tens of rows, not thousands.
   defp apply_filters(socket) do
-    assign(
-      socket,
-      :visible_entries,
-      Enum.filter(socket.assigns.entries, &matches?(&1, socket.assigns))
-    )
+    # The cycles still missing belong at the top, with the current month they
+    # are part of -- which is where the descending order already puts it.
+    visible =
+      Enum.filter(socket.assigns.pending ++ socket.assigns.entries, &matches?(&1, socket.assigns))
+
+    assign(socket, :visible_entries, visible)
   end
 
   defp matches?(entry, assigns) do
@@ -435,19 +439,29 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   defp matches_card?(entry, card_id), do: entry.account.id == card_id
 
   defp matches_status?(_entry, ""), do: true
+
+  # One filter for both missing states: "sem fatura" is the question being
+  # asked, and whether the cycle has closed is the row's own answer.
+  defp matches_status?(entry, "pending"), do: entry.lifecycle in [:not_closed, :awaiting]
   defp matches_status?(entry, status), do: to_string(entry.lifecycle) == status
+
+  # The month a row belongs to, statement or not. The zebra reads it, and so
+  # does the search.
+  defp cycle_of(%{statement: nil, competencia: competencia}), do: competencia
+  defp cycle_of(%{statement: statement}), do: statement.competencia
 
   defp matches_search?(_entry, term) when term in [nil, ""], do: true
 
   defp matches_search?(entry, term) do
     needle = String.downcase(String.trim(term))
+    statement = entry.statement
 
     [
       entry.account.name,
       entry.account.bank,
-      entry.statement.source_file,
-      format_competencia(entry.statement.competencia),
-      entry.statement.due_date && Date.to_string(entry.statement.due_date),
+      statement && statement.source_file,
+      format_competencia(cycle_of(entry)),
+      statement && statement.due_date && Date.to_string(statement.due_date),
       entry.amount && Decimal.to_string(entry.amount),
       entry.payment && entry.payment.description,
       entry.payment && Decimal.to_string(entry.payment.amount)
@@ -467,10 +481,26 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     |> Map.new()
   end
 
+  # Pairs each row with whether its month's band is the shaded one. The flag
+  # flips when the cycle changes, not every row, so a month reads as a block.
+  defp striped_by_month(entries) do
+    entries
+    |> Enum.chunk_by(&cycle_of/1)
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {chunk, index} ->
+      Enum.map(chunk, &{&1, rem(index, 2) == 1})
+    end)
+  end
+
+  defp row_id(%{statement: nil, account: account}), do: "pending-row-#{account.id}"
+  defp row_id(%{statement: statement}), do: "statement-row-#{statement.id}"
+
   defp lifecycle_badge(:open), do: {"badge-info", "Aberta"}
   defp lifecycle_badge(:closed), do: {"badge-warning", "Aguardando pagamento"}
   defp lifecycle_badge(:paid), do: {"badge-success", "Paga e conciliada"}
   defp lifecycle_badge(:absorbed), do: {"badge-ghost", "Incorporada"}
+  defp lifecycle_badge(:not_closed), do: {"badge-ghost", "Ainda não fechou"}
+  defp lifecycle_badge(:awaiting), do: {"badge-error badge-outline", "Aguardando fatura"}
 
   defp due_label(0), do: "hoje"
   defp due_label(1), do: "em 1 dia"
@@ -713,6 +743,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                 <option value="closed" selected={@status_filter == "closed"}>Fechada</option>
                 <option value="paid" selected={@status_filter == "paid"}>Paga</option>
                 <option value="absorbed" selected={@status_filter == "absorbed"}>Incorporada</option>
+                <option value="pending" selected={@status_filter == "pending"}>Sem fatura</option>
               </select>
             </form>
           </div>
@@ -738,25 +769,37 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                 </tr>
               </thead>
               <tbody>
+                <%!--
+                  Striped by month rather than by row. The list runs several
+                  cards deep per cycle, and alternating every line said nothing
+                  about where one month ends and the next begins.
+                --%>
                 <tr
-                  :for={entry <- @visible_entries}
-                  id={"statement-row-#{entry.statement.id}"}
-                  class="hover cursor-pointer"
-                  phx-click={JS.patch(~p"/statements?id=#{entry.statement.id}")}
+                  :for={{entry, shaded?} <- striped_by_month(@visible_entries)}
+                  id={row_id(entry)}
+                  class={[
+                    "hover",
+                    entry.statement && "cursor-pointer",
+                    shaded? && "bg-base-200/50"
+                  ]}
+                  phx-click={entry.statement && JS.patch(~p"/statements?id=#{entry.statement.id}")}
                 >
                   <td class="font-bold whitespace-nowrap">{entry.account.name}</td>
                   <td class="whitespace-nowrap">
-                    {format_competencia(entry.statement.competencia)}
+                    {format_competencia(cycle_of(entry))}
                   </td>
                   <td class="whitespace-nowrap opacity-60">
-                    {if entry.statement.due_date, do: format_date(entry.statement.due_date), else: "—"}
+                    {if entry.statement && entry.statement.due_date,
+                      do: format_date(entry.statement.due_date),
+                      else: "—"}
                   </td>
                   <td class="text-right font-mono font-bold whitespace-nowrap">
-                    {format_currency(entry.amount)}
+                    {if entry.amount, do: format_currency(entry.amount), else: "—"}
                   </td>
                   <td class="text-right opacity-50">{entry.line_count}</td>
                   <td><.badge lifecycle={entry.lifecycle} /></td>
                   <td class="text-xs">
+                    <span :if={is_nil(entry.statement)} class="opacity-30 italic">—</span>
                     <div :if={entry.payment} class="whitespace-nowrap">
                       <span class="font-mono font-bold">
                         {format_currency(entry.payment.amount)}
@@ -768,7 +811,10 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                         {entry.payment.description}
                       </p>
                     </div>
-                    <div :if={is_nil(entry.payment)} class="flex items-center gap-2">
+                    <div
+                      :if={entry.statement && is_nil(entry.payment)}
+                      class="flex items-center gap-2"
+                    >
                       <button
                         :if={@suggestions[entry.statement.id]}
                         type="button"

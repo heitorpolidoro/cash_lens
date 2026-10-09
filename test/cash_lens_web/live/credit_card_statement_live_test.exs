@@ -1065,4 +1065,119 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       refute has_element?(live, ~s{a[href*="for_account"]})
     end
   end
+
+  describe "cycles with no statement yet" do
+    import CashLens.AccountsFixtures
+
+    test "every card appears for the current month, statement or not", %{conn: conn} do
+      today = Date.utc_today()
+
+      early = account_fixture(%{name: "Fecha Cedo", is_credit_card: true, closing_day: 1})
+      late = account_fixture(%{name: "Fecha Tarde", is_credit_card: true, closing_day: 28})
+
+      {:ok, live, _html} = live(conn, ~p"/statements")
+
+      assert has_element?(live, "#pending-row-#{early.id}")
+      assert has_element?(live, "#pending-row-#{late.id}")
+
+      # Past its closing day the bill exists at the bank and is not here;
+      # before it, there is nothing to expect yet.
+      if today.day > 1 do
+        assert has_element?(live, "#pending-row-#{early.id}", "Aguardando fatura")
+      end
+
+      if today.day < 28 do
+        assert has_element?(live, "#pending-row-#{late.id}", "Ainda não fechou")
+      end
+    end
+
+    test "a card whose statement already arrived has no pending row", %{conn: conn} do
+      card = account_fixture(%{name: "Ourocard", is_credit_card: true, closing_day: 3})
+      today = Date.utc_today()
+
+      statement_fixture(%{
+        account: card,
+        competencia: Date.beginning_of_month(today),
+        due_date: Date.add(today, 5),
+        total_a_pagar: Decimal.new("1000.00")
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/statements")
+
+      refute has_element?(live, "#pending-row-#{card.id}")
+      assert has_element?(live, "[id^='statement-row-']")
+    end
+
+    # It is a row about a statement that does not exist: there is nothing to
+    # open, and nothing to reconcile a payment against.
+    test "a pending row is not clickable", %{conn: conn} do
+      card = account_fixture(%{name: "Ourocard", is_credit_card: true, closing_day: 3})
+
+      {:ok, live, _html} = live(conn, ~p"/statements")
+
+      refute has_element?(live, "#pending-row-#{card.id}[phx-click]")
+      refute has_element?(live, "#pending-row-#{card.id}.cursor-pointer")
+    end
+
+    test "the status filter can ask for exactly the missing ones", %{conn: conn} do
+      card = account_fixture(%{name: "Ourocard", is_credit_card: true, closing_day: 3})
+      other = account_fixture(%{name: "Amex", is_credit_card: true, closing_day: 3})
+      today = Date.utc_today()
+
+      statement_fixture(%{
+        account: other,
+        competencia: Date.beginning_of_month(today),
+        due_date: Date.add(today, 5),
+        total_a_pagar: Decimal.new("1000.00")
+      })
+
+      {:ok, live, _html} = live(conn, ~p"/statements")
+
+      live
+      |> form("form[phx-change='filter']", %{"status" => "pending"})
+      |> render_change()
+
+      assert has_element?(live, "#pending-row-#{card.id}")
+      refute has_element?(live, "[id^='statement-row-']")
+    end
+  end
+
+  describe "zebra por mês" do
+    import CashLens.AccountsFixtures
+
+    test "the shading changes with the month, not with every row", %{conn: conn} do
+      card = account_fixture(%{name: "Ourocard", is_credit_card: true, closing_day: 3})
+      other = account_fixture(%{name: "Amex", is_credit_card: true, closing_day: 3})
+
+      for competencia <- [~D[2026-08-01], ~D[2026-07-01]], account <- [card, other] do
+        statement_fixture(%{
+          account: account,
+          competencia: competencia,
+          due_date: Date.add(competencia, 9),
+          total_a_pagar: Decimal.new("100.00")
+        })
+      end
+
+      {:ok, _live, html} = live(conn, ~p"/statements")
+
+      shaded = shaded_months(html)
+
+      # Two cards per month: both rows of a month share one band, and the two
+      # months do not. Striping every other row would split each month in half.
+      assert Enum.count(shaded, &(&1 == "Ago/26")) in [0, 2]
+      assert Enum.count(shaded, &(&1 == "Jul/26")) in [0, 2]
+      assert "Ago/26" in shaded != "Jul/26" in shaded
+    end
+
+    defp shaded_months(html) do
+      {:ok, re} = Regex.compile("<tr[^>]*bg-base-200[^>]*>(.*?)</tr>", "s")
+      {:ok, month_re} = Regex.compile("<td[^>]*>\\s*([A-Z][a-z]{2}/\\d{2})\\s*</td>", "s")
+
+      re
+      |> Regex.scan(html)
+      |> Enum.flat_map(fn [_, row] ->
+        month_re |> Regex.scan(row) |> Enum.map(fn [_, month] -> month end)
+      end)
+    end
+  end
 end
