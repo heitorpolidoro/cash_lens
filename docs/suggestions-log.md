@@ -1316,3 +1316,115 @@ commit claimed none were added. Fixed; back to 23.
   class is a criterion that greps a whole file to assert something about one function; a criterion
   should be scoped to the function it is about, and should be checked against the current tree at
   authoring time.
+
+## [CL-38] Pin the dashboard query count with a test, and explain it — 2026-10-11 (spec_review round 0)
+
+- "Measurements on real data are taken against the development database" does
+  not say how to reach it. `AGENTS.md` lines 119–138 document that `./run` and
+  the compose `db` share one data directory and that starting the second while
+  the first is live required a `pg_resetwal` recovery on 2026-09-22. The spec
+  should name the connection form the way `CL-30-measurements.md` does
+  (`DATABASE_HOST=localhost DATABASE_PORT=5432 …` against the live `./run`
+  Postgres, after `pgrep -f 'bash ./run'`), and state that the measurement is
+  read-only.
+- Expected results 4 and 5 each assert three independent things in one line
+  ("attributes every group" / "gives the formula" / "states six section costs";
+  "records the baseline" / "separates inherent from defect" / "states the
+  taildash consequence"). They are checkable, but a QA failure on one clause
+  reads as a failure of all three. Splitting the weakest clause out of each — or
+  rephrasing as "the document contains the following sections: …" — would make
+  the contract read cleanly.
+- Expected result 6 is self-grading: "every defect the document judges worth
+  fixing" is satisfied trivially by a document that judges nothing worth fixing.
+  The spec's prose already requires a written reason for each defect left
+  unfixed; naming the two large groups (the `installment_groups` fan-out and the
+  per-due-month `credit_card_statements` lookups) as defects that must each be
+  adjudicated explicitly would close the loop without pre-judging the verdict.
+- `test/cash_lens_web/controllers/dashboard_limit_test.exs` already renders
+  `GET /` and asserts the 12-month limits with 2025/2026 date literals. The spec
+  correctly refuses to repeat that pattern; a one-line pointer in the new test
+  explaining why its dates are relative would stop the next reader from
+  "harmonising" the two.
+- The spec says `test/support/fixtures/*.ex` may be extended "only if … extend,
+  never repurpose". Worth noting that `test/support/fixtures/credit_cards_fixtures.ex`
+  is already modified in the working tree; the implementer should rebase that
+  change out of their diff view before deciding what the factories cannot express.
+
+
+## [CL-38] Pin the dashboard query count with a test, and explain it — 2026-10-11 (spec_review round 1)
+- Expected result 6 now carries three distinct assertions (two-column baseline,
+  inherent-vs-defect split, taildash consequence). It is verifiable as written,
+  but splitting the taildash sentence into its own line would make a partial
+  failure easier for QA to report without pushing the list over eight.
+- Test criteria could name the concrete command used for the ">= 1 fails when
+  fixtures are removed" check, so the falsification step is reproducible rather
+  than described.
+
+## [CL-38] Pin the dashboard query count with a test, and explain it — 2026-10-11 (code_review round 0)
+
+* `query_counter.ex:56` — `:ets.new(:query_counter, [:set, :public])`. Because
+  the handler only writes when `self() == owner`, every write comes from the
+  owning process, so the default `:protected` would do and would state that
+  invariant in the table's own options. Harmless as it stands.
+* The document's **Finding 5** is an honest and correct record that the spec's
+  test criterion "deleting the fixture rows that feed any one of the seven tables
+  makes that table's `>= 1` assertion fail" cannot hold against today's
+  controller — `closed_without_statement/0` and `list_off_card_groups/0` query
+  their tables unconditionally, and the tally counts queries issued, not rows
+  returned. Satisfying that criterion literally would require a `lib/` change,
+  which the task forbids. The lower bounds are still worth having for the reason
+  the finding gives, and the Expected Results clause they answer ("both `>= 1`
+  and `<= ceiling`") is met. Flagging it so the gap between spec prose and
+  reality is adjudicated deliberately rather than discovered in QA.
+* Expected result "`mix precommit` passes" is **not** met, and the document says
+  so under "What this task could not do". I verified all three causes predate
+  this task (`lib/cash_lens/imports.ex:136` ungrouped clauses breaking
+  `compile --warnings-as-errors`, ~23 pre-existing `credo --strict` findings in
+  `lib/`, and the two date-dependent test failures above), and all three live in
+  files this task is barred from editing. CL-43 exists for them. Not blocking on
+  my side, but it is the one Expected Results checkbox that cannot be ticked, and
+  QA should be pointed at CL-43 rather than at this change.
+* `test/support/fixtures/credit_cards_fixtures.ex` is modified in the working
+  tree and left unstaged. It is not needed (item 1 above), so the cleanest
+  outcome is to drop it. If it is ever staged, note that its new tail
+  `|> case do {:ok, statement} -> statement; statement -> statement end`
+  swallows `{:error, changeset}` and hands the caller a tuple where every call
+  site expects a struct — the `{:ok, statement} = …` match it replaces failed
+  loudly, which is the better behaviour in a fixture.
+* The spec-review suggestions log asked for a one-line pointer in the new test
+  explaining why its dates are relative, next to the existing
+  `dashboard_limit_test.exs` which uses 2025/2026 literals. The `setup` comment
+  covers the "why" well; a bare mention of the sibling module would stop a future
+  reader from "harmonising" the two in the wrong direction. Cosmetic.
+
+
+## [CL-38] Pin the dashboard query count with a test, and explain it — 2026-10-11 (qa round 0)
+
+- `test/support/fixtures/credit_cards_fixtures.ex` is modified in the working tree
+  but **not staged**, and the modification is in the same area this task's fixture set
+  uses (`statement_fixture/1` learning to derive `competencia` from `due_date` and to
+  tolerate a non-`{:ok, _}` return). I checked whether CL-38 depends on it: with that
+  file reverted to `HEAD`, the six new tests still pass (`6 tests, 0 failures`). So the
+  commit boundary is safe as it stands. Worth a deliberate decision rather than an
+  accident, though — either stage it with a reason or drop it, because a half-applied
+  fixture change is a confusing thing to find later.
+- The document's own Finding 5 is candid that the seven `>= 1` lower bounds cannot
+  fail against today's controller, since every one of the seven tables is read
+  unconditionally on the common path (it even reports verifying that deleting every
+  `recurring_items` row leaves the count at 2). The assertions are still worth having —
+  they catch an empty `by_table` with a rising `total`, which would make every ceiling
+  vacuous at once — and ER2 asks for the assertions, which are present and two-sided.
+  But the spec's `## Test criteria` bullet "Deleting the fixture rows that feed any one
+  of the seven tables makes that table's `>= 1` assertion fail" is not true of the
+  implementation, and the document says so rather than hiding it. No action needed for
+  this task; flagged so that nobody later reads that bullet as a verified property.
+- Minor arity/naming drift in the document's prose versus the code:
+  `Forecast.upcoming_bills/1` and `/2`, `CreditCards.closed_without_statement/0` and
+  `/2`, `Forecast.overdue_occurrences/0`, `/1` and `/2`,
+  `Transactions.get_monthly_summary/0` and `/2` all appear in different places for what
+  is presumably one function each. Harmless to a reader who knows the module, mildly
+  confusing to one who does not.
+- The `@total_ceiling` comment reads "282 measured + 20 = @total_delta", where the
+  intent is "+ 20, which is `@total_delta`". The equation as punctuated says something
+  else. One comma.
+
