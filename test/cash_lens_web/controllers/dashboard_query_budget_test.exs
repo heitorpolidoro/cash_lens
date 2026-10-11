@@ -78,10 +78,11 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # which is which.
   # ---------------------------------------------------------------------------
 
-  # 282 measured + 20 = @total_delta, the two horizon-driven groups' share of
+  # 283 measured + 20 = @total_delta, the two horizon-driven groups' share of
   # the calendar margin: 2 cards * 1 due-month * (2 + 8). Every other group
-  # contributes 0 to it.
-  @total_ceiling 282 + @total_delta
+  # contributes 0 to it. The 283rd is `spend_rate/4`'s covered-days probe,
+  # added after this ceiling was first measured at 282.
+  @total_ceiling 283 + @total_delta
 
   # 177 measured + 16 = 2 cards * 1 due-month * 8. The measured 177 is
   # 22 estimating card-months * 8 + 1 for `list_off_card_groups/0`.
@@ -92,15 +93,19 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # `CreditCards.closed_without_statement/0`.
   @credit_card_statements_ceiling 47 + @statements_delta
 
-  # 19 measured + 0: 12 for `Forecast.monthly_volatility/0`'s 12-month window,
+  # 20 measured + 0: 12 for `Forecast.monthly_volatility/0`'s 12-month window,
   # 2 for `get_monthly_summary/0` (the latest-date probe and the aggregate), 2
   # for `get_historical_summary/1` (controller and `spend_rate/4`), 2 for
-  # `overdue_occurrences/1` (the latest-date probe and `settled_categories/2`)
-  # and 1 for `variable_spending_total/2`. Nothing here is driven by the
-  # due-month calendar — every fixture statement carries a `total_a_pagar`, so
-  # no bill falls back to `CreditCards.statement_transactions/1`, and an extra
-  # due-month is always an estimate, which reads no transaction.
-  @transactions_ceiling 19 + 0
+  # `overdue_occurrences/1` (the latest-date probe and `settled_categories/2`),
+  # 1 for `variable_spending_total/2` and 1 for `spend_rate/4`'s own
+  # covered-days probe — the last movement dated on or before today, which
+  # cannot ride on the summary aggregate because that one excludes transfers
+  # and a transfer still marks how far the ledger reaches. Nothing here is
+  # driven by the due-month calendar — every fixture statement carries a
+  # `total_a_pagar`, so no bill falls back to
+  # `CreditCards.statement_transactions/1`, and an extra due-month is always an
+  # estimate, which reads no transaction.
+  @transactions_ceiling 20 + 0
 
   # 15 measured + 0: 12 for the three self-healing probes, which issue one
   # `exists?` per open account and there are 4, plus the two

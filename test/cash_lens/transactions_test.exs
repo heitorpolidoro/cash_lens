@@ -1777,15 +1777,69 @@ defmodule CashLens.TransactionsTest do
       transaction_fixture(%{account_id: account_fixture().id, date: date, amount: amount})
     end
 
-    test "divides the month by the days it has actually run, not by its length" do
-      # 900 spent by the 9th is 100/day. Dividing by the month's 31 days would
-      # read it as 29/day -- a quiet month, right up to the overdraft.
+    test "divides the month by the days the ledger covers, not by its length" do
+      # 900 spent, the statement reaching the 9th. Dividing by the month's 31
+      # days would read it as 29/day -- a quiet month, right up to the
+      # overdraft.
       spent(~D[2026-10-03], "-400.00")
-      spent(~D[2026-10-08], "-500.00")
+      spent(~D[2026-10-09], "-500.00")
 
       rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("900.00"), ~D[2026-10-09])
 
       assert Decimal.equal?(rate.per_day, Decimal.new("100"))
+    end
+
+    # Dividing by the calendar turns an unimported week into good news. On
+    # 11/10/2026 the real statement stopped at the 5th: six days of spending
+    # spread over eleven read as 771/day, 30% under the average, when the
+    # covered days gave 1696 -- a quarter above it. The arrow pointed the wrong
+    # way for want of data.
+    test "a stale statement does not stretch the month and flatter the rate" do
+      spent(~D[2026-10-05], "-900.00")
+
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("900.00"), ~D[2026-10-11])
+
+      # 900 over the five covered days, not over the eleven on the calendar.
+      assert Decimal.equal?(rate.per_day, Decimal.new("180"))
+    end
+
+    # A transfer is not spending, but it is proof the statement was imported
+    # that far -- which is the only thing the divisor asks.
+    test "any movement marks how far the ledger reaches, transfers included" do
+      account = account_fixture()
+      transfer = CashLens.CategoriesFixtures.category_fixture(%{slug: "transfer"})
+      spent(~D[2026-10-02], "-600.00")
+
+      transaction_fixture(%{
+        account_id: account.id,
+        date: ~D[2026-10-06],
+        amount: "-5000.00",
+        category_id: transfer.id
+      })
+
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("600.00"), ~D[2026-10-11])
+
+      # Six covered days because of the transfer, not two because of the spend.
+      assert Decimal.equal?(rate.per_day, Decimal.new("100"))
+    end
+
+    # Month-end "Rendimento" rows are posted ahead of time. A plain max(date)
+    # would read 31/10 as the ledger's reach on the 11th and halve the rate.
+    test "a row dated in the future does not stretch the covered days" do
+      spent(~D[2026-10-05], "-900.00")
+      spent(~D[2026-10-31], "-10.00")
+
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("900.00"), ~D[2026-10-11])
+
+      assert Decimal.equal?(rate.per_day, Decimal.new("180"))
+    end
+
+    test "with nothing imported this month the rate is the month's whole spending" do
+      spent(~D[2026-09-20], "-3000.00")
+
+      rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("450.00"), ~D[2026-10-11])
+
+      assert Decimal.equal?(rate.per_day, Decimal.new("450"))
     end
 
     test "a month already closed is divided by all of its days" do
@@ -1799,7 +1853,7 @@ defmodule CashLens.TransactionsTest do
       # is 6100/61 = 100/day. October is running at 150/day: half as fast again.
       spent(~D[2026-08-10], "-3100.00")
       spent(~D[2026-09-10], "-3000.00")
-      spent(~D[2026-10-05], "-1500.00")
+      spent(~D[2026-10-10], "-1500.00")
 
       rate = Transactions.spend_rate(~D[2026-10-01], Decimal.new("1500.00"), ~D[2026-10-10])
 

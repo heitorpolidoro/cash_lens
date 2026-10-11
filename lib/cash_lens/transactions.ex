@@ -1897,6 +1897,14 @@ defmodule CashLens.Transactions do
   transfers, initial values and both legs of a reimbursement excluded -- so the
   rate is money that really left, and the comparison is like for like.
 
+  The divisor is the days the ledger actually covers, not the days the calendar
+  has run. Dividing by the calendar turns an unimported week into good news: on
+  11/10/2026 the statement stopped at the 5th, so six days of spending were
+  spread over eleven days and the card read 771,11/dia, a reassuring 30% under
+  the average, when the covered days gave 1.696,44 -- a quarter *above* it. The
+  arrow pointed the wrong way for want of data, which is the one direction a
+  warning must never point.
+
   The average deliberately spans whole months only. A month still running
   would drag the baseline towards whatever today happens to be, which is the
   very thing being measured.
@@ -1916,7 +1924,7 @@ defmodule CashLens.Transactions do
          days + Date.days_in_month(Date.new!(row.year, row.month, 1))}
       end)
 
-    per_day = per_day(expenses, elapsed_days(month, today))
+    per_day = per_day(expenses, covered_days(month, today))
     average = per_day(total, days)
 
     %{
@@ -1930,12 +1938,38 @@ defmodule CashLens.Transactions do
   defp earlier_month?(%{year: year, month: month}, %Date{} = reference),
     do: {year, month} < {reference.year, reference.month}
 
-  # A month still running has only run as far as today; a month already past
-  # ran all the way to its end.
-  defp elapsed_days(%Date{year: year, month: month}, %Date{year: year, month: month} = today),
-    do: today.day
+  # A month already past ran all the way to its end. A month still running ran
+  # only as far as the ledger reaches -- the last movement dated on or before
+  # today, whatever it was. A transfer is not spending, but it is still proof
+  # that the statement was imported that far, which is the only thing being
+  # asked here.
+  #
+  # Dated on or before today, because a few rows sit in the future: month-end
+  # "Rendimento" lines are posted ahead, and a plain `max(date)` would read
+  # 31/10 as the ledger's reach on the 11th and halve the rate.
+  #
+  # With nothing imported this month yet there is no covered day, and the one
+  # day floor keeps the division defined; the figure it produces is the month's
+  # whole spending, which is the honest reading of a single covered day.
+  defp covered_days(
+         %Date{year: year, month: month} = first,
+         %Date{year: year, month: month} = today
+       ) do
+    case last_movement_on_or_before(first, today) do
+      nil -> 1
+      %Date{} = last -> max(Date.diff(last, first) + 1, 1)
+    end
+  end
 
-  defp elapsed_days(%Date{} = month, _today), do: Date.days_in_month(month)
+  defp covered_days(%Date{} = month, _today), do: Date.days_in_month(month)
+
+  defp last_movement_on_or_before(first, today) do
+    Transaction
+    |> Scopes.cash_accounts_only()
+    |> where([t], t.date >= ^first and t.date <= ^today)
+    |> select([t], max(t.date))
+    |> Repo.one()
+  end
 
   defp per_day(_total, 0), do: Decimal.new("0")
   defp per_day(total, days), do: Decimal.div(total, days)
