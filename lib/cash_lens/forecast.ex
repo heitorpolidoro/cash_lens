@@ -933,10 +933,31 @@ defmodule CashLens.Forecast do
     end)
   end
 
+  # Everything a card's walk needs is read once, up front, and every due-month
+  # is derived from those results in memory: the card's statements over the
+  # walked months, its recent-bill sample, and its installment groups.
   defp card_account_occurrences(account, today, horizon_end) do
-    card_due_dates(account.due_day, today, horizon_end)
-    |> Enum.map(&card_occurrence_for_date(account, &1))
-    |> Enum.reject(&is_nil/1)
+    case card_due_dates(account.due_day, today, horizon_end) do
+      [] ->
+        []
+
+      dates ->
+        statements = statements_for_dates(account.id, dates)
+        groups = Installments.list_account_groups(account.id)
+
+        resolved =
+          Enum.map(dates, fn date ->
+            {date, statement_for_month(statements, Date.beginning_of_month(date))}
+          end)
+
+        base = if Enum.any?(resolved, &is_nil(elem(&1, 1))), do: estimate_base(account, groups)
+
+        resolved
+        |> Enum.map(fn {date, statement} ->
+          card_occurrence_for_date(account, date, statement, base, groups)
+        end)
+        |> Enum.reject(&is_nil/1)
+    end
   end
 
   defp card_due_dates(due_day, today, horizon_end) do
@@ -945,10 +966,10 @@ defmodule CashLens.Forecast do
     |> Enum.take_while(&(Date.compare(&1, horizon_end) != :gt))
   end
 
-  defp card_occurrence_for_date(account, date) do
+  defp card_occurrence_for_date(account, date, statement, base, groups) do
     month = Date.beginning_of_month(date)
 
-    case statement_for_month(account.id, month) do
+    case statement do
       %Statement{payment_transaction_id: nil} = s ->
         account
         |> build_card_occurrence(s.due_date, statement_amount(s), :boleto, nil)
@@ -958,27 +979,59 @@ defmodule CashLens.Forecast do
         nil
 
       nil ->
-        case estimate_for_month(account, month) do
+        case estimate_for_month(base, groups, month) do
           nil ->
             nil
 
           %{amount: amount, replacement: replacement} ->
-            groups = Installments.account_installment_groups(account.id, month)
-            build_card_occurrence(account, date, amount, :estimado, {month, groups, replacement})
+            month_groups = Installments.groups_due_in_month(groups, month)
+
+            build_card_occurrence(
+              account,
+              date,
+              amount,
+              :estimado,
+              {month, month_groups, replacement}
+            )
         end
     end
   end
 
-  defp statement_for_month(account_id, month) do
-    month_end = Date.end_of_month(month)
+  # One read of the card's statements over the whole walk. The window is
+  # month-aligned -- first day of the first walked month to last day of the last
+  # -- because a month is looked up whole: a statement already past today but in
+  # the current month, or one due after the horizon end but in its last month,
+  # still decides that month.
+  defp statements_for_dates(account_id, dates) do
+    from_date = dates |> List.first() |> Date.beginning_of_month()
+    to_date = dates |> List.last() |> Date.end_of_month()
 
     from(s in Statement,
-      where: s.account_id == ^account_id and s.due_date >= ^month and s.due_date <= ^month_end,
-      order_by: [desc: s.due_date, desc: s.inserted_at],
-      limit: 1
+      where: s.account_id == ^account_id and s.due_date >= ^from_date and s.due_date <= ^to_date
     )
-    |> Repo.one()
+    |> Repo.all()
   end
+
+  # The statement of `month`: the latest by `{due_date, inserted_at}` among
+  # those whose due date lands in it.
+  defp statement_for_month(statements, month) do
+    statements
+    |> Enum.filter(&(Date.beginning_of_month(&1.due_date) == month))
+    |> Enum.sort(&(statement_order(&1, &2) != :lt))
+    |> List.first()
+  end
+
+  # Latest first, compared as calendar values: structs compare by field order
+  # under `==`/`<`, which is not chronological.
+  defp statement_order(a, b) do
+    case Date.compare(a.due_date, b.due_date) do
+      :eq -> DateTime.compare(to_utc(a.inserted_at), to_utc(b.inserted_at))
+      other -> other
+    end
+  end
+
+  defp to_utc(%DateTime{} = dt), do: dt
+  defp to_utc(%NaiveDateTime{} = dt), do: DateTime.from_naive!(dt, "Etc/UTC")
 
   # What a bill takes out of the account, as a negative number -- and never a
   # positive one. A bill whose total comes out at or below zero takes nothing
@@ -1026,7 +1079,9 @@ defmodule CashLens.Forecast do
   # Equivalently: the month is charged the gross bill average, plus only the
   # part of its scheduled parcels that exceeds the usual load. A month carrying
   # an unusually heavy schedule is still projected heavier than its neighbours.
-  defp estimate_for_month(account, month) do
+  # The month-independent half of the estimate, computed once per card: the
+  # recent-bill sample's average variable part and typical installment load.
+  defp estimate_base(account, groups) do
     since = Date.add(Date.utc_today(), -30 * @history_months)
 
     recent =
@@ -1042,22 +1097,30 @@ defmodule CashLens.Forecast do
         nil
 
       statements ->
-        parts = Enum.map(statements, &variable_part/1)
-        variable = parts |> Enum.map(& &1.variable) |> average()
-        typical = parts |> Enum.map(& &1.installments) |> average()
-        scheduled = Installments.account_installment_total(account.id, month)
-        replacement = Decimal.max(Decimal.sub(typical, scheduled), Decimal.new("0"))
+        parts = Enum.map(statements, &variable_part(&1, groups))
 
         %{
-          amount: variable |> Decimal.sub(scheduled) |> Decimal.sub(replacement),
-          replacement: replacement
+          variable: parts |> Enum.map(& &1.variable) |> average(),
+          typical: parts |> Enum.map(& &1.installments) |> average()
         }
     end
   end
 
-  defp variable_part(%Statement{} = statement) do
+  defp estimate_for_month(nil, _groups, _month), do: nil
+
+  defp estimate_for_month(%{variable: variable, typical: typical}, groups, month) do
+    scheduled = Installments.total_due_in_month(groups, month)
+    replacement = Decimal.max(Decimal.sub(typical, scheduled), Decimal.new("0"))
+
+    %{
+      amount: variable |> Decimal.sub(scheduled) |> Decimal.sub(replacement),
+      replacement: replacement
+    }
+  end
+
+  defp variable_part(%Statement{} = statement, groups) do
     competencia = statement.competencia || Date.beginning_of_month(statement.due_date)
-    installments = Installments.account_installment_total(statement.account_id, competencia)
+    installments = Installments.total_due_in_month(groups, competencia)
 
     %{
       variable: statement |> statement_amount() |> Decimal.add(installments),

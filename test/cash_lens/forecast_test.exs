@@ -1213,6 +1213,37 @@ defmodule CashLens.ForecastTest do
       assert occ.date == s2.due_date
       assert Decimal.equal?(occ.item.amount, Decimal.new("-300.00"))
     end
+
+    test "two statements with the same due date resolve by chronological inserted_at", %{
+      card: card
+    } do
+      attrs = %{
+        account: card,
+        due_date: ~D[2026-08-10],
+        competencia: ~D[2026-07-01]
+      }
+
+      older =
+        CashLens.CreditCardsFixtures.statement_fixture(
+          Map.put(attrs, :total_a_pagar, Decimal.new("100.00"))
+        )
+
+      newer =
+        CashLens.CreditCardsFixtures.statement_fixture(
+          Map.put(attrs, :total_a_pagar, Decimal.new("200.00"))
+        )
+
+      # Jan 31 has the larger day-of-month, Feb 1 is the later date.
+      for {s, at} <- [{older, ~U[2026-01-31 10:00:00Z]}, {newer, ~U[2026-02-01 10:00:00Z]}] do
+        CashLens.Repo.update_all(
+          from(x in CashLens.CreditCards.Statement, where: x.id == ^s.id),
+          set: [inserted_at: at]
+        )
+      end
+
+      assert [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      assert Decimal.equal?(occ.item.amount, Decimal.new("-200.00"))
+    end
   end
 
   describe "variable spending baseline" do

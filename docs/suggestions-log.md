@@ -1428,3 +1428,39 @@ commit claimed none were added. Fixed; back to 23.
   intent is "+ 20, which is `@total_delta`". The equation as punctuated says something
   else. One comma.
 
+
+## [CL-39] Read each card's bill estimate once per card, not once per due-month — 2026-10-11 (spec review, CL-39-spec_review-0.md)
+
+- Expected result 6 asserts two independent things in one line (`mix format --check-formatted` and the
+  credo finding count). Both are mechanical, so it is not blocking, but splitting them would keep every
+  result single-assertion as the rest of the list is.
+- After this task `@total_delta` becomes 0, leaving `@total_ceiling` at 67 with no margin at all. The
+  spec's argument for that is sound (every remaining group is already measured at delta 0 by CL-38), but
+  a one-line comment in the test saying *why* the total now carries no margin — because the only two
+  calendar-driven groups stopped being calendar-driven — would save the next reader from assuming the
+  margin was dropped by accident.
+- The spec's restatement of the estimate-sample query omits the `not is_nil(s.due_date)` guard that
+  `estimate_for_month/2` actually carries. Harmless for the counts, but worth copying verbatim since the
+  prefetch has to reproduce the same row set.
+- Consider adding a regression test for the off-cycle `due_date` case described in the blocking finding
+  (a statement in a walked month whose `due_date` precedes today). It is the one behaviour this
+  refactor can silently change and no existing test covers it. Not required by the task's contract.
+
+## [CL-39] Read each card's bill estimate once per card, not once per due-month — 2026-10-11 (spec review, CL-39-spec_review-1.md)
+- Expected result 1 reads "reads each card's statements once for the whole
+  horizon", which is now slightly out of step with the Approach section's
+  insistence that the window is month-aligned and deliberately *not* the
+  horizon. The result is about the *count* of reads, so it is still verifiable
+  as written, but "once for the walked due-months" would stop a future reader
+  from citing the result as licence for a `[today, horizon_end]` window. Worth
+  a word change if the spec is edited again for another reason; not worth a
+  round on its own.
+- Since the window correctness is explicitly untestable against the current
+  fixture set, consider noting in the spec that a fixture with an off-cycle
+  `due_date` (one not derived from the card's `due_day`) would close that gap.
+  Out of scope here — the spec forbids touching the budget test's fixtures so
+  the ceilings stay comparable to CL-38 — so this is a candidate follow-up
+  task, not a change to CL-39.
+
+## [CL-39] Read each card bill estimate once per card — 2026-10-12
+- Add a small forecast test for a month with two statements (same and different due_date) so the tie-break is pinned; the spec says the window/selection is review-only, and this bug shows why.

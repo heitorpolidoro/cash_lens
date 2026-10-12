@@ -30,8 +30,8 @@ defmodule CashLens.Installments do
   """
   def account_installment_total(account_id, %Date{} = month) do
     account_id
-    |> account_installment_groups(month)
-    |> Enum.reduce(Decimal.new("0"), fn g, acc -> Decimal.add(acc, parcel_value(g)) end)
+    |> list_account_groups()
+    |> total_due_in_month(month)
   end
 
   @doc """
@@ -40,6 +40,17 @@ defmodule CashLens.Installments do
   `parcel_value/1` is exactly what `account_installment_total/2` returns.
   """
   def account_installment_groups(account_id, %Date{} = month) do
+    account_id
+    |> list_account_groups()
+    |> groups_due_in_month(month)
+  end
+
+  @doc """
+  Every installment group touching `account_id`, whatever the month. One query;
+  the account scoping stays in it. Callers that need several months filter this
+  result with `groups_due_in_month/2` / `total_due_in_month/2`.
+  """
+  def list_account_groups(account_id) do
     from(g in InstallmentGroup,
       join: t in assoc(g, :transactions),
       where: t.account_id == ^account_id,
@@ -47,7 +58,22 @@ defmodule CashLens.Installments do
       select: g
     )
     |> Repo.all()
-    |> Enum.filter(&parcel_due_in_month?(&1, month))
+  end
+
+  @doc """
+  The `groups` whose plan bills a parcel in `month`. Pure.
+  """
+  def groups_due_in_month(groups, %Date{} = month) do
+    Enum.filter(groups, &parcel_due_in_month?(&1, month))
+  end
+
+  @doc """
+  Sum of the parcels `groups` bill in `month`, as a positive magnitude. Pure.
+  """
+  def total_due_in_month(groups, %Date{} = month) do
+    groups
+    |> groups_due_in_month(month)
+    |> Enum.reduce(Decimal.new("0"), fn g, acc -> Decimal.add(acc, parcel_value(g)) end)
   end
 
   @doc """

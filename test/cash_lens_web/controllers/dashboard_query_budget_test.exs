@@ -34,42 +34,15 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # The shape of the fixture set, as the ceilings' derivation needs it named.
   # ---------------------------------------------------------------------------
 
-  # Open credit-card accounts with a full cycle (`closing_day` + `due_day`).
-  # These are the cards `Forecast.card_occurrences/2` iterates.
-  @cards 2
-
-  # `Forecast.card_occurrences/2` walks one due-date per month inside the
-  # 365-day horizon. That is **12 or 13** dates depending on where today falls
-  # relative to `due_day`: when `due_day == today.day` the first date is today
-  # and the twelfth-next lands exactly on the horizon's last day, so both are
-  # inside it. The same calendar also decides whether the current month's
-  # statement is one of the dates walked, which swaps one month between the
-  # cheap `:boleto` branch and the expensive estimate branch.
+  # `Forecast.card_occurrences/2` walks 12 or 13 due-dates per card depending on
+  # where today falls relative to `due_day`.
   #
-  # One extra due-month per card is therefore the *only* admissible margin, and
-  # it is the only margin any ceiling below carries.
-  @extra_due_months_per_card 1
-
-  # What one card-due-month costs on the estimate branch, read off
-  # `CashLens.Forecast`:
-  #
-  #   * `credit_card_statements`: 2 — `statement_for_month/2` (1) plus
-  #     `estimate_for_month/2`'s recent-bill sample (1).
-  #   * `installment_groups`: 8 — `estimate_for_month/2` calls
-  #     `variable_part/1` once per sampled statement (`@estimate_sample`, 6
-  #     here, each one `Installments.account_installment_total/2` →
-  #     `account_installment_groups/2`), plus one more
-  #     `account_installment_total/2` for the month being estimated, plus one
-  #     `account_installment_groups/2` for the disclosure. 6 + 1 + 1 = 8.
-  @statements_per_card_due_month 2
-  @installment_groups_per_card_due_month 8
-
-  # The per-card calendar margin, applied only to the two groups that scale
-  # with the horizon and to the total they contribute to.
-  @statements_delta @cards * @extra_due_months_per_card * @statements_per_card_due_month
-  @installment_groups_delta @cards * @extra_due_months_per_card *
-                              @installment_groups_per_card_due_month
-  @total_delta @statements_delta + @installment_groups_delta
+  # The calendar no longer moves any ceiling: `Forecast.card_occurrences/2`
+  # reads each card's statements, estimate sample and installment groups once
+  # per card, not once per due-month, so an extra due-month costs no query.
+  @statements_delta 0
+  @installment_groups_delta 0
+  @total_delta 0
 
   # ---------------------------------------------------------------------------
   # The ceilings. Every one is `measured_fixture_count + delta`, measured on the
@@ -78,20 +51,18 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # which is which.
   # ---------------------------------------------------------------------------
 
-  # 283 measured + 20 = @total_delta, the two horizon-driven groups' share of
-  # the calendar margin: 2 cards * 1 due-month * (2 + 8). Every other group
-  # contributes 0 to it. The 283rd is `spend_rate/4`'s covered-days probe,
-  # added after this ceiling was first measured at 282.
-  @total_ceiling 283 + @total_delta
+  # 67 = 283 - 174 - 42: the 283 measured before CL-39, less the 174
+  # `installment_groups` (177 -> 3) and 42 `credit_card_statements` (47 -> 5)
+  # queries it removed. The 283rd was `spend_rate/4`'s covered-days probe.
+  @total_ceiling 283 - 174 - 42 + @total_delta
 
-  # 177 measured + 16 = 2 cards * 1 due-month * 8. The measured 177 is
-  # 22 estimating card-months * 8 + 1 for `list_off_card_groups/0`.
-  @installment_groups_ceiling 177 + @installment_groups_delta
+  # 3 = one `Installments.list_account_groups/1` per card (2) plus 1 for
+  # `list_off_card_groups/0`.
+  @installment_groups_ceiling 3 + @installment_groups_delta
 
-  # 47 measured + 4 = 2 cards * 1 due-month * 2. The measured 47 is 24
-  # `statement_for_month/2` + 22 `estimate_for_month/2` samples + 1 for
-  # `CreditCards.closed_without_statement/0`.
-  @credit_card_statements_ceiling 47 + @statements_delta
+  # 5 = two reads per card (the walked months' statements and the estimate
+  # sample) plus 1 for `CreditCards.closed_without_statement/0`.
+  @credit_card_statements_ceiling 5 + @statements_delta
 
   # 20 measured + 0: 12 for `Forecast.monthly_volatility/0`'s 12-month window,
   # 2 for `get_monthly_summary/0` (the latest-date probe and the aggregate), 2
