@@ -71,6 +71,15 @@ defmodule CashLensWeb.Plugs.RateLimit do
     |> halt()
   end
 
+  @doc """
+  The client IP as text, honouring `trust_proxy_headers` (the proxy header is
+  used only when configured).
+  """
+  def client_ip(conn) do
+    settings = Application.get_env(:cash_lens, __MODULE__, [])
+    client_ip(conn, Keyword.get(settings, :trust_proxy_headers, false))
+  end
+
   defp client_ip(conn, true) do
     case get_req_header(conn, "x-forwarded-for") do
       [] -> remote_ip(conn)

@@ -1,0 +1,19 @@
+<div class="max-w-sm mx-auto mt-24 p-6 bg-white rounded-2xl border border-slate-200">
+  <h1 class="text-xl font-bold mb-4">Nova senha</h1>
+
+  <.form
+    :let={f}
+    for={@changeset}
+    as={:user}
+    action={~p"/users/reset_password/#{@conn.params["token"]}"}
+    method="put"
+  >
+    <.input
+      field={f[:password]}
+      type="password"
+      label="Nova senha (mínimo 12 caracteres)"
+      required
+    />
+    <.button class="w-full mt-4">Redefinir senha</.button>
+  </.form>
+</div>

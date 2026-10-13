@@ -7,6 +7,11 @@ defmodule CashLens.Application do
 
   @impl true
   def start(_type, _args) do
+    # Reports logged errors to Sentry; a no-op while no DSN is configured.
+    :logger.add_handler(:sentry_handler, Sentry.LoggerHandler, %{
+      config: %{metadata: [:request_id]}
+    })
+
     children =
       [
         CashLensWeb.Telemetry,

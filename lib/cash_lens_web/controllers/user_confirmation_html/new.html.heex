@@ -1,0 +1,12 @@
+<div class="max-w-sm mx-auto mt-24 p-6 bg-white rounded-2xl border border-slate-200">
+  <h1 class="text-xl font-bold mb-4">Reenviar confirmação</h1>
+
+  <.form :let={f} for={%{}} as={:user} action={~p"/users/confirm"}>
+    <.input field={f[:email]} type="email" label="E-mail" value="" required />
+    <.button class="w-full mt-4">Reenviar link</.button>
+  </.form>
+
+  <p class="mt-4 text-sm">
+    <.link href={~p"/users/log_in"} class="font-semibold">Voltar ao login</.link>
+  </p>
+</div>

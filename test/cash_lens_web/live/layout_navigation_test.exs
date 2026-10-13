@@ -37,7 +37,8 @@ defmodule CashLensWeb.LayoutNavigationTest do
     live_paths =
       for group <- Layouts.nav_groups(),
           item <- group.items,
-          item.path != "/",
+          # "/" and "/account" are controller pages, not LiveViews.
+          item.path not in ["/", "/account"],
           do: item.path
 
     for path <- live_paths do

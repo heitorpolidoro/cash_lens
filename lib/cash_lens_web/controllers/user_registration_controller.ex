@@ -3,7 +3,6 @@ defmodule CashLensWeb.UserRegistrationController do
 
   alias CashLens.Users
   alias CashLens.Users.User
-  alias CashLensWeb.UserAuth
 
   def new(conn, _params) do
     render(conn, :new, changeset: Users.change_user_registration(%User{}))
@@ -12,10 +11,17 @@ defmodule CashLensWeb.UserRegistrationController do
   def create(conn, %{"user" => user_params}) do
     case Users.register_user(user_params) do
       {:ok, user} ->
-        UserAuth.log_in_user(conn, user, ~p"/users/pending")
+        Users.deliver_confirmation_instructions(user, &confirm_url/1)
+
+        conn
+        |> put_flash(:info, "Account created. Check your email to confirm it before logging in.")
+        |> redirect(to: ~p"/users/log_in")
 
       {:error, %Ecto.Changeset{} = changeset} ->
         render(conn, :new, changeset: changeset)
     end
   end
+
+  @doc false
+  def confirm_url(token), do: CashLensWeb.Endpoint.url() <> ~p"/users/confirm/#{token}"
 end

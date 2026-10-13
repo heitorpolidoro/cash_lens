@@ -14,6 +14,7 @@ defmodule CashLens.Users.User do
     field :hashed_password, :string, redact: true
     field :enabled, :boolean, default: false
     field :session_nonce, :string, redact: true
+    field :confirmed_at, :utc_datetime
 
     timestamps(type: :utc_datetime)
   end
@@ -31,6 +32,16 @@ defmodule CashLens.Users.User do
     |> hash_password()
     |> put_change(:session_nonce, new_nonce())
   end
+
+  @doc "Password-reset changeset: applies the sign-up password rules to a new password."
+  def password_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:password])
+    |> validate_password()
+    |> hash_password()
+  end
+
+  def confirmed?(%__MODULE__{confirmed_at: confirmed_at}), do: not is_nil(confirmed_at)
 
   # Read at compile time; the file lives in the repo (priv/common_passwords.txt)
   # and is compared lowercased.

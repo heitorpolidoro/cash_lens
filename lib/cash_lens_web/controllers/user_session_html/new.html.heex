@@ -1,6 +1,20 @@
 <div class="max-w-sm mx-auto mt-24 p-6 bg-white rounded-2xl border border-slate-200">
   <h1 class="text-xl font-bold mb-4">Entrar</h1>
 
+  <p
+    :if={info = Phoenix.Flash.get(@flash, :info)}
+    id="login-info"
+    class="mb-3 text-sm text-green-700"
+  >
+    {info}
+  </p>
+  <p
+    :if={flash_error = Phoenix.Flash.get(@flash, :error)}
+    id="login-flash-error"
+    class="mb-3 text-sm text-red-600"
+  >
+    {flash_error}
+  </p>
   <p :if={@error} id="login-error" class="mb-3 text-sm text-red-600">{@error}</p>
 
   <.form :let={f} for={%{}} as={:user} action={~p"/users/log_in"}>
@@ -9,7 +23,12 @@
     <.button class="w-full mt-4">Entrar</.button>
   </.form>
 
-  <p class="mt-4 text-sm">
+  <p class="mt-4 text-sm space-x-3">
     <.link href={~p"/users/register"} class="font-semibold">Criar conta</.link>
+    <.link href={~p"/users/reset_password"} class="font-semibold">Esqueci minha senha</.link>
+    <.link href={~p"/users/confirm"} class="font-semibold">Reenviar confirmação</.link>
+  </p>
+  <p class="mt-2 text-xs">
+    <.link href={~p"/privacy"} class="underline">Privacidade</.link>
   </p>
 </div>

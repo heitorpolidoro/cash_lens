@@ -71,7 +71,8 @@ defmodule CashLensWeb.Layouts do
             "hero-adjustments-horizontal",
             "/automation"
           ),
-          nav_item("Banco de Dados", "/admin/db", "hero-circle-stack", "/admin/db")
+          nav_item("Banco de Dados", "/admin/db", "hero-circle-stack", "/admin/db"),
+          nav_item("Minha Conta", "/account", "hero-user-circle", "/account")
         ]
       }
     ]

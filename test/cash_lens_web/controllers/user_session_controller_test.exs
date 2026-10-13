@@ -5,12 +5,18 @@ defmodule CashLensWeb.UserSessionControllerTest do
 
   import CashLens.UsersFixtures
 
+  alias CashLens.Audit.LoginAttempt
+  alias CashLens.Repo
+
   defp log_in(conn, user) do
     post(conn, ~p"/users/log_in", user: %{email: user.email, password: valid_user_password()})
   end
 
   test "GET /users/log_in renders the form", %{conn: conn} do
-    assert html_response(get(conn, ~p"/users/log_in"), 200) =~ "Entrar"
+    html = html_response(get(conn, ~p"/users/log_in"), 200)
+    assert html =~ "Entrar"
+    assert html =~ ~s(href="/privacy")
+    assert html =~ ~s(href="/users/reset_password")
   end
 
   test "enabled user logs in and lands on /", %{conn: conn} do
@@ -68,5 +74,114 @@ defmodule CashLensWeb.UserSessionControllerTest do
 
     # And the cookie the logout response left behind is empty too.
     assert out |> recycle() |> get(~p"/") |> redirected_to() == ~p"/users/log_in"
+  end
+
+  describe "email confirmation" do
+    test "an unconfirmed user is refused, then can log in after using the link", %{conn: conn} do
+      email = unique_user_email()
+      post(conn, ~p"/users/register", user: %{email: email, password: valid_user_password()})
+      assert_received {:email, mail}
+
+      refused =
+        post(build_conn(), ~p"/users/log_in",
+          user: %{email: email, password: valid_user_password()}
+        )
+
+      assert html_response(refused, 401) =~ "Confirm your email"
+      refute get_session(refused, :user_id)
+
+      confirm = get(build_conn(), ~p"/users/confirm/#{extract_token(mail)}")
+      assert redirected_to(confirm) == ~p"/users/log_in"
+
+      ok =
+        post(build_conn(), ~p"/users/log_in",
+          user: %{email: email, password: valid_user_password()}
+        )
+
+      assert get_session(ok, :user_id)
+    end
+
+    test "an unconfirmed user with a wrong password gets the generic message", %{conn: conn} do
+      user = user_fixture(%{confirmed: false})
+      conn = post(conn, ~p"/users/log_in", user: %{email: user.email, password: "wrong-password"})
+      assert html_response(conn, 401) =~ "Invalid email or password"
+    end
+
+    test "a reused or garbage confirm link is refused", %{conn: conn} do
+      user = user_fixture(%{confirmed: false})
+      {:ok, mail} = CashLens.Users.deliver_confirmation_instructions(user, &("http://x/" <> &1))
+      token = extract_token(mail)
+
+      first = get(conn, ~p"/users/confirm/#{token}")
+      assert Phoenix.Flash.get(first.assigns.flash, :info) =~ "Email confirmed"
+      reused = get(build_conn(), ~p"/users/confirm/#{token}")
+      assert Phoenix.Flash.get(reused.assigns.flash, :error) =~ "invalid or has expired"
+      bad = get(build_conn(), ~p"/users/confirm/garbage")
+      assert Phoenix.Flash.get(bad.assigns.flash, :error) =~ "invalid or has expired"
+    end
+
+    test "resend delivers one email for an unconfirmed user and answers the same otherwise", %{
+      conn: conn
+    } do
+      user = user_fixture(%{confirmed: false})
+      assert html_response(get(conn, ~p"/users/confirm"), 200) =~ "Reenviar"
+
+      known = post(conn, ~p"/users/confirm", user: %{email: user.email})
+      assert_received {:email, _}
+      unknown = post(build_conn(), ~p"/users/confirm", user: %{email: "nobody@example.com"})
+      refute_received {:email, _}
+      malformed = post(build_conn(), ~p"/users/confirm", %{})
+
+      messages =
+        for c <- [known, unknown, malformed], do: Phoenix.Flash.get(c.assigns.flash, :info)
+
+      assert [m] = Enum.uniq(messages)
+      assert is_binary(m)
+    end
+  end
+
+  describe "login audit" do
+    defp attempts, do: Repo.all(LoginAttempt)
+
+    test "a successful login adds one row with user, ip and timestamp", %{conn: conn} do
+      user = user_fixture(%{enabled: true})
+      log_in(conn, user)
+
+      assert [a] = attempts()
+      assert a.user_id == user.id
+      assert a.success
+      assert a.email == user.email
+      assert a.ip == "127.0.0.1"
+      assert a.inserted_at
+    end
+
+    test "a wrong password adds a failed row without storing the password", %{conn: conn} do
+      user = user_fixture(%{enabled: true})
+      post(conn, ~p"/users/log_in", user: %{email: user.email, password: "wrong-password-xyz"})
+
+      assert [a] = attempts()
+      assert a.user_id == user.id
+      refute a.success
+      refute inspect(a) =~ "wrong-password-xyz"
+    end
+
+    test "an unknown email adds a row with a nil user", %{conn: conn} do
+      post(conn, ~p"/users/log_in",
+        user: %{email: "ghost@example.com", password: "whatever-12345"}
+      )
+
+      assert [a] = attempts()
+      assert a.user_id == nil
+      refute a.success
+      assert a.email == "ghost@example.com"
+      assert a.ip != ""
+    end
+
+    test "an unconfirmed login with the right password is recorded as a failure", %{conn: conn} do
+      user = user_fixture(%{confirmed: false})
+      log_in(conn, user)
+      assert [%{success: false, user_id: user_id}] = attempts()
+      assert user_id == user.id
+    end
   end
 end

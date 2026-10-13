@@ -59,3 +59,6 @@ config :cash_lens, Oban, testing: :manual
 config :cash_lens, CashLensWeb.Plugs.RateLimit,
   login: [limit: 100_000, window_seconds: 60],
   register: [limit: 100_000, window_seconds: 3600]
+
+# Sentry events are collected in-process (Sentry.Test) instead of being sent.
+config :sentry, test_mode: true

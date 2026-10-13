@@ -38,6 +38,12 @@ defmodule CashLensWeb.Router do
 
     get "/users/register", UserRegistrationController, :new
     post "/users/register", UserRegistrationController, :create
+
+    # Request forms that send an email share the sign-up limit.
+    get "/users/reset_password", UserResetPasswordController, :new
+    post "/users/reset_password", UserResetPasswordController, :create
+    get "/users/confirm", UserConfirmationController, :new
+    post "/users/confirm", UserConfirmationController, :create
   end
 
   scope "/", CashLensWeb do
@@ -52,6 +58,17 @@ defmodule CashLensWeb.Router do
 
     get "/.well-known/appspecific/com.chrome.devtools.json", PageController, :chrome_devtools
     delete "/users/log_out", UserSessionController, :delete
+
+    get "/users/confirm/:token", UserConfirmationController, :confirm
+    get "/users/reset_password/:token", UserResetPasswordController, :edit
+    put "/users/reset_password/:token", UserResetPasswordController, :update
+
+    get "/privacy", PrivacyController, :show
+  end
+
+  # Outside every pipeline: no session, no CSRF, no login.
+  scope "/", CashLensWeb do
+    get "/health", HealthController, :show
   end
 
   scope "/", CashLensWeb do
@@ -64,6 +81,10 @@ defmodule CashLensWeb.Router do
     pipe_through [:browser, :require_authenticated_user, :require_enabled_user]
 
     get "/", PageController, :home
+
+    get "/account", UserAccountController, :show
+    get "/account/export", UserAccountController, :export
+    delete "/account", UserAccountController, :delete
     get "/credit_card_links", RedirectController, :statements
 
     # The two rule screens merged into the Automation Center (CL-17); the old

@@ -1,5 +1,6 @@
 defmodule CashLensWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :cash_lens
+  use Sentry.PlugCapture
 
   # The session cookie is signed and encrypted. Flags and salts come from
   # config (`session_options`), with `secure: true` added in config/prod.exs.
@@ -41,6 +42,8 @@ defmodule CashLensWeb.Endpoint do
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()
+
+  plug Sentry.PlugContext
 
   plug Plug.MethodOverride
   plug Plug.Head

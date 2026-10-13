@@ -56,7 +56,7 @@ defmodule CashLensWeb.LayoutsTest do
       paths = for group <- Layouts.nav_groups(), item <- group.items, do: item.path
 
       assert paths == Enum.uniq(paths)
-      assert length(paths) == 15
+      assert length(paths) == 16
     end
 
     test "the monthly closing entry points at the current competência" do

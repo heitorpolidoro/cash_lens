@@ -46,6 +46,13 @@ config :cash_lens, CashLensWeb.Plugs.RateLimit,
   register: [limit: 5, window_seconds: 3600],
   trust_proxy_headers: false
 
+# Error tracking. The DSN is nil everywhere (even when SENTRY_DSN is exported)
+# and is only set for prod in config/runtime.exs, so dev and test send nothing.
+config :sentry,
+  dsn: nil,
+  client: Sentry.HackneyClient,
+  integrations: [oban: [capture_errors: true]]
+
 # Configure the mailer
 #
 # By default it uses the "Local" adapter which stores the emails

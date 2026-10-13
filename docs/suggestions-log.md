@@ -1565,3 +1565,7 @@ commit claimed none were added. Fixed; back to 23.
 - Code review: `rate_limit.ex` `client_ip/2` with `trust_proxy_headers` takes the last `x-forwarded-for` entry, correct for a single trusted proxy; document that it is wrong for a multi-hop chain.
 - Code review: `validate_drop/2` reads the whole file (up to 10 MB) after stat; fine at this size. The control-byte list is rebuilt per call and could be a module attribute.
 - Code review: keep the global `Config.Headers` sobelow ignore under review, since it would also hide a real missing-headers regression on other pipelines.
+
+## [CL-54] Production readiness: account recovery, audit, health and privacy — 2026-10-13
+- Code review: `mix.exs` adds `hackney` only for `Sentry.HackneyClient`; it is a second HTTP client alongside Req.
+- Code review: `runtime.exs` now raises at boot in prod if `MAILGUN_API_KEY` or `MAILGUN_DOMAIN` is missing; update the deploy env first.

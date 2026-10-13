@@ -14,7 +14,7 @@ config :cash_lens, CashLensWeb.Endpoint,
   force_ssl: [rewrite_on: [:x_forwarded_proto], hsts: true, expires: 63_072_000, subdomains: true],
   session_options: [secure: true],
   exclude: [
-    # paths: ["/health"],
+    paths: ["/health"],
     hosts: ["localhost", "127.0.0.1"]
   ]
 

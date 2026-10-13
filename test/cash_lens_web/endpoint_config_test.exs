@@ -78,7 +78,9 @@ defmodule CashLensWeb.EndpointConfigTest do
       read_runtime([
         {"SECRET_KEY_BASE", String.duplicate("a", 64)},
         {"DATABASE_URL", "ecto://u:p@localhost/db"},
-        {"PHX_HOST", "money.example.org"}
+        {"PHX_HOST", "money.example.org"},
+        {"MAILGUN_API_KEY", "key-for-test"},
+        {"MAILGUN_DOMAIN", "mg.example.org"}
       ])
 
     endpoint = config |> Keyword.fetch!(:cash_lens) |> Keyword.fetch!(@endpoint_key)

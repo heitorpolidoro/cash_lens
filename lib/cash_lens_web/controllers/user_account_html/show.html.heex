@@ -1,0 +1,26 @@
+<div class="max-w-xl space-y-6">
+  <h1 class="text-xl font-bold">Minha Conta</h1>
+
+  <section class="p-6 bg-white rounded-2xl border border-slate-200 space-y-2">
+    <h2 class="font-bold">Exportar meus dados</h2>
+    <p class="text-sm">
+      Baixe um arquivo JSON com os dados da sua conta (sem hashes de senha). Os dados financeiros compartilhados não fazem parte da exportação.
+    </p>
+    <.link href={~p"/account/export"} class="font-semibold text-sm text-blue-600">
+      Baixar meus dados
+    </.link>
+  </section>
+
+  <section class="p-6 bg-white rounded-2xl border border-red-200 space-y-2">
+    <h2 class="font-bold text-red-600">Excluir minha conta</h2>
+    <p id="delete-warning" class="text-sm">
+      Atenção: isto apaga sua conta, seus tokens e seu histórico de logins de forma permanente e não pode ser desfeito. Digite sua senha para confirmar.
+    </p>
+    <.form :let={f} for={%{}} as={:account} action={~p"/account"} method="delete">
+      <.input field={f[:password]} type="password" label="Senha atual" value="" required />
+      <.button class="mt-4">Excluir conta</.button>
+    </.form>
+  </section>
+
+  <p class="text-xs"><.link href={~p"/privacy"} class="underline">Aviso de privacidade</.link></p>
+</div>

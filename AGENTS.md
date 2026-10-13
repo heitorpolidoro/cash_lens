@@ -152,7 +152,12 @@ Mix aliases worth knowing (`mix.exs`):
 ```
 lib/cash_lens/                     Business logic ("contexts") — framework-agnostic
   accounts.ex / accounts/          Bank/credit-card accounts (Account schema)
-  users.ex / users/                Login users (User schema; `enabled` defaults to false)
+  users.ex / users/                Login users (User schema; `enabled` defaults to false;
+                                      `confirmed_at` set by the emailed link), UserToken (hashed
+                                      confirm/reset tokens), UserNotifier (Swoosh emails)
+  audit.ex / audit/                Login audit log (`login_attempts`: one row per attempt, incl. unknown emails)
+  privacy.ex                       Owned-data registry (`@owned`) behind `export/1` and `delete_account/2`
+  health.ex                        DB check behind `GET /health`
   transactions.ex / transactions/  Core transaction logic:
                                       transaction.ex          — schema + dedup fingerprinting
                                       auto_categorizer.ex      — rule-based categorization
@@ -215,6 +220,22 @@ BACKLOG.md                         Architectural decisions + prioritized backlog
 Auth hardening (CSRF, session cookie, rate limiting, password policy, CSP/HSTS, secrets,
 upload validation) and the `mix security` gate are documented in
 [`docs/security.md`](docs/security.md), including accepted audit exceptions.
+
+### Account recovery, audit, health and privacy (CL-54)
+
+- Routes: `GET/POST /users/confirm` (resend), `GET /users/confirm/:token`,
+  `GET/POST /users/reset_password`, `GET/PUT /users/reset_password/:token`, `GET /privacy`
+  (public), `GET /health` (no pipeline; JSON, 200/503, check injectable with
+  `config :cash_lens, :health_check`), `GET /account`, `GET /account/export`,
+  `DELETE /account` (logged in and enabled).
+- Login is refused for unconfirmed users. Confirm tokens last 7 days, reset tokens 1 hour; both
+  are single use and only their SHA-256 is stored.
+- Export/delete cover only rows in the `CashLens.Privacy` `@owned` registry (user, tokens, login
+  attempts). Shared financial data has no owner and is never exported or deleted. **Any table that
+  gains a `user_id` must be added to `@owned`.**
+- Env vars (prod, `config/runtime.exs`): `SENTRY_DSN` (optional; without it, or in dev/test,
+  nothing is sent to Sentry), `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` (required, Swoosh Mailgun
+  adapter), `MAIL_FROM` (optional, defaults to `noreply@PHX_HOST`).
 
 ## Domain Concepts
 

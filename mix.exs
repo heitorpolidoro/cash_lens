@@ -73,6 +73,8 @@ defmodule CashLens.MixProject do
        compile: false,
        depth: 1},
       {:swoosh, "~> 1.16"},
+      {:sentry, "~> 11.0"},
+      {:hackney, "~> 1.20"},
       {:req, "~> 0.5"},
       {:nimble_csv, "~> 1.1"},
       {:gettext, "~> 1.0"},

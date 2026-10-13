@@ -103,21 +103,30 @@ if config_env() == :prod do
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
-  # ## Configuring the mailer
+  # ## Error tracking
   #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
+  # Unhandled errors are reported to Sentry only when SENTRY_DSN is set.
+  if dsn = System.get_env("SENTRY_DSN") do
+    config :sentry,
+      dsn: dsn,
+      environment_name: :prod,
+      enable_source_code_context: false
+  end
+
+  # ## Mailer
   #
-  #     config :cash_lens, CashLens.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
+  # Production mail goes through Mailgun's API (Swoosh.ApiClient.Req is set in
+  # config/prod.exs). The keys are required: without them confirmation and
+  # password-reset emails could not be delivered.
+  mail_from = System.get_env("MAIL_FROM") || "noreply@#{host}"
+  config :cash_lens, :mail_from, {"CashLens", mail_from}
+
+  config :cash_lens, CashLens.Mailer,
+    adapter: Swoosh.Adapters.Mailgun,
+    api_key:
+      System.get_env("MAILGUN_API_KEY") ||
+        raise("environment variable MAILGUN_API_KEY is missing."),
+    domain:
+      System.get_env("MAILGUN_DOMAIN") ||
+        raise("environment variable MAILGUN_DOMAIN is missing.")
 end
