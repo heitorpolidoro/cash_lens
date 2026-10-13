@@ -346,18 +346,19 @@ defmodule CashLens.Parsers.CSVParser do
 
   defp infer_purchase_date(base_date, d, m) do
     case Date.new(base_date.year, String.to_integer(m), String.to_integer(d)) do
-      {:ok, date} ->
-        if Date.diff(date, base_date) > @max_future_days do
-          case Date.new(base_date.year - 1, date.month, date.day) do
-            {:ok, previous} -> previous
-            _ -> base_date
-          end
-        else
-          date
-        end
+      {:ok, date} -> roll_back_far_future(date, base_date)
+      _ -> base_date
+    end
+  end
 
-      _ ->
-        base_date
+  defp roll_back_far_future(date, base_date) do
+    if Date.diff(date, base_date) > @max_future_days do
+      case Date.new(base_date.year - 1, date.month, date.day) do
+        {:ok, previous} -> previous
+        _ -> base_date
+      end
+    else
+      date
     end
   end
 end

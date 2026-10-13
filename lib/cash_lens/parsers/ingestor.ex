@@ -4,6 +4,7 @@ defmodule CashLens.Parsers.Ingestor do
   """
   require Logger
   alias CashLens.Accounting
+  alias CashLens.CreditCards.Matcher
   alias CashLens.Imports
   alias CashLens.Parsers.CSVParser
   alias CashLens.Parsers.MercadoPagoPDFParser
@@ -11,10 +12,10 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Parsers.OurocardTXTParser
   alias CashLens.Parsers.PDFParser
   alias CashLens.Transactions.AutoCategorizer
-  alias CashLens.Workers.SyncRecurringWorker
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.TransferRuleApplier
+  alias CashLens.Workers.SyncRecurringWorker
   alias Ecto.UUID
   import Ecto.Query, only: [from: 2]
 
@@ -27,52 +28,30 @@ defmodule CashLens.Parsers.Ingestor do
     "mercado_pago_pdf"
   ]
 
+  # parser_type => {log label, parser module, parser variant}
+  @parsers %{
+    "bradesco_csv" => {"Bradesco CSV", CSVParser, :bradesco_csv},
+    "bb_csv" => {"BB CSV", CSVParser, :bb},
+    "mercado_pago_csv" => {"Mercado Pago CSV", CSVParser, :mercado_pago_csv},
+    "mercado_pago_pdf" => {"Mercado Pago Conta PDF", MercadoPagoPDFParser, :mercado_pago_conta},
+    "sem_parar_pdf" => {"Sem Parar PDF", PDFParser, :sem_parar},
+    "bradesco_cartao_pdf" => {"Bradesco Cartao PDF", PDFParser, :bradesco_card},
+    "mercadopago_cartao_pdf" => {"Mercado Pago Cartao PDF", PDFParser, :mercado_pago_card},
+    "standard_ofx" => {"Standard OFX", OFXParser, :standard},
+    "ourocard_ofx" => {"Ourocard OFX", OFXParser, :ourocard},
+    "ourocard_txt" => {"Ourocard TXT", OurocardTXTParser, :ourocard}
+  }
+
   @doc """
   Parses the content based on the provided parser_type.
   """
   def parse(content, parser_type) do
-    case parser_type do
-      "bradesco_csv" ->
-        Logger.info("Using Bradesco CSV Parser")
-        CSVParser.parse(content, :bradesco_csv)
+    case Map.fetch(@parsers, parser_type) do
+      {:ok, {label, module, variant}} ->
+        Logger.info("Using #{label} Parser")
+        module.parse(content, variant)
 
-      "bb_csv" ->
-        Logger.info("Using BB CSV Parser")
-        CSVParser.parse(content, :bb)
-
-      "mercado_pago_csv" ->
-        Logger.info("Using Mercado Pago CSV Parser")
-        CSVParser.parse(content, :mercado_pago_csv)
-
-      "mercado_pago_pdf" ->
-        Logger.info("Using Mercado Pago Conta PDF Parser")
-        MercadoPagoPDFParser.parse(content, :mercado_pago_conta)
-
-      "sem_parar_pdf" ->
-        Logger.info("Using Sem Parar PDF Parser")
-        PDFParser.parse(content, :sem_parar)
-
-      "bradesco_cartao_pdf" ->
-        Logger.info("Using Bradesco Cartao PDF Parser")
-        PDFParser.parse(content, :bradesco_card)
-
-      "mercadopago_cartao_pdf" ->
-        Logger.info("Using Mercado Pago Cartao PDF Parser")
-        PDFParser.parse(content, :mercado_pago_card)
-
-      "standard_ofx" ->
-        Logger.info("Using Standard OFX Parser")
-        OFXParser.parse(content, :standard)
-
-      "ourocard_ofx" ->
-        Logger.info("Using Ourocard OFX Parser")
-        OFXParser.parse(content, :ourocard)
-
-      "ourocard_txt" ->
-        Logger.info("Using Ourocard TXT Parser")
-        OurocardTXTParser.parse(content, :ourocard)
-
-      _ ->
+      :error ->
         {:error, "Extrator não configurado ou não suportado para esta conta."}
     end
   end
@@ -482,7 +461,7 @@ defmodule CashLens.Parsers.Ingestor do
       line_total =
         Enum.reduce(statement_lines, Decimal.new(0), &Decimal.add(&2, &1.amount))
 
-      CashLens.CreditCards.Matcher.auto_link(statement, line_total)
+      Matcher.auto_link(statement, line_total)
     end
 
     # 4. Run TransferMatcher for new transactions (including mirrors) in batch

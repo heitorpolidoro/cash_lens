@@ -2312,10 +2312,15 @@ defmodule CashLens.ForecastTest do
     end
 
     test "a real unpaid statement is listed as a bill, and links to itself" do
-      card =
-        account_fixture(%{is_credit_card: true, name: "Ourocard", closing_day: 3, due_day: 10})
-
       due = Date.add(Date.utc_today(), 4)
+
+      card =
+        account_fixture(%{
+          is_credit_card: true,
+          name: "Ourocard",
+          closing_day: 3,
+          due_day: min(due.day, 28)
+        })
 
       statement =
         statement_fixture(%{
@@ -2334,10 +2339,48 @@ defmodule CashLens.ForecastTest do
       assert Decimal.equal?(bill.amount, Decimal.new("14075.87"))
     end
 
+    test "an unpaid statement due in the window is listed once even when due_day has passed" do
+      # Fixed clock: the card's own date for March (the 10th) is behind `today`,
+      # yet the real statement, shifted off the due_day or entered by hand, is
+      # still owed on the 24th.
+      today = ~D[2026-03-20]
+      due = ~D[2026-03-24]
+
+      card =
+        account_fixture(%{is_credit_card: true, name: "Ourocard", closing_day: 3, due_day: 10})
+
+      statement =
+        statement_fixture(%{
+          account: card,
+          competencia: Date.beginning_of_month(due),
+          due_date: due,
+          total_a_pagar: Decimal.new("500.00")
+        })
+
+      occurrences =
+        today
+        |> Forecast.card_occurrences(due)
+        |> Enum.filter(&(&1.item.id == card.id))
+
+      assert [occurrence] = occurrences
+      assert occurrence.statement_id == statement.id
+      assert occurrence.origin == :boleto
+      assert occurrence.date == due
+      refute Enum.any?(occurrences, &(&1.origin == :estimado))
+    end
+
     test "a statement already paid is not a bill to pay" do
-      card = account_fixture(%{is_credit_card: true, name: "Amex", closing_day: 3, due_day: 10})
-      conta = account_fixture(%{name: "Conta"})
       due = Date.add(Date.utc_today(), 4)
+
+      card =
+        account_fixture(%{
+          is_credit_card: true,
+          name: "Amex",
+          closing_day: 3,
+          due_day: min(due.day, 28)
+        })
+
+      conta = account_fixture(%{name: "Conta"})
 
       statement =
         statement_fixture(%{

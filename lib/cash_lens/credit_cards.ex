@@ -1,11 +1,12 @@
 defmodule CashLens.CreditCards do
   @moduledoc "Credit-card statement (fatura) context."
   import Ecto.Query
-  alias CashLens.Repo
-  alias CashLens.CreditCards.Statement
-  alias CashLens.Transactions.Transaction
   alias CashLens.Accounts
   alias CashLens.Accounts.Account
+  alias CashLens.CreditCards.Matcher
+  alias CashLens.CreditCards.Statement
+  alias CashLens.Repo
+  alias CashLens.Transactions.Transaction
   alias Ecto.Multi
 
   @closing_offset 7
@@ -15,23 +16,7 @@ defmodule CashLens.CreditCards do
     competencia = Map.get(attrs, :competencia) || Map.get(attrs, "competencia")
     due_date = Map.get(attrs, :due_date) || Map.get(attrs, "due_date")
 
-    existing =
-      cond do
-        account_id && competencia ->
-          get_statement_by_account_and_competencia(account_id, competencia)
-
-        account_id && is_nil(competencia) && due_date ->
-          from(s in Statement,
-            where:
-              s.account_id == ^account_id and s.due_date == ^due_date and is_nil(s.competencia),
-            order_by: [desc: s.inserted_at],
-            limit: 1
-          )
-          |> Repo.one()
-
-        true ->
-          nil
-      end
+    existing = find_existing_statement(account_id, competencia, due_date)
 
     case existing do
       %Statement{} = statement ->
@@ -43,6 +28,25 @@ defmodule CashLens.CreditCards do
         |> Repo.insert()
     end
   end
+
+  defp find_existing_statement(nil, _competencia, _due_date), do: nil
+  defp find_existing_statement(false, _competencia, _due_date), do: nil
+
+  defp find_existing_statement(account_id, nil, due_date) when due_date not in [nil, false] do
+    from(s in Statement,
+      where: s.account_id == ^account_id and s.due_date == ^due_date and is_nil(s.competencia),
+      order_by: [desc: s.inserted_at],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  defp find_existing_statement(account_id, competencia, _due_date)
+       when competencia not in [nil, false] do
+    get_statement_by_account_and_competencia(account_id, competencia)
+  end
+
+  defp find_existing_statement(_account_id, _competencia, _due_date), do: nil
 
   def get_statement!(id), do: Repo.get!(Statement, id)
 
@@ -187,7 +191,7 @@ defmodule CashLens.CreditCards do
     line_total =
       Enum.reduce(parsed_transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
 
-    CashLens.CreditCards.Matcher.auto_link(statement, line_total)
+    Matcher.auto_link(statement, line_total)
 
     {:ok, statement}
   end
@@ -445,7 +449,7 @@ defmodule CashLens.CreditCards do
     |> case do
       {:ok, %{statement: statement, lines: inserted}} ->
         line_total = Enum.reduce(inserted, Decimal.new(0), &Decimal.add(&2, &1.amount))
-        CashLens.CreditCards.Matcher.auto_link(statement, line_total)
+        Matcher.auto_link(statement, line_total)
         {:ok, Repo.get!(Statement, statement.id)}
 
       {:error, _step, reason, _} ->
@@ -1191,14 +1195,15 @@ defmodule CashLens.CreditCards do
           count
 
         absorbed ->
-          if boleto.payment_transaction_id do
-            link_payment(boleto, boleto.payment_transaction_id)
-          end
-
+          relink_payment(boleto)
           count + length(absorbed)
       end
     end)
   end
+
+  defp relink_payment(%{payment_transaction_id: nil}), do: :ok
+
+  defp relink_payment(boleto), do: link_payment(boleto, boleto.payment_transaction_id)
 
   @doc """
   Best-effort billing-cycle estimate from the account's imported boletos:
@@ -1242,22 +1247,24 @@ defmodule CashLens.CreditCards do
     Enum.reduce(accounts, 0, fn account, count ->
       statements = from(s in Statement, where: s.account_id == ^account.id) |> Repo.all()
 
-      Enum.reduce(statements, count, fn s, acc ->
-        meta = %{
-          due_date: s.due_date,
-          competencia: s.due_date && Date.beginning_of_month(s.due_date)
-        }
-
-        new_comp = competencia_for(account, meta, statement_transactions(s.id))
-
-        if new_comp && new_comp != s.competencia do
-          {:ok, _} = update_statement_competencia(s, new_comp)
-          acc + 1
-        else
-          acc
-        end
-      end)
+      Enum.reduce(statements, count, &recompute_statement_competencia(&1, &2, account))
     end)
+  end
+
+  defp recompute_statement_competencia(s, acc, account) do
+    meta = %{
+      due_date: s.due_date,
+      competencia: s.due_date && Date.beginning_of_month(s.due_date)
+    }
+
+    new_comp = competencia_for(account, meta, statement_transactions(s.id))
+
+    if new_comp && new_comp != s.competencia do
+      {:ok, _} = update_statement_competencia(s, new_comp)
+      acc + 1
+    else
+      acc
+    end
   end
 
   defp update_statement_competencia(%Statement{} = s, competencia) do

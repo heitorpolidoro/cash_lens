@@ -25,30 +25,7 @@ defmodule Mix.Tasks.CashLens.Import do
     ansi? = IO.ANSI.enabled?()
 
     try do
-      extra_opts =
-        case DirectoryImporter.preflight(path) do
-          :ok ->
-            []
-
-          {:needs_confirmation, missing_accounts} ->
-            Mix.shell().info("\nAs seguintes contas não existem e serão criadas:")
-
-            Enum.each(missing_accounts, fn a ->
-              tag = if a.credit_card, do: " [cartão]", else: ""
-              Mix.shell().info("  • #{a.bank} / #{a.account}#{tag} (parser: #{a.parser})")
-            end)
-
-            if Mix.shell().yes?("\nCriar contas e continuar?") do
-              [create_missing: true]
-            else
-              Mix.shell().info("Importação cancelada.")
-              exit({:shutdown, 0})
-            end
-
-          {:error, reasons} ->
-            Enum.each(reasons, &Mix.shell().error("✗ #{&1}"))
-            exit({:shutdown, 1})
-        end
+      extra_opts = preflight_opts(path)
 
       {result, agent} =
         if ansi? do
@@ -75,6 +52,38 @@ defmodule Mix.Tasks.CashLens.Import do
   def run(_args) do
     Mix.shell().error("Uso: mix cash_lens.import <caminho>")
     exit({:shutdown, 2})
+  end
+
+  defp preflight_opts(path) do
+    case DirectoryImporter.preflight(path) do
+      :ok ->
+        []
+
+      {:needs_confirmation, missing_accounts} ->
+        Mix.shell().info("\nAs seguintes contas não existem e serão criadas:")
+
+        Enum.each(missing_accounts, &print_missing_account/1)
+
+        confirm_create_missing()
+
+      {:error, reasons} ->
+        Enum.each(reasons, &Mix.shell().error("✗ #{&1}"))
+        exit({:shutdown, 1})
+    end
+  end
+
+  defp print_missing_account(a) do
+    tag = if a.credit_card, do: " [cartão]", else: ""
+    Mix.shell().info("  • #{a.bank} / #{a.account}#{tag} (parser: #{a.parser})")
+  end
+
+  defp confirm_create_missing do
+    if Mix.shell().yes?("\nCriar contas e continuar?") do
+      [create_missing: true]
+    else
+      Mix.shell().info("Importação cancelada.")
+      exit({:shutdown, 0})
+    end
   end
 
   # Builds an :on_event callback that drives two levels of owl progress bars:

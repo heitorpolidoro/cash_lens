@@ -1,6 +1,11 @@
 defmodule Mix.Tasks.CashLens.MigrateOurocardTxt do
   use Mix.Task
   import Ecto.Query
+
+  alias CashLens.Accounts.Account
+  alias CashLens.CreditCards
+  alias CashLens.Repo
+
   @shortdoc "Wipes ourocard_ofx accounts and switches them to the TXT parser"
 
   @moduledoc """
@@ -17,16 +22,16 @@ defmodule Mix.Tasks.CashLens.MigrateOurocardTxt do
     Mix.Task.run("app.start")
 
     accounts =
-      from(a in CashLens.Accounts.Account, where: a.parser_type == "ourocard_ofx")
-      |> CashLens.Repo.all()
+      from(a in Account, where: a.parser_type == "ourocard_ofx")
+      |> Repo.all()
 
     Enum.each(accounts, fn account ->
-      {stmts, txns} = CashLens.CreditCards.reset_account_statements(account.id)
+      {stmts, txns} = CreditCards.reset_account_statements(account.id)
 
       {:ok, _} =
         account
-        |> CashLens.Accounts.Account.changeset(%{parser_type: "ourocard_txt"})
-        |> CashLens.Repo.update()
+        |> Account.changeset(%{parser_type: "ourocard_txt"})
+        |> Repo.update()
 
       Mix.shell().info(
         "#{account.name}: deleted #{stmts} statements, #{txns} transactions; parser -> ourocard_txt"

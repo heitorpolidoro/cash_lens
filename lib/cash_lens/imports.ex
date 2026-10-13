@@ -110,6 +110,8 @@ defmodule CashLens.Imports do
     end
   end
 
+  def put_import_root(_root), do: :error
+
   # A path pasted from a terminal, a document or a chat message often arrives
   # wrapped in quotes, especially when it contains spaces — and this one usually
   # does, since a Google Drive mount lives under "My Drive". Stored verbatim the
@@ -132,8 +134,6 @@ defmodule CashLens.Imports do
       _ -> <<quote_char>> <> rest
     end
   end
-
-  def put_import_root(_root), do: :error
 
   @doc """
   The monitored root to fall back to when no setting has been saved yet.

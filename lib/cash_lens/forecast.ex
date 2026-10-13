@@ -5,17 +5,17 @@ defmodule CashLens.Forecast do
   """
 
   import Ecto.Query, warn: false
-  alias CashLens.Repo
-  alias CashLens.Forecast.RecurringItem
+  alias CashLens.Accounting
+  alias CashLens.Accounts
   alias CashLens.Accounts.Scopes
   alias CashLens.Categories
   alias CashLens.Categories.Category
-  alias CashLens.Transactions.Transaction
-  alias CashLens.Accounting
-  alias CashLens.Accounts
   alias CashLens.CreditCards
   alias CashLens.CreditCards.Statement
+  alias CashLens.Forecast.RecurringItem
   alias CashLens.Installments
+  alias CashLens.Repo
+  alias CashLens.Transactions.Transaction
 
   @history_months 6
   @min_occurrences 2
@@ -936,33 +936,74 @@ defmodule CashLens.Forecast do
   # Everything a card's walk needs is read once, up front, and every due-month
   # is derived from those results in memory: the card's statements over the
   # walked months, its recent-bill sample, and its installment groups.
+  #
+  # The walk covers every month from today's to the horizon's. A month whose
+  # `due_day` date falls inside the window is resolved as before (a real
+  # statement, else an estimate). A month whose `due_day` date does not -- the
+  # current month once `due_day` has passed, say -- still lists a real unpaid
+  # statement due inside the window (a weekend shift, a manual entry), and
+  # never an estimate, so the bill is neither lost nor counted twice.
   defp card_account_occurrences(account, today, horizon_end) do
-    case card_due_dates(account.due_day, today, horizon_end) do
-      [] ->
-        []
+    statements = statements_for_months(account.id, card_months(today, horizon_end))
 
-      dates ->
-        statements = statements_for_dates(account.id, dates)
-        groups = Installments.list_account_groups(account.id)
+    walked =
+      today
+      |> card_months(horizon_end)
+      |> Enum.map(&resolve_card_month(&1, account.due_day, statements, today, horizon_end))
+      |> Enum.reject(&is_nil/1)
 
-        resolved =
-          Enum.map(dates, fn date ->
-            {date, statement_for_month(statements, Date.beginning_of_month(date))}
-          end)
+    if walked == [] do
+      []
+    else
+      groups = Installments.list_account_groups(account.id)
 
-        base = if Enum.any?(resolved, &is_nil(elem(&1, 1))), do: estimate_base(account, groups)
+      base =
+        if Enum.any?(walked, &(&1.estimable? and is_nil(&1.statement))),
+          do: estimate_base(account, groups)
 
-        resolved
-        |> Enum.map(fn {date, statement} ->
-          card_occurrence_for_date(account, date, statement, base, groups)
-        end)
-        |> Enum.reject(&is_nil/1)
+      walked
+      |> Enum.map(&walked_card_occurrence(&1, account, base, groups))
+      |> Enum.reject(&is_nil/1)
     end
   end
 
-  defp card_due_dates(due_day, today, horizon_end) do
-    next_occurrence_date(due_day, today)
-    |> Stream.iterate(&next_month_date(&1, due_day))
+  defp walked_card_occurrence(%{estimable?: true} = m, account, base, groups),
+    do: card_occurrence_for_date(account, m.date, m.statement, base, groups)
+
+  defp walked_card_occurrence(m, account, _base, groups),
+    do: card_occurrence_for_date(account, m.date, m.statement, nil, groups)
+
+  # `estimable?` marks a month whose `due_day` date is inside the window: only
+  # those may fall back to an estimate. Other months are walked only to list a
+  # real unpaid statement.
+  defp resolve_card_month(month, due_day, statements, today, horizon_end) do
+    date = clamp_day(month.year, month.month, due_day)
+    statement = statement_for_month(statements, month)
+    estimable? = in_window?(date, today, horizon_end)
+
+    if estimable? or listed_outside_walk?(statement, today, horizon_end) do
+      %{date: date, statement: statement, estimable?: estimable?}
+    end
+  end
+
+  defp in_window?(date, today, horizon_end),
+    do: Date.compare(date, today) != :lt and Date.compare(date, horizon_end) != :gt
+
+  # An unpaid real statement due inside the window, in a month whose `due_day`
+  # date is outside it.
+  defp listed_outside_walk?(
+         %Statement{payment_transaction_id: nil, due_date: due},
+         today,
+         horizon_end
+       ),
+       do: Date.compare(due, today) != :lt and Date.compare(due, horizon_end) != :gt
+
+  defp listed_outside_walk?(_statement, _today, _horizon_end), do: false
+
+  defp card_months(today, horizon_end) do
+    today
+    |> Date.beginning_of_month()
+    |> Stream.iterate(&(&1 |> Date.end_of_month() |> Date.add(1)))
     |> Enum.take_while(&(Date.compare(&1, horizon_end) != :gt))
   end
 
@@ -1002,9 +1043,9 @@ defmodule CashLens.Forecast do
   # -- because a month is looked up whole: a statement already past today but in
   # the current month, or one due after the horizon end but in its last month,
   # still decides that month.
-  defp statements_for_dates(account_id, dates) do
-    from_date = dates |> List.first() |> Date.beginning_of_month()
-    to_date = dates |> List.last() |> Date.end_of_month()
+  defp statements_for_months(account_id, months) do
+    from_date = List.first(months)
+    to_date = months |> List.last() |> Date.end_of_month()
 
     from(s in Statement,
       where: s.account_id == ^account_id and s.due_date >= ^from_date and s.due_date <= ^to_date

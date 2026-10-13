@@ -8,6 +8,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferRule
+  alias Mix.Tasks.MigrateCreditCardTransfers
 
   defp insert_raw(attrs) do
     %Transaction{} |> Transaction.changeset(attrs) |> Repo.insert!()
@@ -72,7 +73,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
         import_batch_id: statement.id
       })
 
-    capture_log(fn -> Mix.Tasks.MigrateCreditCardTransfers.run([]) end)
+    capture_log(fn -> MigrateCreditCardTransfers.run([]) end)
 
     updated_payment = Repo.get!(Transaction, payment.id)
     assert updated_payment.category_id == cc_cat.id
@@ -119,7 +120,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
       end
 
     log =
-      capture_log(fn -> Mix.Tasks.MigrateCreditCardTransfers.run([]) end)
+      capture_log(fn -> MigrateCreditCardTransfers.run([]) end)
 
     assert log =~ "abort"
 
@@ -157,7 +158,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
 
     link(manual_a, manual_b)
 
-    capture_log(fn -> Mix.Tasks.MigrateCreditCardTransfers.run([]) end)
+    capture_log(fn -> MigrateCreditCardTransfers.run([]) end)
 
     reloaded_a = Repo.get!(Transaction, manual_a.id)
     reloaded_b = Repo.get!(Transaction, manual_b.id)

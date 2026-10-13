@@ -179,11 +179,7 @@ defmodule CashLens.Accounting do
       # This ensures that even if we are missing a whole year, the chain is restored.
       case calculate_monthly_balance(account_id, next_year, next_month) do
         {:ok, next_balance} ->
-          if {next_year, next_month} == {target_year, target_month} do
-            next_balance.final_balance
-          else
-            calculate_from_point(account_id, next_balance, target_year, target_month)
-          end
+          continue_from_point(account_id, next_balance, target_year, target_month)
 
         {:error, reason} ->
           Logger.error(
@@ -193,6 +189,14 @@ defmodule CashLens.Accounting do
           # Fallback to the last known point to avoid complete failure
           last_point.final_balance
       end
+    end
+  end
+
+  defp continue_from_point(account_id, point, target_year, target_month) do
+    if {point.year, point.month} == {target_year, target_month} do
+      point.final_balance
+    else
+      calculate_from_point(account_id, point, target_year, target_month)
     end
   end
 
@@ -266,45 +270,8 @@ defmodule CashLens.Accounting do
           limit: 1
       )
 
-    # The starting month/year
-    {start_year, start_month} =
-      case oldest_tx do
-        nil ->
-          inserted_date = DateTime.to_date(account.inserted_at || DateTime.utc_now())
-          {inserted_date.year, inserted_date.month}
-
-        tx ->
-          {tx.date.year, tx.date.month}
-      end
-
-    # The ending month/year
-    today = Date.utc_today()
-
-    {end_year, end_month} =
-      if account.is_closed do
-        # Find the newest transaction to determine the end month if the account is closed
-        newest_tx =
-          Repo.one(
-            from t in Transaction,
-              where: t.account_id == ^account_id,
-              order_by: [desc: t.date],
-              limit: 1
-          )
-
-        case newest_tx do
-          nil -> {start_year, start_month}
-          tx -> {tx.date.year, tx.date.month}
-        end
-      else
-        {today.year, today.month}
-      end
-
-    {end_year, end_month} =
-      if {end_year, end_month} < {start_year, start_month} do
-        {start_year, start_month}
-      else
-        {end_year, end_month}
-      end
+    {start_year, start_month} = rebuild_start_period(account, oldest_tx)
+    {end_year, end_month} = rebuild_end_period(account, {start_year, start_month})
 
     # Calculate the first month's balance
     case calculate_monthly_balance(account_id, start_year, start_month) do
@@ -319,6 +286,39 @@ defmodule CashLens.Accounting do
       _error ->
         :ok
     end
+  end
+
+  # The first month to rebuild: the oldest transaction's, else the account's creation.
+  defp rebuild_start_period(account, nil) do
+    inserted_date = DateTime.to_date(account.inserted_at || DateTime.utc_now())
+    {inserted_date.year, inserted_date.month}
+  end
+
+  defp rebuild_start_period(_account, tx), do: {tx.date.year, tx.date.month}
+
+  # The last month to rebuild: the current month, or the newest transaction's when
+  # the account is closed. Never earlier than the start.
+  defp rebuild_end_period(account, start_period) do
+    end_period =
+      if account.is_closed do
+        newest_tx =
+          Repo.one(
+            from t in Transaction,
+              where: t.account_id == ^account.id,
+              order_by: [desc: t.date],
+              limit: 1
+          )
+
+        case newest_tx do
+          nil -> start_period
+          tx -> {tx.date.year, tx.date.month}
+        end
+      else
+        today = Date.utc_today()
+        {today.year, today.month}
+      end
+
+    max(end_period, start_period)
   end
 
   @doc """

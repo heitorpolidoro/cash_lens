@@ -22,22 +22,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
 
       {errors, missing} =
         Enum.reduce(account_dirs, {[], []}, fn dir, {errs, miss} ->
-          case AccountFile.read(dir) do
-            {:error, reason} ->
-              {[reason | errs], miss}
-
-            {:ok, attrs} ->
-              case AccountFile.validate_parser(attrs) do
-                {:error, reason} ->
-                  {[reason | errs], miss}
-
-                :ok ->
-                  case Accounts.find_accounts_by_bank_and_name(attrs.bank, attrs.account) do
-                    [_] -> {errs, miss}
-                    _ -> {errs, [attrs | miss]}
-                  end
-              end
-          end
+          preflight_dir(dir, errs, miss)
         end)
 
       cond do
@@ -47,6 +32,18 @@ defmodule CashLens.Parsers.DirectoryImporter do
       end
     else
       {:error, ["caminho '#{path}' não existe ou não é uma pasta"]}
+    end
+  end
+
+  defp preflight_dir(dir, errs, miss) do
+    with {:ok, attrs} <- AccountFile.read(dir),
+         :ok <- AccountFile.validate_parser(attrs) do
+      case Accounts.find_accounts_by_bank_and_name(attrs.bank, attrs.account) do
+        [_] -> {errs, miss}
+        _ -> {errs, [attrs | miss]}
+      end
+    else
+      {:error, reason} -> {[reason | errs], miss}
     end
   end
 
@@ -309,17 +306,19 @@ defmodule CashLens.Parsers.DirectoryImporter do
     if File.dir?(path) do
       {account_dirs, _skipped} = account_dirs(path)
 
-      Enum.each(account_dirs, fn dir ->
-        with {:ok, %{bank: bank, account: name}} <- AccountFile.read(dir),
-             {:ok, account} <- resolve_account(bank, name),
-             true <- account.is_credit_card do
-          visit_account_files(dir, account, fun)
-        else
-          _ -> :ok
-        end
-      end)
+      Enum.each(account_dirs, &visit_credit_card_dir(&1, fun))
     else
       {:error, "caminho '#{path}' não existe ou não é uma pasta"}
+    end
+  end
+
+  defp visit_credit_card_dir(dir, fun) do
+    with {:ok, %{bank: bank, account: name}} <- AccountFile.read(dir),
+         {:ok, account} <- resolve_account(bank, name),
+         true <- account.is_credit_card do
+      visit_account_files(dir, account, fun)
+    else
+      _ -> :ok
     end
   end
 

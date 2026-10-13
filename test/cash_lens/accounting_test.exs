@@ -240,7 +240,7 @@ defmodule CashLens.AccountingTest do
 
       assert :ok = Accounting.rebuild_account_balances(acc.id)
       balances = Repo.all(from b in Balance, where: b.account_id == ^acc.id)
-      assert length(balances) > 0
+      assert balances != []
 
       # The latest month should be the current month
       today = Date.utc_today()
