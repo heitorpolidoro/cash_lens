@@ -66,8 +66,9 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # sample) plus 1 for `CreditCards.closed_without_statement/0`.
   @credit_card_statements_ceiling 5 + @statements_delta
 
-  # 20 measured + 0: 12 for `Forecast.monthly_volatility/0`'s 12-month window,
-  # 2 for `get_monthly_summary/0` (the latest-date probe and the aggregate), 2
+  # 9 measured + 0: 1 for `Forecast.monthly_volatility/0`'s grouped read of
+  # its 12-month window (was 12, one per month, before CL-41), 2 for
+  # `get_monthly_summary/0` (the latest-date probe and the aggregate), 2
   # for `get_historical_summary/1` (controller and `spend_rate/4`), 2 for
   # `overdue_occurrences/1` (the latest-date probe and `settled_categories/2`),
   # 1 for `variable_spending_total/2` and 1 for `spend_rate/4`'s own
@@ -78,7 +79,7 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # `total_a_pagar`, so no bill falls back to
   # `CreditCards.statement_transactions/1`, and an extra due-month is always an
   # estimate, which reads no transaction.
-  @transactions_ceiling 20 + 0
+  @transactions_ceiling 9 + 0
 
   # 3 = the healing probe's single set-based query (it runs once, whatever the
   # number of open accounts), the one `list_latest_balances/1` result and the
@@ -228,8 +229,8 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
 
   # Thirteen months of movement on every open account. The cash accounts feed
   # the KPIs, the chart, the 12-month history table and
-  # `Forecast.monthly_volatility/0` — which runs one query per month of its
-  # window and returns `nil` when every net is zero, taking the volatility
+  # `Forecast.monthly_volatility/0` — which reads its whole window in one
+  # grouped query and returns `nil` when every net is zero, taking the volatility
   # warning off the bankruptcy card. The amounts differ month to month so the
   # spread it measures is real.
   #

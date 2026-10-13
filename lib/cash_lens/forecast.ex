@@ -694,7 +694,7 @@ defmodule CashLens.Forecast do
   """
   def monthly_volatility(months \\ @volatility_months, today \\ Date.utc_today()) do
     window = complete_months_before(today, months)
-    nets = Enum.map(window, &monthly_net/1)
+    nets = monthly_nets(window)
 
     if length(nets) < months or Enum.all?(nets, &Decimal.equal?(&1, Decimal.new("0"))) do
       nil
@@ -731,18 +731,26 @@ defmodule CashLens.Forecast do
     end)
   end
 
-  defp monthly_net(month) do
-    from(t in Transaction,
-      where: t.date >= ^month and t.date <= ^Date.end_of_month(month),
-      where: is_nil(t.transfer_key),
-      select: sum(t.amount)
-    )
-    |> Scopes.cash_accounts_only()
-    |> Repo.one()
-    |> case do
-      nil -> Decimal.new("0")
-      net -> net
-    end
+  # The net of each month in `window` (oldest first) from one grouped read.
+  # A month with no cash movement has no row and counts as zero.
+  defp monthly_nets([]), do: []
+
+  defp monthly_nets(window) do
+    first = List.first(window)
+    last = window |> List.last() |> Date.end_of_month()
+
+    by_month =
+      from(t in Transaction,
+        where: t.date >= ^first and t.date <= ^last,
+        where: is_nil(t.transfer_key),
+        group_by: fragment("date_trunc('month', ?)::date", t.date),
+        select: {type(fragment("date_trunc('month', ?)::date", t.date), :date), sum(t.amount)}
+      )
+      |> Scopes.cash_accounts_only()
+      |> Repo.all()
+      |> Map.new()
+
+    Enum.map(window, &Map.get(by_month, &1, Decimal.new("0")))
   end
 
   @doc """
