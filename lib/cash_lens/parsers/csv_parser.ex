@@ -184,23 +184,20 @@ defmodule CashLens.Parsers.CSVParser do
   # --- Shared helpers ---
 
   @doc """
-  Extracts date (DD/MM) and time (HH:MM) from a string and returns a cleaned version.
+  Extracts the purchase date (DD/MM) and time (HH:MM) from a string and returns a cleaned version.
   Returns {date, time, clean_text}.
+
+  A DD/MM only counts when it is a standalone token: not part of a longer date
+  (DD/MM/YYYY) and not an installment marker (`PARC 03/10`). Only that token is removed.
   """
   def extract_metadata_and_clean(text, base_date) do
-    date_match = Regex.run(~r/(\d{2})\/(\d{2})/, text)
+    date_token = find_purchase_date_token(text)
     time_match = Regex.run(~r/(\d{2}):(\d{2})/, text)
 
     final_date =
-      case date_match do
-        [_, d, m] ->
-          case Date.new(base_date.year, String.to_integer(m), String.to_integer(d)) do
-            {:ok, date} -> date
-            _ -> base_date
-          end
-
-        _ ->
-          base_date
+      case date_token do
+        {_pos, _len, d, m} -> infer_purchase_date(base_date, d, m)
+        nil -> base_date
       end
 
     final_time =
@@ -217,7 +214,7 @@ defmodule CashLens.Parsers.CSVParser do
 
     clean_text =
       text
-      |> String.replace(~r/\d{2}\/\d{2}/, "")
+      |> remove_token(date_token)
       |> String.replace(~r/\d{2}:\d{2}/, "")
       |> String.replace(~r/^[\s\-\.]+/, "")
       |> String.replace(~r/[\s\-\.]+$/, "")
@@ -314,6 +311,53 @@ defmodule CashLens.Parsers.CSVParser do
 
       _ ->
         nil
+    end
+  end
+
+  defp find_purchase_date_token(text) do
+    ~r/(\d{2})\/(\d{2})/
+    |> Regex.scan(text, return: :index)
+    |> Enum.find_value(fn [{pos, len}, {d_pos, d_len}, {m_pos, m_len}] ->
+      before = binary_part(text, 0, pos)
+      after_token = binary_part(text, pos + len, byte_size(text) - pos - len)
+
+      if standalone_date?(before, after_token) do
+        {pos, len, binary_part(text, d_pos, d_len), binary_part(text, m_pos, m_len)}
+      end
+    end)
+  end
+
+  defp standalone_date?(before, after_token) do
+    not Regex.match?(~r/[\d\/]$/, before) and
+      not Regex.match?(~r/PARC\s*$/i, before) and
+      not Regex.match?(~r/^[\d\/]/, after_token)
+  end
+
+  defp remove_token(text, nil), do: text
+
+  defp remove_token(text, {pos, len, _d, _m}) do
+    binary_part(text, 0, pos) <> binary_part(text, pos + len, byte_size(text) - pos - len)
+  end
+
+  # Card purchases are posted on or after the purchase date. A date that lands far
+  # in the future relative to the posting date belongs to the previous year
+  # (30/12 posted on 02/01). The threshold keeps near-future dates in the same year.
+  @max_future_days 180
+
+  defp infer_purchase_date(base_date, d, m) do
+    case Date.new(base_date.year, String.to_integer(m), String.to_integer(d)) do
+      {:ok, date} ->
+        if Date.diff(date, base_date) > @max_future_days do
+          case Date.new(base_date.year - 1, date.month, date.day) do
+            {:ok, previous} -> previous
+            _ -> base_date
+          end
+        else
+          date
+        end
+
+      _ ->
+        base_date
     end
   end
 end

@@ -68,7 +68,68 @@ defmodule CashLens.CSVParserTest do
     end
   end
 
+  describe "extract_metadata_and_clean/2 anchoring" do
+    test "leaves a full dd/mm/yyyy date in the middle of the text untouched" do
+      text = "Tarifa Pacote de Servicos - Cobranca referente 17/09/2026"
+
+      assert {~D[2026-09-17], nil, ^text} =
+               CSVParser.extract_metadata_and_clean(text, ~D[2026-09-17])
+    end
+
+    test "extracts the purchase prefix with time" do
+      assert {~D[2026-05-30], ~T[21:19:00], clean} =
+               CSVParser.extract_metadata_and_clean(
+                 "Compra com Cartao - 30/05 21:19 PAROQUIA SANTO AGOST",
+                 ~D[2026-06-01]
+               )
+
+      assert clean == "Compra com Cartao - PAROQUIA SANTO AGOST"
+    end
+
+    test "rolls December back a year when posted in January" do
+      assert {~D[2025-12-30], ~T[10:00:00], _} =
+               CSVParser.extract_metadata_and_clean(
+                 "Compra com Cartao - 30/12 10:00 SUPERMERCADO",
+                 ~D[2026-01-02]
+               )
+    end
+
+    test "leaves installment markers untouched" do
+      text = "COMPRA LOJA PARC 03/10"
+
+      assert {~D[2026-09-21], nil, ^text} =
+               CSVParser.extract_metadata_and_clean(text, ~D[2026-09-21])
+
+      assert {~D[2026-09-21], nil, "LOJA parc03/10"} =
+               CSVParser.extract_metadata_and_clean("LOJA parc03/10", ~D[2026-09-21])
+    end
+
+    test "removes only the matched token" do
+      assert {~D[2026-02-24], nil, clean} =
+               CSVParser.extract_metadata_and_clean("PIX 24/02 REF 10/03/2026", ~D[2026-02-25])
+
+      assert clean == "PIX REF 10/03/2026"
+    end
+  end
+
   describe "parse/2" do
+    test "keeps the full date in a BB tariff description" do
+      csv =
+        "Data,Dep,Term,Hist,Doc,Valor,\n17/09/2026,0,0,Tarifa Pacote de Servicos - Cobranca referente 17/09/2026,1,-10.00,\n"
+
+      [tx] = CSVParser.parse(csv, :bb)
+      assert tx.date == ~D[2026-09-17]
+      assert tx.description =~ "17/09/2026"
+    end
+
+    test "keeps PARC installment markers in a BB row" do
+      csv = "Data,Dep,Term,Hist,Doc,Valor,\n21/09/2026,0,0,COMPRA LOJA PARC 03/10,1,-10.00,\n"
+
+      [tx] = CSVParser.parse(csv, :bb)
+      assert tx.date == ~D[2026-09-21]
+      assert tx.description =~ "PARC 03/10"
+    end
+
     test "correctly parses a Banco do Brasil CSV file" do
       csv_content = File.read!(@sample_path)
       transactions = CSVParser.parse(csv_content, :bb)

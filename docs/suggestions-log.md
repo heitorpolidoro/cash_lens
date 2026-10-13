@@ -1464,3 +1464,60 @@ commit claimed none were added. Fixed; back to 23.
 
 ## [CL-39] Read each card bill estimate once per card — 2026-10-12
 - Add a small forecast test for a month with two statements (same and different due_date) so the tie-break is pinned; the spec says the window/selection is review-only, and this bug shows why.
+
+## [CL-43] Make mix precommit green again: compile warning, Credo strict, two date-dependent tests — 2026-10-12
+- Result 1 and Result 5 each assert two things (compile and tests; precommit and test). Consider splitting them or simplifying them.
+- "about 23 findings" is non-binding. Result 2 is the gate, so it is fine, but drop the count.
+- The spec asks to "decide" the defect question in Scope, while Approach 4 already decides it. Align the wording.
+- Result 4 in the spec's list omits the "no :estimado duplicate" wording that the Test criteria paragraph contains (since added to the task's expected results).
+
+## [CL-49] Add users, authentication and enabled-user gate — 2026-10-12
+- Approach, sign-up: state whether registration puts the user id in the session; the pending page is public yet is also where a logged-in disabled user lands. Pin the choice with one test assertion.
+- Results 6 and 7 bundle several assertions; acceptable but near the one-assertion-per-line limit.
+- Confirm a `citext` extension migration works on the test and CI Postgres.
+- The `/api` 401 behavior and the LiveView `on_mount` hook have no expected result; consider adding one for the API.
+
+## [CL-36] Anchor the BB CSV date and time extraction to the description prefix — 2026-10-12
+- Result 5 ("existing tests and the new cases all pass") is a test-suite gate, not a behavior; acceptable but overlaps results 1-4.
+- Result 6 is already true in the current code and is a regression guard only.
+- State what happens when two standalone dd/mm tokens appear (presumably the first one is used).
+- Clarify whether lowercase "parc" and "PARC." (with a dot) count as installment markers; the text says case-insensitive, so only the dot case is unclear.
+
+## [CL-40] Answer the balance self-healing probe in one query, once per request — 2026-10-12
+- Expected result 2 bundles three assertions (probe runs once, account list read once, latest balances read once); the spec pins them only indirectly through the budget ceilings. Consider splitting it, or adding a direct per-request query-count assertion for the account list and the latest balances.
+
+## [CL-44] Make the month zebra striping stand out on the statements screen — 2026-10-12
+- Expected result 1 says "the new stronger class" without naming it. The Approach names `bg-base-300/60` for option A. Naming it in the result would make QA's check exact.
+- The DaisyUI `hover` row background is `base-200`. Against a `base-300/60` band it differs, but only slightly in the light theme. The mock shows this, so check it there.
+- Results 3-5 (placeholder banding, mock visibility, hover distinct) are verifiable only in the mock or by eye. Say so in QA notes.
+
+## [CL-45] Date a manual Rendimento entry from the account's last transaction — 2026-10-12
+- Result 2 is largely implied by result 1; consider merging or keeping it only if it adds a distinct check (e.g. no-transaction running month).
+
+## [CL-46] Aviso de fatura deve considerar o dia seguinte ao fechamento — 2026-10-12
+- The Approach lists only the credit_cards_test changes. Add an explicit page_controller_test case for the dashboard warning on the closing day versus the next day, since expected result 3 depends on it.
+- The "comparison is `:gt`" fix should be a `:lt` check: latest closing = this if this < today, else previous. The Approach already says this.
+
+## [CL-47] Sincronizador deve inativar contas recorrentes que pararam de ser cobradas — 2026-10-12
+- State that the "window" in the staleness check is the same 180-day `since` query used by suggest_for_category/1. The implementer may need to extract a shared rows query to avoid duplication.
+- "Recent" for a single transaction is defined only by the cut-off (first of last month). A test fixture dated this month would make that unambiguous.
+
+## [CL-48] Mostrar parcelamentos (financiamento, consórcio, empréstimo) na tela de Contas Recorrentes — 2026-10-12
+- Spec says `Installments.parcel_position/2` returns 1 when not started; the helper may return nil in that case, so the implementation should clamp explicitly.
+- `fully_grouped_category?/1` is private in forecast.ex; the sync_one change is in the same module, so this is fine.
+
+## [CL-42] Resolve the excluded summary category ids once per request — 2026-10-12
+- Result 4 is verified by "existing tests passing". An explicit test that calls the summaries with and without the option and compares results would be stronger.
+- Result 3 says "creates a category under transfer (or re-parents one into it)". Pick one so the test is deterministic.
+
+## [CL-49] Add users, authentication and enabled-user gate — 2026-10-13
+- The staged diff also contains unrelated changes (forecast.ex logic rewrite, accounting.ex, credit_cards.ex, imports.ex, directory_importer, ingestor, transfer_matcher, mix tasks, forecast_test). Keep them out of the CL-49 commit.
+- Login has no rate limiting (explicitly out of scope).
+
+## [CL-36] Anchor the BB CSV date and time extraction to the description prefix — 2026-10-13
+- csv_parser.ex infer_purchase_date/3: the spec says "if the result is later than the base date, use the previous year"; the implementation uses a 180-day future threshold (@max_future_days) to keep the legacy near-future behavior. Consider recording it in the spec.
+- The anchoring helper uses Regex.scan with indexes and binary_part; slightly heavier than a single regex with lookbehind. Fine as is.
+
+## [CL-50] Add user ownership schema and backfill existing data — 2026-10-13
+- Approach says "ON DELETE RESTRICT (default :nothing semantics are fine)". These differ slightly in Postgres (NO ACTION can be deferred). Pick one, preferably `on_delete: :restrict`.
+- Result 3 is verified only by the manual dump check or an optional migration test. Consider making the backfill test mandatory, or say that the manual report is the evidence.
