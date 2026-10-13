@@ -1588,3 +1588,39 @@ commit claimed none were added. Fixed; back to 23.
 - Code review: `Repo` overrides a long list of functions to wrap them in a transaction; `query/3` and `stream/2` are not wrapped (documented). Consider a lint or test guarding new direct raw-SQL callers.
 - QA: Install age in CI so the real-age round-trip test is not skipped.
 - QA: The transaction_live "saves new transaction" test flaked once in the full run; watch for recurrence.
+
+## [CL-55] Add ownership scoping foundation and tenancy test helpers — 2026-10-13
+- Spec review: `operator_user!/0` duplicates the private `operator_user_id!/0`; state whether it reuses it (minus the auto-create fallback) so the two do not drift.
+- Spec review: `validate_owned/3` should state which error key/validation tag it uses so tests can assert it via `errors_on/1`.
+- Spec review: scope text says "account, balance, category, ..." fixtures while results say "accounts, accounting, ..." files; align names to file names.
+
+## [CL-56] Scope Accounts and Categories by the current user — 2026-10-13
+- Spec review: `keyword_conflicts` signature is left open (`keyword_conflicts(user, categories)`-style or required list); pick one shape.
+
+## [CL-57] Scope Accounting and balance recalculation by the current user — 2026-10-13
+- Spec review: `Repo.with_user/2` takes a `user_id` (lib/cash_lens/repo.ex:74), while the spec says it pins the loaded user; state that it is passed `user.id`.
+- Spec review: Oban uniqueness is `period: 60` with default keys, so it covers all args; the spec already says to verify this.
+- Spec review: `Ownership.scope/2` and `cross_tenant` come from CL-55; make sure `blockedBy` includes CL-55 as well as CL-56.
+
+## [CL-58] Scope Transactions core by the current user — 2026-10-13
+- Spec review: result 1 covers several modules (signatures and scoping) in one line; it is checkable through the tenancy tests, but could be split.
+- Spec review: result 3 lists four entity families; fine as one result since the test file is the single verification artifact.
+
+## [CL-59] Scope Installments and CreditCards by the current user — 2026-10-13
+- Spec review: confirm `blockedBy` includes CL-55, CL-56, CL-57 and CL-58 (`Ownership.scope/2` is not yet in `ownership.ex`; it comes from CL-55).
+- Spec review: result 3 names only `payment_transaction_id`/`installment_group_id`/`account_id`; the spec also covers `absorbed_by_statement_id` and `parent_id`, which could be added to the tests.
+- Spec review: the "(or return nil as they do today)" wording for `get_statement_detail` leaves two behaviours; the implementer should keep the existing one.
+
+## [CL-60] Scope Forecast and recurring items by the current user — 2026-10-13
+- Spec review: the worker calls `Ownership.pin_operator!()` (RLS, CL-53); say whether it stays and how the user lookup runs under it.
+- Spec review: "flash broadcast addressed to that user only" requires changing `CashLensWeb.RecurringSyncFlash` (topic per user and subscribers); add it to Files touched and the test criteria.
+- Spec review: state where the user goes relative to defaulted args (`today`, `opts`) in functions such as `Forecast.project/3`.
+
+## [CL-61] Scope imports and tooling by user, then remove the owner fallback — 2026-10-13
+- Spec review: the audit regex requires `user_id` or `Ownership.scope(` in the block; a block that only mentions `user_id` in a comment would pass, so say whether comments are stripped.
+- Spec review: confirm `Repo.with_user/2` and `Repo.put_current_user_id/1` exist today, since the spec says they "stay".
+- Spec review: Part B is large (five-step lockdown plus the audit test) on top of Part A; consider an explicit ordering note (Part A green first).
+- Spec review: the expected results do not directly cover seeds, `ImportLive` scoping, the lockdown deletions (`Ownership.assign/1`, `:auto_create_owner`) or the AGENTS.md update; Test criteria covers them, and result 7 could name the `:auto_create_owner` removal if a slot frees up.
+
+## [CL-55] Add ownership scoping foundation and tenancy test helpers — 2026-10-13
+- Code review: `Tenancy.pop_user` treats `user: nil` like an absent key; acceptable, but worth a doc line.

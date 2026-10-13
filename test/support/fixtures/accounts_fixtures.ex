@@ -4,22 +4,27 @@ defmodule CashLens.AccountsFixtures do
   entities via the `CashLens.Accounts` context.
   """
 
+  alias CashLens.Tenancy
+
   @doc """
-  Generate a account.
+  Generate a account. Accepts `:user` to create it for an explicit owner.
   """
   def account_fixture(attrs \\ %{}) do
     unique_id = System.unique_integer([:positive])
+    {user, attrs} = Tenancy.pop_user(attrs)
 
     {:ok, account} =
-      attrs
-      |> Enum.into(%{
-        balance: "120.5",
-        bank: "some bank",
-        color: "some color",
-        icon: "some icon",
-        name: "account #{unique_id}"
-      })
-      |> CashLens.Accounts.create_account()
+      Tenancy.acting_as(user, fn ->
+        attrs
+        |> Enum.into(%{
+          balance: "120.5",
+          bank: "some bank",
+          color: "some color",
+          icon: "some icon",
+          name: "account #{unique_id}"
+        })
+        |> CashLens.Accounts.create_account()
+      end)
 
     account
   end

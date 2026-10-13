@@ -28,6 +28,7 @@ defmodule CashLensWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import CashLensWeb.ConnCase
+      import CashLens.Tenancy, only: [cross_tenant: 0, cross_tenant: 1]
     end
   end
 

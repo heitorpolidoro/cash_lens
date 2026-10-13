@@ -26,6 +26,7 @@ defmodule CashLens.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import CashLens.DataCase
+      import CashLens.Tenancy, only: [cross_tenant: 0, cross_tenant: 1]
     end
   end
 

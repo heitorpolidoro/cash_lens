@@ -51,6 +51,72 @@ defmodule CashLens.Ownership do
   @doc "The owner pinned for the calling process, or `nil`."
   def pinned_user_id, do: Process.get(@pdict_key)
 
+  @doc """
+  Restricts `queryable` to the rows owned by `user` (`user_id == user.id`).
+
+  The filter is explicit and does not rely on the pinned user or on row-level
+  security, so it is the application-level half of tenant isolation.
+  """
+  def scope(queryable, %CashLens.Users.User{id: user_id}) do
+    from(x in queryable, where: x.user_id == ^user_id)
+  end
+
+  @doc """
+  Adds an error on `field` when the id it references (a row of `schema`) does
+  not exist or belongs to a user other than the changeset's owner.
+
+  Does nothing when `field` has no change. Fails closed: with no `user_id` on
+  the changeset any non-nil reference is an error. The lookup runs as the
+  changeset owner, so it works when nothing is pinned.
+  """
+  def validate_owned(%Ecto.Changeset{} = changeset, field, schema) do
+    case Ecto.Changeset.get_change(changeset, field) do
+      nil ->
+        changeset
+
+      id ->
+        if owned?(Ecto.Changeset.get_field(changeset, :user_id), id, schema) do
+          changeset
+        else
+          Ecto.Changeset.add_error(changeset, field, "does not exist")
+        end
+    end
+  end
+
+  defp owned?(nil, _id, _schema), do: false
+
+  defp owned?(owner_id, id, schema) do
+    case Ecto.UUID.cast(id) do
+      {:ok, id} ->
+        Repo.with_user(owner_id, fn ->
+          Repo.exists?(from s in schema, where: s.id == ^id and s.user_id == ^owner_id)
+        end)
+
+      :error ->
+        false
+    end
+  end
+
+  @doc """
+  The operator user: the one named by `CASH_LENS_OPERATOR_EMAIL`, or the only
+  user when the variable is unset or empty. Raises when no unambiguous user
+  exists and never creates one. For mix tasks and seeds only.
+  """
+  def operator_user! do
+    case System.get_env(@env_var) do
+      email when is_binary(email) and email != "" ->
+        Repo.get_by(CashLens.Users.User, email: email) ||
+          raise "#{@env_var}=#{email} does not match any user"
+
+      _ ->
+        case Repo.all(from(u in CashLens.Users.User, limit: 2)) do
+          [user] -> user
+          [] -> raise "no user exists: register one first"
+          _ -> raise "several users exist: set #{@env_var} to pick the operator"
+        end
+    end
+  end
+
   @doc "Pins the operator (see the moduledoc) for the calling process; for maintenance code."
   def pin_operator! do
     put_user_id(current_user_id!())
