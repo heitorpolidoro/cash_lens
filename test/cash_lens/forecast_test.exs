@@ -282,6 +282,74 @@ defmodule CashLens.ForecastTest do
       assert reloaded.day_of_month == 10
     end
 
+    defp one_transaction(category, account, months_back) do
+      transaction_fixture(%{
+        account_id: account.id,
+        category_id: category.id,
+        date: history_date(months_back, 10),
+        amount: "-50.00"
+      })
+    end
+
+    test "sync_all switches off an item whose only transaction in the window is stale" do
+      category = category_fixture(%{type: "fixed", name: "Igreja"})
+      account = account_fixture()
+      one_transaction(category, account, 4)
+
+      item = recurring_item_fixture(%{category_id: category.id})
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 1}
+      refute Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "sync_all switches off an item with no transactions in the window" do
+      category = category_fixture(%{type: "fixed", name: "Igreja"})
+      item = recurring_item_fixture(%{category_id: category.id})
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 1}
+      refute Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "sync_all leaves an item with a single recent transaction alone" do
+      category = category_fixture(%{type: "fixed", name: "Igreja"})
+      account = account_fixture()
+      one_transaction(category, account, 0)
+
+      item = recurring_item_fixture(%{category_id: category.id})
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "sync_all does not count an already inactive item with no history" do
+      category = category_fixture(%{type: "fixed", name: "Igreja"})
+      recurring_item_fixture(%{category_id: category.id, active: false})
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+    end
+
+    test "sync_all leaves a manually edited item on even with stale history" do
+      category = category_fixture(%{type: "fixed", name: "Igreja"})
+      account = account_fixture()
+      one_transaction(category, account, 4)
+
+      item = recurring_item_fixture(%{category_id: category.id, manually_edited: true})
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.get_recurring_item!(item.id).active
+    end
+
+    test "sync_all creates nothing for a category without an item and stale or thin history" do
+      stale = category_fixture(%{type: "fixed", name: "Velha"})
+      recent = category_fixture(%{type: "fixed", name: "Nova"})
+      account = account_fixture()
+      one_transaction(stale, account, 4)
+      one_transaction(recent, account, 0)
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.list_recurring_items() == []
+    end
+
     test "resync says why it cannot, rather than reporting no history" do
       category = category_fixture(%{type: "fixed", name: "Parou"})
       account = account_fixture()

@@ -1545,3 +1545,6 @@ commit claimed none were added. Fixed; back to 23.
 ## [CL-45] Date a manual Rendimento entry from the account's last transaction — 2026-10-13
 - Code review: a not-yet-started month keeps the month-end date. That goes beyond the spec and is reasonable, but no test covers it. Low risk.
 - QA: `income_date/3` keeps month-end for a month not yet started; reasonable but undocumented in the spec.
+
+## [CL-47] Sync must switch off recurring items whose bill stopped — 2026-10-13
+- Code review: in the :insufficient_history branch the window query runs a second time (suggest_for_category already fetched the rows). Acceptable since the spec forbids changing the return contract.

@@ -65,15 +65,7 @@ defmodule CashLens.Forecast do
   """
   def suggest_for_category(%Category{} = category) do
     today = Date.utc_today()
-    since = Date.add(today, -30 * @history_months)
-
-    rows =
-      from(t in Transaction,
-        where: t.category_id == ^category.id and t.date >= ^since,
-        select: %{date: t.date, amount: t.amount}
-      )
-      |> Scopes.cash_accounts_only()
-      |> Repo.all()
+    rows = window_rows(category, today)
 
     cond do
       length(rows) < @min_occurrences ->
@@ -88,6 +80,20 @@ defmodule CashLens.Forecast do
         {:ok, %{"day_of_month" => typical_day(days), "amount" => latest.amount}}
     end
   end
+
+  defp window_rows(category, today) do
+    since = Date.add(today, -30 * @history_months)
+
+    from(t in Transaction,
+      where: t.category_id == ^category.id and t.date >= ^since,
+      select: %{date: t.date, amount: t.amount}
+    )
+    |> Scopes.cash_accounts_only()
+    |> Repo.all()
+  end
+
+  # No rows at all counts as stale: nothing has arrived, so nothing recent.
+  defp stale?([], _today), do: true
 
   defp stale?(rows, today) do
     cutoff = today |> Date.beginning_of_month() |> Date.add(-1) |> Date.beginning_of_month()
@@ -158,7 +164,8 @@ defmodule CashLens.Forecast do
   Syncs all fixed categories against recurring_items: creates items for
   fixed categories that don't have one yet, refreshes day/amount for existing
   items that haven't been manually edited, and switches off the ones whose bill
-  stopped arriving.
+  stopped arriving -- including those whose old rows already left the history
+  window, so that too little history remains to detect anything.
 
   Switched off, not deleted. A recurrence that stops is usually a service that
   ended, but it is sometimes a month that has not been imported yet, and
@@ -204,8 +211,14 @@ defmodule CashLens.Forecast do
       :no_recent_occurrence ->
         deactivate_stale(item, acc)
 
+      # Too few rows to detect a recurrence, but an existing item whose last
+      # row is stale (or gone from the window) has stopped all the same.
       :insufficient_history ->
-        acc
+        today = Date.utc_today()
+
+        if stale?(window_rows(category, today), today),
+          do: deactivate_stale(item, acc),
+          else: acc
     end
   end
 
