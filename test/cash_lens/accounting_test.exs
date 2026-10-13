@@ -6,16 +6,21 @@ defmodule CashLens.AccountingTest do
   import CashLens.AccountsFixtures
   import CashLens.TransactionsFixtures
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   describe "balances" do
     test "list_balances/1 returns all balances" do
       acc = account_fixture()
-      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      assert Accounting.list_balances() != []
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+      assert Accounting.list_balances(user()) != []
     end
 
     test "calculate_monthly_balance/3 creates a balance" do
       acc = account_fixture()
-      assert {:ok, %Balance{} = balance} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+
+      assert {:ok, %Balance{} = balance} =
+               Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+
       assert balance.year == 2026
       assert balance.month == 1
     end
@@ -42,7 +47,7 @@ defmodule CashLens.AccountingTest do
         category_id: transfer_cat.id
       })
 
-      assert {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      assert {:ok, b} = Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
 
       assert Decimal.equal?(b.income, Decimal.new("1000.00"))
       assert Decimal.equal?(b.expenses, Decimal.new("200.00"))
@@ -57,54 +62,64 @@ defmodule CashLens.AccountingTest do
       # so an account with 2+ balances before the target month raised
       # Ecto.MultipleResultsError (froze multi-month statement imports).
       acc = account_fixture()
-      assert {:ok, _} = Accounting.calculate_monthly_balance(acc.id, 2025, 10)
-      assert {:ok, _} = Accounting.calculate_monthly_balance(acc.id, 2025, 11)
-      assert {:ok, _} = Accounting.calculate_monthly_balance(acc.id, 2025, 12)
+      assert {:ok, _} = Accounting.calculate_monthly_balance(user(), acc.id, 2025, 10)
+      assert {:ok, _} = Accounting.calculate_monthly_balance(user(), acc.id, 2025, 11)
+      assert {:ok, _} = Accounting.calculate_monthly_balance(user(), acc.id, 2025, 12)
 
       # Two+ balances now exist before 2026-01; this must not crash.
       assert {:ok, %Balance{year: 2026, month: 1}} =
-               Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+               Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
     end
 
     test "list_balances/1 with filters and pagination" do
       acc = account_fixture()
-      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      Accounting.calculate_monthly_balance(acc.id, 2026, 2)
-      Accounting.calculate_monthly_balance(acc.id, 2026, 3)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 2)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 3)
 
-      assert length(Accounting.list_balances(%{"account_id" => acc.id}, 1, 2)) == 2
-      assert length(Accounting.list_balances(%{"account_id" => acc.id}, 2, 2)) == 1
+      assert length(Accounting.list_balances(user(), %{"account_id" => acc.id}, 1, 2)) == 2
+      assert length(Accounting.list_balances(user(), %{"account_id" => acc.id}, 2, 2)) == 1
 
-      assert Accounting.list_balances(%{"month" => "1"}) != []
-      assert Accounting.list_balances(%{"month" => "10"}) == []
-      assert Accounting.list_balances(%{"year" => "2026"}) != []
-      assert length(Accounting.list_balances(%{"account_id" => acc.id})) == 3
+      assert Accounting.list_balances(user(), %{"month" => "1"}) != []
+      assert Accounting.list_balances(user(), %{"month" => "10"}) == []
+      assert Accounting.list_balances(user(), %{"year" => "2026"}) != []
+      assert length(Accounting.list_balances(user(), %{"account_id" => acc.id})) == 3
 
       assert length(
-               Accounting.list_balances(%{"account_id" => nil, "month" => nil, "year" => ""})
+               Accounting.list_balances(user(), %{
+                 "account_id" => nil,
+                 "month" => nil,
+                 "year" => ""
+               })
              ) >= 3
 
-      assert length(Accounting.list_balances(%{"account_id" => "", "month" => "", "year" => nil})) >=
+      assert length(
+               Accounting.list_balances(user(), %{
+                 "account_id" => "",
+                 "month" => "",
+                 "year" => nil
+               })
+             ) >=
                3
     end
 
     test "get_latest_balance_for_account/1 returns the most recent balance" do
       acc = account_fixture()
-      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      Accounting.calculate_monthly_balance(acc.id, 2026, 2)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 2)
 
-      latest = Accounting.get_latest_balance_for_account(acc.id)
+      latest = Accounting.get_latest_balance_for_account(user(), acc.id)
       assert latest.month == 2
     end
 
     test "list_latest_balances/0 returns latest for each account" do
       acc1 = account_fixture()
       acc2 = account_fixture()
-      Accounting.calculate_monthly_balance(acc1.id, 2026, 1)
-      Accounting.calculate_monthly_balance(acc1.id, 2026, 2)
-      Accounting.calculate_monthly_balance(acc2.id, 2026, 1)
+      Accounting.calculate_monthly_balance(user(), acc1.id, 2026, 1)
+      Accounting.calculate_monthly_balance(user(), acc1.id, 2026, 2)
+      Accounting.calculate_monthly_balance(user(), acc2.id, 2026, 1)
 
-      latest_list = Accounting.list_latest_balances()
+      latest_list = Accounting.list_latest_balances(user())
       assert [_, _ | _] = latest_list
     end
 
@@ -117,8 +132,8 @@ defmodule CashLens.AccountingTest do
         amount: "100.0"
       })
 
-      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      history = Accounting.get_historical_balances()
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+      history = Accounting.get_historical_balances(user())
       assert history != []
       entry = Enum.find(history, &(&1.month == 1 and &1.year == 2026))
       assert entry.month == 1
@@ -126,19 +141,19 @@ defmodule CashLens.AccountingTest do
 
     test "recalculate_all_balances/0 runs through all balances" do
       acc = account_fixture()
-      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      assert Accounting.recalculate_all_balances() == :ok
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+      assert Accounting.recalculate_all_balances(user()) == :ok
     end
 
     test "calculate_monthly_balance preserves initial_balance when recalculating root" do
       acc = account_fixture(balance: "500")
-      {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      {:ok, b} = Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
 
       # Manually update initial_balance to something different than auto-calculated
-      {:ok, b} = Accounting.update_balance(b, %{initial_balance: "1000"})
+      {:ok, b} = Accounting.update_balance(user(), b, %{initial_balance: "1000"})
 
       # Recalculate - it should preserve the 1000 if it detects it as root (no prev balance)
-      {:ok, updated} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      {:ok, updated} = Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
       assert Decimal.equal?(updated.initial_balance, "1000")
       assert updated.id == b.id
     end
@@ -147,12 +162,12 @@ defmodule CashLens.AccountingTest do
       account = account_fixture(balance: "1000")
 
       # Create a snapshot in Dec 2025
-      {:ok, snapshot} = Accounting.calculate_monthly_balance(account.id, 2025, 12)
+      {:ok, snapshot} = Accounting.calculate_monthly_balance(user(), account.id, 2025, 12)
       # Manually mark as snapshot
-      {:ok, _snapshot} = Accounting.update_balance(snapshot, %{is_snapshot: true})
+      {:ok, _snapshot} = Accounting.update_balance(user(), snapshot, %{is_snapshot: true})
 
       # Calculate Feb 2026. Should find Dec 2025 snapshot and recurse.
-      {:ok, balance} = Accounting.calculate_monthly_balance(account.id, 2026, 2)
+      {:ok, balance} = Accounting.calculate_monthly_balance(user(), account.id, 2026, 2)
       assert balance.year == 2026
       assert balance.month == 2
       assert Repo.get_by(Balance, account_id: account.id, year: 2026, month: 1)
@@ -161,10 +176,10 @@ defmodule CashLens.AccountingTest do
 
     test "calculate_monthly_balance with huge gap" do
       account = account_fixture(balance: "0")
-      Accounting.calculate_monthly_balance(account.id, 2025, 1)
+      Accounting.calculate_monthly_balance(user(), account.id, 2025, 1)
 
       # Gap of 11 months
-      {:ok, balance} = Accounting.calculate_monthly_balance(account.id, 2026, 1)
+      {:ok, balance} = Accounting.calculate_monthly_balance(user(), account.id, 2026, 1)
       assert balance.year == 2026
       assert balance.month == 1
       # It should have filled the gap
@@ -175,10 +190,10 @@ defmodule CashLens.AccountingTest do
       account = account_fixture(balance: "1000")
 
       # Create a snapshot in month 6
-      {:ok, snapshot} = Accounting.calculate_monthly_balance(account.id, 2026, 6)
+      {:ok, snapshot} = Accounting.calculate_monthly_balance(user(), account.id, 2026, 6)
       assert snapshot.is_snapshot
 
-      {:ok, balance8} = Accounting.calculate_monthly_balance(account.id, 2026, 8)
+      {:ok, balance8} = Accounting.calculate_monthly_balance(user(), account.id, 2026, 8)
       # Month 8 depends on 7, 7 depends on 6 (snapshot).
       assert balance8.month == 8
       assert Repo.get_by(Balance, account_id: account.id, year: 2026, month: 7)
@@ -186,21 +201,21 @@ defmodule CashLens.AccountingTest do
 
     test "get_oldest_balance_for_account/1 returns the oldest record" do
       acc = account_fixture()
-      Accounting.calculate_monthly_balance(acc.id, 2026, 3)
-      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 3)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
 
-      oldest = Accounting.get_oldest_balance_for_account(acc.id)
+      oldest = Accounting.get_oldest_balance_for_account(user(), acc.id)
       assert oldest.month == 1
     end
 
     test "calculates monthly balance with January transition" do
       acc = account_fixture()
-      assert {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      assert {:ok, b} = Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
       assert b.month == 1
       assert b.year == 2026
 
       # Recalculate existing balance
-      assert {:ok, updated_b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      assert {:ok, updated_b} = Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
       assert updated_b.id == b.id
     end
   end
@@ -208,29 +223,29 @@ defmodule CashLens.AccountingTest do
   describe "crud" do
     test "get_balance!/1" do
       acc = account_fixture()
-      {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      assert Accounting.get_balance!(b.id).id == b.id
+      {:ok, b} = Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+      assert Accounting.get_balance!(user(), b.id).id == b.id
     end
 
     test "update_balance/2" do
       acc = account_fixture()
-      {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      assert {:ok, updated} = Accounting.update_balance(b, %{income: "99.99"})
+      {:ok, b} = Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+      assert {:ok, updated} = Accounting.update_balance(user(), b, %{income: "99.99"})
       assert updated.income == Decimal.new("99.99")
     end
 
     test "change_balance/2" do
       acc = account_fixture()
-      {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      {:ok, b} = Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
       changeset = Accounting.change_balance(b, %{income: "888.00"})
       assert changeset.valid?
     end
 
     test "delete_balance/1" do
       acc = account_fixture()
-      {:ok, b} = Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      assert {:ok, _} = Accounting.delete_balance(b)
-      assert_raise Ecto.NoResultsError, fn -> Accounting.get_balance!(b.id) end
+      {:ok, b} = Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+      assert {:ok, _} = Accounting.delete_balance(user(), b)
+      assert_raise Ecto.NoResultsError, fn -> Accounting.get_balance!(user(), b.id) end
     end
   end
 
@@ -246,7 +261,7 @@ defmodule CashLens.AccountingTest do
 
     defp healthy_accounts(count) do
       accounts = for _ <- 1..count, do: account_fixture(balance: "100")
-      Enum.each(accounts, &Accounting.rebuild_account_balances(&1.id))
+      Enum.each(accounts, &Accounting.rebuild_account_balances(user(), &1.id))
       accounts
     end
 
@@ -255,7 +270,7 @@ defmodule CashLens.AccountingTest do
       Repo.delete_all(from b in Balance, where: b.account_id == ^acc.id)
       refute current_month_balance(acc.id)
 
-      Accounting.list_latest_balances()
+      Accounting.list_latest_balances(user())
 
       assert current_month_balance(acc.id)
     end
@@ -264,7 +279,7 @@ defmodule CashLens.AccountingTest do
       [acc | _] = healthy_accounts(2)
       Repo.delete_all(from b in Balance, where: b.account_id == ^acc.id)
 
-      Accounting.get_historical_balances()
+      Accounting.get_historical_balances(user())
 
       assert current_month_balance(acc.id)
     end
@@ -273,8 +288,8 @@ defmodule CashLens.AccountingTest do
       [acc | _] = healthy_accounts(2)
       Repo.delete_all(from b in Balance, where: b.account_id == ^acc.id)
 
-      Accounting.list_latest_balances(heal: false)
-      Accounting.get_historical_balances(heal: false)
+      Accounting.list_latest_balances(user(), heal: false)
+      Accounting.get_historical_balances(user(), heal: false)
 
       refute current_month_balance(acc.id)
     end
@@ -289,7 +304,7 @@ defmodule CashLens.AccountingTest do
 
       Repo.delete_all(from b in Balance, where: b.account_id == ^acc.id)
 
-      Accounting.list_latest_balances()
+      Accounting.list_latest_balances(user())
 
       refute current_month_balance(acc.id)
     end
@@ -300,7 +315,7 @@ defmodule CashLens.AccountingTest do
 
       {balances, counts} =
         CashLens.QueryCounter.count(fn ->
-          Accounting.list_latest_balances(accounts: accounts, heal: false)
+          Accounting.list_latest_balances(user(), accounts: accounts, heal: false)
         end)
 
       assert Enum.all?(balances, &(&1.account.id == &1.account_id))
@@ -308,22 +323,23 @@ defmodule CashLens.AccountingTest do
     end
 
     test "the probe issues the same number of queries for 2 and for 6 open accounts" do
+      user = user()
       healthy_accounts(2)
-      {_, two} = CashLens.QueryCounter.count(&Accounting.heal_active_balances/0)
+      {_, two} = CashLens.QueryCounter.count(fn -> Accounting.heal_active_balances(user) end)
 
       healthy_accounts(4)
-      {_, six} = CashLens.QueryCounter.count(&Accounting.heal_active_balances/0)
+      {_, six} = CashLens.QueryCounter.count(fn -> Accounting.heal_active_balances(user) end)
 
       assert two.total == six.total
       assert six.total == 1
     end
   end
 
-  describe "rebuild_account_balances/1" do
+  describe "rebuild_account_balances/2" do
     test "generates balance records up to the current month when the account has no transactions" do
       acc = account_fixture(balance: "500")
 
-      assert :ok = Accounting.rebuild_account_balances(acc.id)
+      assert :ok = Accounting.rebuild_account_balances(user(), acc.id)
       balances = Repo.all(from b in Balance, where: b.account_id == ^acc.id)
       assert balances != []
 
@@ -350,7 +366,7 @@ defmodule CashLens.AccountingTest do
           is_closed: true
         })
 
-      assert :ok = Accounting.rebuild_account_balances(closed_acc.id)
+      assert :ok = Accounting.rebuild_account_balances(user(), closed_acc.id)
 
       # Should have balances for Jan (1) and Feb (2) only
       balances =
@@ -367,7 +383,7 @@ defmodule CashLens.AccountingTest do
 
       transaction_fixture(%{account_id: acc.id, date: ~D[2026-01-15], amount: "50"})
 
-      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
 
       original = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 1)
       assert Decimal.equal?(original.initial_balance, "100")
@@ -377,7 +393,7 @@ defmodule CashLens.AccountingTest do
           balance: "200"
         })
 
-      assert :ok = Accounting.rebuild_account_balances(updated_acc.id)
+      assert :ok = Accounting.rebuild_account_balances(user(), updated_acc.id)
 
       rebuilt = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 1)
       assert Decimal.equal?(rebuilt.initial_balance, "200")
@@ -390,16 +406,16 @@ defmodule CashLens.AccountingTest do
       transaction_fixture(%{account_id: acc.id, date: ~D[2026-02-10], amount: "200"})
       transaction_fixture(%{account_id: acc.id, date: ~D[2026-03-10], amount: "-50"})
 
-      Accounting.calculate_monthly_balance(acc.id, 2026, 1)
-      Accounting.calculate_monthly_balance(acc.id, 2026, 2)
-      Accounting.calculate_monthly_balance(acc.id, 2026, 3)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 1)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 2)
+      Accounting.calculate_monthly_balance(user(), acc.id, 2026, 3)
 
       {:ok, updated_acc} =
         CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), acc, %{
           balance: "500"
         })
 
-      assert :ok = Accounting.rebuild_account_balances(updated_acc.id)
+      assert :ok = Accounting.rebuild_account_balances(user(), updated_acc.id)
 
       jan = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 1)
       feb = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 2)
@@ -414,30 +430,30 @@ defmodule CashLens.AccountingTest do
   describe "coverage" do
     test "list_balances with empty string filters" do
       account = account_fixture()
-      Accounting.calculate_monthly_balance(account.id, 2026, 1)
+      Accounting.calculate_monthly_balance(user(), account.id, 2026, 1)
 
       filters = %{"account_id" => "", "month" => "", "year" => ""}
-      balances = Accounting.list_balances(filters)
+      balances = Accounting.list_balances(user(), filters)
       assert balances != []
     end
 
     test "calculate_monthly_balance triggers get_previous_period year transition" do
       account = account_fixture()
       # Ensure Jan 2026 is calculated based on Dec 2025
-      Accounting.calculate_monthly_balance(account.id, 2025, 12)
-      {:ok, balance} = Accounting.calculate_monthly_balance(account.id, 2026, 1)
+      Accounting.calculate_monthly_balance(user(), account.id, 2025, 12)
+      {:ok, balance} = Accounting.calculate_monthly_balance(user(), account.id, 2026, 1)
       assert balance.year == 2026
       assert balance.month == 1
     end
 
     test "calculate_from_point handles failure fallback" do
       account = account_fixture()
-      {:ok, b1} = Accounting.calculate_monthly_balance(account.id, 2026, 1)
+      {:ok, b1} = Accounting.calculate_monthly_balance(user(), account.id, 2026, 1)
 
       invalid_uuid = Ecto.UUID.generate()
       # Pass invalid_uuid to force calculate_monthly_balance inside calculate_from_point to fail
       # This handles the {:error, _} branch without mocking or mutating global Logger state.
-      result = Accounting.__test_calculate_from_point(invalid_uuid, b1, 2026, 2)
+      result = Accounting.__test_calculate_from_point(user(), invalid_uuid, b1, 2026, 2)
       assert result == b1.final_balance
     end
   end

@@ -131,7 +131,7 @@ defmodule CashLensWeb.MonthLive.Show do
     socket
     |> assign(:year_options, year_options([analysis]))
     |> assign(:comparison, nil)
-    |> assign(:single, build_single(analysis))
+    |> assign(:single, build_single(socket.assigns.current_user, analysis))
   end
 
   defp apply_period(socket, analysis, base) do
@@ -141,8 +141,8 @@ defmodule CashLensWeb.MonthLive.Show do
     |> assign(:comparison, build_comparison(base, analysis))
   end
 
-  defp build_single({year, month}) do
-    {opening, final} = consolidated_balances(year, month)
+  defp build_single(user, {year, month}) do
+    {opening, final} = consolidated_balances(user, year, month)
     income_rows = Transactions.get_month_income_breakdown(year, month)
     expense_rows = Transactions.get_month_category_breakdown(year, month)
     income_total = total_of(income_rows)
@@ -254,7 +254,7 @@ defmodule CashLensWeb.MonthLive.Show do
   # add up to the KPI card above them and no percentage can exceed 100%.
   #
   # `opening_balance`/`final_balance` are deliberately NOT part of this universe
-  # — see `consolidated_balances/2`, they are a cash position, not a flow.
+  # — see `consolidated_balances/3`, they are a cash position, not a flow.
   defp total_of(rows), do: Enum.reduce(rows, Decimal.new(0), &Decimal.add(&2, &1.total))
 
   defp row_total(nil), do: Decimal.new(0)
@@ -272,9 +272,9 @@ defmodule CashLensWeb.MonthLive.Show do
 
   # Consolidated opening/closing cash position of the month. Credit-card accounts
   # are left out: their balance is a debt, not cash on hand.
-  defp consolidated_balances(year, month) do
-    %{"year" => year, "month" => month}
-    |> Accounting.list_balances(1, @balances_page_size)
+  defp consolidated_balances(user, year, month) do
+    user
+    |> Accounting.list_balances(%{"year" => year, "month" => month}, 1, @balances_page_size)
     |> Enum.reject(&(&1.account && &1.account.is_credit_card))
     |> Enum.reduce({Decimal.new(0), Decimal.new(0)}, fn balance, {opening, final} ->
       {Decimal.add(opening, balance.initial_balance || Decimal.new(0)),

@@ -10,6 +10,8 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
   alias CashLens.Transactions
   alias CashLens.Transactions.Transaction
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   setup do
     today = Date.utc_today()
     account = account_fixture(%{balance: "100.00"})
@@ -35,7 +37,7 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
       seed_balance(account, year, month, "120.50")
 
       assert Decimal.equal?(
-               BalanceAdjuster.current_final_balance(account.id, year, month),
+               BalanceAdjuster.current_final_balance(user(), account.id, year, month),
                Decimal.new("120.50")
              )
     end
@@ -45,7 +47,7 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
       year: year,
       month: month
     } do
-      refute BalanceAdjuster.current_final_balance(account.id, year, month)
+      refute BalanceAdjuster.current_final_balance(user(), account.id, year, month)
     end
   end
 
@@ -57,6 +59,7 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
     } do
       assert {:error, :balance_not_found} =
                BalanceAdjuster.adjust_final_balance(
+                 user(),
                  account.id,
                  year,
                  month,
@@ -74,6 +77,7 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
 
       assert {:error, :no_difference} =
                BalanceAdjuster.adjust_final_balance(
+                 user(),
                  account.id,
                  year,
                  month,
@@ -91,6 +95,7 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
 
       assert {:error, :category_not_found} =
                BalanceAdjuster.adjust_final_balance(
+                 user(),
                  account.id,
                  year,
                  month,
@@ -101,6 +106,7 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
 
     defp adjust_rendimento(account, year, month) do
       BalanceAdjuster.adjust_final_balance(
+        user(),
         account.id,
         year,
         month,
@@ -203,10 +209,11 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
 
       assert {:ok, :rendimento} = adjust_rendimento(account, year, month)
 
-      current = BalanceAdjuster.current_final_balance(account.id, year, month)
+      current = BalanceAdjuster.current_final_balance(user(), account.id, year, month)
 
       assert {:error, :duplicate} =
                BalanceAdjuster.adjust_final_balance(
+                 user(),
                  account.id,
                  year,
                  month,
@@ -224,6 +231,7 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
 
       assert {:ok, :correcao} =
                BalanceAdjuster.adjust_final_balance(
+                 user(),
                  account.id,
                  year,
                  month,

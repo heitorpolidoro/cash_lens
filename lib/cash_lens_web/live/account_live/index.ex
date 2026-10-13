@@ -476,7 +476,7 @@ defmodule CashLensWeb.AccountLive.Index do
   defp load_accounts(socket) do
     user = socket.assigns.current_user
     opts = [include_closed: socket.assigns.show_closed]
-    current_balances = current_balances_map()
+    current_balances = current_balances_map(user)
 
     {investment_accounts, bank_accounts} =
       user |> Accounts.list_bank_accounts(opts) |> Enum.split_with(& &1.is_investment)
@@ -535,7 +535,7 @@ defmodule CashLensWeb.AccountLive.Index do
     with {:ok, account} <- fetch_account(socket, id),
          {:ok, updated} <-
            Accounts.update_account(user, account, %{is_closed: !account.is_closed}) do
-      Accounting.rebuild_account_balances(updated.id)
+      Accounting.rebuild_account_balances(user, updated.id)
 
       {:noreply,
        socket
@@ -685,8 +685,8 @@ defmodule CashLensWeb.AccountLive.Index do
     |> put_flash(:error, "Não foi possível registrar o rendimento.")
   end
 
-  defp current_balances_map do
-    Accounting.list_latest_balances()
+  defp current_balances_map(user) do
+    Accounting.list_latest_balances(user)
     |> Map.new(fn b -> {b.account_id, b.final_balance} end)
   end
 end

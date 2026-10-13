@@ -255,8 +255,11 @@ defmodule CashLens.Parsers.Ingestor do
       process_entries(entries, transactions_data, account_id, statement_id)
 
     # Rebuild balances for all affected accounts up to the current month/year
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    user = CashLens.Ownership.current_user!()
+
     Enum.each(affected_account_ids, fn acc_id ->
-      Accounting.rebuild_account_balances(acc_id)
+      Accounting.rebuild_account_balances(user, acc_id)
     end)
 
     # `skipped` makes silent dedupe misses observable: it is the number of prepared

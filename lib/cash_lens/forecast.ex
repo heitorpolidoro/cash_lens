@@ -859,7 +859,8 @@ defmodule CashLens.Forecast do
   defp current_balance(accounts, opts) do
     latest_balances =
       Keyword.get_lazy(opts, :latest_balances, fn ->
-        Accounting.list_latest_balances(accounts: accounts)
+        # TRANSITIONAL: removed when CL-51 converts the caller
+        Accounting.list_latest_balances(CashLens.Ownership.current_user!(), accounts: accounts)
       end)
 
     balances_by_account = Map.new(latest_balances, &{&1.account_id, &1.final_balance})

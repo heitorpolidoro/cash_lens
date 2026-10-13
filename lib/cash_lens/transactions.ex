@@ -1040,16 +1040,16 @@ defmodule CashLens.Transactions do
         maybe_match_credit_card_payment(transaction)
 
         # Rebuild balances for the original account
-        CashLens.Accounting.rebuild_account_balances(transaction.account_id)
+        rebuild_balances(transaction.account_id)
 
         # Rebuild balances for any mirror account
         Enum.each(mirrors, fn mirror ->
-          CashLens.Accounting.rebuild_account_balances(mirror.account_id)
+          rebuild_balances(mirror.account_id)
         end)
 
         # Rebuild balances for twin account if matched
         if twin_account_id do
-          CashLens.Accounting.rebuild_account_balances(twin_account_id)
+          rebuild_balances(twin_account_id)
         end
 
         {:ok, transaction}
@@ -1163,10 +1163,10 @@ defmodule CashLens.Transactions do
     |> case do
       {:ok, updated_transaction} ->
         maybe_match_credit_card_payment(updated_transaction)
-        CashLens.Accounting.rebuild_account_balances(updated_transaction.account_id)
+        rebuild_balances(updated_transaction.account_id)
 
         if old_account_id && old_account_id != updated_transaction.account_id do
-          CashLens.Accounting.rebuild_account_balances(old_account_id)
+          rebuild_balances(old_account_id)
         end
 
         {:ok, updated_transaction}
@@ -1201,7 +1201,7 @@ defmodule CashLens.Transactions do
     |> case do
       {:ok, updated} ->
         maybe_match_credit_card_payment(updated)
-        CashLens.Accounting.rebuild_account_balances(updated.account_id)
+        rebuild_balances(updated.account_id)
         {:ok, updated}
 
       error ->
@@ -1216,7 +1216,7 @@ defmodule CashLens.Transactions do
     Repo.delete(transaction)
     |> case do
       {:ok, deleted} ->
-        CashLens.Accounting.rebuild_account_balances(deleted.account_id)
+        rebuild_balances(deleted.account_id)
         {:ok, deleted}
 
       error ->
@@ -1232,7 +1232,7 @@ defmodule CashLens.Transactions do
     res = Repo.delete_all(Transaction)
 
     Enum.each(active_accounts, fn account ->
-      CashLens.Accounting.rebuild_account_balances(account.id)
+      rebuild_balances(account.id)
     end)
 
     res
@@ -1284,7 +1284,7 @@ defmodule CashLens.Transactions do
     Enum.each(
       CashLens.Accounts.list_active_accounts(CashLens.Ownership.current_user!()),
       fn account ->
-        CashLens.Accounting.rebuild_account_balances(account.id)
+        rebuild_balances(account.id)
       end
     )
 
@@ -1338,7 +1338,7 @@ defmodule CashLens.Transactions do
 
         [updated_tx.account_id | affected_ids]
         |> Enum.uniq()
-        |> Enum.each(&CashLens.Accounting.rebuild_account_balances/1)
+        |> Enum.each(&rebuild_balances/1)
 
       _ ->
         :ok
@@ -1700,7 +1700,7 @@ defmodule CashLens.Transactions do
           })
           |> Repo.update()
 
-        CashLens.Accounting.rebuild_account_balances(destination_account_id)
+        rebuild_balances(destination_account_id)
 
         {:ok, Repo.preload(mirror, [:account, :category])}
 
@@ -2043,6 +2043,11 @@ defmodule CashLens.Transactions do
     |> where([t], t.date >= ^first and t.date <= ^today)
     |> select([t], max(t.date))
     |> Repo.one()
+  end
+
+  # TRANSITIONAL: removed when CL-51 converts the caller
+  defp rebuild_balances(account_id) do
+    CashLens.Accounting.rebuild_account_balances(CashLens.Ownership.current_user!(), account_id)
   end
 
   defp per_day(_total, 0), do: Decimal.new("0")

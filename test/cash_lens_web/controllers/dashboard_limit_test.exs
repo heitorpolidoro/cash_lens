@@ -33,7 +33,12 @@ defmodule CashLensWeb.DashboardLimitTest do
     end
 
     test "Accounting.get_historical_balances limits to 12 months" do
-      results = Accounting.get_historical_balances(limit: 12)
+      results =
+        Accounting.get_historical_balances(
+          CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id()),
+          limit: 12
+        )
+
       assert length(results) == 12
 
       # Should be the most recent 12: 2025-04 to 2026-03

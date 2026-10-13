@@ -670,4 +670,25 @@ defmodule CashLensWeb.MonthLiveTest do
     |> then(&Regex.scan(~r/id="#{prefix}([^"]+)"/, &1))
     |> Enum.map(fn [_, id] -> id end)
   end
+
+  describe "tenancy" do
+    test "the month page does not count another user's balances", %{conn: conn} do
+      %{a: other} = cross_tenant()
+      account = account_fixture(%{user: other, name: "Foreign account", is_credit_card: false})
+
+      balance_fixture(%{
+        user: other,
+        account_id: account.id,
+        year: 2026,
+        month: 3,
+        initial_balance: "7777.00",
+        final_balance: "8888.00"
+      })
+
+      {:ok, _live, html} = live(conn, ~p"/months/2026/3")
+      refute html =~ "Foreign account"
+      refute html =~ "7.777,00"
+      refute html =~ "8.888,00"
+    end
+  end
 end

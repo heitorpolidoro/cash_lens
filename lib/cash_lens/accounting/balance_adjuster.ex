@@ -23,8 +23,10 @@ defmodule CashLens.Accounting.BalanceAdjuster do
   alias CashLens.Accounting.Balance
   alias CashLens.Accounts
   alias CashLens.Categories
+  alias CashLens.Ownership
   alias CashLens.Repo
   alias CashLens.Transactions
+  alias CashLens.Users.User
 
   @income_category_slug "rendimento"
   @income_description "Rendimento"
@@ -34,67 +36,83 @@ defmodule CashLens.Accounting.BalanceAdjuster do
   @type result ::
           {:ok, adjust_type()}
           | {:error,
-             :balance_not_found | :category_not_found | :duplicate | :no_difference | term()}
+             :not_found
+             | :balance_not_found
+             | :category_not_found
+             | :duplicate
+             | :no_difference
+             | term()}
 
   @doc """
-  Adjusts the final balance of `account_id` for `year`/`month` so it matches `real_balance`.
+  Adjusts the final balance of one of `user`'s accounts for `year`/`month` so it matches `real_balance`.
 
   Returns `{:ok, type}` when an adjustment was applied, `{:error, :no_difference}` when the
-  calculated balance already matches, and `{:error, reason}` otherwise.
+  calculated balance already matches, `{:error, :not_found}` when the account is not the
+  user's, and `{:error, reason}` otherwise.
   """
   @spec adjust_final_balance(
+          struct(),
           Ecto.UUID.t(),
           integer(),
           integer(),
           Decimal.t(),
           adjust_type()
         ) :: result()
-  def adjust_final_balance(account_id, year, month, real_balance, type) do
-    case current_final_balance(account_id, year, month) do
-      nil ->
-        {:error, :balance_not_found}
+  def adjust_final_balance(%User{} = user, account_id, year, month, real_balance, type) do
+    with {:ok, _account} <- fetch_account(user, account_id) do
+      case current_final_balance(user, account_id, year, month) do
+        nil ->
+          {:error, :balance_not_found}
 
-      current ->
-        real_balance
-        |> Decimal.sub(current)
-        |> apply_difference(account_id, year, month, type)
+        current ->
+          real_balance
+          |> Decimal.sub(current)
+          |> apply_difference(user, account_id, year, month, type)
+      end
     end
+  end
+
+  defp fetch_account(user, account_id) do
+    {:ok, Accounts.get_account!(user, account_id)}
+  rescue
+    Ecto.NoResultsError -> {:error, :not_found}
+    Ecto.Query.CastError -> {:error, :not_found}
   end
 
   @doc """
   Returns the currently calculated final balance for the given account and period.
   """
-  @spec current_final_balance(Ecto.UUID.t(), integer(), integer()) :: Decimal.t() | nil
-  def current_final_balance(account_id, year, month) do
+  @spec current_final_balance(struct(), Ecto.UUID.t(), integer(), integer()) ::
+          Decimal.t() | nil
+  def current_final_balance(%User{} = user, account_id, year, month) do
     Balance
+    |> Ownership.scope(user)
     |> where([b], b.account_id == ^account_id and b.year == ^year and b.month == ^month)
     |> select([b], b.final_balance)
     |> Repo.one()
   end
 
-  defp apply_difference(diff, account_id, year, month, type) do
+  defp apply_difference(diff, user, account_id, year, month, type) do
     if Decimal.equal?(diff, Decimal.new(0)) do
       {:error, :no_difference}
     else
-      apply_adjustment(type, account_id, year, month, diff)
+      apply_adjustment(type, user, account_id, year, month, diff)
     end
   end
 
-  defp apply_adjustment(:rendimento, account_id, year, month, diff) do
-    @income_category_slug
-    |> then(&Categories.get_category_by_slug(CashLens.Ownership.current_user!(), &1))
-    |> create_income_transaction(account_id, year, month, diff)
+  defp apply_adjustment(:rendimento, user, account_id, year, month, diff) do
+    user
+    |> Categories.get_category_by_slug(@income_category_slug)
+    |> create_income_transaction(user, account_id, year, month, diff)
   end
 
-  defp apply_adjustment(:correcao, account_id, _year, _month, diff) do
-    account = Accounts.get_account!(CashLens.Ownership.current_user!(), account_id)
+  defp apply_adjustment(:correcao, user, account_id, _year, _month, diff) do
+    account = Accounts.get_account!(user, account_id)
     new_balance = Decimal.add(account.balance || Decimal.new(0), diff)
 
-    case Accounts.update_account(CashLens.Ownership.current_user!(), account, %{
-           balance: new_balance
-         }) do
+    case Accounts.update_account(user, account, %{balance: new_balance}) do
       {:ok, _account} ->
-        Accounting.rebuild_account_balances(account_id)
+        Accounting.rebuild_account_balances(user, account_id)
         {:ok, :correcao}
 
       {:error, changeset} ->
@@ -102,10 +120,10 @@ defmodule CashLens.Accounting.BalanceAdjuster do
     end
   end
 
-  defp create_income_transaction(nil, _account_id, _year, _month, _diff),
+  defp create_income_transaction(nil, _user, _account_id, _year, _month, _diff),
     do: {:error, :category_not_found}
 
-  defp create_income_transaction(category, account_id, year, month, diff) do
+  defp create_income_transaction(category, user, account_id, year, month, diff) do
     attrs = %{
       account_id: account_id,
       date: income_date(account_id, year, month),
@@ -114,7 +132,9 @@ defmodule CashLens.Accounting.BalanceAdjuster do
       category_id: category.id
     }
 
-    case Transactions.create_transaction(attrs) do
+    # Transactions is not user-aware yet (next CL-51 part): it takes the owner from the
+    # pinned user, so pin `user` for the call.
+    case Repo.with_user(user.id, fn -> Transactions.create_transaction(attrs) end) do
       {:ok, :duplicate} -> {:error, :duplicate}
       {:ok, _transaction} -> {:ok, :rendimento}
       {:error, reason} -> {:error, reason}

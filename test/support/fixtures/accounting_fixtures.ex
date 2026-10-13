@@ -28,7 +28,7 @@ defmodule CashLens.AccountingFixtures do
           month: 1,
           year: 2026
         })
-        |> CashLens.Accounting.create_balance()
+        |> then(&CashLens.Accounting.create_balance(user, &1))
       end)
 
     balance

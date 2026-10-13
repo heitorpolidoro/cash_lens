@@ -368,7 +368,12 @@ defmodule CashLensWeb.BalanceLive.Index do
     year = to_integer(year)
     month = to_integer(month)
 
-    case BalanceAdjuster.current_final_balance(account_id, year, month) do
+    case BalanceAdjuster.current_final_balance(
+           socket.assigns.current_user,
+           account_id,
+           year,
+           month
+         ) do
       nil ->
         {:noreply, put_flash(socket, :error, "Saldo não encontrado para o período.")}
 
@@ -399,6 +404,7 @@ defmodule CashLensWeb.BalanceLive.Index do
       {:ok, real_balance} ->
         result =
           BalanceAdjuster.adjust_final_balance(
+            socket.assigns.current_user,
             modal.account_id,
             modal.year,
             modal.month,
@@ -502,8 +508,8 @@ defmodule CashLensWeb.BalanceLive.Index do
 
   defp load_balances(socket, filters) do
     {card_balances, cash_balances} =
-      filters
-      |> Accounting.list_balances()
+      socket.assigns.current_user
+      |> Accounting.list_balances(filters)
       |> Enum.split_with(&credit_card?/1)
 
     socket

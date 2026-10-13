@@ -219,8 +219,12 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
       })
 
     # 3. Recalculate balances
-    CashLens.Accounting.rebuild_account_balances(origin_tx.account_id)
-    CashLens.Accounting.rebuild_account_balances(pair_tx.account_id)
+    CashLens.Accounting.rebuild_account_balances(
+      socket.assigns.current_user,
+      origin_tx.account_id
+    )
+
+    CashLens.Accounting.rebuild_account_balances(socket.assigns.current_user, pair_tx.account_id)
 
     send(self(), {:transfer_linked, "Par de transferência criado e vinculado!"})
 

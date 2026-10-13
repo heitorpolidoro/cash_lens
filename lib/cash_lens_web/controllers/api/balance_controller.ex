@@ -9,7 +9,7 @@ defmodule CashLensWeb.Api.BalanceController do
     page_size = params["page_size"] |> parse_int(20) |> min(200)
     filters = Map.take(params, ["account_id", "month", "year"])
 
-    balances = Accounting.list_balances(filters, page, page_size)
+    balances = Accounting.list_balances(conn.assigns.current_user, filters, page, page_size)
 
     json(conn, %{
       data: Enum.map(balances, &serialize/1),
@@ -18,7 +18,7 @@ defmodule CashLensWeb.Api.BalanceController do
   end
 
   def show(conn, %{"id" => id}) do
-    balance = Accounting.get_balance!(id)
+    balance = Accounting.get_balance!(conn.assigns.current_user, id)
     json(conn, %{data: serialize(balance)})
   rescue
     Ecto.NoResultsError -> send_resp(conn, 404, ~s({"error":"not found"}))

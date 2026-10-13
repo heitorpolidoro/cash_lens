@@ -19,7 +19,9 @@ defmodule CashLensWeb.PageController do
     # would otherwise read both again. `list_latest_balances/1` is also where
     # the read-time self-healing probe runs, so it runs once per request.
     all_accounts = Accounts.list_accounts(conn.assigns.current_user)
-    latest_balances = Accounting.list_latest_balances(accounts: all_accounts)
+
+    latest_balances =
+      Accounting.list_latest_balances(conn.assigns.current_user, accounts: all_accounts)
 
     # One projection serves both the bill list and the bankruptcy card: a
     # 30-day slice of a 365-day projection is the same slice, so building two
@@ -38,7 +40,9 @@ defmodule CashLensWeb.PageController do
     today = Date.utc_today()
     {start_m, start_y} = calculate_start_period(today, @history_months - 1)
 
-    historical_balances = Accounting.get_historical_balances(limit: 24, heal: false)
+    historical_balances =
+      Accounting.get_historical_balances(conn.assigns.current_user, limit: 24, heal: false)
+
     historical_summary = Transactions.get_historical_summary([{:limit, 24} | summary_opts])
 
     historical =

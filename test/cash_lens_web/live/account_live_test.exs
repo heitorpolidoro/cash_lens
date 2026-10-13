@@ -38,7 +38,10 @@ defmodule CashLensWeb.AccountLiveTest do
       date: Date.utc_today()
     })
 
-    CashLens.Accounting.rebuild_account_balances(account.id)
+    CashLens.Accounting.rebuild_account_balances(
+      CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id()),
+      account.id
+    )
 
     account
   end

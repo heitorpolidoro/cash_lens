@@ -48,5 +48,6 @@ defmodule CashLens.Accounting.Balance do
       :account_id
     ])
     |> foreign_key_constraint(:account_id)
+    |> CashLens.Ownership.validate_owned(:account_id, CashLens.Accounts.Account)
   end
 end

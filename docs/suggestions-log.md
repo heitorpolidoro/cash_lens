@@ -1629,3 +1629,8 @@ commit claimed none were added. Fixed; back to 23.
 - Code review: `Categories.broadcast/2` hand-builds the topic string instead of reusing `topic/1`. Minor DRY.
 - Code review: `AccountLive.Index` uses `fetch_account` (rescue) while `Show` has its own `assign_account`. Acceptable.
 - QA: Fix the compile warning at test/cash_lens/categories_test.exs:241.
+
+## [CL-57] Scope Accounting and balance recalculation by the current user — 2026-10-13
+- Code review: `list_latest_balances` (`accounts:` option) filters with `a.user_id == user.id` in memory rather than through `scope/2`; acceptable since it is not a query predicate.
+- Code review: `balance_adjuster.ex` uses `struct()` in specs; `User.t()` would be more precise.
+- Code review: Unused `user` var in accounts_test.exs:279 and unused import in credit_cards_test.exs (pre-existing warnings).

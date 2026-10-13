@@ -407,10 +407,13 @@ defmodule CashLens.Installments do
 
     # Re-dating parcels moves them across months, so rebuild the affected accounts'
     # balance chains to keep monthly summaries correct.
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    user = CashLens.Ownership.current_user!()
+
     detected
     |> Enum.map(fn {tx, _d} -> tx.account_id end)
     |> Enum.uniq()
-    |> Enum.each(&CashLens.Accounting.rebuild_account_balances/1)
+    |> Enum.each(&CashLens.Accounting.rebuild_account_balances(user, &1))
 
     count
   end

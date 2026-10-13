@@ -396,7 +396,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     pair
     |> Enum.map(& &1.account_id)
     |> Enum.uniq()
-    |> Enum.each(&CashLens.Accounting.rebuild_account_balances/1)
+    |> Enum.each(&CashLens.Accounting.rebuild_account_balances(socket.assigns.current_user, &1))
 
     socket =
       pair

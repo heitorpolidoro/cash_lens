@@ -56,7 +56,7 @@ defmodule CashLensWeb.AccountLive.FormComponent do
 
   @impl true
   def update(%{account: account, action: action} = assigns, socket) do
-    current_balance = current_balance(account, action)
+    current_balance = current_balance(assigns.current_user, account, action)
 
     {:ok,
      socket
@@ -68,10 +68,10 @@ defmodule CashLensWeb.AccountLive.FormComponent do
      |> assign(:current_balance_value, current_balance)}
   end
 
-  defp current_balance(_account, :new), do: nil
+  defp current_balance(_user, _account, :new), do: nil
 
-  defp current_balance(account, :edit) do
-    case Accounting.get_latest_balance_for_account(account.id) do
+  defp current_balance(user, account, :edit) do
+    case Accounting.get_latest_balance_for_account(user, account.id) do
       nil -> account.balance
       balance -> balance.final_balance
     end
@@ -314,7 +314,7 @@ defmodule CashLensWeb.AccountLive.FormComponent do
 
     case Accounts.update_account(socket.assigns.current_user, account, adjusted_params) do
       {:ok, updated} ->
-        maybe_rebuild_balances(account, updated)
+        maybe_rebuild_balances(socket.assigns.current_user, account, updated)
         send(self(), {:account_saved, updated, :edit})
         {:noreply, socket}
 
@@ -330,7 +330,7 @@ defmodule CashLensWeb.AccountLive.FormComponent do
     case Accounts.create_account(socket.assigns.current_user, account_params) do
       {:ok, account} ->
         # Initialize the monthly balance record for the new account.
-        Accounting.rebuild_account_balances(account.id)
+        Accounting.rebuild_account_balances(socket.assigns.current_user, account.id)
         send(self(), {:account_saved, account, :new})
         {:noreply, socket}
 
@@ -356,10 +356,10 @@ defmodule CashLensWeb.AccountLive.FormComponent do
     end
   end
 
-  defp maybe_rebuild_balances(previous, updated) do
+  defp maybe_rebuild_balances(user, previous, updated) do
     if not Decimal.equal?(previous.balance, updated.balance) or
          previous.is_closed != updated.is_closed do
-      Accounting.rebuild_account_balances(updated.id)
+      Accounting.rebuild_account_balances(user, updated.id)
     end
   end
 end

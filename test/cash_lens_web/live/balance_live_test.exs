@@ -553,6 +553,7 @@ defmodule CashLensWeb.BalanceLiveTest do
 
       current =
         BalanceAdjuster.current_final_balance(
+          CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id()),
           balance.account_id,
           today.year,
           today.month
@@ -586,6 +587,57 @@ defmodule CashLensWeb.BalanceLiveTest do
         |> render_submit()
 
       assert html =~ "Informe o saldo real"
+    end
+  end
+
+  describe "tenancy" do
+    setup %{user: user} do
+      %{a: other} = cross_tenant()
+      today = Date.utc_today()
+      foreign_account = account_fixture(%{user: other, name: "Foreign account"})
+
+      foreign =
+        balance_fixture(%{
+          user: other,
+          account_id: foreign_account.id,
+          year: today.year,
+          month: today.month
+        })
+
+      mine_account = account_fixture(%{user: user, name: "My account"})
+
+      mine =
+        balance_fixture(%{
+          user: user,
+          account_id: mine_account.id,
+          year: today.year,
+          month: today.month
+        })
+
+      %{other: other, foreign: foreign, mine: mine}
+    end
+
+    test "lists only the logged-in user's balances", %{conn: conn} do
+      {:ok, _live, html} = live(conn, ~p"/balances")
+      assert html =~ "My account"
+      refute html =~ "Foreign account"
+    end
+
+    test "a forged adjust event for another user's account is a no-op", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/balances")
+      html = open_modal(live, foreign)
+
+      assert html =~ "Saldo não encontrado"
+      refute has_element?(live, "#adjust-balance-modal")
+      refute html =~ "Foreign account"
+
+      CashLens.Tenancy.acting_as(other, fn ->
+        assert Repo.get!(CashLens.Accounting.Balance, foreign.id) == foreign
+      end)
     end
   end
 end
