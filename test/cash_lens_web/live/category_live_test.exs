@@ -258,13 +258,15 @@ defmodule CashLensWeb.CategoryLiveTest do
       |> element("input[phx-click='toggle_fixed'][phx-value-id='#{child.id}']")
       |> render_click()
 
-      assert Categories.get_category!(child.id).type == "variable"
+      assert Categories.get_category!(CashLens.Ownership.current_user!(), child.id).type ==
+               "variable"
 
       live
       |> element("input[phx-click='toggle_fixed'][phx-value-id='#{child.id}']")
       |> render_click()
 
-      assert Categories.get_category!(child.id).type == "fixed"
+      assert Categories.get_category!(CashLens.Ownership.current_user!(), child.id).type ==
+               "fixed"
     end
 
     test "quick toggle on the root card switches the type", %{conn: conn, root: root} do
@@ -274,7 +276,9 @@ defmodule CashLensWeb.CategoryLiveTest do
       assert markup =~ "Fixo (Contas Essenciais)"
 
       live |> element("#toggle-type-#{root.id}") |> render_click()
-      assert Categories.get_category!(root.id).type == "variable"
+
+      assert Categories.get_category!(CashLens.Ownership.current_user!(), root.id).type ==
+               "variable"
     end
 
     test "renders the reimbursable badges", %{conn: conn, root: root} do
@@ -412,7 +416,10 @@ defmodule CashLensWeb.CategoryLiveTest do
 
       assert_patch(live, ~p"/categories")
 
-      created = Categories.list_categories() |> Enum.find(&(&1.name == "Água"))
+      created =
+        Categories.list_categories(CashLens.Ownership.current_user!())
+        |> Enum.find(&(&1.name == "Água"))
+
       assert created.parent_id == root.id
       assert has_element?(live, "#group-#{root.id} #category-#{created.id}")
     end
@@ -516,7 +523,12 @@ defmodule CashLensWeb.CategoryLiveTest do
         |> form("#category-form", category: %{name: "Invariante #{index}", type: "variable"})
         |> render_submit()
 
-        created = Enum.find(Categories.list_categories(), &(&1.name == "Invariante #{index}"))
+        created =
+          Enum.find(
+            Categories.list_categories(CashLens.Ownership.current_user!()),
+            &(&1.name == "Invariante #{index}")
+          )
+
         assert created.parent_id == parent_id
 
         {:ok, index_live, _html} = live(conn, ~p"/categories")
@@ -653,7 +665,10 @@ defmodule CashLensWeb.CategoryLiveTest do
       pessoais = category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR"})
       cabelo = category_fixture(%{name: "Cabeleireiro", keywords: "HAIR"})
 
-      assert [conflict] = Categories.keyword_conflicts()
+      assert [conflict] =
+               Categories.list_categories(CashLens.Ownership.current_user!())
+               |> Categories.keyword_conflicts()
+
       assert conflict.exact?
       assert conflict.text == conflict.shadowed_by_text
 
@@ -665,7 +680,10 @@ defmodule CashLensWeb.CategoryLiveTest do
       category_fixture(%{name: "Cuidados Pessoais", keywords: "HAIR"})
       category_fixture(%{name: "Cabeleireiro", keywords: "ALEX HAIR"})
 
-      assert [conflict] = Categories.keyword_conflicts()
+      assert [conflict] =
+               Categories.list_categories(CashLens.Ownership.current_user!())
+               |> Categories.keyword_conflicts()
+
       refute conflict.exact?
     end
 
@@ -719,6 +737,77 @@ defmodule CashLensWeb.CategoryLiveTest do
 
       assert_patch(live, ~p"/categories")
       refute has_element?(live, "#keyword-conflicts")
+    end
+  end
+
+  describe "tenancy" do
+    # The logged-in user (from ConnCase) plays user B; `other` owns the foreign row.
+    setup %{user: user} do
+      %{a: other} = cross_tenant()
+      foreign = category_fixture(%{user: other, name: "Foreign Cat"})
+      mine = category_fixture(%{user: user, name: "My Cat"})
+      {:ok, other: other, foreign: foreign, mine: mine}
+    end
+
+    defp foreign_category(other, foreign) do
+      CashLens.Tenancy.acting_as(other, fn -> Categories.get_category!(other, foreign.id) end)
+    end
+
+    test "the list shows only the logged-in user's categories", %{conn: conn} do
+      {:ok, _live, html} = live(conn, ~p"/categories")
+
+      assert html =~ "My Cat"
+      refute html =~ "Foreign Cat"
+    end
+
+    test "/categories/:id redirects to the list for another user's category", %{
+      conn: conn,
+      foreign: foreign
+    } do
+      assert {:error, {:live_redirect, %{to: "/categories", flash: flash}}} =
+               live(conn, ~p"/categories/#{foreign.id}")
+
+      assert flash["error"]
+      refute inspect(flash) =~ "Foreign Cat"
+    end
+
+    test "/categories/:id/edit redirects to the list for another user's category", %{
+      conn: conn,
+      foreign: foreign
+    } do
+      assert {:error, {:live_redirect, %{to: "/categories", flash: flash}}} =
+               live(conn, ~p"/categories/#{foreign.id}/edit")
+
+      assert flash["error"]
+    end
+
+    test "a forged delete event is a no-op with an error flash", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/categories")
+
+      html = render_hook(live, "delete", %{"id" => foreign.id})
+
+      assert html =~ "Categoria não encontrada"
+      assert foreign_category(other, foreign).id == foreign.id
+    end
+
+    test "forged type and confirm events are no-ops with an error flash", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/categories")
+
+      assert render_hook(live, "toggle_fixed", %{"id" => foreign.id}) =~
+               "Categoria não encontrada"
+
+      assert render_hook(live, "confirm_delete", %{"id" => foreign.id}) =~
+               "Categoria não encontrada"
+
+      assert foreign_category(other, foreign).type == "variable"
     end
   end
 end

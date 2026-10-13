@@ -54,7 +54,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   end
 
   defp get_transfer_category do
-    case Categories.get_category_by_slug("transfer") do
+    case Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer") do
       nil ->
         Logger.warning(
           "TransferRuleApplier: 'transfer' category not found; skipping rule application."
@@ -105,7 +105,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   end
 
   defp apply_credit_card_rule(tx, rule) do
-    case Categories.get_category_by_slug("cartao-de-credito") do
+    case Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "cartao-de-credito") do
       nil ->
         Logger.warning(
           "TransferRuleApplier: 'cartao-de-credito' category not found; skipping rule application."
@@ -192,7 +192,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   defp repo_mod, do: Application.get_env(:cash_lens, :transfer_rule_repo, CashLens.Repo)
 
   defp link_pair(tx_id, twin_id, link_id) do
-    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat = Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer")
     cat_id = transfer_cat && transfer_cat.id
 
     Repo.transaction(fn ->

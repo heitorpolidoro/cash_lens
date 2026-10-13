@@ -38,7 +38,11 @@ defmodule CashLens.Parsers.DirectoryImporter do
   defp preflight_dir(dir, errs, miss) do
     with {:ok, attrs} <- AccountFile.read(dir),
          :ok <- AccountFile.validate_parser(attrs) do
-      case Accounts.find_accounts_by_bank_and_name(attrs.bank, attrs.account) do
+      case Accounts.find_accounts_by_bank_and_name(
+             CashLens.Ownership.current_user!(),
+             attrs.bank,
+             attrs.account
+           ) do
         [_] -> {errs, miss}
         _ -> {errs, [attrs | miss]}
       end
@@ -104,8 +108,13 @@ defmodule CashLens.Parsers.DirectoryImporter do
     Enum.each(account_dirs, fn dir ->
       with {:ok, attrs} <- AccountFile.read(dir),
            :ok <- AccountFile.validate_parser(attrs),
-           [] <- Accounts.find_accounts_by_bank_and_name(attrs.bank, attrs.account) do
-        Accounts.create_account(%{
+           [] <-
+             Accounts.find_accounts_by_bank_and_name(
+               CashLens.Ownership.current_user!(),
+               attrs.bank,
+               attrs.account
+             ) do
+        Accounts.create_account(CashLens.Ownership.current_user!(), %{
           name: attrs.account,
           bank: attrs.bank,
           parser_type: attrs.parser,
@@ -197,7 +206,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
   end
 
   defp resolve_account(bank, name) do
-    case Accounts.find_accounts_by_bank_and_name(bank, name) do
+    case Accounts.find_accounts_by_bank_and_name(CashLens.Ownership.current_user!(), bank, name) do
       [account] -> {:ok, account}
       [] -> {:error, "conta '#{bank} / #{name}' não encontrada"}
       _ -> {:error, "conta '#{bank} / #{name}' é ambígua"}

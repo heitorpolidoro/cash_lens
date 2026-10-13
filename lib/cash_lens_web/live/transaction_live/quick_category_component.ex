@@ -155,7 +155,11 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
 
   @impl true
   def handle_event("validate", %{"category" => category_params}, socket) do
-    changeset = Categories.change_category(%Category{}, category_params)
+    changeset =
+      Categories.change_category(
+        %Category{user_id: socket.assigns.current_user.id},
+        category_params
+      )
 
     parent = find_parent_option(socket.assigns.parent_options, category_params["parent_id"])
 
@@ -167,7 +171,11 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
 
   @impl true
   def handle_event("clear_parent", _params, socket) do
-    changeset = Categories.change_category(%Category{}, %{"parent_id" => nil})
+    changeset =
+      Categories.change_category(
+        %Category{user_id: socket.assigns.current_user.id},
+        %{"parent_id" => nil}
+      )
 
     {:noreply,
      socket
@@ -177,7 +185,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponent do
 
   @impl true
   def handle_event("save_quick_category", %{"category" => category_params}, socket) do
-    case Categories.create_category(category_params) do
+    case Categories.create_category(socket.assigns.current_user, category_params) do
       {:ok, category} ->
         send(self(), {:category_created, category, socket.assigns.target_transaction_id})
         {:noreply, socket}

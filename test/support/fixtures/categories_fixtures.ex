@@ -19,7 +19,7 @@ defmodule CashLens.CategoriesFixtures do
         |> Enum.into(%{
           name: "category #{unique_id}"
         })
-        |> CashLens.Categories.create_category()
+        |> then(&CashLens.Categories.create_category(user, &1))
       end)
 
     category

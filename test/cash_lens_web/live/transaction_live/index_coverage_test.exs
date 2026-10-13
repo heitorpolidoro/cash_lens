@@ -92,7 +92,10 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(cat.id).keywords in [nil, ""]
+      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords in [
+               nil,
+               ""
+             ]
     end
 
     test "ticking the checkbox appends the description to the category's keywords",
@@ -112,7 +115,9 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(cat.id).keywords == "Restaurante A"
+      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords ==
+               "Restaurante A"
+
       assert render(live) =~ "Regra criada para &quot;Restaurante A&quot;."
     end
 
@@ -137,7 +142,8 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(cat.id).keywords == "PORTO SEGURO ADMIN"
+      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords ==
+               "PORTO SEGURO ADMIN"
     end
 
     test "the rule is appended to the keywords the category already had", %{conn: conn} do
@@ -152,7 +158,8 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       render_click(live, "toggle_bulk_rule", %{})
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(cat.id).keywords == "IFOOD, Restaurante A"
+      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords ==
+               "IFOOD, Restaurante A"
     end
 
     test "a blank keyword ticks the box but creates nothing, and says so", %{conn: conn} do
@@ -169,7 +176,11 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(cat.id).keywords in [nil, ""]
+      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords in [
+               nil,
+               ""
+             ]
+
       # The categorization still happened, so the flash must not claim a rule.
       html = render(live)
       assert html =~ "transações categorizadas!"
@@ -203,7 +214,10 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(other.id).keywords in [nil, ""]
+      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), other.id).keywords in [
+               nil,
+               ""
+             ]
     end
 
     test "the rule field warns when another category already claims the text", %{conn: conn} do
@@ -227,7 +241,9 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       # A warning, not a block: the rule is still created if the user wants it.
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
-      assert CashLens.Categories.get_category!(cat.id).keywords == "HAIR"
+
+      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords ==
+               "HAIR"
     end
 
     test "the rule field stays quiet when the text clashes with nothing", %{conn: conn} do

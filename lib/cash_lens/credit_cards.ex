@@ -356,8 +356,8 @@ defmodule CashLens.CreditCards do
       |> Enum.filter(&(&1.statement.competencia == competencia))
       |> MapSet.new(& &1.account.id)
 
-    [include_closed: false]
-    |> Accounts.list_credit_cards()
+    CashLens.Ownership.current_user!()
+    |> Accounts.list_credit_cards(include_closed: false)
     |> Enum.reject(&MapSet.member?(covered, &1.id))
     |> Enum.map(&pending_entry(&1, competencia, today))
     |> Enum.sort_by(& &1.account.name)
@@ -795,12 +795,19 @@ defmodule CashLens.CreditCards do
   # A payment already somewhere in the subtree is left alone, so a more
   # specific child the operator chose by hand is not overwritten.
   defp categorize_payment(multi, payment_id, now) do
-    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+    case CashLens.Categories.get_category_by_slug(
+           CashLens.Ownership.current_user!(),
+           "cartao-de-credito"
+         ) do
       nil ->
         multi
 
       category ->
-        keep = CashLens.Categories.get_category_ids_with_children(category.id)
+        keep =
+          CashLens.Categories.get_category_ids_with_children(
+            CashLens.Ownership.current_user!(),
+            category.id
+          )
 
         Multi.update_all(
           multi,
@@ -928,9 +935,18 @@ defmodule CashLens.CreditCards do
   # The whole `cartao-de-credito` subtree, matching what
   # `CashLens.CreditCards.Matcher` does.
   defp credit_card_category_ids do
-    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
-      nil -> []
-      category -> CashLens.Categories.get_category_ids_with_children(category.id)
+    case CashLens.Categories.get_category_by_slug(
+           CashLens.Ownership.current_user!(),
+           "cartao-de-credito"
+         ) do
+      nil ->
+        []
+
+      category ->
+        CashLens.Categories.get_category_ids_with_children(
+          CashLens.Ownership.current_user!(),
+          category.id
+        )
     end
   end
 

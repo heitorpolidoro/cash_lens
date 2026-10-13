@@ -65,7 +65,9 @@ defmodule CashLensWeb.AccountLive.IndexTest do
       assert Decimal.equal?(transaction.amount, Decimal.new("50.00"))
       assert transaction.date == Date.utc_today()
 
-      category = CashLens.Categories.get_category_by_slug("rendimento")
+      category =
+        CashLens.Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "rendimento")
+
       assert transaction.category_id == category.id
     end
 

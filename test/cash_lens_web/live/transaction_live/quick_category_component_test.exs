@@ -18,13 +18,15 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
       # Stands in for the auth on_mount: the LiveView acts for the logged-in user.
       CashLens.Repo.put_current_user_id(session["user_id"])
 
-      form = Phoenix.Component.to_form(Categories.change_category(%Category{}))
+      user = CashLens.Repo.get!(CashLens.Users.User, session["user_id"])
+      form = Phoenix.Component.to_form(Categories.change_category(%Category{user_id: user.id}))
 
       {:ok,
        assign(socket,
          show: true,
+         current_user: user,
          category_form: form,
-         categories: Categories.list_categories(),
+         categories: Categories.list_categories(user),
          target_transaction_id: "some-tx-id"
        )}
     end
@@ -43,6 +45,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
         show={@show}
         category_form={@category_form}
         categories={@categories}
+        current_user={@current_user}
         target_transaction_id={@target_transaction_id}
       />
       <.flash kind={:info} flash={@flash} />
@@ -76,7 +79,9 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
     |> render_submit(%{"category" => %{"name" => "My New Category", "parent_id" => ""}})
 
     assert render(view) =~ "Category created!"
-    assert Categories.get_category_by_slug("my-new-category") != nil
+
+    assert Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "my-new-category") !=
+             nil
   end
 
   test "validate selects a parent and clear_parent resets it", %{conn: conn, user: user} do
@@ -115,13 +120,13 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
 
   test "handles error when category creation fails with invalid data", %{conn: conn, user: user} do
     {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"user_id" => user.id})
-    count_before = length(Categories.list_categories())
+    count_before = length(Categories.list_categories(CashLens.Ownership.current_user!()))
 
     # Submit with empty name to fail validate_required(:name) — triggers the error branch
     view
     |> element("#quick-category-form")
     |> render_submit(%{"name" => "", "parent_id" => ""})
 
-    assert length(Categories.list_categories()) == count_before
+    assert length(Categories.list_categories(CashLens.Ownership.current_user!())) == count_before
   end
 end

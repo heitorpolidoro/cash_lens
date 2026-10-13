@@ -259,7 +259,7 @@ defmodule CashLens.Accounting do
     Repo.delete_all(from b in Balance, where: b.account_id == ^account_id)
 
     # Get the account to check if it is closed
-    account = CashLens.Accounts.get_account!(account_id)
+    account = CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account_id)
 
     # Find the oldest transaction for this account
     oldest_tx =

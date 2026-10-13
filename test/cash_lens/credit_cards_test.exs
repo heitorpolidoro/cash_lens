@@ -272,7 +272,10 @@ defmodule CashLens.CreditCardsTest do
     bank = CashLens.AccountsFixtures.account_fixture(%{})
 
     {:ok, category} =
-      CashLens.Categories.create_category(%{name: "Cartão de Crédito", slug: "cartao-de-credito"})
+      CashLens.Categories.create_category(CashLens.Ownership.current_user!(), %{
+        name: "Cartão de Crédito",
+        slug: "cartao-de-credito"
+      })
 
     today = Date.utc_today()
     s = statement_fixture(%{account: card, total_a_pagar: Decimal.new("100.00"), due_date: today})
@@ -321,7 +324,7 @@ defmodule CashLens.CreditCardsTest do
       bank = CashLens.AccountsFixtures.account_fixture(%{})
 
       {:ok, category} =
-        CashLens.Categories.create_category(%{
+        CashLens.Categories.create_category(CashLens.Ownership.current_user!(), %{
           name: "Cartão de Crédito",
           slug: "cartao-de-credito"
         })
@@ -514,7 +517,7 @@ defmodule CashLens.CreditCardsTest do
 
     test "unlinked_card_payments reads the whole cartao-de-credito subtree", ctx do
       {:ok, child} =
-        CashLens.Categories.create_category(%{
+        CashLens.Categories.create_category(CashLens.Ownership.current_user!(), %{
           name: "Ourocard",
           slug: "cartao-de-credito-ourocard",
           parent_id: ctx.category.id
@@ -552,7 +555,11 @@ defmodule CashLens.CreditCardsTest do
     end
 
     test "a payment with an unrelated category is still a candidate", ctx do
-      {:ok, outros} = CashLens.Categories.create_category(%{name: "Outros", slug: "outros"})
+      {:ok, outros} =
+        CashLens.Categories.create_category(CashLens.Ownership.current_user!(), %{
+          name: "Outros",
+          slug: "outros"
+        })
 
       statement =
         statement_fixture(%{
@@ -600,7 +607,11 @@ defmodule CashLens.CreditCardsTest do
     end
 
     test "linking files the payment under Cartão de Crédito", ctx do
-      {:ok, outros} = CashLens.Categories.create_category(%{name: "Outros", slug: "outros"})
+      {:ok, outros} =
+        CashLens.Categories.create_category(CashLens.Ownership.current_user!(), %{
+          name: "Outros",
+          slug: "outros"
+        })
 
       statement =
         statement_fixture(%{
@@ -619,7 +630,7 @@ defmodule CashLens.CreditCardsTest do
 
     test "linking leaves a more specific card subcategory alone", ctx do
       {:ok, child} =
-        CashLens.Categories.create_category(%{
+        CashLens.Categories.create_category(CashLens.Ownership.current_user!(), %{
           name: "Ourocard",
           slug: "cartao-de-credito-ourocard",
           parent_id: ctx.category.id
@@ -665,7 +676,11 @@ defmodule CashLens.CreditCardsTest do
     end
 
     test "unlinked_card_payments lists what no statement claims", ctx do
-      {:ok, outros} = CashLens.Categories.create_category(%{name: "Outros", slug: "outros"})
+      {:ok, outros} =
+        CashLens.Categories.create_category(CashLens.Ownership.current_user!(), %{
+          name: "Outros",
+          slug: "outros"
+        })
 
       loose = payment(ctx.bank, ctx.category, "-321.00", ctx.today, "Pagto solto")
       _other_category = payment(ctx.bank, outros, "-99.00", ctx.today, "Nao e cartao")
@@ -713,7 +728,12 @@ defmodule CashLens.CreditCardsTest do
     end
 
     test "unlinked_card_payments ignores transactions outside the category", ctx do
-      {:ok, outros} = CashLens.Categories.create_category(%{name: "Outros", slug: "outros"})
+      {:ok, outros} =
+        CashLens.Categories.create_category(CashLens.Ownership.current_user!(), %{
+          name: "Outros",
+          slug: "outros"
+        })
+
       not_card = payment(ctx.bank, outros, "-50.00", ctx.today, "Mercado")
 
       ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)

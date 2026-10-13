@@ -122,6 +122,12 @@ defmodule CashLens.Ownership do
     put_user_id(current_user_id!())
   end
 
+  # TRANSITIONAL: removed when CL-51 converts the caller
+  @doc "The `%User{}` for `current_user_id!/0`, for callers not yet converted to take a user."
+  def current_user! do
+    Repo.get!(CashLens.Users.User, current_user_id!())
+  end
+
   @doc "Returns the id that should own a new row, raising when it is ambiguous."
   def current_user_id! do
     Process.get(@pdict_key) || operator_user_id!()

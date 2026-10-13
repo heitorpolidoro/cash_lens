@@ -177,6 +177,7 @@ defmodule CashLensWeb.AccountLive.Index do
       id="account-form-component"
       action={@form_action}
       account={@form_account}
+      current_user={@current_user}
     />
 
     <!-- Confirmation Modal -->
@@ -440,14 +441,20 @@ defmodule CashLensWeb.AccountLive.Index do
     socket
     |> assign(:page_title, "Nova Conta")
     |> assign(:form_action, :new)
-    |> assign(:form_account, %Account{})
+    |> assign(:form_account, %Account{user_id: socket.assigns.current_user.id})
   end
 
   defp apply_action(socket, :edit, %{"id" => id}) do
-    socket
-    |> assign(:page_title, "Editar Conta")
-    |> assign(:form_action, :edit)
-    |> assign(:form_account, Accounts.get_account!(id))
+    case fetch_account(socket, id) do
+      {:ok, account} ->
+        socket
+        |> assign(:page_title, "Editar Conta")
+        |> assign(:form_action, :edit)
+        |> assign(:form_account, account)
+
+      :error ->
+        socket |> account_not_found() |> push_navigate(to: ~p"/accounts")
+    end
   end
 
   defp apply_action(socket, _index, _params) do
@@ -457,18 +464,28 @@ defmodule CashLensWeb.AccountLive.Index do
     |> assign(:form_account, nil)
   end
 
+  # Another user's account is indistinguishable from a missing one.
+  defp fetch_account(socket, id) do
+    {:ok, Accounts.get_account!(socket.assigns.current_user, id)}
+  rescue
+    Ecto.NoResultsError -> :error
+  end
+
+  defp account_not_found(socket), do: put_flash(socket, :error, "Conta não encontrada.")
+
   defp load_accounts(socket) do
+    user = socket.assigns.current_user
     opts = [include_closed: socket.assigns.show_closed]
     current_balances = current_balances_map()
 
     {investment_accounts, bank_accounts} =
-      opts |> Accounts.list_bank_accounts() |> Enum.split_with(& &1.is_investment)
+      user |> Accounts.list_bank_accounts(opts) |> Enum.split_with(& &1.is_investment)
 
     socket
     |> assign(:current_balances, current_balances)
     |> assign(:bank_accounts, bank_accounts)
     |> assign(:investment_accounts, investment_accounts)
-    |> assign(:credit_cards, Accounts.list_credit_cards(opts))
+    |> assign(:credit_cards, Accounts.list_credit_cards(user, opts))
     |> assign(:bank_total, bank_total(bank_accounts, current_balances))
     |> assign(:investment_total, bank_total(investment_accounts, current_balances))
   end
@@ -493,12 +510,16 @@ defmodule CashLensWeb.AccountLive.Index do
         socket.assigns.bank_accounts
       end
 
-    section
-    |> Accounts.move(id, if(direction == "up", do: :up, else: :down))
-    |> Enum.map(& &1.id)
-    |> Accounts.reorder_accounts()
+    if Enum.any?(section, &(&1.id == id)) do
+      section
+      |> Accounts.move(id, if(direction == "up", do: :up, else: :down))
+      |> Enum.map(& &1.id)
+      |> then(&Accounts.reorder_accounts(socket.assigns.current_user, &1))
 
-    {:noreply, load_accounts(socket)}
+      {:noreply, load_accounts(socket)}
+    else
+      {:noreply, account_not_found(socket)}
+    end
   end
 
   def handle_event("toggle_closed", params, socket) do
@@ -509,15 +530,20 @@ defmodule CashLensWeb.AccountLive.Index do
   end
 
   def handle_event("toggle_archive", %{"id" => id}, socket) do
-    account = Accounts.get_account!(id)
+    user = socket.assigns.current_user
 
-    {:ok, updated} = Accounts.update_account(account, %{is_closed: !account.is_closed})
-    Accounting.rebuild_account_balances(updated.id)
+    with {:ok, account} <- fetch_account(socket, id),
+         {:ok, updated} <-
+           Accounts.update_account(user, account, %{is_closed: !account.is_closed}) do
+      Accounting.rebuild_account_balances(updated.id)
 
-    {:noreply,
-     socket
-     |> put_flash(:success, archive_flash(updated))
-     |> load_accounts()}
+      {:noreply,
+       socket
+       |> put_flash(:success, archive_flash(updated))
+       |> load_accounts()}
+    else
+      _ -> {:noreply, account_not_found(socket)}
+    end
   end
 
   def handle_event("close_account_modal", _params, socket) do
@@ -532,20 +558,29 @@ defmodule CashLensWeb.AccountLive.Index do
   def handle_event("close_modal", _, socket), do: {:noreply, assign(socket, :confirm_modal, nil)}
 
   def handle_event("delete", %{"id" => id}, socket) do
-    account = Accounts.get_account!(id)
-    {:ok, _} = Accounts.delete_account(account)
+    user = socket.assigns.current_user
 
-    {:noreply, socket |> assign(:confirm_modal, nil) |> load_accounts()}
+    with {:ok, account} <- fetch_account(socket, id),
+         {:ok, _} <- Accounts.delete_account(user, account) do
+      {:noreply, socket |> assign(:confirm_modal, nil) |> load_accounts()}
+    else
+      _ -> {:noreply, socket |> assign(:confirm_modal, nil) |> account_not_found()}
+    end
   end
 
   def handle_event("open_update_balance_modal", %{"id" => id}, socket) do
-    account = Accounts.get_account!(id)
-    current_balance = current_balance(socket.assigns.current_balances, account)
+    case fetch_account(socket, id) do
+      {:ok, account} ->
+        current_balance = current_balance(socket.assigns.current_balances, account)
 
-    {:noreply,
-     socket
-     |> assign(:update_balance_modal, %{account: account, current_balance: current_balance})
-     |> assign(:update_balance_form, to_form(update_balance_changeset(%{}), as: :balance))}
+        {:noreply,
+         socket
+         |> assign(:update_balance_modal, %{account: account, current_balance: current_balance})
+         |> assign(:update_balance_form, to_form(update_balance_changeset(%{}), as: :balance))}
+
+      :error ->
+        {:noreply, account_not_found(socket)}
+    end
   end
 
   def handle_event("close_update_balance_modal", _params, socket) do
@@ -605,7 +640,10 @@ defmodule CashLensWeb.AccountLive.Index do
       |> put_flash(:info, "Nenhuma diferença a registrar.")
     else
       account
-      |> create_income_transaction(diff, Categories.get_category_by_slug("rendimento"))
+      |> create_income_transaction(
+        diff,
+        Categories.get_category_by_slug(socket.assigns.current_user, "rendimento")
+      )
       |> then(&apply_transaction_result(socket, &1))
     end
   end

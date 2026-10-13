@@ -23,7 +23,7 @@ defmodule CashLensWeb.TransferLive.Index do
      |> assign(:link_candidates, [])
      |> assign(:mirror_origin, nil)
      |> assign(:mirror_form, to_form(%{}))
-     |> assign(:accounts, Accounts.list_active_accounts())
+     |> assign(:accounts, Accounts.list_active_accounts(socket.assigns.current_user))
      |> load_data()}
   end
 

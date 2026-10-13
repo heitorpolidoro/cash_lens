@@ -281,7 +281,12 @@ defmodule CashLens.AccountingTest do
 
     test "a closed account missing its balance is not rebuilt" do
       acc = account_fixture(balance: "100")
-      {:ok, _} = CashLens.Accounts.update_account(acc, %{is_closed: true})
+
+      {:ok, _} =
+        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), acc, %{
+          is_closed: true
+        })
+
       Repo.delete_all(from b in Balance, where: b.account_id == ^acc.id)
 
       Accounting.list_latest_balances()
@@ -291,7 +296,7 @@ defmodule CashLens.AccountingTest do
 
     test "accounts passed in are attached without reading accounts again" do
       healthy_accounts(2)
-      accounts = CashLens.Accounts.list_accounts()
+      accounts = CashLens.Accounts.list_accounts(CashLens.Ownership.current_user!())
 
       {balances, counts} =
         CashLens.QueryCounter.count(fn ->
@@ -340,7 +345,10 @@ defmodule CashLens.AccountingTest do
       transaction_fixture(%{account_id: acc.id, date: ~D[2026-02-10], amount: "-200"})
 
       # Mark account as closed
-      {:ok, closed_acc} = CashLens.Accounts.update_account(acc, %{is_closed: true})
+      {:ok, closed_acc} =
+        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), acc, %{
+          is_closed: true
+        })
 
       assert :ok = Accounting.rebuild_account_balances(closed_acc.id)
 
@@ -364,7 +372,10 @@ defmodule CashLens.AccountingTest do
       original = Repo.one!(from b in Balance, where: b.account_id == ^acc.id and b.month == 1)
       assert Decimal.equal?(original.initial_balance, "100")
 
-      {:ok, updated_acc} = CashLens.Accounts.update_account(acc, %{balance: "200"})
+      {:ok, updated_acc} =
+        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), acc, %{
+          balance: "200"
+        })
 
       assert :ok = Accounting.rebuild_account_balances(updated_acc.id)
 
@@ -383,7 +394,10 @@ defmodule CashLens.AccountingTest do
       Accounting.calculate_monthly_balance(acc.id, 2026, 2)
       Accounting.calculate_monthly_balance(acc.id, 2026, 3)
 
-      {:ok, updated_acc} = CashLens.Accounts.update_account(acc, %{balance: "500"})
+      {:ok, updated_acc} =
+        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), acc, %{
+          balance: "500"
+        })
 
       assert :ok = Accounting.rebuild_account_balances(updated_acc.id)
 

@@ -82,15 +82,17 @@ defmodule CashLens.Accounting.BalanceAdjuster do
 
   defp apply_adjustment(:rendimento, account_id, year, month, diff) do
     @income_category_slug
-    |> Categories.get_category_by_slug()
+    |> then(&Categories.get_category_by_slug(CashLens.Ownership.current_user!(), &1))
     |> create_income_transaction(account_id, year, month, diff)
   end
 
   defp apply_adjustment(:correcao, account_id, _year, _month, diff) do
-    account = Accounts.get_account!(account_id)
+    account = Accounts.get_account!(CashLens.Ownership.current_user!(), account_id)
     new_balance = Decimal.add(account.balance || Decimal.new(0), diff)
 
-    case Accounts.update_account(account, %{balance: new_balance}) do
+    case Accounts.update_account(CashLens.Ownership.current_user!(), account, %{
+           balance: new_balance
+         }) do
       {:ok, _account} ->
         Accounting.rebuild_account_balances(account_id)
         {:ok, :correcao}

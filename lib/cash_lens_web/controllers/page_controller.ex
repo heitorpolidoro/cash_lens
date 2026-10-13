@@ -18,7 +18,7 @@ defmodule CashLensWeb.PageController do
     # Accounts and latest balances are read once and handed down: the forecast
     # would otherwise read both again. `list_latest_balances/1` is also where
     # the read-time self-healing probe runs, so it runs once per request.
-    all_accounts = Accounts.list_accounts()
+    all_accounts = Accounts.list_accounts(conn.assigns.current_user)
     latest_balances = Accounting.list_latest_balances(accounts: all_accounts)
 
     # One projection serves both the bill list and the bankruptcy card: a

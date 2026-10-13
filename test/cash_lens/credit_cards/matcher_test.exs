@@ -38,7 +38,12 @@ defmodule CashLens.CreditCards.MatcherTest do
   test "auto_link links the single exact-amount payment within the window" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     bank = CashLens.AccountsFixtures.account_fixture(%{})
-    cat = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+    cat =
+      CashLens.Categories.get_category_by_slug(
+        CashLens.Ownership.current_user!(),
+        "cartao-de-credito"
+      )
 
     s =
       statement_fixture(%{
@@ -64,7 +69,12 @@ defmodule CashLens.CreditCards.MatcherTest do
   test "auto_link matches a payment categorized under a descendant category" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     bank = CashLens.AccountsFixtures.account_fixture(%{})
-    parent = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+    parent =
+      CashLens.Categories.get_category_by_slug(
+        CashLens.Ownership.current_user!(),
+        "cartao-de-credito"
+      )
 
     child =
       CashLens.CategoriesFixtures.category_fixture(%{
@@ -104,7 +114,12 @@ defmodule CashLens.CreditCards.MatcherTest do
   test "auto_link returns :ambiguous and does not link when two candidates match" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     bank = CashLens.AccountsFixtures.account_fixture(%{})
-    cat = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+    cat =
+      CashLens.Categories.get_category_by_slug(
+        CashLens.Ownership.current_user!(),
+        "cartao-de-credito"
+      )
 
     s =
       statement_fixture(%{
@@ -124,7 +139,12 @@ defmodule CashLens.CreditCards.MatcherTest do
     test "links the payment to the single open statement whose total matches within the window" do
       card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
       bank = CashLens.AccountsFixtures.account_fixture(%{})
-      cat = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      cat =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
 
       statement =
         statement_fixture(%{
@@ -152,7 +172,12 @@ defmodule CashLens.CreditCards.MatcherTest do
     test "returns :no_match when no open statement's total matches the payment" do
       card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
       bank = CashLens.AccountsFixtures.account_fixture(%{})
-      cat = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      cat =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
 
       statement_fixture(%{account: card, total_a_pagar: Decimal.new("99.00")})
 
@@ -176,7 +201,12 @@ defmodule CashLens.CreditCards.MatcherTest do
       card_a = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
       card_b = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
       bank = CashLens.AccountsFixtures.account_fixture(%{})
-      cat = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      cat =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
 
       statement_a =
         statement_fixture(%{
@@ -207,7 +237,12 @@ defmodule CashLens.CreditCards.MatcherTest do
       card_a = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
       card_b = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
       bank = CashLens.AccountsFixtures.account_fixture(%{})
-      cat = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      cat =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
 
       statement_a =
         statement_fixture(%{

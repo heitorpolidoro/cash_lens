@@ -27,7 +27,8 @@ defmodule CashLens.Transactions.TransferMatcher do
 
     # 2. Match only those with 'transfer' category
     # Pre-fetch 'transfer' category slug for efficiency
-    transfer_category = Categories.get_category_by_slug("transfer")
+    transfer_category =
+      Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer")
 
     if transfer_category do
       transfers
@@ -57,7 +58,7 @@ defmodule CashLens.Transactions.TransferMatcher do
 
   def match_transfer(%Transaction{} = tx) do
     # Only try to match if the category is "transfer"
-    case Categories.get_category_by_slug("transfer") do
+    case Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer") do
       %{id: id} when tx.category_id == id -> find_and_link(tx)
       _ -> :not_a_transfer
     end
@@ -90,7 +91,7 @@ defmodule CashLens.Transactions.TransferMatcher do
   end
 
   defp link_pair(tx_id, twin_id, link_id) do
-    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat = Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer")
     cat_id = transfer_cat && transfer_cat.id
 
     Repo.transaction(fn ->

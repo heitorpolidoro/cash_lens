@@ -248,7 +248,7 @@ defmodule CashLensWeb.AccountLiveTest do
       |> element(~s(#account-#{account.id} button[phx-click="toggle_archive"]))
       |> render_click()
 
-      assert CashLens.Accounts.get_account!(account.id).is_closed
+      assert CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id).is_closed
       refute has_element?(live, "#account-#{account.id}")
     end
 
@@ -262,7 +262,7 @@ defmodule CashLensWeb.AccountLiveTest do
       |> element(~s(#account-#{account.id} button[phx-click="toggle_archive"]))
       |> render_click()
 
-      refute CashLens.Accounts.get_account!(account.id).is_closed
+      refute CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id).is_closed
       assert has_element?(live, "#account-#{account.id}")
     end
   end
@@ -402,7 +402,7 @@ defmodule CashLensWeb.AccountLiveTest do
 
       assert_patch(live, ~p"/accounts")
 
-      reloaded = CashLens.Accounts.get_account!(account.id)
+      reloaded = CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id)
       assert reloaded.parser_type == "standard_ofx"
       assert reloaded.icon == "https://example.com/new-icon.png"
       assert render(live) =~ "Conta atualizada com sucesso"
@@ -455,7 +455,7 @@ defmodule CashLensWeb.AccountLiveTest do
       assert_patch(live, ~p"/accounts")
 
       assert Decimal.equal?(
-               CashLens.Accounts.get_account!(account.id).balance,
+               CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id).balance,
                Decimal.new("120.00")
              )
     end
@@ -477,7 +477,9 @@ defmodule CashLensWeb.AccountLiveTest do
       |> render_submit()
 
       assert_patch(live, ~p"/accounts")
-      assert CashLens.Accounts.get_account!(account.id).is_closed
+
+      assert CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id).is_closed
+
       refute has_element?(live, "#account-#{account.id}")
     end
 
@@ -525,7 +527,7 @@ defmodule CashLensWeb.AccountLiveTest do
       assert form_html =~ ~s(value="15")
       assert form_html =~ ~s(value="8")
 
-      reloaded = CashLens.Accounts.get_account!(account.id)
+      reloaded = CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id)
       assert reloaded.closing_day == nil
       assert reloaded.due_day == nil
     end
@@ -647,6 +649,87 @@ defmodule CashLensWeb.AccountLiveTest do
 
       assert has_element?(live, ~s{a[href="/transactions/new"]})
       refute has_element?(live, ~s{a[href*="for_account"]})
+    end
+  end
+
+  describe "tenancy" do
+    # The logged-in user (from ConnCase) plays user B; `other` owns the foreign row.
+    setup %{user: user} do
+      %{a: other} = cross_tenant()
+      foreign = account_fixture(%{user: other, name: "Foreign Wallet"})
+      mine = account_fixture(%{user: user, name: "My Wallet"})
+      {:ok, other: other, foreign: foreign, mine: mine}
+    end
+
+    defp foreign_still_there?(other, foreign) do
+      CashLens.Tenancy.acting_as(other, fn ->
+        CashLens.Accounts.get_account!(other, foreign.id)
+      end)
+    end
+
+    test "the list shows only the logged-in user's accounts", %{conn: conn} do
+      {:ok, _live, html} = live(conn, ~p"/accounts")
+
+      assert html =~ "My Wallet"
+      refute html =~ "Foreign Wallet"
+    end
+
+    test "/accounts/:id redirects to the list for another user's account", %{
+      conn: conn,
+      foreign: foreign
+    } do
+      assert {:error, {:live_redirect, %{to: "/accounts", flash: flash}}} =
+               live(conn, ~p"/accounts/#{foreign.id}")
+
+      assert flash["error"]
+      refute inspect(flash) =~ "Foreign Wallet"
+    end
+
+    test "/accounts/:id/edit redirects to the list for another user's account", %{
+      conn: conn,
+      foreign: foreign
+    } do
+      assert {:error, {:live_redirect, %{to: "/accounts", flash: flash}}} =
+               live(conn, ~p"/accounts/#{foreign.id}/edit")
+
+      assert flash["error"]
+    end
+
+    test "a forged delete event is a no-op with an error flash", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+
+      html = render_hook(live, "delete", %{"id" => foreign.id})
+
+      assert html =~ "Conta não encontrada"
+      assert foreign_still_there?(other, foreign)
+    end
+
+    test "forged toggle and balance events are no-ops with an error flash", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+
+      assert render_hook(live, "toggle_archive", %{"id" => foreign.id}) =~
+               "Conta não encontrada"
+
+      assert render_hook(live, "open_update_balance_modal", %{"id" => foreign.id}) =~
+               "Conta não encontrada"
+
+      refute foreign_still_there?(other, foreign).is_closed
+    end
+
+    test "a forged move event is a no-op with an error flash", %{conn: conn, foreign: foreign} do
+      {:ok, live, _html} = live(conn, ~p"/accounts")
+
+      html = render_hook(live, "move_account", %{"id" => foreign.id, "direction" => "up"})
+
+      assert html =~ "Conta não encontrada"
     end
   end
 end

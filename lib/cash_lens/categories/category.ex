@@ -23,6 +23,7 @@ defmodule CashLens.Categories.Category do
     |> cast(attrs, [:name, :parent_id, :keywords, :default_reimbursable, :type, :slug])
     |> validate_required([:name, :type])
     |> validate_inclusion(:type, ["fixed", "variable"])
+    |> CashLens.Ownership.validate_owned(:parent_id, __MODULE__)
     |> generate_slug()
     |> unique_constraint(:slug)
     |> unique_constraint(:name, name: :categories_top_level_name_index)
@@ -38,6 +39,10 @@ defmodule CashLens.Categories.Category do
       # Without a name there is nothing to build a slug from; `validate_required`
       # is what reports the problem back to the user.
       is_nil(get_field(changeset, :name)) ->
+        changeset
+
+      # An unusable parent is reported on `parent_id`; there is no slug to build.
+      Keyword.has_key?(changeset.errors, :parent_id) ->
         changeset
 
       # Auto-generate slug if name or parent_id changed

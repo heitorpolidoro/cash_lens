@@ -443,7 +443,7 @@ defmodule CashLens.InstallmentsApplyTest do
         |> Map.delete(:slug)
         |> Map.put_new(:name, "Cat #{System.unique_integer([:positive])}")
 
-      {:ok, cat} = Categories.create_category(attrs)
+      {:ok, cat} = Categories.create_category(CashLens.Ownership.current_user!(), attrs)
       cat
     end
 

@@ -1624,3 +1624,8 @@ commit claimed none were added. Fixed; back to 23.
 
 ## [CL-55] Add ownership scoping foundation and tenancy test helpers — 2026-10-13
 - Code review: `Tenancy.pop_user` treats `user: nil` like an absent key; acceptable, but worth a doc line.
+
+## [CL-56] Scope Accounts and Categories by the current user — 2026-10-13
+- Code review: `Categories.broadcast/2` hand-builds the topic string instead of reusing `topic/1`. Minor DRY.
+- Code review: `AccountLive.Index` uses `fetch_account` (rescue) while `Show` has its own `assign_account`. Acceptable.
+- QA: Fix the compile warning at test/cash_lens/categories_test.exs:241.

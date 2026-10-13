@@ -169,6 +169,7 @@ defmodule CashLensWeb.CategoryLive.Index do
       action={@form_action}
       category={@form_category}
       parent_id={@form_parent_id}
+      current_user={@current_user}
     />
 
     <.modal :if={@confirm_modal} id="confirm-modal" show on_cancel={JS.push("close_modal")}>
@@ -431,16 +432,25 @@ defmodule CashLensWeb.CategoryLive.Index do
     socket
     |> assign(:page_title, "Nova Categoria")
     |> assign(:form_action, :new)
-    |> assign(:form_category, %Category{default_reimbursable: false})
+    |> assign(:form_category, %Category{
+      default_reimbursable: false,
+      user_id: socket.assigns.current_user.id
+    })
     |> assign(:form_parent_id, params["parent_id"])
   end
 
   defp apply_action(socket, :edit, %{"id" => id}) do
-    socket
-    |> assign(:page_title, "Editar Categoria")
-    |> assign(:form_action, :edit)
-    |> assign(:form_category, Categories.get_category!(id))
-    |> assign(:form_parent_id, nil)
+    case fetch_category(socket, id) do
+      {:ok, category} ->
+        socket
+        |> assign(:page_title, "Editar Categoria")
+        |> assign(:form_action, :edit)
+        |> assign(:form_category, category)
+        |> assign(:form_parent_id, nil)
+
+      :error ->
+        socket |> category_not_found() |> push_navigate(to: ~p"/categories")
+    end
   end
 
   defp apply_action(socket, _index, _params) do
@@ -451,8 +461,17 @@ defmodule CashLensWeb.CategoryLive.Index do
     |> assign(:form_parent_id, nil)
   end
 
+  # Another user's category is indistinguishable from a missing one.
+  defp fetch_category(socket, id) do
+    {:ok, Categories.get_category!(socket.assigns.current_user, id)}
+  rescue
+    Ecto.NoResultsError -> :error
+  end
+
+  defp category_not_found(socket), do: put_flash(socket, :error, "Categoria não encontrada.")
+
   defp load_categories(socket) do
-    categories = Categories.list_categories()
+    categories = Categories.list_categories(socket.assigns.current_user)
 
     socket
     |> assign(:categories, categories)
@@ -536,15 +555,9 @@ defmodule CashLensWeb.CategoryLive.Index do
   end
 
   def handle_event("toggle_fixed", %{"id" => id}, socket) do
-    category = Categories.get_category!(id)
-    new_type = if category.type == "fixed", do: "variable", else: "fixed"
-
-    case Categories.update_category(category, %{type: new_type}) do
-      {:ok, _updated} ->
-        {:noreply, socket |> load_categories() |> assign_tree()}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Falha ao atualizar.")}
+    case fetch_category(socket, id) do
+      {:ok, category} -> {:noreply, toggle_type(socket, category)}
+      :error -> {:noreply, category_not_found(socket)}
     end
   end
 
@@ -552,17 +565,22 @@ defmodule CashLensWeb.CategoryLive.Index do
   # is deleted, so the modal can state the reason and disable its confirm
   # button instead of letting the delete fail against the database constraint.
   def handle_event("confirm_delete", %{"id" => id}, socket) do
-    category = Categories.get_category!(id)
-    has_children = Enum.any?(socket.assigns.categories, &(&1.parent_id == category.id))
+    case fetch_category(socket, id) do
+      {:ok, category} ->
+        has_children = Enum.any?(socket.assigns.categories, &(&1.parent_id == category.id))
 
-    confirm = %{
-      id: category.id,
-      name: category.name,
-      has_children: has_children,
-      body: confirm_body(category.name, has_children)
-    }
+        confirm = %{
+          id: category.id,
+          name: category.name,
+          has_children: has_children,
+          body: confirm_body(category.name, has_children)
+        }
 
-    {:noreply, assign(socket, :confirm_modal, confirm)}
+        {:noreply, assign(socket, :confirm_modal, confirm)}
+
+      :error ->
+        {:noreply, category_not_found(socket)}
+    end
   end
 
   def handle_event("close_modal", _params, socket),
@@ -572,9 +590,23 @@ defmodule CashLensWeb.CategoryLive.Index do
     do: {:noreply, push_patch(socket, to: ~p"/categories")}
 
   def handle_event("delete", %{"id" => id}, socket) do
-    category = Categories.get_category!(id)
+    case fetch_category(socket, id) do
+      {:ok, category} -> delete_category(socket, category)
+      :error -> {:noreply, socket |> assign(:confirm_modal, nil) |> category_not_found()}
+    end
+  end
 
-    case Categories.delete_category(category) do
+  defp toggle_type(socket, category) do
+    new_type = if category.type == "fixed", do: "variable", else: "fixed"
+
+    case Categories.update_category(socket.assigns.current_user, category, %{type: new_type}) do
+      {:ok, _updated} -> socket |> load_categories() |> assign_tree()
+      {:error, _reason} -> put_flash(socket, :error, "Falha ao atualizar.")
+    end
+  end
+
+  defp delete_category(socket, category) do
+    case Categories.delete_category(socket.assigns.current_user, category) do
       {:ok, _} ->
         {:noreply,
          socket
@@ -582,7 +614,7 @@ defmodule CashLensWeb.CategoryLive.Index do
          |> load_categories()
          |> assign_tree()}
 
-      {:error, _changeset} ->
+      {:error, _reason} ->
         {:noreply,
          socket
          |> assign(:confirm_modal, nil)

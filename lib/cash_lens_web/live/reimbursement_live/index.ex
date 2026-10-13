@@ -1142,7 +1142,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     case categories do
       [] ->
         {:noreply,
-         open_reconcile(socket, expense_ids, credit_ids, :select, list_all_categories())}
+         open_reconcile(socket, expense_ids, credit_ids, :select, list_all_categories(socket))}
 
       [category_id] ->
         {:noreply,
@@ -1151,7 +1151,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
          |> finish_link(category_id)}
 
       ids ->
-        cats = Enum.map(ids, &CashLens.Categories.get_category!/1)
+        cats = Enum.map(ids, &CashLens.Categories.get_category!(socket.assigns.current_user, &1))
         {:noreply, open_reconcile(socket, expense_ids, credit_ids, :buttons, cats)}
     end
   end
@@ -1182,7 +1182,8 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     |> load_data()
   end
 
-  defp list_all_categories, do: CashLens.Categories.list_categories()
+  defp list_all_categories(socket),
+    do: CashLens.Categories.list_categories(socket.assigns.current_user)
 
   # -- selection helpers -----------------------------------------------------
 

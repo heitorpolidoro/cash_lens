@@ -1018,7 +1018,11 @@ defmodule CashLensWeb.ImportLiveTest do
     test "an ambiguous account choice waits for the operator", %{conn: conn, account: account} do
       # The bank hint of the BB sample is "Banco do Brasil": with the two
       # candidates banking elsewhere it matches neither, so no rule can fire.
-      {:ok, _} = CashLens.Accounts.update_account(account, %{accepts_import: false})
+      {:ok, _} =
+        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), account, %{
+          accepts_import: false
+        })
+
       account_fixture(bank: "Bradesco", name: "Conta Um", parser_type: "bb_csv")
       second = account_fixture(bank: "Santander", name: "Conta Dois", parser_type: "bb_csv")
 

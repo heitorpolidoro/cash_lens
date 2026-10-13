@@ -34,8 +34,11 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
      |> assign(assigns)
      |> assign(:category, category)
      |> assign(:fixo_hint, @fixo_hint)
-     |> assign(:parent_options, parent_options(category, action))
-     |> assign(:keyword_conflicts, conflicts_for(category.keywords, category.id))
+     |> assign(:parent_options, parent_options(assigns.current_user, category, action))
+     |> assign(
+       :keyword_conflicts,
+       conflicts_for(assigns.current_user, category.keywords, category.id)
+     )
      |> assign(:form, to_form(Categories.change_category(category, %{})))}
   end
 
@@ -52,18 +55,19 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
   # not a root, so editing a deeper category that predates this rule does not
   # silently promote it to a root. A category may also not become a child of
   # itself or of one of its own descendants.
-  defp parent_options(category, action) do
-    excluded = excluded_parent_ids(category, action)
+  defp parent_options(user, category, action) do
+    excluded = excluded_parent_ids(user, category, action)
 
-    Categories.list_categories()
+    user
+    |> Categories.list_categories()
     |> Enum.filter(&selectable_parent?(&1, category, excluded))
     |> to_options()
   end
 
-  defp excluded_parent_ids(category, :edit),
-    do: MapSet.new(Categories.get_category_ids_with_children(category.id))
+  defp excluded_parent_ids(user, category, :edit),
+    do: MapSet.new(Categories.get_category_ids_with_children(user, category.id))
 
-  defp excluded_parent_ids(_category, :new), do: MapSet.new()
+  defp excluded_parent_ids(_user, _category, :new), do: MapSet.new()
 
   defp selectable_parent?(option, category, excluded) do
     not MapSet.member?(excluded, option.id) and
@@ -203,12 +207,12 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
   # Every keyword in the field is checked, not just the one being typed: a
   # conflict created by the third term is as silent as one created by the
   # first, and the field holds the whole list.
-  defp conflicts_for(nil, _category_id), do: []
+  defp conflicts_for(_user, nil, _category_id), do: []
 
-  defp conflicts_for(keywords, category_id) do
+  defp conflicts_for(user, keywords, category_id) do
     keywords
     |> String.split([",", "\n", "\r\n"])
-    |> Enum.flat_map(&Categories.keyword_conflicts_for(&1, category_id))
+    |> Enum.flat_map(&Categories.keyword_conflicts_for(user, &1, category_id))
     |> Enum.uniq_by(&{&1.text, &1.category.id, &1.shadowed_by_text, &1.shadowed_by.id})
   end
 
@@ -229,7 +233,11 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
      |> assign(:form, to_form(changeset, action: :validate))
      |> assign(
        :keyword_conflicts,
-       conflicts_for(category_params["keywords"], socket.assigns.category.id)
+       conflicts_for(
+         socket.assigns.current_user,
+         category_params["keywords"],
+         socket.assigns.category.id
+       )
      )}
   end
 
@@ -238,10 +246,17 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
   end
 
   defp save_category(socket, :edit, category_params) do
-    case Categories.update_category(socket.assigns.category, category_params) do
+    case Categories.update_category(
+           socket.assigns.current_user,
+           socket.assigns.category,
+           category_params
+         ) do
       {:ok, category} ->
         send(self(), {:category_saved, category, :edit})
         {:noreply, socket}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Categoria não encontrada.")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :form, to_form(surface_slug_error(changeset)))}
@@ -249,7 +264,7 @@ defmodule CashLensWeb.CategoryLive.FormComponent do
   end
 
   defp save_category(socket, :new, category_params) do
-    case Categories.create_category(category_params) do
+    case Categories.create_category(socket.assigns.current_user, category_params) do
       {:ok, category} ->
         send(self(), {:category_saved, category, :new})
         {:noreply, socket}

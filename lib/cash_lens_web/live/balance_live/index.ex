@@ -332,7 +332,7 @@ defmodule CashLensWeb.BalanceLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Saldos")
-     |> assign(:accounts, Accounts.list_accounts())
+     |> assign(:accounts, Accounts.list_accounts(socket.assigns.current_user))
      |> assign(:filters, filters)
      |> close_adjust_modal()
      |> load_balances(filters)}
@@ -459,7 +459,7 @@ defmodule CashLensWeb.BalanceLive.Index do
   end
 
   defp open_adjust_modal(socket, account_id, year, month, current_balance) do
-    account = Accounts.get_account!(account_id)
+    account = Accounts.get_account!(socket.assigns.current_user, account_id)
 
     params = %{
       "real_balance" => Decimal.to_string(Decimal.round(current_balance, 2), :normal),

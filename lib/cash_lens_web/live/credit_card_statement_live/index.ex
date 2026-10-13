@@ -300,7 +300,10 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     |> assign(:gaps, CreditCards.statement_gaps(entries))
     # Every credit-card account, not just those that already have a statement:
     # the whole point of "Nova fatura" is the card that has none.
-    |> assign(:cards, CashLens.Accounts.list_credit_cards() |> Enum.sort_by(& &1.name))
+    |> assign(
+      :cards,
+      CashLens.Accounts.list_credit_cards(socket.assigns.current_user) |> Enum.sort_by(& &1.name)
+    )
     |> assign(:suggestions, current_suggestions(card_groups))
     |> assign(:unlinked_payments, CreditCards.unlinked_card_payments())
     |> apply_filters()

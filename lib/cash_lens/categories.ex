@@ -4,23 +4,25 @@ defmodule CashLens.Categories do
   """
 
   import Ecto.Query, warn: false
+  alias CashLens.Ownership
   alias CashLens.Repo
 
   alias CashLens.Categories.Category
+  alias CashLens.Users.User
 
   @doc """
-  Returns the list of categories.
+  Returns the list of the user's categories.
 
   ## Examples
 
-      iex> list_categories()
+      iex> list_categories(user)
       [%Category{}, ...]
 
   """
-  def list_categories(opts \\ []) do
+  def list_categories(%User{} = user, opts \\ []) do
     name_filter = Keyword.get(opts, :name)
 
-    query = from(c in Category, order_by: [asc: c.slug])
+    query = from(c in Ownership.scope(Category, user), order_by: [asc: c.slug])
 
     query =
       if name_filter && name_filter != "" do
@@ -119,34 +121,40 @@ defmodule CashLens.Categories do
 
   ## Examples
 
-      iex> get_category!(123)
+      iex> get_category!(user, 123)
       %Category{}
 
-      iex> get_category!(456)
+      iex> get_category!(user, 456)
       ** (Ecto.NoResultsError)
 
   """
-  def get_category!(id), do: Repo.get!(Category, id) |> Repo.preload(:parent)
+  def get_category!(%User{} = user, id) do
+    Category |> Ownership.scope(user) |> Repo.get!(id) |> Repo.preload(:parent)
+  end
 
   @doc """
   Gets a list of IDs including the category itself and all its descendants (children, grandchildren, etc.).
   """
-  def get_category_ids_with_children(nil), do: []
+  def get_category_ids_with_children(%User{}, nil), do: []
 
-  def get_category_ids_with_children(category_id) do
+  def get_category_ids_with_children(%User{} = user, category_id) do
     initial_query =
       Category
+      |> Ownership.scope(user)
       |> where([c], c.id == ^category_id)
       |> select([c], %{id: c.id})
 
     recursive_query =
       Category
+      |> Ownership.scope(user)
       |> join(:inner, [c], ct in "category_tree", on: c.parent_id == ct.id)
       |> select([c], %{id: c.id})
 
     cte_query = initial_query |> union_all(^recursive_query)
 
-    recursive_ctes(Category, true)
+    Category
+    |> Ownership.scope(user)
+    |> recursive_ctes(true)
     |> with_cte("category_tree", as: ^cte_query)
     |> join(:inner, [c], ct in "category_tree", on: c.id == ct.id)
     |> select([c], c.id)
@@ -156,47 +164,55 @@ defmodule CashLens.Categories do
   @doc """
   Gets a single category by its slug.
   """
-  def get_category_by_slug(slug) do
-    Repo.get_by(Category, slug: slug)
+  def get_category_by_slug(%User{} = user, slug) do
+    Category |> Ownership.scope(user) |> Repo.get_by(slug: slug)
   end
 
   @doc """
-  Creates a category.
+  Creates a category owned by `user`; a `user_id` in `attrs` is ignored.
 
   ## Examples
 
-      iex> create_category(%{field: value})
+      iex> create_category(user, %{field: value})
       {:ok, %Category{}}
 
-      iex> create_category(%{field: bad_value})
+      iex> create_category(user, %{field: bad_value})
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_category(attrs) do
-    %Category{}
+  def create_category(%User{} = user, attrs) do
+    %Category{user_id: user.id}
     |> Category.changeset(attrs)
     |> Repo.insert()
     |> broadcast(:category_created)
   end
 
   @doc """
-  Updates a category.
+  Updates one of the user's categories; `{:error, :not_found}` for anyone else's.
 
   ## Examples
 
-      iex> update_category(category, %{field: new_value})
+      iex> update_category(user, category, %{field: new_value})
       {:ok, %Category{}}
 
-      iex> update_category(category, %{field: bad_value})
+      iex> update_category(user, category, %{field: bad_value})
       {:error, %Ecto.Changeset{}}
 
   """
-  def update_category(%Category{} = category, attrs) do
-    category
-    |> Category.changeset(attrs)
-    |> Repo.update()
-    |> broadcast(:category_updated)
+  def update_category(%User{} = user, %Category{id: id}, attrs) do
+    case fetch_owned(user, id) do
+      nil ->
+        {:error, :not_found}
+
+      category ->
+        category
+        |> Category.changeset(attrs)
+        |> Repo.update()
+        |> broadcast(:category_updated)
+    end
   end
+
+  defp fetch_owned(user, id), do: Category |> Ownership.scope(user) |> Repo.get(id)
 
   @doc """
   Appends `keyword` to a category's `keywords`, the list `AutoCategorizer`
@@ -209,13 +225,21 @@ defmodule CashLens.Categories do
 
   The separator is `", "`, the format the field already holds.
   """
-  def add_keyword(%Category{} = category, keyword) when is_binary(keyword) do
+  def add_keyword(%User{} = user, %Category{} = category, keyword) when is_binary(keyword) do
     trimmed = normalize_keyword(keyword)
 
     cond do
-      trimmed == "" -> {:ok, category}
-      keyword?(category, trimmed) -> {:ok, category}
-      true -> update_category(category, %{keywords: append_keyword(category.keywords, trimmed)})
+      is_nil(fetch_owned(user, category.id)) ->
+        {:error, :not_found}
+
+      trimmed == "" ->
+        {:ok, category}
+
+      keyword?(category, trimmed) ->
+        {:ok, category}
+
+      true ->
+        update_category(user, category, %{keywords: append_keyword(category.keywords, trimmed)})
     end
   end
 
@@ -267,9 +291,7 @@ defmodule CashLens.Categories do
   Reported, never resolved: which category should own an ambiguous description
   is a judgement about meaning, and the app does not get to make it quietly.
   """
-  def keyword_conflicts(categories \\ nil) do
-    categories = categories || list_categories()
-
+  def keyword_conflicts(categories) do
     indexed =
       for category <- categories,
           text <- split_keywords(category.keywords),
@@ -298,7 +320,7 @@ defmodule CashLens.Categories do
   Used by the forms to warn before the keyword is saved, so the same rule that
   describes an existing clash also describes one about to be made.
   """
-  def keyword_conflicts_for(keyword, category_id) when is_binary(keyword) do
+  def keyword_conflicts_for(%User{} = user, keyword, category_id) when is_binary(keyword) do
     case normalize_keyword(keyword) do
       "" ->
         []
@@ -306,7 +328,8 @@ defmodule CashLens.Categories do
       trimmed ->
         candidate = %Category{id: category_id, name: "", keywords: trimmed}
 
-        list_categories()
+        user
+        |> list_categories()
         |> Enum.reject(&(&1.id == category_id))
         |> then(&keyword_conflicts([candidate | &1]))
         |> Enum.filter(&(&1.category.id == category_id or &1.shadowed_by.id == category_id))
@@ -323,27 +346,44 @@ defmodule CashLens.Categories do
   defp conflict?(a, b), do: String.contains?(b.upcased, a.upcased)
 
   @doc """
-  Deletes a category.
+  Deletes one of the user's categories; `{:error, :not_found}` for anyone else's.
 
   ## Examples
 
-      iex> delete_category(category)
+      iex> delete_category(user, category)
       {:ok, %Category{}}
 
-      iex> delete_category(category)
+      iex> delete_category(user, category)
       {:error, %Ecto.Changeset{}}
 
   """
-  def delete_category(%Category{} = category) do
-    category
-    |> Ecto.Changeset.change()
-    |> Ecto.Changeset.no_assoc_constraint(:children)
-    |> Repo.delete()
-    |> broadcast(:category_deleted)
+  def delete_category(%User{} = user, %Category{id: id}) do
+    case fetch_owned(user, id) do
+      nil ->
+        {:error, :not_found}
+
+      category ->
+        category
+        |> Ecto.Changeset.change()
+        |> Ecto.Changeset.no_assoc_constraint(:children)
+        |> Repo.delete()
+        |> broadcast(:category_deleted)
+    end
   end
 
+  @doc "The PubSub topic carrying the category events of `user`."
+  def topic(%User{id: user_id}), do: "categories:#{user_id}"
+
+  @doc "Subscribes the calling process to the category events of `user`."
+  def subscribe(%User{} = user), do: Phoenix.PubSub.subscribe(CashLens.PubSub, topic(user))
+
   defp broadcast({:ok, category}, event) do
-    Phoenix.PubSub.broadcast(CashLens.PubSub, "categories", {event, category})
+    Phoenix.PubSub.broadcast(
+      CashLens.PubSub,
+      "categories:#{category.user_id}",
+      {event, category}
+    )
+
     {:ok, category}
   end
 

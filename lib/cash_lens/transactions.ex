@@ -253,8 +253,14 @@ defmodule CashLens.Transactions do
         case Repo.one(
                from c in CashLens.Categories.Category, where: c.slug == ^slug, select: c.id
              ) do
-          nil -> []
-          id -> CashLens.Categories.get_category_ids_with_children(id)
+          nil ->
+            []
+
+          id ->
+            CashLens.Categories.get_category_ids_with_children(
+              CashLens.Ownership.current_user!(),
+              id
+            )
         end
       end)
       |> Enum.uniq()
@@ -497,7 +503,12 @@ defmodule CashLens.Transactions do
   end
 
   defp filter_by_category(query, category_id) do
-    ids = CashLens.Categories.get_category_ids_with_children(category_id)
+    ids =
+      CashLens.Categories.get_category_ids_with_children(
+        CashLens.Ownership.current_user!(),
+        category_id
+      )
+
     where(query, [t], t.category_id in ^ids)
   end
 
@@ -841,9 +852,11 @@ defmodule CashLens.Transactions do
 
   defp excluded_cash_summary_category_ids do
     ["initial_value", "transfer"]
-    |> Enum.map(&Categories.get_category_by_slug/1)
+    |> Enum.map(&Categories.get_category_by_slug(CashLens.Ownership.current_user!(), &1))
     |> Enum.reject(&is_nil/1)
-    |> Enum.flat_map(&Categories.get_category_ids_with_children(&1.id))
+    |> Enum.flat_map(
+      &Categories.get_category_ids_with_children(CashLens.Ownership.current_user!(), &1.id)
+    )
     |> Enum.uniq()
   end
 
@@ -857,9 +870,11 @@ defmodule CashLens.Transactions do
   # bare parent slug.
   defp excluded_report_category_ids do
     ["initial_value", "transfer", "cartao-de-credito"]
-    |> Enum.map(&Categories.get_category_by_slug/1)
+    |> Enum.map(&Categories.get_category_by_slug(CashLens.Ownership.current_user!(), &1))
     |> Enum.reject(&is_nil/1)
-    |> Enum.flat_map(&Categories.get_category_ids_with_children(&1.id))
+    |> Enum.flat_map(
+      &Categories.get_category_ids_with_children(CashLens.Ownership.current_user!(), &1.id)
+    )
     |> Enum.uniq()
   end
 
@@ -1213,7 +1228,7 @@ defmodule CashLens.Transactions do
   Deletes all transactions from the database.
   """
   def delete_all_transactions do
-    active_accounts = CashLens.Accounts.list_active_accounts()
+    active_accounts = CashLens.Accounts.list_active_accounts(CashLens.Ownership.current_user!())
     res = Repo.delete_all(Transaction)
 
     Enum.each(active_accounts, fn account ->
@@ -1266,9 +1281,12 @@ defmodule CashLens.Transactions do
     retry_credit_card_matching()
 
     # Rebuild balances for all active accounts after applying rules
-    Enum.each(CashLens.Accounts.list_active_accounts(), fn account ->
-      CashLens.Accounting.rebuild_account_balances(account.id)
-    end)
+    Enum.each(
+      CashLens.Accounts.list_active_accounts(CashLens.Ownership.current_user!()),
+      fn account ->
+        CashLens.Accounting.rebuild_account_balances(account.id)
+      end
+    )
 
     transfer_count_after =
       if transfer_cat_id,
@@ -1280,7 +1298,7 @@ defmodule CashLens.Transactions do
   end
 
   defp get_transfer_category_id do
-    case CashLens.Categories.get_category_by_slug("transfer") do
+    case CashLens.Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer") do
       nil -> nil
       cat -> cat.id
     end
@@ -1345,7 +1363,10 @@ defmodule CashLens.Transactions do
   end
 
   defp get_credit_card_category_id do
-    case CashLens.Categories.get_category_by_slug("cartao-de-credito") do
+    case CashLens.Categories.get_category_by_slug(
+           CashLens.Ownership.current_user!(),
+           "cartao-de-credito"
+         ) do
       nil -> nil
       category -> category.id
     end
@@ -1503,7 +1524,7 @@ defmodule CashLens.Transactions do
   Returns a list of {tx_out, tx_in} tuples sorted by date desc.
   """
   def list_transfer_suggestions do
-    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat = Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer")
     transfer_cat_id = transfer_cat && transfer_cat.id
 
     transfer_suggestion_candidates_query(transfer_cat_id)
@@ -1572,7 +1593,7 @@ defmodule CashLens.Transactions do
   it in to avoid recomputing the pairing query.
   """
   def list_unmatched_transfers_without_suggestion(suggestions \\ nil) do
-    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat = Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer")
 
     if is_nil(transfer_cat) do
       []
@@ -1603,7 +1624,7 @@ defmodule CashLens.Transactions do
   comes first.
   """
   def list_transfer_link_candidates(%Transaction{} = transaction) do
-    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat = Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer")
     transfer_cat_id = transfer_cat && transfer_cat.id
     opposite_sign = if Decimal.negative?(transaction.amount), do: :positive, else: :negative
 
@@ -1656,7 +1677,7 @@ defmodule CashLens.Transactions do
   end
 
   defp insert_mirror(origin, destination_account_id) do
-    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat = Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer")
     transfer_key = Ecto.UUID.generate()
 
     attrs = %{
@@ -1752,8 +1773,14 @@ defmodule CashLens.Transactions do
   defp excluded_reimbursement_category_ids do
     Enum.flat_map(@excluded_reimbursement_slugs, fn slug ->
       case Repo.one(from c in CashLens.Categories.Category, where: c.slug == ^slug, select: c.id) do
-        nil -> []
-        id -> CashLens.Categories.get_category_ids_with_children(id)
+        nil ->
+          []
+
+        id ->
+          CashLens.Categories.get_category_ids_with_children(
+            CashLens.Ownership.current_user!(),
+            id
+          )
       end
     end)
     |> Enum.uniq()
@@ -1866,7 +1893,10 @@ defmodule CashLens.Transactions do
   """
   def link_transfer_pair(tx_id_a, tx_id_b) do
     link_key = Ecto.UUID.generate()
-    transfer_cat = CashLens.Categories.get_category_by_slug("transfer")
+
+    transfer_cat =
+      CashLens.Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer")
+
     cat_id = transfer_cat && transfer_cat.id
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 

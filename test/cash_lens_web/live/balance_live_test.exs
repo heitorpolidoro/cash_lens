@@ -444,7 +444,7 @@ defmodule CashLensWeb.BalanceLiveTest do
       conn: conn,
       balance: balance
     } do
-      account = Accounts.get_account!(balance.account_id)
+      account = Accounts.get_account!(CashLens.Ownership.current_user!(), balance.account_id)
 
       {:ok, index_live, _html} = live(conn, ~p"/balances")
       open_modal(index_live, balance)
@@ -458,7 +458,7 @@ defmodule CashLensWeb.BalanceLiveTest do
 
       assert html =~ "Saldo inicial"
 
-      updated = Accounts.get_account!(balance.account_id)
+      updated = Accounts.get_account!(CashLens.Ownership.current_user!(), balance.account_id)
       assert Decimal.equal?(updated.balance, Decimal.add(account.balance, Decimal.new("30.00")))
     end
 

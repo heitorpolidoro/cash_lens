@@ -396,7 +396,7 @@ defmodule CashLensWeb.AutomationLive.Index do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:accounts, Accounts.list_active_accounts())
+     |> assign(:accounts, Accounts.list_active_accounts(socket.assigns.current_user))
      |> assign(:rule_modal, nil)
      |> assign(:form, nil)
      |> assign(:regex_verdict, nil)

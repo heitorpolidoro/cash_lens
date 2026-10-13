@@ -312,11 +312,14 @@ defmodule CashLensWeb.AccountLive.FormComponent do
     account = socket.assigns.account
     adjusted_params = adjust_initial_balance(socket, account_params)
 
-    case Accounts.update_account(account, adjusted_params) do
+    case Accounts.update_account(socket.assigns.current_user, account, adjusted_params) do
       {:ok, updated} ->
         maybe_rebuild_balances(account, updated)
         send(self(), {:account_saved, updated, :edit})
         {:noreply, socket}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Conta não encontrada.")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset))}
@@ -324,7 +327,7 @@ defmodule CashLensWeb.AccountLive.FormComponent do
   end
 
   defp save_account(socket, :new, account_params) do
-    case Accounts.create_account(account_params) do
+    case Accounts.create_account(socket.assigns.current_user, account_params) do
       {:ok, account} ->
         # Initialize the monthly balance record for the new account.
         Accounting.rebuild_account_balances(account.id)

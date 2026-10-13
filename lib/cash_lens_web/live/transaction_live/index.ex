@@ -10,8 +10,8 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket), do: Phoenix.PubSub.subscribe(CashLens.PubSub, "categories")
-    accounts = Accounts.list_accounts()
+    if connected?(socket), do: Categories.subscribe(socket.assigns.current_user)
+    accounts = Accounts.list_accounts(socket.assigns.current_user)
 
     {:ok,
      socket
@@ -37,7 +37,12 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:pending_transaction_id, nil)
      |> assign(
        :category_form,
-       to_form(Categories.change_category(%Category{default_reimbursable: false}))
+       to_form(
+         Categories.change_category(%Category{
+           default_reimbursable: false,
+           user_id: socket.assigns.current_user.id
+         })
+       )
      )
      |> assign(:quick_category_parent, nil)
      |> assign(:auto_categorizing, false)
@@ -49,7 +54,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:reimbursement_pair_view, nil)
      |> assign(:confirm_modal, nil)
      |> assign(:accounts, accounts)
-     |> assign(:categories, Categories.list_categories())
+     |> assign(:categories, Categories.list_categories(socket.assigns.current_user))
      |> assign(:filters, default_filters())
      |> assign(:page, 1)
      |> assign(:end_of_list?, false)
@@ -127,7 +132,10 @@ defmodule CashLensWeb.TransactionLive.Index do
     |> assign(:page_title, "Editar Transação")
     |> assign(:form_action, :edit)
     |> assign(:form_transaction, transaction)
-    |> assign(:accounts, with_account(socket.assigns.accounts, transaction))
+    |> assign(
+      :accounts,
+      with_account(socket.assigns.current_user, socket.assigns.accounts, transaction)
+    )
     |> assign(:show_transaction, nil)
   end
 
@@ -149,19 +157,19 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   # A transaction may sit on a closed account that the select no longer lists;
   # without this the edit modal would silently re-point it somewhere else.
-  defp with_account(accounts, %{account_id: nil}), do: accounts
+  defp with_account(_user, accounts, %{account_id: nil}), do: accounts
 
-  defp with_account(accounts, transaction) do
+  defp with_account(user, accounts, transaction) do
     if Enum.any?(accounts, &(&1.id == transaction.account_id)) do
       accounts
     else
-      [Accounts.get_account!(transaction.account_id) | accounts]
+      [Accounts.get_account!(user, transaction.account_id) | accounts]
     end
   end
 
   defp assign_transfer_category_id(socket) do
     id =
-      case Categories.get_category_by_slug("transfer") do
+      case Categories.get_category_by_slug(socket.assigns.current_user, "transfer") do
         nil -> nil
         cat -> cat.id
       end
@@ -311,7 +319,12 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("open_quick_category", %{"name" => name, "id" => tx_id}, socket) do
     suggested_name = name |> String.split(" ") |> Enum.map_join(" ", &String.capitalize/1)
-    new_category = %Category{name: suggested_name, default_reimbursable: false}
+
+    new_category = %Category{
+      name: suggested_name,
+      default_reimbursable: false,
+      user_id: socket.assigns.current_user.id
+    }
 
     {:noreply,
      socket
@@ -444,7 +457,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())
-     |> assign(:categories, Categories.list_categories())
+     |> assign(:categories, Categories.list_categories(socket.assigns.current_user))
      |> assign(:pending_count, Transactions.count_pending_transactions())
      |> put_flash(:success, bulk_flash(length(selected_items), rule))
      |> refresh_transactions_page1(socket.assigns.filters)}
@@ -814,14 +827,16 @@ defmodule CashLensWeb.TransactionLive.Index do
     if target_transaction_id do
       process_category_created_with_tx(socket, category, target_transaction_id)
     else
-      {:noreply, assign(socket, :categories, Categories.list_categories())}
+      {:noreply,
+       assign(socket, :categories, Categories.list_categories(socket.assigns.current_user))}
     end
   end
 
   @impl true
   def handle_info({event, _category}, socket)
       when event in [:category_created, :category_updated, :category_deleted] do
-    {:noreply, assign(socket, :categories, Categories.list_categories())}
+    {:noreply,
+     assign(socket, :categories, Categories.list_categories(socket.assigns.current_user))}
   end
 
   # Helpers
@@ -832,7 +847,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     socket =
       socket
       |> assign(:show_quick_category_modal, false)
-      |> assign(:categories, Categories.list_categories())
+      |> assign(:categories, Categories.list_categories(socket.assigns.current_user))
       |> assign(:pending_count, Transactions.count_pending_transactions())
       |> calculate_summary()
       |> put_flash(:success, "Categoria criada!")
@@ -999,14 +1014,21 @@ defmodule CashLensWeb.TransactionLive.Index do
   defp assign_rule_conflicts(socket, keyword) do
     category_id = socket.assigns.bulk_confirmation && socket.assigns.bulk_confirmation.category_id
 
-    assign(socket, :bulk_rule_conflicts, Categories.keyword_conflicts_for(keyword, category_id))
+    assign(
+      socket,
+      :bulk_rule_conflicts,
+      Categories.keyword_conflicts_for(socket.assigns.current_user, keyword, category_id)
+    )
   end
 
-  defp maybe_create_rule(%{assigns: %{bulk_create_rule: true, bulk_rule_keyword: keyword}}, id) do
+  defp maybe_create_rule(
+         %{assigns: %{bulk_create_rule: true, bulk_rule_keyword: keyword, current_user: user}},
+         id
+       ) do
     # Re-read the category instead of taking it from `@categories`: the assign
     # was loaded when the page rendered, and appending to a stale `keywords`
     # would silently drop any rule added since.
-    case Categories.add_keyword(Categories.get_category!(id), keyword) do
+    case Categories.add_keyword(user, Categories.get_category!(user, id), keyword) do
       {:ok, _updated} -> String.trim(keyword)
       {:error, _changeset} -> nil
     end
@@ -1079,7 +1101,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     origin_tx = socket.assigns.transfer_origin
     target_amount = Decimal.mult(origin_tx.amount, -1)
 
-    transfer_cat = Categories.get_category_by_slug("transfer")
+    transfer_cat = Categories.get_category_by_slug(socket.assigns.current_user, "transfer")
     transfer_cat_id = if transfer_cat, do: transfer_cat.id, else: nil
 
     # 1. Broad search for opposite value transactions

@@ -213,7 +213,12 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
     test "a reconciled statement shows its payment in the row", %{conn: conn, a: a} do
       bank = account_fixture(%{name: "Conta"})
-      category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      category =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
 
       payment =
         transaction_fixture(%{
@@ -381,7 +386,11 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       card: card,
       bank: bank
     } do
-      category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+      category =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
 
       payment =
         transaction_fixture(%{
@@ -412,7 +421,13 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
   describe "unlinked payments" do
     test "lists card-categorized transactions no statement claims", %{conn: conn} do
       payment_category()
-      category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      category =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
+
       bank = account_fixture(%{name: "Itau Conta"})
 
       loose =
@@ -462,7 +477,12 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
     test "renders the reconcile block and links the payment in one click", ctx do
       %{conn: conn, statement: statement, purchase: purchase, bank: bank} = ctx
-      category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      category =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
 
       # Two exact payments: CreditCards.Matcher refuses to guess between them,
       # so the statement stays unpaid and the banner is what offers the choice.
@@ -513,7 +533,12 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
     test "unlinking reverses the reconciliation", ctx do
       %{conn: conn, statement: statement, purchase: purchase, bank: bank} = ctx
-      category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      category =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
 
       debit =
         transaction_fixture(%{
@@ -553,7 +578,12 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
     test "manual linking through the candidate picker pays the statement", ctx do
       %{conn: conn, statement: statement, purchase: purchase, bank: bank} = ctx
-      category = CashLens.Categories.get_category_by_slug("cartao-de-credito")
+
+      category =
+        CashLens.Categories.get_category_by_slug(
+          CashLens.Ownership.current_user!(),
+          "cartao-de-credito"
+        )
 
       other =
         transaction_fixture(%{

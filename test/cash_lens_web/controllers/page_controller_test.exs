@@ -34,7 +34,10 @@ defmodule CashLensWeb.PageControllerTest do
     first = get(conn, ~p"/")
     assert Decimal.equal?(first.assigns.monthly_income, Decimal.new("321.00"))
 
-    {:ok, _} = CashLens.Categories.update_category(moved, %{parent_id: transfer.id})
+    {:ok, _} =
+      CashLens.Categories.update_category(CashLens.Ownership.current_user!(), moved, %{
+        parent_id: transfer.id
+      })
 
     second = get(conn, ~p"/")
     assert Decimal.equal?(second.assigns.monthly_income, Decimal.new("0"))
@@ -507,7 +510,8 @@ defmodule CashLensWeb.PageControllerTest do
       alfa = account_fixture(%{name: "Alfa"})
       bravo = account_fixture(%{name: "Bravo"})
 
-      :ok = CashLens.Accounts.reorder_accounts([bravo.id, alfa.id])
+      :ok =
+        CashLens.Accounts.reorder_accounts(CashLens.Ownership.current_user!(), [bravo.id, alfa.id])
 
       html = conn |> get(~p"/") |> html_response(200)
 

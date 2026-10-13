@@ -39,7 +39,17 @@ defmodule CashLensWeb.CategoryLive.Show do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    {:ok,
-     assign(socket, :category, Categories.get_category!(id) |> CashLens.Repo.preload(:parent))}
+    {:ok, assign_category(socket, id)}
+  end
+
+  # Another user's category is indistinguishable from a missing one: back to the
+  # list, never rendering its data.
+  defp assign_category(socket, id) do
+    assign(socket, :category, Categories.get_category!(socket.assigns.current_user, id))
+  rescue
+    Ecto.NoResultsError ->
+      socket
+      |> put_flash(:error, "Categoria não encontrada.")
+      |> push_navigate(to: ~p"/categories")
   end
 end

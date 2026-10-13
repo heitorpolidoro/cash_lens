@@ -97,9 +97,12 @@ defmodule CashLens.CreditCards.Matcher do
   # `cartao-de-credito-pagamento`, not the bare parent slug). Returns [] when
   # the parent category doesn't exist.
   defp credit_card_category_ids do
-    case Categories.get_category_by_slug("cartao-de-credito") do
-      nil -> []
-      category -> Categories.get_category_ids_with_children(category.id)
+    case Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "cartao-de-credito") do
+      nil ->
+        []
+
+      category ->
+        Categories.get_category_ids_with_children(CashLens.Ownership.current_user!(), category.id)
     end
   end
 

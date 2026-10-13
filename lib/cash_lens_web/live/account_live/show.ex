@@ -34,9 +34,20 @@ defmodule CashLensWeb.AccountLive.Show do
     {:ok,
      socket
      |> assign(:page_title, "Detalhes da Conta")
-     |> assign(:account, Accounts.get_account!(id))
+     |> assign_account(id)
      # Same reason as the statement screen: a transaction typed from an
      # account's own page belongs to that account.
      |> assign(:new_transaction_account_id, id)}
+  end
+
+  # Another user's account is indistinguishable from a missing one: back to the
+  # list, never rendering its data.
+  defp assign_account(socket, id) do
+    assign(socket, :account, Accounts.get_account!(socket.assigns.current_user, id))
+  rescue
+    Ecto.NoResultsError ->
+      socket
+      |> put_flash(:error, "Conta não encontrada.")
+      |> push_navigate(to: ~p"/accounts")
   end
 end

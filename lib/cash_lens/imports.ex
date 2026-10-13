@@ -240,7 +240,7 @@ defmodule CashLens.Imports do
   """
   def account_for_entry(%{bank: bank, account: name})
       when is_binary(bank) and is_binary(name) do
-    case Accounts.find_accounts_by_bank_and_name(bank, name) do
+    case Accounts.find_accounts_by_bank_and_name(CashLens.Ownership.current_user!(), bank, name) do
       [account] -> {:ok, account}
       [] -> {:error, :not_found}
       _many -> {:error, :ambiguous}
@@ -394,7 +394,7 @@ defmodule CashLens.Imports do
     extension = extension_of(format)
 
     {exact, family} =
-      Accounts.list_accounts()
+      Accounts.list_accounts(CashLens.Ownership.current_user!())
       |> Enum.filter(&importable_for?(&1, extension))
       |> Enum.sort_by(&{&1.bank, &1.name})
       |> Enum.split_with(&exact_parser?(&1, Map.get(verdict, :parser_type)))
@@ -571,7 +571,7 @@ defmodule CashLens.Imports do
   # account's `parser_type`, falling back to the `.account` file's own `parser`
   # when the account does not exist (or is ambiguous) yet.
   defp resolve_parser_type(%{bank: bank, account: name, parser: parser}) do
-    case Accounts.find_accounts_by_bank_and_name(bank, name) do
+    case Accounts.find_accounts_by_bank_and_name(CashLens.Ownership.current_user!(), bank, name) do
       [account] -> {:ok, account.parser_type}
       _ when is_binary(parser) -> {:ok, parser}
       _ -> :error

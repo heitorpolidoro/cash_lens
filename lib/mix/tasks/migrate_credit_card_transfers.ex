@@ -44,7 +44,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
     # Row-level security: maintenance work acts for the operator (CL-53).
     CashLens.Ownership.pin_operator!()
 
-    case Categories.get_category_by_slug("cartao-de-credito") do
+    case Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "cartao-de-credito") do
       nil ->
         Logger.error(
           "MigrateCreditCardTransfers: 'cartao-de-credito' category not found — run seeds first."

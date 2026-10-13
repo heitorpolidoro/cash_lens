@@ -23,7 +23,7 @@ defmodule CashLens.AccountsFixtures do
           icon: "some icon",
           name: "account #{unique_id}"
         })
-        |> CashLens.Accounts.create_account()
+        |> then(&CashLens.Accounts.create_account(user, &1))
       end)
 
     account

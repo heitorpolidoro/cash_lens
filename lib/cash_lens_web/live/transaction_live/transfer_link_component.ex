@@ -206,7 +206,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
     {:ok, origin_tx} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
 
     # 2. Create target transaction
-    transfer_category = Categories.get_category_by_slug("transfer")
+    transfer_category = Categories.get_category_by_slug(socket.assigns.current_user, "transfer")
 
     {:ok, pair_tx} =
       Transactions.create_transaction(%{

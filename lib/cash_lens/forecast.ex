@@ -208,7 +208,7 @@ defmodule CashLens.Forecast do
   """
   def sync_all do
     fixed_categories =
-      Categories.list_categories()
+      Categories.list_categories(CashLens.Ownership.current_user!())
       |> Enum.filter(&(&1.type == "fixed" and not credit_card_category?(&1)))
 
     existing_by_category = Map.new(list_recurring_items(), &{&1.category_id, &1})
@@ -333,7 +333,7 @@ defmodule CashLens.Forecast do
   resets manually_edited to false.
   """
   def resync_item(%RecurringItem{} = item) do
-    category = Categories.get_category!(item.category_id)
+    category = Categories.get_category!(CashLens.Ownership.current_user!(), item.category_id)
 
     case suggest_for_category(category) do
       {:ok, suggestion} ->
@@ -381,7 +381,10 @@ defmodule CashLens.Forecast do
   `horizon_days`.
   """
   def project(horizon_days \\ @default_horizon_days, today \\ Date.utc_today(), opts \\ []) do
-    accounts = Keyword.get_lazy(opts, :accounts, &Accounts.list_accounts/0)
+    accounts =
+      Keyword.get_lazy(opts, :accounts, fn ->
+        Accounts.list_accounts(CashLens.Ownership.current_user!())
+      end)
 
     starting_balance = current_balance(accounts, opts)
     horizon_end = Date.add(today, horizon_days)
@@ -835,7 +838,7 @@ defmodule CashLens.Forecast do
   def list_categories_without_recurring_item do
     taken = MapSet.new(list_recurring_items(), & &1.category_id)
 
-    Categories.list_categories()
+    Categories.list_categories(CashLens.Ownership.current_user!())
     |> Enum.reject(&(MapSet.member?(taken, &1.id) or credit_card_category?(&1)))
     |> Enum.sort_by(& &1.name)
   end
@@ -992,7 +995,9 @@ defmodule CashLens.Forecast do
   """
   def card_occurrences(today, horizon_end, opts \\ []) do
     opts
-    |> Keyword.get_lazy(:accounts, &Accounts.list_accounts/0)
+    |> Keyword.get_lazy(:accounts, fn ->
+      Accounts.list_accounts(CashLens.Ownership.current_user!())
+    end)
     |> card_accounts()
     |> Enum.flat_map(&card_account_occurrences(&1, today, horizon_end))
   end

@@ -863,6 +863,7 @@
     pending_transfers={@pending_transfers}
     quick_transfer_form={@quick_transfer_form}
     accounts={@accounts}
+    current_user={@current_user}
   />
 
   <.live_component
@@ -1004,6 +1005,7 @@
     categories={@categories}
     category_form={@category_form}
     current_parent={@quick_category_parent}
+    current_user={@current_user}
   />
 
   <.modal :if={@show_notes_modal} id="notes-modal" show on_cancel={JS.push("close_modal")}>
