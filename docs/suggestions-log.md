@@ -1551,3 +1551,7 @@ commit claimed none were added. Fixed; back to 23.
 
 ## [CL-48] Mostrar parcelamentos (financiamento, consórcio, empréstimo) na tela de Contas Recorrentes — 2026-10-13
 - Code review: list_commitment_rows calls Installments.last_installment_date twice per group; minor.
+
+## [CL-42] Resolve the excluded summary category ids once per request — 2026-10-13
+- Code review: the old `# Category ids to exclude...` comment now sits above the new `@doc`; move it next to `excluded_cash_summary_category_ids/0`.
+- Code review: the freshness test does not assert the first request counted the transaction via ids resolved once; the budget test covers the query count, which is sufficient.

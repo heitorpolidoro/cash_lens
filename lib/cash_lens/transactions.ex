@@ -525,15 +525,19 @@ defmodule CashLens.Transactions do
   Considers only the cash-accounts scope (`CashLens.Accounts.Scopes`) unless a specific
   account_id filter is passed.
   Includes credit-card bill payments (cartao-de-credito) on bank accounts as cash expenses.
+
+  `opts` may carry `:excluded_category_ids`, the list `summary_excluded_category_ids/0`
+  returned, so a caller making several summary reads resolves it once. Without it
+  the ids are resolved here.
   """
-  def get_monthly_summary(date \\ nil, filters \\ %{}) do
+  def get_monthly_summary(date \\ nil, filters \\ %{}, opts \\ []) do
     filters = filters || %{}
     target_date = date || get_latest_transaction_date() || Date.utc_today()
     {first_of_month, last_of_month} = get_summary_period(target_date, filters)
 
     result =
       Transaction
-      |> build_summary_base_query()
+      |> build_summary_base_query(excluded_ids(opts))
       |> apply_summary_date_filters(first_of_month, last_of_month, filters)
       |> apply_summary_account_filter(filters)
       |> aggregate_summary_totals()
@@ -695,10 +699,10 @@ defmodule CashLens.Transactions do
     {first, Date.end_of_month(first)}
   end
 
-  defp build_summary_base_query(query) do
+  defp build_summary_base_query(query, excluded_ids) do
     from t in query,
       left_join: c in assoc(t, :category),
-      where: is_nil(c.id) or c.id not in ^excluded_cash_summary_category_ids(),
+      where: is_nil(c.id) or c.id not in ^excluded_ids,
       where: is_nil(t.reimbursement_link_key)
   end
 
@@ -733,16 +737,19 @@ defmodule CashLens.Transactions do
   @doc """
   Returns pure income and expenses history grouped by month, excluding transfers.
   Considers only the cash-accounts scope (`CashLens.Accounts.Scopes`).
+
+  Options: `:limit`, and `:excluded_category_ids` (see `get_monthly_summary/3`).
   """
   def get_historical_summary(opts \\ []) do
     limit = Keyword.get(opts, :limit)
+    excluded_ids = excluded_ids(opts)
 
     cash_transactions = Scopes.cash_accounts_only(Transaction)
 
     query =
       from t in cash_transactions,
         left_join: c in assoc(t, :category),
-        where: is_nil(c.id) or c.id not in ^excluded_cash_summary_category_ids(),
+        where: is_nil(c.id) or c.id not in ^excluded_ids,
         where: is_nil(t.reimbursement_link_key),
         group_by: [
           fragment("EXTRACT(YEAR FROM ?)::integer", t.date),
@@ -819,6 +826,19 @@ defmodule CashLens.Transactions do
   # Category ids to exclude from cash flow summaries (monthly and historical):
   # transfers and initial opening balance. Credit-card bill payments (cartao-de-credito)
   # are real cash outflows on bank accounts, so they are INCLUDED in cash flow.
+  @doc """
+  Resolves the category ids the cash-flow summaries leave out (transfers and
+  opening balances, with their subtrees).
+
+  Costs four queries. A caller making several summary reads in one request
+  calls this once and passes the result as `:excluded_category_ids`. It is not
+  cached anywhere: the answer is only as fresh as the call.
+  """
+  def summary_excluded_category_ids, do: excluded_cash_summary_category_ids()
+
+  defp excluded_ids(opts),
+    do: Keyword.get_lazy(opts, :excluded_category_ids, &excluded_cash_summary_category_ids/0)
+
   defp excluded_cash_summary_category_ids do
     ["initial_value", "transfer"]
     |> Enum.map(&Categories.get_category_by_slug/1)
@@ -1922,15 +1942,22 @@ defmodule CashLens.Transactions do
   arrow pointed the wrong way for want of data, which is the one direction a
   warning must never point.
 
+  Options: `:months` (the baseline length) and `:excluded_category_ids`, passed
+  through to `get_historical_summary/1`.
+
   The average deliberately spans whole months only. A month still running
   would drag the baseline towards whatever today happens to be, which is the
   very thing being measured.
   """
-  def spend_rate(month, expenses, today \\ Date.utc_today(), months \\ @spend_rate_months)
+  def spend_rate(month, expenses, today \\ Date.utc_today(), opts \\ [])
 
-  def spend_rate(%Date{} = month, expenses, %Date{} = today, months) do
+  def spend_rate(%Date{} = month, expenses, %Date{} = today, opts) do
+    months = Keyword.get(opts, :months, @spend_rate_months)
+
     previous =
-      [limit: months + 2]
+      opts
+      |> Keyword.take([:excluded_category_ids])
+      |> Keyword.put(:limit, months + 2)
       |> get_historical_summary()
       |> Enum.filter(&earlier_month?(&1, month))
       |> Enum.take(-months)

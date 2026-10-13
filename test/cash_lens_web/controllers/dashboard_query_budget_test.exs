@@ -53,10 +53,12 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # which is which.
   # ---------------------------------------------------------------------------
 
-  # 67 = 283 - 174 - 42: the 283 measured before CL-39, less the 174
+  # 59 = 283 - 174 - 42 - 8: the 283 measured before CL-39, less the 174
   # `installment_groups` (177 -> 3) and 42 `credit_card_statements` (47 -> 5)
-  # queries it removed. The 283rd was `spend_rate/4`'s covered-days probe.
-  @total_ceiling 283 - 174 - 42 + @total_delta
+  # queries it removed, less the 8 `categories` queries CL-42 removed (the
+  # excluded-ids resolution runs once per request, not on each of three reads).
+  # The 283rd was `spend_rate/4`'s covered-days probe.
+  @total_ceiling 283 - 174 - 42 - 8 + @total_delta
 
   # 3 = one `Installments.list_account_groups/1` per card (2) plus 1 for
   # `list_off_card_groups/0`.
@@ -97,10 +99,11 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # once in `overdue_occurrences/1`.
   @recurring_items_ceiling 2 + 0
 
-  # 13 measured + 0. `excluded_cash_summary_category_ids/0` costs 4 (two slug
-  # lookups, two recursive CTEs) on each of the three summary reads, plus the
+  # 5 = the 4 queries of one `Transactions.summary_excluded_category_ids/0`
+  # resolution (two slug lookups, two recursive CTEs), which the controller runs
+  # once and hands to every summary read (was 12 across three reads), plus the
   # fixed-category lookup behind the variable baseline.
-  @categories_ceiling 13 + 0
+  @categories_ceiling 5 + 0
 
   setup do
     # Every date is derived from today. A fixture pinned to a literal year

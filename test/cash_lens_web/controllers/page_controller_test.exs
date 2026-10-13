@@ -17,6 +17,29 @@ defmodule CashLensWeb.PageControllerTest do
     # Monthly summary income/expenses should be present (based on seeds/fixtures logic)
   end
 
+  test "GET / sees a category re-parented under transfer between two requests", %{conn: conn} do
+    import CashLens.CategoriesFixtures
+
+    transfer = category_fixture(%{name: "Transferência", slug: "transfer", type: "variable"})
+    moved = category_fixture(%{name: "Movida", type: "variable"})
+    account = account_fixture()
+
+    transaction_fixture(%{
+      account_id: account.id,
+      amount: "321.00",
+      date: Date.utc_today(),
+      category_id: moved.id
+    })
+
+    first = get(conn, ~p"/")
+    assert Decimal.equal?(first.assigns.monthly_income, Decimal.new("321.00"))
+
+    {:ok, _} = CashLens.Categories.update_category(moved, %{parent_id: transfer.id})
+
+    second = get(conn, ~p"/")
+    assert Decimal.equal?(second.assigns.monthly_income, Decimal.new("0"))
+  end
+
   test "GET / with historical data", %{conn: conn} do
     account = account_fixture()
     # Past month balance

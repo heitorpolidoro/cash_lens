@@ -30,12 +30,16 @@ defmodule CashLensWeb.PageController do
         latest_balances: latest_balances
       )
 
+    # Resolved once and handed to every summary read: the answer is the same
+    # within a request, and it is not kept past it.
+    summary_opts = [excluded_category_ids: Transactions.summary_excluded_category_ids()]
+
     # Real history only: the last 12 months up to and including the current one.
     today = Date.utc_today()
     {start_m, start_y} = calculate_start_period(today, @history_months - 1)
 
     historical_balances = Accounting.get_historical_balances(limit: 24, heal: false)
-    historical_summary = Transactions.get_historical_summary(limit: 24)
+    historical_summary = Transactions.get_historical_summary([{:limit, 24} | summary_opts])
 
     historical =
       generate_historical_series(start_y, start_m, historical_balances, historical_summary)
@@ -66,7 +70,7 @@ defmodule CashLensWeb.PageController do
         Decimal.add(acc, a.display_balance)
       end)
 
-    summary = Transactions.get_monthly_summary()
+    summary = Transactions.get_monthly_summary(nil, %{}, summary_opts)
     month_name = CashLensWeb.Formatters.month_name(summary.month.month)
 
     balance_account_ids = MapSet.new(accounts_with_data, & &1.id)
@@ -81,7 +85,7 @@ defmodule CashLensWeb.PageController do
       total_balance: total_balance,
       monthly_income: summary.income,
       monthly_expenses: summary.expenses,
-      spend_rate: Transactions.spend_rate(summary.month, summary.expenses, today),
+      spend_rate: Transactions.spend_rate(summary.month, summary.expenses, today, summary_opts),
       monthly_balance: Decimal.sub(total_balance, initial_balance_total),
       accounts: accounts_with_data,
       summary_month: month_name,
