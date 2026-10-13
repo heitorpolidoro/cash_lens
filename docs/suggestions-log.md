@@ -1548,3 +1548,6 @@ commit claimed none were added. Fixed; back to 23.
 
 ## [CL-47] Sync must switch off recurring items whose bill stopped — 2026-10-13
 - Code review: in the :insufficient_history branch the window query runs a second time (suggest_for_category already fetched the rows). Acceptable since the spec forbids changing the return contract.
+
+## [CL-48] Mostrar parcelamentos (financiamento, consórcio, empréstimo) na tela de Contas Recorrentes — 2026-10-13
+- Code review: list_commitment_rows calls Installments.last_installment_date twice per group; minor.

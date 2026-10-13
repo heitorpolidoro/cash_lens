@@ -138,6 +138,39 @@ defmodule CashLens.Forecast do
   end
 
   @doc """
+  The read-only rows for the recurring-items screen: off-card installment groups
+  (financing, consorcio, emprestimo) still running this month.
+
+  They reach the forecast through the temporary recurrences, so the screen only
+  lists them; nothing here feeds a total. Card groups are absent because
+  `Installments.list_off_card_groups/0` excludes them, and groups whose last
+  parcel is before the current month are finished.
+  """
+  def list_commitment_rows(today \\ Date.utc_today()) do
+    month = Date.beginning_of_month(today)
+
+    Installments.list_off_card_groups()
+    |> Enum.filter(fn g ->
+      case Installments.last_installment_date(g) do
+        nil -> false
+        last -> Date.compare(last, month) != :lt
+      end
+    end)
+    |> Enum.map(fn g ->
+      %{
+        id: g.id,
+        label: g.description_pattern,
+        commitment_type: g.commitment_type,
+        position: Installments.parcel_position(g, month) || 1,
+        installments: g.installments,
+        end_date: Installments.last_installment_date(g),
+        day_of_month: g.start_date.day,
+        amount: Decimal.negate(Installments.parcel_value(g))
+      }
+    end)
+  end
+
+  @doc """
   Deletes a recurring item.
 
   Deleting is not the same as switching one off: an item that is off keeps its
@@ -187,7 +220,17 @@ defmodule CashLens.Forecast do
 
   defp sync_one(_category, %RecurringItem{manually_edited: true}, acc), do: acc
 
+  # A category wholly covered by installment groups is projected as a commitment;
+  # creating an item for it would charge the same expense twice.
   defp sync_one(category, nil, acc) do
+    if fully_grouped_category?(category.id), do: acc, else: sync_new(category, acc)
+  end
+
+  defp sync_one(category, %RecurringItem{} = item, acc) do
+    sync_existing(category, item, acc)
+  end
+
+  defp sync_new(category, acc) do
     case suggest_for_category(category) do
       {:ok, suggestion} ->
         {:ok, _} =
@@ -202,7 +245,7 @@ defmodule CashLens.Forecast do
     end
   end
 
-  defp sync_one(category, %RecurringItem{} = item, acc) do
+  defp sync_existing(category, item, acc) do
     case suggest_for_category(category) do
       {:ok, suggestion} ->
         {:ok, _} = item |> RecurringItem.changeset(suggestion) |> Repo.update()

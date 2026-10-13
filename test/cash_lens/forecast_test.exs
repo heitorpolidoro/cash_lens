@@ -2497,4 +2497,92 @@ defmodule CashLens.ForecastTest do
       assert bills.last_date == nil
     end
   end
+
+  describe "list_commitment_rows/0 and the sync rule" do
+    import CashLens.AccountsFixtures
+    import CashLens.TransactionsFixtures
+
+    defp mk_group(attrs) do
+      {:ok, group} =
+        CashLens.Installments.create_installment_group(
+          Map.merge(
+            %{
+              description_pattern: "G #{System.unique_integer([:positive])}",
+              commitment_type: "financing",
+              installments: 48,
+              start_date: Date.add(Date.utc_today(), -330),
+              total_amount: "48000.00"
+            },
+            attrs
+          )
+        )
+
+      group
+    end
+
+    test "lists a running off-card group with position, end date, day and value" do
+      group =
+        mk_group(%{description_pattern: "Apto", start_date: Date.add(Date.utc_today(), -330)})
+
+      assert [row] = Forecast.list_commitment_rows()
+      assert row.id == group.id
+      assert row.label == "Apto"
+      assert row.commitment_type == "financing"
+      assert row.installments == 48
+      assert row.day_of_month == group.start_date.day
+      assert row.end_date == CashLens.Installments.last_installment_date(group)
+      assert Decimal.equal?(row.amount, Decimal.new("-1000.00"))
+
+      assert row.position ==
+               CashLens.Installments.parcel_position(
+                 group,
+                 Date.beginning_of_month(Date.utc_today())
+               )
+    end
+
+    test "a group that has not started shows parcel 1" do
+      mk_group(%{start_date: Date.add(Date.utc_today(), 90)})
+      assert [%{position: 1}] = Forecast.list_commitment_rows()
+    end
+
+    test "omits finished groups and groups on a credit card" do
+      mk_group(%{installments: 3, start_date: Date.add(Date.utc_today(), -200)})
+
+      card = account_fixture(%{is_credit_card: true})
+      on_card = mk_group(%{})
+
+      tx = transaction_fixture(%{account_id: card.id, amount: "-100.00", date: Date.utc_today()})
+
+      CashLens.Repo.update_all(
+        from(t in CashLens.Transactions.Transaction, where: t.id == ^tx.id),
+        set: [installment_group_id: on_card.id, installment_number: 1]
+      )
+
+      assert Forecast.list_commitment_rows() == []
+    end
+
+    test "sync_all creates no item for a category wholly linked to groups" do
+      account = account_fixture()
+      category = category_fixture(%{type: "fixed", name: "Financiamento"})
+      group = mk_group(%{})
+
+      for m <- 1..3 do
+        tx =
+          transaction_fixture(%{
+            account_id: account.id,
+            category_id: category.id,
+            amount: "-1000.00",
+            date: Date.add(Date.utc_today(), -30 * m)
+          })
+
+        CashLens.Repo.update_all(
+          from(t in CashLens.Transactions.Transaction, where: t.id == ^tx.id),
+          set: [installment_group_id: group.id, installment_number: m]
+        )
+      end
+
+      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.list_recurring_items() == []
+    end
+  end
 end

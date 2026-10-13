@@ -309,4 +309,58 @@ defmodule CashLensWeb.RecurringItemLiveTest do
 
     assert render(live) =~ "Luz"
   end
+
+  describe "installment commitments" do
+    defp commitment(attrs) do
+      {:ok, group} =
+        CashLens.Installments.create_installment_group(
+          Map.merge(
+            %{
+              description_pattern: "Financiamento Apto",
+              commitment_type: "financing",
+              installments: 48,
+              start_date: Date.add(Date.utc_today(), -330),
+              total_amount: "48000.00"
+            },
+            attrs
+          )
+        )
+
+      group
+    end
+
+    test "shows a read-only row with badge, position, end date, day and value", %{conn: conn} do
+      group = commitment(%{})
+      {:ok, live, html} = live(conn, ~p"/recurring_items")
+
+      assert has_element?(live, "#commitment-#{group.id}")
+      assert html =~ "Parcelado"
+      assert html =~ "Financiamento Apto"
+
+      assert html =~
+               "#{CashLens.Installments.parcel_position(group, Date.beginning_of_month(Date.utc_today()))} de 48"
+
+      assert html =~ "1.000,00"
+
+      assert html =~
+               Calendar.strftime(CashLens.Installments.last_installment_date(group), "%m/%Y")
+
+      refute has_element?(live, "#toggle-#{group.id}")
+      refute has_element?(live, "#edit-#{group.id}")
+      refute has_element?(live, "#resync-#{group.id}")
+      refute has_element?(live, "#delete-#{group.id}")
+      refute has_element?(live, "#empty-state")
+    end
+
+    test "does not list a finished group and leaves the monthly total alone", %{conn: conn} do
+      commitment(%{installments: 2, start_date: Date.add(Date.utc_today(), -200)})
+      category = fixed_category("Luz")
+      recurring_item_fixture(%{category_id: category.id, amount: "-100.00"})
+      commitment(%{description_pattern: "Consorcio X"})
+
+      {:ok, live, html} = live(conn, ~p"/recurring_items")
+      refute html =~ "2 de 2"
+      assert has_element?(live, "#monthly-total", "100,00")
+    end
+  end
 end

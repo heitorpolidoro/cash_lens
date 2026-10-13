@@ -137,6 +137,7 @@ defmodule CashLensWeb.RecurringItemLive.Index do
 
     socket
     |> assign(:items, items)
+    |> assign(:commitments, Forecast.list_commitment_rows())
     |> assign(:free_categories, Forecast.list_categories_without_recurring_item())
     |> assign(:monthly_total, monthly_total(items))
   end
@@ -148,6 +149,11 @@ defmodule CashLensWeb.RecurringItemLive.Index do
     |> Enum.filter(&(&1.active and Decimal.negative?(&1.amount)))
     |> Enum.reduce(Decimal.new(0), &Decimal.add(&2, Decimal.abs(&1.amount)))
   end
+
+  defp commitment_type_name("financing"), do: "Financiamento"
+  defp commitment_type_name("consorcio"), do: "Consórcio"
+  defp commitment_type_name("emprestimo"), do: "Empréstimo"
+  defp commitment_type_name(other), do: other
 
   defp category_name(%{category: %{name: name}}), do: name
   defp category_name(_item), do: "—"
@@ -161,6 +167,7 @@ defmodule CashLensWeb.RecurringItemLive.Index do
           <h1 class="text-2xl font-black uppercase tracking-tight">Contas Recorrentes</h1>
           <p class="text-xs opacity-50 mt-1">
             As contas fixas que a previsão projeta todo mês. Uma por categoria.
+            Parcelamentos aparecem ao final, somente leitura, e ficam fora do total.
           </p>
         </div>
         <div class="flex items-center gap-4 shrink-0">
@@ -181,7 +188,7 @@ defmodule CashLensWeb.RecurringItemLive.Index do
       </div>
 
       <div
-        :if={@items == []}
+        :if={@items == [] and @commitments == []}
         id="empty-state"
         class="card bg-base-100 border border-base-300 rounded-2xl p-12 text-center"
       >
@@ -191,7 +198,7 @@ defmodule CashLensWeb.RecurringItemLive.Index do
       </div>
 
       <div
-        :if={@items != []}
+        :if={@items != [] or @commitments != []}
         class="card bg-base-100 border border-base-300 shadow-sm rounded-2xl overflow-hidden"
       >
         <table class="table table-sm w-full">
@@ -285,6 +292,26 @@ defmodule CashLensWeb.RecurringItemLive.Index do
                   </button>
                 </div>
               </td>
+            </tr>
+            <tr
+              :for={c <- @commitments}
+              id={"commitment-#{c.id}"}
+              class="bg-indigo-50/50"
+            >
+              <td class="font-bold">
+                {c.label}
+                <span class="badge badge-primary badge-xs ml-1">Parcelado</span>
+                <div class="text-xs font-normal opacity-60">{c.position} de {c.installments}</div>
+              </td>
+              <td class="text-xs opacity-60">{commitment_type_name(c.commitment_type)}</td>
+              <td class="text-center font-mono text-xs">{c.day_of_month}</td>
+              <td class="text-right font-mono font-black text-error">
+                {format_currency(c.amount)}
+              </td>
+              <td class="text-center text-xs">
+                termina em {Calendar.strftime(c.end_date, "%m/%Y")}
+              </td>
+              <td></td>
             </tr>
           </tbody>
         </table>
