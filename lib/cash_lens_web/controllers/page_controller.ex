@@ -15,22 +15,26 @@ defmodule CashLensWeb.PageController do
   @forecast_horizon_days 365
 
   def home(conn, _params) do
+    # Accounts and latest balances are read once and handed down: the forecast
+    # would otherwise read both again. `list_latest_balances/1` is also where
+    # the read-time self-healing probe runs, so it runs once per request.
+    all_accounts = Accounts.list_accounts()
+    latest_balances = Accounting.list_latest_balances(accounts: all_accounts)
+
     # One projection serves both the bill list and the bankruptcy card: a
     # 30-day slice of a 365-day projection is the same slice, so building two
     # would only cost twice.
-    projection = Forecast.project(@forecast_horizon_days)
-
-    # Get all accounts
-    all_accounts = Accounts.list_accounts()
-
-    # Get latest balances per account (triggers read-time self-healing check internally)
-    latest_balances = Accounting.list_latest_balances()
+    projection =
+      Forecast.project(@forecast_horizon_days, Date.utc_today(),
+        accounts: all_accounts,
+        latest_balances: latest_balances
+      )
 
     # Real history only: the last 12 months up to and including the current one.
     today = Date.utc_today()
     {start_m, start_y} = calculate_start_period(today, @history_months - 1)
 
-    historical_balances = Accounting.get_historical_balances(limit: 24)
+    historical_balances = Accounting.get_historical_balances(limit: 24, heal: false)
     historical_summary = Transactions.get_historical_summary(limit: 24)
 
     historical =

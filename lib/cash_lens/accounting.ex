@@ -353,8 +353,8 @@ defmodule CashLens.Accounting do
   @doc """
   Returns the most recent balance for each account.
   """
-  def list_latest_balances do
-    ensure_active_balances_healed()
+  def list_latest_balances(opts \\ []) do
+    if Keyword.get(opts, :heal, true), do: heal_active_balances()
 
     subquery =
       from b in Balance,
@@ -369,17 +369,25 @@ defmodule CashLens.Accounting do
         join: s in subquery(subquery),
         on:
           b.account_id == s.account_id and
-            fragment("(? * 100 + ?)", b.year, b.month) == s.latest_date,
-        preload: [:account]
+            fragment("(? * 100 + ?)", b.year, b.month) == s.latest_date
 
-    Repo.all(query)
+    case Keyword.get(opts, :accounts) do
+      nil ->
+        Repo.all(from b in query, preload: [:account])
+
+      accounts ->
+        # The caller already holds the accounts: attach them instead of
+        # preloading, which would read the `accounts` table again.
+        by_id = Map.new(accounts, &{&1.id, &1})
+        query |> Repo.all() |> Enum.map(&%{&1 | account: Map.get(by_id, &1.account_id)})
+    end
   end
 
   @doc """
   Returns aggregated balance history grouped by year and month.
   """
   def get_historical_balances(opts \\ []) do
-    ensure_active_balances_healed()
+    if Keyword.get(opts, :heal, true), do: heal_active_balances()
 
     limit = Keyword.get(opts, :limit)
 
@@ -444,21 +452,33 @@ defmodule CashLens.Accounting do
     Balance.changeset(balance, attrs)
   end
 
-  defp ensure_active_balances_healed do
+  @doc """
+  Rebuilds the balance chain of every open account that has no balance row for
+  the current month. One set-based query finds them, so the cost does not grow
+  with the number of accounts; closed accounts are ignored.
+
+  `list_latest_balances/1` and `get_historical_balances/1` run this themselves;
+  a caller that already ran it passes `heal: false` to skip the repeat.
+  """
+  def heal_active_balances do
     today = Date.utc_today()
 
-    # Get all active accounts
-    active_accounts = Repo.all(from a in CashLens.Accounts.Account, where: a.is_closed == false)
+    missing_ids =
+      Repo.all(
+        from a in CashLens.Accounts.Account,
+          as: :account,
+          where: a.is_closed == false,
+          where:
+            not exists(
+              from b in Balance,
+                where:
+                  b.account_id == parent_as(:account).id and b.year == ^today.year and
+                    b.month == ^today.month,
+                select: 1
+            ),
+          select: a.id
+      )
 
-    Enum.each(active_accounts, fn account ->
-      unless Repo.exists?(
-               from b in Balance,
-                 where:
-                   b.account_id == ^account.id and b.year == ^today.year and
-                     b.month == ^today.month
-             ) do
-        rebuild_account_balances(account.id)
-      end
-    end)
+    Enum.each(missing_ids, &rebuild_account_balances/1)
   end
 end

@@ -1521,3 +1521,18 @@ commit claimed none were added. Fixed; back to 23.
 ## [CL-50] Add user ownership schema and backfill existing data — 2026-10-13
 - Approach says "ON DELETE RESTRICT (default :nothing semantics are fine)". These differ slightly in Postgres (NO ACTION can be deferred). Pick one, preferably `on_delete: :restrict`.
 - Result 3 is verified only by the manual dump check or an optional migration test. Consider making the backfill test mandatory, or say that the manual report is the evidence.
+
+## [CL-52] Application security review and hardening — 2026-10-13
+- Result 5 bundles four headers into one line; tighten if QA finds it hard to judge.
+- Results 3, 4, 5 and 9 lack a "(named test)" tag, though the Test criteria name a file for each.
+- Result 10 depends on tool output; the PR gate covers it.
+
+## [CL-54] Production readiness: account recovery, audit, health and privacy — 2026-10-13
+- Results 1, 2 and 7 each bundle two or three checks in one sentence. They are still mechanically verifiable because the Test criteria section names each one, so this is not blocking. Splitting them would make QA reporting cleaner.
+- The Sentry "may be swapped for an equivalent" clause is a soft spot. Consider fixing the vendor, since the DSN env and the test collector depend on it.
+- State the trusted-proxy header config key explicitly, so the IP audit is implementable one way only.
+
+## [CL-40] Answer the balance self-healing probe in one query, once per request — 2026-10-13
+- Ceilings were tightened to 3 and 4 (spec required <=6 / <=5); fine, tests green.
+- docs/tasks/CL-38-measurements.md D3 note (optional) not added.
+- QA: credit_card_statement_live_test.exs:463 ("one-click reconciliation") failed once in mix precommit and then passed. It looks order-dependent, so consider a separate task.

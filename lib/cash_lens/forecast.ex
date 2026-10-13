@@ -324,8 +324,10 @@ defmodule CashLens.Forecast do
   applying every active recurring item's future occurrences within
   `horizon_days`.
   """
-  def project(horizon_days \\ @default_horizon_days, today \\ Date.utc_today()) do
-    starting_balance = current_balance()
+  def project(horizon_days \\ @default_horizon_days, today \\ Date.utc_today(), opts \\ []) do
+    accounts = Keyword.get_lazy(opts, :accounts, &Accounts.list_accounts/0)
+
+    starting_balance = current_balance(accounts, opts)
     horizon_end = Date.add(today, horizon_days)
 
     recurring_occurrences =
@@ -336,7 +338,7 @@ defmodule CashLens.Forecast do
     occurrences =
       (overdue_occurrences(today) ++
          recurring_occurrences ++
-         card_occurrences(today, horizon_end) ++
+         card_occurrences(today, horizon_end, accounts: accounts) ++
          commitment_occurrences(today, horizon_end) ++
          variable_baseline(today, horizon_end))
       |> Enum.sort_by(& &1.date, Date)
@@ -787,11 +789,15 @@ defmodule CashLens.Forecast do
     end
   end
 
-  defp current_balance do
-    balances_by_account =
-      Map.new(Accounting.list_latest_balances(), &{&1.account_id, &1.final_balance})
+  defp current_balance(accounts, opts) do
+    latest_balances =
+      Keyword.get_lazy(opts, :latest_balances, fn ->
+        Accounting.list_latest_balances(accounts: accounts)
+      end)
 
-    Accounts.list_accounts()
+    balances_by_account = Map.new(latest_balances, &{&1.account_id, &1.final_balance})
+
+    accounts
     |> Enum.reject(&(&1.is_closed or &1.is_credit_card))
     |> Enum.reduce(Decimal.new("0"), fn account, acc ->
       balance = Map.get(balances_by_account, account.id, account.balance)
@@ -920,13 +926,15 @@ defmodule CashLens.Forecast do
   month's known installments. Paid months and cycle-less accounts produce
   no occurrence.
   """
-  def card_occurrences(today, horizon_end) do
-    card_accounts()
+  def card_occurrences(today, horizon_end, opts \\ []) do
+    opts
+    |> Keyword.get_lazy(:accounts, &Accounts.list_accounts/0)
+    |> card_accounts()
     |> Enum.flat_map(&card_account_occurrences(&1, today, horizon_end))
   end
 
-  defp card_accounts do
-    Accounts.list_accounts()
+  defp card_accounts(accounts) do
+    accounts
     |> Enum.filter(fn a ->
       a.is_credit_card and not a.is_closed and is_integer(a.closing_day) and
         is_integer(a.due_day)

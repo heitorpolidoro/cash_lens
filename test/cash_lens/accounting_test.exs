@@ -234,6 +234,86 @@ defmodule CashLens.AccountingTest do
     end
   end
 
+  describe "self-healing probe" do
+    defp current_month_balance(account_id) do
+      today = Date.utc_today()
+
+      Repo.one(
+        from b in Balance,
+          where: b.account_id == ^account_id and b.year == ^today.year and b.month == ^today.month
+      )
+    end
+
+    defp healthy_accounts(count) do
+      accounts = for _ <- 1..count, do: account_fixture(balance: "100")
+      Enum.each(accounts, &Accounting.rebuild_account_balances(&1.id))
+      accounts
+    end
+
+    test "list_latest_balances/0 rebuilds an open account's missing current-month balance" do
+      [acc | _] = healthy_accounts(2)
+      Repo.delete_all(from b in Balance, where: b.account_id == ^acc.id)
+      refute current_month_balance(acc.id)
+
+      Accounting.list_latest_balances()
+
+      assert current_month_balance(acc.id)
+    end
+
+    test "get_historical_balances/1 rebuilds an open account's missing current-month balance" do
+      [acc | _] = healthy_accounts(2)
+      Repo.delete_all(from b in Balance, where: b.account_id == ^acc.id)
+
+      Accounting.get_historical_balances()
+
+      assert current_month_balance(acc.id)
+    end
+
+    test "heal: false skips the probe" do
+      [acc | _] = healthy_accounts(2)
+      Repo.delete_all(from b in Balance, where: b.account_id == ^acc.id)
+
+      Accounting.list_latest_balances(heal: false)
+      Accounting.get_historical_balances(heal: false)
+
+      refute current_month_balance(acc.id)
+    end
+
+    test "a closed account missing its balance is not rebuilt" do
+      acc = account_fixture(balance: "100")
+      {:ok, _} = CashLens.Accounts.update_account(acc, %{is_closed: true})
+      Repo.delete_all(from b in Balance, where: b.account_id == ^acc.id)
+
+      Accounting.list_latest_balances()
+
+      refute current_month_balance(acc.id)
+    end
+
+    test "accounts passed in are attached without reading accounts again" do
+      healthy_accounts(2)
+      accounts = CashLens.Accounts.list_accounts()
+
+      {balances, counts} =
+        CashLens.QueryCounter.count(fn ->
+          Accounting.list_latest_balances(accounts: accounts, heal: false)
+        end)
+
+      assert Enum.all?(balances, &(&1.account.id == &1.account_id))
+      assert Map.get(counts.by_table, "accounts", 0) == 0
+    end
+
+    test "the probe issues the same number of queries for 2 and for 6 open accounts" do
+      healthy_accounts(2)
+      {_, two} = CashLens.QueryCounter.count(&Accounting.heal_active_balances/0)
+
+      healthy_accounts(4)
+      {_, six} = CashLens.QueryCounter.count(&Accounting.heal_active_balances/0)
+
+      assert two.total == six.total
+      assert six.total == 1
+    end
+  end
+
   describe "rebuild_account_balances/1" do
     test "generates balance records up to the current month when the account has no transactions" do
       acc = account_fixture(balance: "500")

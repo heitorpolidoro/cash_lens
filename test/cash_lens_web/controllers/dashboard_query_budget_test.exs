@@ -80,18 +80,17 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # estimate, which reads no transaction.
   @transactions_ceiling 20 + 0
 
-  # 15 measured + 0: 12 for the three self-healing probes, which issue one
-  # `exists?` per open account and there are 4, plus the two
-  # `list_latest_balances/0` results and the one `get_historical_balances/1`.
-  # Scales with the number of open accounts, not with the horizon.
-  @balances_ceiling 15 + 0
+  # 3 = the healing probe's single set-based query (it runs once, whatever the
+  # number of open accounts), the one `list_latest_balances/1` result and the
+  # one `get_historical_balances/1`, which skips the probe the controller
+  # already ran. Was 15 before CL-40.
+  @balances_ceiling 3 + 0
 
-  # 9 measured + 0: 3 for the self-healing probes' active-account list, 3 for
-  # `Accounts.list_accounts/0` (`current_balance/0`, `card_accounts/0` and the
-  # controller), 2 for the `:account` preload inside the two
-  # `list_latest_balances/0` calls, and 1 for
-  # `CreditCards.closed_without_statement/0`. Per caller, not per due-month.
-  @accounts_ceiling 9 + 0
+  # 4 = the probe's open-account lookup, one `Accounts.list_accounts/0` (the
+  # controller reads it once and hands it to `Forecast.project/3` and
+  # `list_latest_balances/1`, so there is no `:account` preload either), and 1
+  # for `CreditCards.closed_without_statement/0`. Was 9 before CL-40.
+  @accounts_ceiling 4 + 0
 
   # 2 measured + 0. `Forecast.list_recurring_items/0`, once in `project/2` and
   # once in `overdue_occurrences/1`.
