@@ -1536,3 +1536,8 @@ commit claimed none were added. Fixed; back to 23.
 - Ceilings were tightened to 3 and 4 (spec required <=6 / <=5); fine, tests green.
 - docs/tasks/CL-38-measurements.md D3 note (optional) not added.
 - QA: credit_card_statement_live_test.exs:463 ("one-click reconciliation") failed once in mix precommit and then passed. It looks order-dependent, so consider a separate task.
+
+## [CL-44] Make the month zebra striping stand out on the statements screen — 2026-10-13
+- Code review: `hover:bg-primary/15` applies to all shaded rows including non-clickable placeholders; harmless.
+- QA: unshaded rows have no hover effect (`hover` is a no-op in daisyUI 5; `row-hover` is the real class). Predates the task; consider `row-hover`.
+- QA: priv/static CSS was not rebuilt; confirm `bg-base-300/60` and `hover:bg-primary/15` appear after the next asset build.

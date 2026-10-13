@@ -1160,6 +1160,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       {:ok, _live, html} = live(conn, ~p"/statements")
 
+      refute html =~ ~r/<tr[^>]*bg-base-200\/50/
       shaded = shaded_months(html)
 
       # Two cards per month: both rows of a month share one band, and the two
@@ -1170,7 +1171,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
     end
 
     defp shaded_months(html) do
-      {:ok, re} = Regex.compile("<tr[^>]*bg-base-200[^>]*>(.*?)</tr>", "s")
+      {:ok, re} = Regex.compile("<tr[^>]*bg-base-300/60[^>]*>(.*?)</tr>", "s")
       {:ok, month_re} = Regex.compile("<td[^>]*>\\s*([A-Z][a-z]{2}/\\d{2})\\s*</td>", "s")
 
       re

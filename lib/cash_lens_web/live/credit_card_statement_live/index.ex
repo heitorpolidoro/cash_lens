@@ -780,7 +780,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
                   class={[
                     "hover",
                     entry.statement && "cursor-pointer",
-                    shaded? && "bg-base-200/50"
+                    shaded? && "bg-base-300/60 hover:bg-primary/15"
                   ]}
                   phx-click={entry.statement && JS.patch(~p"/statements?id=#{entry.statement.id}")}
                 >
