@@ -53,3 +53,9 @@ config :cash_lens, :start_console_reporter, false
 
 # Configure Oban for testing
 config :cash_lens, Oban, testing: :manual
+
+# High limits so ordinary tests never trip the limiter; the rate-limit tests
+# lower them explicitly.
+config :cash_lens, CashLensWeb.Plugs.RateLimit,
+  login: [limit: 100_000, window_seconds: 60],
+  register: [limit: 100_000, window_seconds: 3600]

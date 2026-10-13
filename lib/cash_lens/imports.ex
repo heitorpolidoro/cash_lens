@@ -267,6 +267,64 @@ defmodule CashLens.Imports do
   def session_drop_root(session_id) when is_binary(session_id),
     do: Path.join(drop_root(), session_id)
 
+  @drop_extensions ~w(.csv .pdf .ofx .txt)
+  @drop_max_bytes 10_000_000
+
+  @doc """
+  Validates an uploaded file before it is staged, server-side, so a crafted
+  client cannot bypass the dropzone's `accept`.
+
+  Checks the extension (allow-list `.csv .pdf .ofx .txt`, case-insensitive),
+  the size (10 MB) and the content: a `.pdf` must start with `%PDF`; any other
+  type must be text, i.e. free of NUL bytes and of binary control characters
+  (latin-1 exports are text and are accepted).
+
+  Returns `:ok` or `{:error, :extension | :too_large | :content_mismatch |
+  :unreadable}`.
+  """
+  def validate_drop(path, client_name) when is_binary(path) and is_binary(client_name) do
+    extension = client_name |> Path.extname() |> String.downcase()
+
+    with :ok <- check_drop_extension(extension),
+         {:ok, %{size: size}} <- stat_drop(path),
+         :ok <- check_drop_size(size),
+         {:ok, raw} <- read_drop(path) do
+      check_drop_content(extension, raw)
+    end
+  end
+
+  defp check_drop_extension(extension) when extension in @drop_extensions, do: :ok
+  defp check_drop_extension(_extension), do: {:error, :extension}
+
+  defp stat_drop(path) do
+    case File.stat(path) do
+      {:ok, stat} -> {:ok, stat}
+      {:error, _reason} -> {:error, :unreadable}
+    end
+  end
+
+  defp check_drop_size(size) when size > @drop_max_bytes, do: {:error, :too_large}
+  defp check_drop_size(_size), do: :ok
+
+  defp read_drop(path) do
+    case File.read(path) do
+      {:ok, raw} -> {:ok, raw}
+      {:error, _reason} -> {:error, :unreadable}
+    end
+  end
+
+  defp check_drop_content(".pdf", "%PDF" <> _), do: :ok
+  defp check_drop_content(".pdf", _raw), do: {:error, :content_mismatch}
+
+  defp check_drop_content(_extension, raw) do
+    # NUL and the other C0 control characters (except tab, LF, VT, FF, CR) never
+    # appear in a text statement, whatever its encoding.
+    if :binary.match(raw, for(byte <- Enum.to_list(0..8) ++ Enum.to_list(14..31), do: <<byte>>)) ==
+         :nomatch,
+       do: :ok,
+       else: {:error, :content_mismatch}
+  end
+
   @doc """
   Copies `source_path` into the session staging area and returns its location.
 

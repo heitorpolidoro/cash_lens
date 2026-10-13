@@ -18,7 +18,8 @@ defmodule CashLens.MixProject do
         "coveralls.post": :test,
         "coveralls.html": :test,
         "coveralls.xml": :test,
-        quality_check: :test
+        quality_check: :test,
+        security: :test
       ],
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader]
@@ -37,7 +38,7 @@ defmodule CashLens.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test, quality_check: :test]
+      preferred_envs: [precommit: :test, quality_check: :test, security: :test]
     ]
   end
 
@@ -83,7 +84,9 @@ defmodule CashLens.MixProject do
       {:telemetry_poller, "~> 1.1"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:mox, "~> 1.0", only: :test}
+      {:mox, "~> 1.0", only: :test},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
+      {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -107,6 +110,9 @@ defmodule CashLens.MixProject do
         "phx.digest"
       ],
       precommit: ["quality_check"],
+      # GHSA-rhv4-8758-jx7v (decimal, moderate) is an accepted exception, see
+      # docs/security.md.
+      security: ["deps.audit --ignore-advisory-ids GHSA-rhv4-8758-jx7v", "sobelow --config"],
       quality_check: [
         "ecto.create --quiet",
         "ecto.migrate --quiet",

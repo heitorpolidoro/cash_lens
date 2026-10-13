@@ -25,11 +25,56 @@ defmodule CashLens.Users.User do
     |> validate_required([:email, :password])
     |> validate_format(:email, ~r/^[^ @]+@[^ @]+$/, message: "must have the @ sign and no spaces")
     |> validate_length(:email, max: 160)
-    |> validate_length(:password, min: 12, max: 72)
+    |> validate_password()
     |> unsafe_validate_unique(:email, CashLens.Repo)
     |> unique_constraint(:email)
     |> hash_password()
     |> put_change(:session_nonce, new_nonce())
+  end
+
+  # Read at compile time; the file lives in the repo (priv/common_passwords.txt)
+  # and is compared lowercased.
+  @common_passwords_path Path.expand("../../../priv/common_passwords.txt", __DIR__)
+  @external_resource @common_passwords_path
+  @common_passwords @common_passwords_path
+                    |> File.read!()
+                    |> String.split("\n", trim: true)
+                    |> MapSet.new(&String.downcase(String.trim(&1)))
+
+  # Length is counted in bytes: bcrypt ignores everything past 72 bytes.
+  defp validate_password(changeset) do
+    changeset
+    |> validate_required([:password])
+    |> validate_change(:password, fn :password, password ->
+      cond do
+        byte_size(password) < 12 -> [password: "should be at least 12 character(s)"]
+        byte_size(password) > 72 -> [password: "should be at most 72 byte(s)"]
+        true -> []
+      end
+    end)
+    |> validate_not_common()
+    |> validate_not_email()
+  end
+
+  defp validate_not_common(changeset) do
+    validate_change(changeset, :password, fn :password, password ->
+      if MapSet.member?(@common_passwords, String.downcase(password)),
+        do: [password: "is too common"],
+        else: []
+    end)
+  end
+
+  defp validate_not_email(changeset) do
+    email = changeset |> get_field(:email) |> to_string() |> String.downcase()
+    [local | _] = String.split(email, "@")
+
+    validate_change(changeset, :password, fn :password, password ->
+      lowered = String.downcase(password)
+
+      if email != "" and lowered in [email, local],
+        do: [password: "is too similar to your email"],
+        else: []
+    end)
   end
 
   def new_nonce, do: 16 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)

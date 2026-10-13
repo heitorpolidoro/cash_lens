@@ -645,11 +645,17 @@ defmodule CashLensWeb.ImportLive.Index do
 
     staged =
       consume_uploaded_entries(socket, :drop, fn %{path: tmp_path}, upload_entry ->
-        {:ok, Imports.stage_drop(session_id, tmp_path, upload_entry.client_name)}
+        # The client-side `accept` is only a hint: extension, size and content
+        # are re-checked here, before anything is staged or ingested.
+        case Imports.validate_drop(tmp_path, upload_entry.client_name) do
+          :ok -> {:ok, Imports.stage_drop(session_id, tmp_path, upload_entry.client_name)}
+          {:error, reason} -> {:ok, {:rejected, reason}}
+        end
       end)
 
     case staged do
       [{:ok, file}] -> {:noreply, open_drop(socket, file)}
+      [{:rejected, reason}] -> {:noreply, rejected_drop(socket, reason, entry.client_name)}
       _other -> {:noreply, unrecognized_drop(socket, nil, entry.client_name)}
     end
   end
@@ -892,6 +898,33 @@ defmodule CashLensWeb.ImportLive.Index do
     |> assign(:inspect, nil)
     |> assign(:drop_error, "Formato não reconhecido: #{name}")
   end
+
+  defp rejected_drop(socket, :extension, name),
+    do:
+      reject_drop(
+        socket,
+        "Extensão não aceita: #{display_name(name)} (use OFX, CSV, PDF ou TXT)."
+      )
+
+  defp rejected_drop(socket, :too_large, _name),
+    do: reject_drop(socket, "Arquivo grande demais — o limite é 10 MB.")
+
+  defp rejected_drop(socket, _reason, name),
+    do:
+      reject_drop(
+        socket,
+        "Formato não reconhecido: #{display_name(name)} — o conteúdo não corresponde ao tipo do arquivo."
+      )
+
+  defp reject_drop(socket, message) do
+    socket
+    |> assign(:drop, nil)
+    |> assign(:inspect, nil)
+    |> assign(:drop_error, message)
+  end
+
+  # The client filename is only ever a label: shown trimmed to its basename.
+  defp display_name(name), do: name |> Path.basename() |> String.slice(0, 80)
 
   # The drop's `@inspect` is CL-24's map plus `source: :drop`. `entry` is
   # synthetic but carries the same keys the rest of the code reads, so the

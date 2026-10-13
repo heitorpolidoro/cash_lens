@@ -1,0 +1,13 @@
+[
+  verbose: false,
+  private: false,
+  skip: false,
+  router: "lib/cash_lens_web/router.ex",
+  exit: "high",
+  format: "txt",
+  out: nil,
+  threshold: "high",
+  ignore: ["Config.Headers"],
+  ignore_files: [],
+  version: false
+]

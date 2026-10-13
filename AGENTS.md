@@ -210,6 +210,12 @@ BACKLOG.md                         Architectural decisions + prioritized backlog
                                       read this for the "why" behind current design and known risks
 ```
 
+## Security
+
+Auth hardening (CSRF, session cookie, rate limiting, password policy, CSP/HSTS, secrets,
+upload validation) and the `mix security` gate are documented in
+[`docs/security.md`](docs/security.md), including accepted audit exceptions.
+
 ## Domain Concepts
 
 - **Account** — a bank account or credit card the user owns. Has `is_credit_card`, `closing_day`

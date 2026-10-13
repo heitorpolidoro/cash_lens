@@ -1555,3 +1555,13 @@ commit claimed none were added. Fixed; back to 23.
 ## [CL-42] Resolve the excluded summary category ids once per request — 2026-10-13
 - Code review: the old `# Category ids to exclude...` comment now sits above the new `@doc`; move it next to `excluded_cash_summary_category_ids/0`.
 - Code review: the freshness test does not assert the first request counted the transaction via ids resolved once; the budget test covers the query count, which is sufficient.
+
+## [CL-50] Add user ownership schema and backfill existing data — 2026-10-13
+- Code review: `CashLens.Ownership` plus the `Repo.insert/insert!` override and the process-dictionary pin go beyond the spec's "minimally pass a user through". Reasonable as a stopgap; remove it in CL-20 part 3, when the request supplies the user.
+- Code review: `config :cash_lens, :auto_create_owner, true` in test config creates users implicitly; fixtures that take an explicit user would make tests clearer later.
+- Code review: the migration interpolates the operator UUID into SQL (safe, it comes from `id::text`); a parameterized `execute` would be tidier.
+
+## [CL-52] Application security review and hardening — 2026-10-13
+- Code review: `rate_limit.ex` `client_ip/2` with `trust_proxy_headers` takes the last `x-forwarded-for` entry, correct for a single trusted proxy; document that it is wrong for a multi-hop chain.
+- Code review: `validate_drop/2` reads the whole file (up to 10 MB) after stat; fine at this size. The control-byte list is rebuilt per call and could be a module attribute.
+- Code review: keep the global `Config.Headers` sobelow ignore under review, since it would also hide a real missing-headers regression on other pipelines.

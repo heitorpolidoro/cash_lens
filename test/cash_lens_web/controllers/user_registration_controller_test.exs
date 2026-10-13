@@ -25,4 +25,23 @@ defmodule CashLensWeb.UserRegistrationControllerTest do
     assert html_response(conn, 200) =~ "must have the @ sign"
     refute Users.get_user_by_email("bad")
   end
+
+  test "a common password re-renders the form with the error", %{conn: conn} do
+    conn =
+      post(conn, ~p"/users/register",
+        user: %{email: unique_user_email(), password: "qwertyuiop12"}
+      )
+
+    assert html_response(conn, 200) =~ "is too common"
+  end
+
+  test "a password equal to the email local part is refused on the form", %{conn: conn} do
+    conn =
+      post(conn, ~p"/users/register",
+        user: %{email: "marianaoliveira@example.com", password: "marianaoliveira"}
+      )
+
+    assert html_response(conn, 200) =~ "is too similar to your email"
+    refute Users.get_user_by_email("marianaoliveira@example.com")
+  end
 end

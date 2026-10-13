@@ -1,15 +1,9 @@
 defmodule CashLensWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :cash_lens
 
-  # The session will be stored in the cookie and signed,
-  # this means its contents can be read but not tampered with.
-  # Set :encryption_salt if you would also like to encrypt it.
-  @session_options [
-    store: :cookie,
-    key: "_cash_lens_key",
-    signing_salt: "tTS/53s7",
-    same_site: "Lax"
-  ]
+  # The session cookie is signed and encrypted. Flags and salts come from
+  # config (`session_options`), with `secure: true` added in config/prod.exs.
+  @session_options Application.compile_env!(:cash_lens, [__MODULE__, :session_options])
 
   socket "/live", Phoenix.LiveView.Socket,
     websocket: [connect_info: [session: @session_options]],

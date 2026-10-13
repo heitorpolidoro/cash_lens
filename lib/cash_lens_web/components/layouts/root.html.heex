@@ -8,7 +8,13 @@
       {assigns[:page_title]}
     </.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
-    <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
+    <script
+      defer
+      phx-track-static
+      type="text/javascript"
+      nonce={assigns[:csp_nonce]}
+      src={~p"/assets/js/app.js"}
+    >
     </script>
     <%!--
       The collapsed sidebar is a class on <html>, set here rather than in the
@@ -18,7 +24,7 @@
       patch after any click; and running before <body> is parsed means the
       sidebar never paints wide and then snaps narrow.
     --%>
-    <script>
+    <script nonce={assigns[:csp_nonce]}>
       try {
         if (localStorage.getItem("sidebar-collapsed") === "true") {
           document.documentElement.classList.add("sidebar-collapsed");

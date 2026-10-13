@@ -11,6 +11,7 @@ defmodule CashLens.Application do
       [
         CashLensWeb.Telemetry,
         CashLens.Repo,
+        CashLensWeb.Plugs.RateLimit.Store,
         {DNSCluster, query: Application.get_env(:cash_lens, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: CashLens.PubSub},
         {Oban, Application.fetch_env!(:cash_lens, Oban)},

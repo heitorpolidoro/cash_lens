@@ -11,11 +11,15 @@ config :cash_lens, CashLensWeb.Endpoint, cache_static_manifest: "priv/static/cac
 # known as HSTS. If you have a health check endpoint, you may want to exclude it below.
 # Note `:force_ssl` is required to be set at compile-time.
 config :cash_lens, CashLensWeb.Endpoint,
-  force_ssl: [rewrite_on: [:x_forwarded_proto]],
+  force_ssl: [rewrite_on: [:x_forwarded_proto], hsts: true, expires: 63_072_000, subdomains: true],
+  session_options: [secure: true],
   exclude: [
     # paths: ["/health"],
     hosts: ["localhost", "127.0.0.1"]
   ]
+
+# The app runs behind a reverse proxy that sets x-forwarded-for.
+config :cash_lens, CashLensWeb.Plugs.RateLimit, trust_proxy_headers: true
 
 # Configure Swoosh API Client
 config :swoosh, api_client: Swoosh.ApiClient.Req

@@ -9,21 +9,40 @@ defmodule CashLensWeb.Router do
     plug :fetch_live_flash
     plug :put_root_layout, html: {CashLensWeb.Layouts, :root}
     plug :protect_from_forgery
-    plug :put_secure_browser_headers
+    plug CashLensWeb.Plugs.SecurityHeaders
     plug :fetch_current_user
   end
 
   pipeline :api do
     plug :accepts, ["json"]
     plug :fetch_session
+    # The API authenticates with the session cookie, so unsafe verbs need the
+    # CSRF token too (sent in the `x-csrf-token` header).
+    plug :protect_from_forgery
     plug :require_enabled_user_api
   end
 
+  # Credential endpoints: attempts are counted per client IP (and, for log in,
+  # per email) and answered with 429 over the limit. Runs before the handlers
+  # so a throttled request never reaches bcrypt.
+  pipeline :rate_limit_register do
+    plug CashLensWeb.Plugs.RateLimit, bucket: :register
+  end
+
+  pipeline :rate_limit_login do
+    plug CashLensWeb.Plugs.RateLimit, bucket: :login
+  end
+
   scope "/", CashLensWeb do
-    pipe_through [:browser, :redirect_if_authenticated]
+    pipe_through [:browser, :redirect_if_authenticated, :rate_limit_register]
 
     get "/users/register", UserRegistrationController, :new
     post "/users/register", UserRegistrationController, :create
+  end
+
+  scope "/", CashLensWeb do
+    pipe_through [:browser, :redirect_if_authenticated, :rate_limit_login]
+
     get "/users/log_in", UserSessionController, :new
     post "/users/log_in", UserSessionController, :create
   end
@@ -131,7 +150,10 @@ defmodule CashLensWeb.Router do
     scope "/dev" do
       pipe_through :browser
 
-      live_dashboard "/dashboard", metrics: CashLensWeb.Telemetry
+      live_dashboard "/dashboard",
+        metrics: CashLensWeb.Telemetry,
+        csp_nonce_assign_key: :csp_nonce
+
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
   end

@@ -25,7 +25,26 @@ config :cash_lens, CashLensWeb.Endpoint,
     layout: false
   ],
   pubsub_server: CashLens.PubSub,
-  live_view: [signing_salt: "3YNE39mv"]
+  live_view: [signing_salt: "3YNE39mv"],
+  # Read by the endpoint at compile time. Salts are not secrets (they only
+  # namespace key derivation from secret_key_base) but live here so they can
+  # change per environment. `secure: true` is added in config/prod.exs.
+  session_options: [
+    store: :cookie,
+    key: "_cash_lens_key",
+    signing_salt: "tTS/53s7",
+    encryption_salt: "kq2Zr8vXw1Lc9bNd",
+    http_only: true,
+    same_site: "Lax"
+  ]
+
+# Rate limits for the credential endpoints (CashLensWeb.Plugs.RateLimit).
+# `trust_proxy_headers` makes the client IP come from `x-forwarded-for`; only
+# enable it behind a reverse proxy (see config/prod.exs).
+config :cash_lens, CashLensWeb.Plugs.RateLimit,
+  login: [limit: 5, window_seconds: 60],
+  register: [limit: 5, window_seconds: 3600],
+  trust_proxy_headers: false
 
 # Configure the mailer
 #

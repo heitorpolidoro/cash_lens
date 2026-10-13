@@ -55,6 +55,9 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
+  # The websocket accepts connections from the production host only.
+  config :cash_lens, CashLensWeb.Endpoint, check_origin: ["https://#{host}"]
+
   config :cash_lens, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :cash_lens, CashLensWeb.Endpoint,

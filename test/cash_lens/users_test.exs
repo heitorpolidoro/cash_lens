@@ -41,6 +41,65 @@ defmodule CashLens.UsersTest do
     assert "can't be blank" in errors_on(cs).email
   end
 
+  describe "password policy" do
+    defp password_errors(attrs) do
+      {:error, cs} = Users.register_user(valid_user_attributes(attrs))
+      errors_on(cs).password
+    end
+
+    test "a common password is rejected, whatever its case" do
+      assert ["is too common"] = password_errors(%{password: "qwertyuiop12"})
+      assert ["is too common"] = password_errors(%{password: "QwertyUiop12"})
+    end
+
+    test "a password equal to the email or its local part is rejected" do
+      assert ["is too similar to your email"] =
+               password_errors(%{
+                 email: "marianaoliveira@example.com",
+                 password: "marianaoliveira"
+               })
+
+      assert ["is too similar to your email"] =
+               password_errors(%{
+                 email: "marianaoliveira@example.com",
+                 password: "MarianaOliveira"
+               })
+
+      assert ["is too similar to your email"] =
+               password_errors(%{
+                 email: "mariana.oliveira@ex.com",
+                 password: "mariana.oliveira@ex.com"
+               })
+    end
+
+    test "an 11-character password is rejected" do
+      assert [message] = password_errors(%{password: "x7#kQ9!mZ2p"})
+      assert message =~ "at least 12"
+    end
+
+    test "a password over 72 bytes is rejected, counting bytes not characters" do
+      assert [message] = password_errors(%{password: String.duplicate("é", 37)})
+      assert message =~ "at most 72"
+    end
+
+    test "a strong password of 12 or more characters is accepted" do
+      assert {:ok, _} = Users.register_user(valid_user_attributes(%{password: "x7#kQ9!mZ2pL"}))
+    end
+
+    test "log in is not subject to the policy" do
+      {:ok, user} =
+        %User{}
+        |> Ecto.Changeset.change(
+          email: "legacy@example.com",
+          hashed_password: Bcrypt.hash_pwd_salt("password"),
+          session_nonce: "n"
+        )
+        |> Repo.insert()
+
+      assert Users.get_user_by_email_and_password("legacy@example.com", "password").id == user.id
+    end
+  end
+
   test "the enabled column is NOT NULL" do
     assert_raise Postgrex.Error, ~r/not_null_violation|null value/, fn ->
       Repo.query!(
