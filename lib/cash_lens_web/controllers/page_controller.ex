@@ -2,11 +2,11 @@ defmodule CashLensWeb.PageController do
   use CashLensWeb, :controller
 
   alias CashLens.Accounting
+  alias CashLens.Accounts
   alias CashLens.CreditCards
   alias CashLens.Forecast
-  alias CashLensWeb.BankruptcyCard
-  alias CashLens.Accounts
   alias CashLens.Transactions
+  alias CashLensWeb.BankruptcyCard
 
   @history_months 12
 

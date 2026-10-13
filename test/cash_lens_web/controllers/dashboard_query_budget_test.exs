@@ -42,7 +42,9 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # per card, not once per due-month, so an extra due-month costs no query.
   @statements_delta 0
   @installment_groups_delta 0
-  @total_delta 0
+  # The session's user lookup (CL-49) is one `users` query on every request.
+  @users_delta 1
+  @total_delta 0 + @users_delta
 
   # ---------------------------------------------------------------------------
   # The ceilings. Every one is `measured_fixture_count + delta`, measured on the

@@ -286,10 +286,15 @@ defmodule CashLensWeb.PageControllerTest do
          %{conn: conn} do
       bill_on(2, "Internet", "-241.99")
 
-      card =
-        account_fixture(%{is_credit_card: true, name: "Ourocard", closing_day: 3, due_day: 10})
-
       due = Date.add(Date.utc_today(), 4)
+
+      card =
+        account_fixture(%{
+          is_credit_card: true,
+          name: "Ourocard",
+          closing_day: 3,
+          due_day: min(due.day, 28)
+        })
 
       statement =
         statement_fixture(%{

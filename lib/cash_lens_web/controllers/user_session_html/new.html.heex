@@ -1,0 +1,15 @@
+<div class="max-w-sm mx-auto mt-24 p-6 bg-white rounded-2xl border border-slate-200">
+  <h1 class="text-xl font-bold mb-4">Entrar</h1>
+
+  <p :if={@error} id="login-error" class="mb-3 text-sm text-red-600">{@error}</p>
+
+  <.form :let={f} for={%{}} as={:user} action={~p"/users/log_in"}>
+    <.input field={f[:email]} type="email" label="E-mail" value={@email} required />
+    <.input field={f[:password]} type="password" label="Senha" value="" required />
+    <.button class="w-full mt-4">Entrar</.button>
+  </.form>
+
+  <p class="mt-4 text-sm">
+    <.link href={~p"/users/register"} class="font-semibold">Criar conta</.link>
+  </p>
+</div>

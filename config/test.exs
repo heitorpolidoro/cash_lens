@@ -45,6 +45,9 @@ config :phoenix,
 
 config :cash_lens, sql_sandbox: true
 
+# Cheap password hashing keeps the suite fast; production uses the default cost.
+config :bcrypt_elixir, log_rounds: 1
+
 config :cash_lens, :pdf_converter, CashLens.Parsers.PDFConverterMock
 config :cash_lens, :start_console_reporter, false
 

@@ -6,8 +6,10 @@ vocabulary the codebase uses for its business logic.
 
 ## Project Context & Purpose
 
-CashLens is a **personal finance tracking application** built for a single user (no
-multi-tenancy, no login/auth layer today — see `BACKLOG.md` for future SaaS/auth plans). It
+CashLens is a **personal finance tracking application** with no
+multi-tenancy yet: data is not owned per user. Access is gated by login (`users` table, bcrypt)
+plus an operator-controlled `enabled` flag that a new sign-up does not have until it is set by
+hand in the DB — see `BACKLOG.md` for future SaaS plans). It
 solves the problem of consolidating money movement across many disconnected sources — bank CSV/OFX
 exports, credit-card PDF/text statements, and live Open Finance bank connections — into one
 place where transactions can be categorized, reconciled, and turned into monthly balances and
@@ -150,6 +152,7 @@ Mix aliases worth knowing (`mix.exs`):
 ```
 lib/cash_lens/                     Business logic ("contexts") — framework-agnostic
   accounts.ex / accounts/          Bank/credit-card accounts (Account schema)
+  users.ex / users/                Login users (User schema; `enabled` defaults to false)
   transactions.ex / transactions/  Core transaction logic:
                                       transaction.ex          — schema + dedup fingerprinting
                                       auto_categorizer.ex      — rule-based categorization
@@ -178,6 +181,8 @@ lib/cash_lens/                     Business logic ("contexts") — framework-agn
 
 lib/cash_lens_web/                 Web layer (Phoenix)
   router.ex                        Route table: browser (LiveView) + /api (JSON) pipelines
+  user_auth.ex                     Session login/logout, auth + enabled-user plugs, LiveView on_mount
+  controllers/user_*               Register, log in/out and pending-approval pages
   live/                            LiveView modules, one folder per resource:
                                       account_live/, transaction_live/, category_live/,
                                       balance_live/, month_live/, reimbursement_live/,

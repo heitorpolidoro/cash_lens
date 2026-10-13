@@ -31,8 +31,28 @@ defmodule CashLensWeb.ConnCase do
     end
   end
 
+  # Every web test runs as an enabled, logged-in user unless it is tagged
+  # `@tag :logged_out` (or `@moduletag :logged_out`), which the auth tests use.
   setup tags do
     CashLens.DataCase.setup_sandbox(tags)
-    {:ok, conn: Phoenix.ConnTest.build_conn()}
+
+    if tags[:logged_out] do
+      {:ok, conn: Phoenix.ConnTest.build_conn()}
+    else
+      register_and_log_in_user(%{conn: Phoenix.ConnTest.build_conn()})
+    end
+  end
+
+  @doc "Creates an enabled user and puts it in the session of `conn`."
+  def register_and_log_in_user(%{conn: conn}) do
+    user = CashLens.UsersFixtures.user_fixture(%{enabled: true})
+    %{conn: log_in_user(conn, user), user: user}
+  end
+
+  def log_in_user(conn, user) do
+    conn
+    |> Phoenix.ConnTest.init_test_session(%{})
+    |> Plug.Conn.put_session(:user_id, user.id)
+    |> Plug.Conn.put_session(:session_nonce, user.session_nonce)
   end
 end

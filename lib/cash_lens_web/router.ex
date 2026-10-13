@@ -1,6 +1,8 @@
 defmodule CashLensWeb.Router do
   use CashLensWeb, :router
 
+  import CashLensWeb.UserAuth
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -8,17 +10,41 @@ defmodule CashLensWeb.Router do
     plug :put_root_layout, html: {CashLensWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :fetch_current_user
   end
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug :fetch_session
+    plug :require_enabled_user_api
+  end
+
+  scope "/", CashLensWeb do
+    pipe_through [:browser, :redirect_if_authenticated]
+
+    get "/users/register", UserRegistrationController, :new
+    post "/users/register", UserRegistrationController, :create
+    get "/users/log_in", UserSessionController, :new
+    post "/users/log_in", UserSessionController, :create
   end
 
   scope "/", CashLensWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
     get "/.well-known/appspecific/com.chrome.devtools.json", PageController, :chrome_devtools
+    delete "/users/log_out", UserSessionController, :delete
+  end
+
+  scope "/", CashLensWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
+    get "/users/pending", UserPendingController, :show
+  end
+
+  scope "/", CashLensWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_enabled_user]
+
+    get "/", PageController, :home
     get "/credit_card_links", RedirectController, :statements
 
     # The two rule screens merged into the Automation Center (CL-17); the old
@@ -28,7 +54,11 @@ defmodule CashLensWeb.Router do
 
     live_session :default,
       layout: {CashLensWeb.Layouts, :app},
-      on_mount: [CashLensWeb.ActivePath, CashLensWeb.RecurringSyncFlash] do
+      on_mount: [
+        {CashLensWeb.UserAuth, :require_enabled_user},
+        CashLensWeb.ActivePath,
+        CashLensWeb.RecurringSyncFlash
+      ] do
       # The create and edit routes are an overlaid modal on top of the accounts
       # screen, not standalone pages: they mount `Index` so a `live_patch`
       # opens/closes the account settings form without leaving the cards
