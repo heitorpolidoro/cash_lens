@@ -164,8 +164,8 @@ defmodule CashLensWeb.BalanceLive.Index do
             <span>
               <span class="font-bold text-sm block">Rendimento do Mês</span>
               <span class="text-xs opacity-60 block">
-                Cria uma transação de receita na categoria "Rendimentos" no último dia do mês com o
-                valor da diferença.
+                Cria uma transação de receita na categoria "Rendimentos" na data da última transação da
+                conta no mês, com o valor da diferença.
               </span>
             </span>
           </label>

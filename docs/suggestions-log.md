@@ -1541,3 +1541,7 @@ commit claimed none were added. Fixed; back to 23.
 - Code review: `hover:bg-primary/15` applies to all shaded rows including non-clickable placeholders; harmless.
 - QA: unshaded rows have no hover effect (`hover` is a no-op in daisyUI 5; `row-hover` is the real class). Predates the task; consider `row-hover`.
 - QA: priv/static CSS was not rebuilt; confirm `bg-base-300/60` and `hover:bg-primary/15` appear after the next asset build.
+
+## [CL-45] Date a manual Rendimento entry from the account's last transaction — 2026-10-13
+- Code review: a not-yet-started month keeps the month-end date. That goes beyond the spec and is reasonable, but no test covers it. Low risk.
+- QA: `income_date/3` keeps month-end for a month not yet started; reasonable but undocumented in the spec.

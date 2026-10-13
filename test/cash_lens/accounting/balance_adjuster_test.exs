@@ -99,7 +99,32 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
                )
     end
 
-    test "books the difference as income on the last day of the month", %{
+    defp adjust_rendimento(account, year, month) do
+      BalanceAdjuster.adjust_final_balance(
+        account.id,
+        year,
+        month,
+        Decimal.new("150.50"),
+        :rendimento
+      )
+    end
+
+    defp rendimento_date(account) do
+      Repo.get_by!(Transaction, account_id: account.id, description: "Rendimento").date
+    end
+
+    defp manual_transaction(account, date, description) do
+      {:ok, %Transaction{}} =
+        Transactions.create_transaction(%{
+          account_id: account.id,
+          date: date,
+          description: description,
+          amount: Decimal.new("-1.00"),
+          source: "manual"
+        })
+    end
+
+    test "books the difference as income in the rendimento category", %{
       account: account,
       year: year,
       month: month
@@ -107,20 +132,65 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
       category = category_fixture(%{name: "Rendimento"})
       seed_balance(account, year, month, "120.50")
 
-      assert {:ok, :rendimento} =
-               BalanceAdjuster.adjust_final_balance(
-                 account.id,
-                 year,
-                 month,
-                 Decimal.new("150.50"),
-                 :rendimento
-               )
+      assert {:ok, :rendimento} = adjust_rendimento(account, year, month)
 
       transaction = Repo.get_by!(Transaction, account_id: account.id, description: "Rendimento")
 
       assert Decimal.equal?(transaction.amount, Decimal.new("30.00"))
       assert transaction.category_id == category.id
-      assert transaction.date == Date.end_of_month(Date.new!(year, month, 1))
+    end
+
+    test "running month without transactions is dated today", %{
+      account: account,
+      year: year,
+      month: month
+    } do
+      category_fixture(%{name: "Rendimento"})
+      seed_balance(account, year, month, "120.50")
+
+      assert {:ok, :rendimento} = adjust_rendimento(account, year, month)
+      assert rendimento_date(account) == Date.utc_today()
+    end
+
+    test "running month is dated at the last transaction on or before today", %{
+      account: account,
+      year: year,
+      month: month
+    } do
+      category_fixture(%{name: "Rendimento"})
+      today = Date.utc_today()
+      first = Date.new!(year, month, 1)
+      last = Date.end_of_month(first)
+
+      manual_transaction(account, first, "Early")
+      manual_transaction(account, last, "Month end")
+
+      assert {:ok, :rendimento} = adjust_rendimento(account, year, month)
+
+      # The month-end row is a future row unless today is the last day of the month.
+      expected = if Date.compare(last, today) == :gt, do: first, else: last
+      assert rendimento_date(account) == expected
+      refute Date.after?(rendimento_date(account), today)
+    end
+
+    test "past month without transactions is dated at its last day", %{account: account} do
+      category_fixture(%{name: "Rendimento"})
+      seed_balance(account, 2020, 2, "120.50")
+
+      assert {:ok, :rendimento} = adjust_rendimento(account, 2020, 2)
+      assert rendimento_date(account) == ~D[2020-02-29]
+    end
+
+    test "past month is dated at that month's last transaction, not a later month's", %{
+      account: account
+    } do
+      category_fixture(%{name: "Rendimento"})
+      manual_transaction(account, ~D[2020-02-10], "In month")
+      manual_transaction(account, ~D[2020-03-05], "Later month")
+      manual_transaction(account, ~D[2020-01-20], "Earlier month")
+
+      assert {:ok, :rendimento} = adjust_rendimento(account, 2020, 2)
+      assert rendimento_date(account) == ~D[2020-02-10]
     end
 
     test "reports a duplicate instead of booking the same income twice", %{
@@ -128,17 +198,10 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
       year: year,
       month: month
     } do
-      category = category_fixture(%{name: "Rendimento"})
-      last_day = Date.end_of_month(Date.new!(year, month, 1))
+      category_fixture(%{name: "Rendimento"})
+      seed_balance(account, year, month, "120.50")
 
-      {:ok, %Transaction{}} =
-        Transactions.create_transaction(%{
-          account_id: account.id,
-          date: last_day,
-          description: "Rendimento",
-          amount: Decimal.new("30.00"),
-          category_id: category.id
-        })
+      assert {:ok, :rendimento} = adjust_rendimento(account, year, month)
 
       current = BalanceAdjuster.current_final_balance(account.id, year, month)
 

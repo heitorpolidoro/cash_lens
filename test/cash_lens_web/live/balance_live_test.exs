@@ -396,7 +396,7 @@ defmodule CashLensWeb.BalanceLiveTest do
       assert html =~ "R$ 30,00"
     end
 
-    test "rendimento creates an income transaction on the last day of the month", %{
+    test "rendimento creates an income transaction dated no later than today", %{
       conn: conn,
       balance: balance,
       today: today
@@ -420,7 +420,7 @@ defmodule CashLensWeb.BalanceLiveTest do
 
       assert Decimal.equal?(transaction.amount, Decimal.new("30.00"))
       assert transaction.category_id == category.id
-      assert transaction.date == Date.end_of_month(Date.new!(today.year, today.month, 1))
+      assert transaction.date == today
     end
 
     test "rendimento fails gracefully when the category does not exist", %{
@@ -541,12 +541,11 @@ defmodule CashLensWeb.BalanceLiveTest do
       today: today
     } do
       category = category_fixture(%{name: "Rendimento"})
-      last_day = Date.end_of_month(Date.new!(today.year, today.month, 1))
 
       {:ok, %Transaction{}} =
         Transactions.create_transaction(%{
           account_id: balance.account_id,
-          date: last_day,
+          date: today,
           description: "Rendimento",
           amount: Decimal.new("30.00"),
           category_id: category.id

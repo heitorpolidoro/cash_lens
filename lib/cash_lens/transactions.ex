@@ -928,6 +928,23 @@ defmodule CashLens.Transactions do
   end
 
   @doc """
+  Returns the most recent transaction date for `account_id` within `range`
+  (inclusive), or `nil` if the account has no transaction in it.
+
+  Only permanently-persisted rows (`source` of `"file"` or `"manual"`) count.
+  """
+  @spec latest_transaction_date_between(Ecto.UUID.t(), Date.t(), Date.t()) :: Date.t() | nil
+  def latest_transaction_date_between(account_id, from_date, to_date) do
+    Repo.one(
+      from t in Transaction,
+        where:
+          t.account_id == ^account_id and t.source in ["file", "manual"] and
+            t.date >= ^from_date and t.date <= ^to_date,
+        select: max(t.date)
+    )
+  end
+
+  @doc """
   Returns a map of `%{account_id => latest_date}` for all accounts having
   permanently-persisted transactions (`source` of `"file"` or `"manual"`).
   """

@@ -8,8 +8,8 @@ defmodule CashLens.Accounting.BalanceAdjuster do
   gap in the two ways that make accounting sense:
 
     * `:rendimento` — the difference is genuine money earned during the month, so it is
-      booked as an income transaction in the "rendimento" category dated the last day of
-      that month.
+      booked as an income transaction in the "rendimento" category dated the account's
+      last transaction inside that month and on or before today (see `income_date/3`).
     * `:correcao` — the difference comes from a wrong opening balance, so the account's
       seed balance is shifted and the whole historical chain is rebuilt.
 
@@ -106,7 +106,7 @@ defmodule CashLens.Accounting.BalanceAdjuster do
   defp create_income_transaction(category, account_id, year, month, diff) do
     attrs = %{
       account_id: account_id,
-      date: year |> Date.new!(month, 1) |> Date.end_of_month(),
+      date: income_date(account_id, year, month),
       description: @income_description,
       amount: diff,
       category_id: category.id
@@ -116,6 +116,23 @@ defmodule CashLens.Accounting.BalanceAdjuster do
       {:ok, :duplicate} -> {:error, :duplicate}
       {:ok, _transaction} -> {:ok, :rendimento}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # The account's last file/manual transaction inside the month, never after today, so the
+  # income never lands in the future. Without one: the month's last day for a past month,
+  # today for the running month.
+  defp income_date(account_id, year, month) do
+    first = Date.new!(year, month, 1)
+    last = Date.end_of_month(first)
+    today = Date.utc_today()
+
+    if Date.after?(first, today) do
+      # A month that has not started yet keeps the historical month-end date.
+      last
+    else
+      upper = Enum.min([last, today], Date)
+      Transactions.latest_transaction_date_between(account_id, first, upper) || upper
     end
   end
 end
