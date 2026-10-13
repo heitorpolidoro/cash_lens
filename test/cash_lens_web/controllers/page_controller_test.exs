@@ -208,7 +208,7 @@ defmodule CashLensWeb.PageControllerTest do
       account_fixture(%{
         name: "AMAZON",
         is_credit_card: true,
-        closing_day: 1,
+        closing_day: Date.utc_today() |> Date.add(-1) |> Map.fetch!(:day),
         due_day: 10
       })
 
@@ -216,6 +216,38 @@ defmodule CashLensWeb.PageControllerTest do
 
       assert html =~ "Fatura possivelmente fechada"
       assert html =~ "AMAZON"
+    end
+
+    test "waits until the day after closing", %{conn: conn} do
+      today = Date.utc_today()
+      # Due day on the far side of the closing day keeps the closing-today
+      # competência at a known month: this one when due follows closing, else next.
+      due_day = if today.day < 28, do: 28, else: 15
+      current = Date.beginning_of_month(today)
+
+      closing_today_competencia =
+        if due_day > today.day, do: current, else: Date.shift(current, month: 1)
+
+      account =
+        account_fixture(%{
+          name: "HOJE",
+          is_credit_card: true,
+          closing_day: today.day,
+          due_day: due_day
+        })
+
+      # Every older cycle has its statement; only the one closing today is missing.
+      for back <- 1..3 do
+        competencia = Date.shift(closing_today_competencia, month: -back)
+
+        statement_fixture(%{
+          account: account,
+          competencia: competencia,
+          due_date: %{competencia | day: due_day}
+        })
+      end
+
+      refute conn |> get(~p"/") |> html_response(200) =~ "Fatura possivelmente fechada"
     end
 
     test "stays silent once every closed cycle has a statement", %{conn: conn} do

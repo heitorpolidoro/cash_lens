@@ -780,7 +780,25 @@ defmodule CashLens.CreditCardsTest do
         due_date: ~D[2026-10-16]
       })
 
-      assert CreditCards.closed_without_statement(~D[2026-10-06], 1) == []
+      assert CreditCards.closed_without_statement(~D[2026-10-07], 1) == []
+    end
+
+    test "does not report a cycle on its closing day itself" do
+      # Closes on the 6th: the bill is only available on the 7th, so on the 6th
+      # the newest closed cycle is still September's.
+      card(%{name: "HOJE", closing_day: 6, due_day: 16})
+
+      assert [gap] = CreditCards.closed_without_statement(~D[2026-10-06], 1)
+      assert gap.competencia == ~D[2026-09-01]
+      assert gap.closed_on == ~D[2026-09-06]
+    end
+
+    test "reports the cycle the day after its closing day" do
+      card(%{name: "ONTEM", closing_day: 6, due_day: 16})
+
+      assert [gap] = CreditCards.closed_without_statement(~D[2026-10-07], 1)
+      assert gap.competencia == ~D[2026-10-01]
+      assert gap.closed_on == ~D[2026-10-06]
     end
 
     test "places the competência in the next month when closing follows the due day" do

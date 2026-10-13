@@ -512,6 +512,8 @@ defmodule CashLens.CreditCards do
   is later than `closing_day`, in the previous month otherwise. A competência
   whose closing is in the past is a bill the card has issued; without a row for
   it, nothing on the forecast or the statements screen accounts for that spend.
+  The bill is only available the day after closing, so a cycle counts as closed
+  once its closing date is strictly before `today`.
 
   This is the signal `statement_gaps/2` structurally cannot give: `missing_months`
   only looks *between* a card's first and last imported competência, so the cycle
@@ -549,12 +551,12 @@ defmodule CashLens.CreditCards do
     end)
   end
 
-  # The `cycles` most recent competências whose closing date is not in the future,
-  # newest first.
+  # The `cycles` most recent competências whose closing date is strictly before
+  # `today` (the bill is issued the day after closing), newest first.
   defp closed_competencias(%{closing_day: c, due_day: d}, today, cycles) do
     latest_closing =
       case clamp_day(today.year, today.month, c) do
-        this -> if Date.compare(this, today) == :gt, do: previous_closing(this, c), else: this
+        this -> if Date.compare(this, today) != :lt, do: previous_closing(this, c), else: this
       end
 
     newest = latest_closing |> due_from_closing(c, d) |> Date.beginning_of_month()
