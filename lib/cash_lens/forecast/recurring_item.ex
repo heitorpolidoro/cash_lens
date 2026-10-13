@@ -5,6 +5,7 @@ defmodule CashLens.Forecast.RecurringItem do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "recurring_items" do
+    belongs_to :user, CashLens.Users.User
     belongs_to :category, CashLens.Categories.Category
     field :label, :string
     field :day_of_month, :integer

@@ -18,6 +18,7 @@ defmodule CashLens.Imports.ImportRun do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "import_runs" do
+    belongs_to :user, CashLens.Users.User
     field :ran_at, :utc_datetime
     field :file_path, :string
     field :status, :string

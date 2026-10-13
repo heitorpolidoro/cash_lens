@@ -56,4 +56,40 @@ defmodule CashLens.PrivacyTest do
   test "registry lists the owned schemas" do
     assert User in Privacy.owned_schemas()
   end
+
+  describe "domain data" do
+    setup %{user: user, other: other} do
+      CashLens.Ownership.put_user_id(user.id)
+      mine = CashLens.CategoriesFixtures.category_fixture(%{name: "Mine cat"})
+      account = CashLens.AccountsFixtures.account_fixture()
+      CashLens.Ownership.put_user_id(other.id)
+      theirs = CashLens.CategoriesFixtures.category_fixture(%{name: "Theirs cat"})
+      %{mine: mine, theirs: theirs, account: account}
+    end
+
+    test "registry includes every domain schema" do
+      for schema <- CashLens.Ownership.domain_schemas() do
+        assert schema in Privacy.owned_schemas()
+      end
+    end
+
+    test "export holds the user's domain rows only", %{user: user, mine: mine, theirs: theirs} do
+      data = Privacy.export(user)
+      ids = Enum.map(data["categories"], & &1["id"])
+      assert mine.id in ids
+      refute theirs.id in ids
+      assert length(data["accounts"]) == 1
+    end
+
+    test "delete_account removes domain rows and keeps others", %{
+      user: user,
+      mine: mine,
+      theirs: theirs
+    } do
+      assert {:ok, _} = Privacy.delete_account(user, valid_user_password())
+      refute Repo.get(CashLens.Categories.Category, mine.id)
+      assert Repo.get(CashLens.Categories.Category, theirs.id)
+      assert Repo.aggregate(CashLens.Accounts.Account, :count) == 0
+    end
+  end
 end

@@ -5,6 +5,7 @@ defmodule CashLens.CreditCards.Statement do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "credit_card_statements" do
+    belongs_to :user, CashLens.Users.User
     field :competencia, :date
     field :due_date, :date
     field :total_a_pagar, :decimal

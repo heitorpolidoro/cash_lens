@@ -611,7 +611,12 @@ defmodule CashLens.Parsers.Ingestor do
     inserted ++ claimed
   end
 
+  defp batch_insert_transactions([]), do: {0, []}
+
   defp batch_insert_transactions(entries) do
+    user_id = CashLens.Ownership.current_user_id!()
+    entries = Enum.map(entries, &Map.put_new(&1, :user_id, user_id))
+
     CashLens.Repo.insert_all(
       Transaction,
       entries,

@@ -364,7 +364,13 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       now = DateTime.utc_now() |> DateTime.truncate(:second)
 
       Repo.insert_all(CashLens.Transactions.BulkIgnorePattern, [
-        %{id: Ecto.UUID.generate(), pattern: "[invalid", inserted_at: now, updated_at: now}
+        %{
+          id: Ecto.UUID.generate(),
+          user_id: CashLens.Ownership.current_user_id!(),
+          pattern: "[invalid",
+          inserted_at: now,
+          updated_at: now
+        }
       ])
 
       insert_bulk_ignore_pattern(%{pattern: "^Padaria"})
@@ -438,7 +444,13 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       now = DateTime.utc_now() |> DateTime.truncate(:second)
 
       Repo.insert_all(CashLens.Transactions.BulkIgnorePattern, [
-        %{id: Ecto.UUID.generate(), pattern: "[bad_regex", inserted_at: now, updated_at: now}
+        %{
+          id: Ecto.UUID.generate(),
+          user_id: CashLens.Ownership.current_user_id!(),
+          pattern: "[bad_regex",
+          inserted_at: now,
+          updated_at: now
+        }
       ])
 
       tx = transaction_fixture(description: "Uber Ride")
@@ -504,6 +516,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
           [
             %{
               id: Ecto.UUID.generate(),
+              user_id: CashLens.Ownership.current_user_id!(),
               date: ~D[2026-02-23],
               description: nil,
               amount: Decimal.new("50.00"),

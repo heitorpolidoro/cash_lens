@@ -386,6 +386,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
       CashLens.Repo.insert_all("bulk_ignore_patterns", [
         %{
           id: Ecto.UUID.bingenerate(),
+          user_id: Ecto.UUID.dump!(CashLens.Ownership.current_user_id!()),
           pattern: "[broken(",
           description: "Padrão corrompido",
           inserted_at: DateTime.utc_now() |> DateTime.truncate(:second),

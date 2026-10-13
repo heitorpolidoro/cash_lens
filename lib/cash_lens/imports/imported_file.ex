@@ -14,6 +14,7 @@ defmodule CashLens.Imports.ImportedFile do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "imported_files" do
+    belongs_to :user, CashLens.Users.User
     field :path, :string
     field :content_hash, :string
     field :mtime, :utc_datetime

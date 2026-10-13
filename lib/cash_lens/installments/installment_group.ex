@@ -20,6 +20,7 @@ defmodule CashLens.Installments.InstallmentGroup do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "installment_groups" do
+    belongs_to :user, CashLens.Users.User
     field :description_pattern, :string
     field :total_amount, :decimal
     field :installments, :integer

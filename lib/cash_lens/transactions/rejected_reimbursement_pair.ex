@@ -5,6 +5,7 @@ defmodule CashLens.Transactions.RejectedReimbursementPair do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "rejected_reimbursement_pairs" do
+    belongs_to :user, CashLens.Users.User
     belongs_to :transaction_a, CashLens.Transactions.Transaction
     belongs_to :transaction_b, CashLens.Transactions.Transaction
 

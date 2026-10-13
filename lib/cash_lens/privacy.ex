@@ -2,10 +2,9 @@ defmodule CashLens.Privacy do
   @moduledoc """
   Self-service data export and account deletion (LGPD).
 
-  Both operate on one registry of user-owned schemas, `@owned`. Shared financial
-  data (accounts, transactions, ...) is global today, owned by no user, and is
-  never exported or deleted here. A table that gains a `user_id` in the
-  tenant-ownership work must be added to the registry.
+  Both operate on one registry of user-owned schemas, `@owned`: the domain
+  schemas of `CashLens.Ownership` (financial data, dependents first) plus the
+  account tables. A table that gains a `user_id` must be added to the registry.
 
   Each entry is `{schema, owner_field, omitted_fields}`. The `User` row itself is
   last, so dependents are deleted first.
@@ -17,11 +16,14 @@ defmodule CashLens.Privacy do
   alias CashLens.Users.User
   alias CashLens.Users.UserToken
 
-  @owned [
-    {UserToken, :user_id, [:token]},
-    {LoginAttempt, :user_id, []},
-    {User, :id, [:hashed_password, :session_nonce]}
-  ]
+  @domain_owned Enum.map(CashLens.Ownership.domain_schemas(), &{&1, :user_id, []})
+
+  @owned @domain_owned ++
+           [
+             {UserToken, :user_id, [:token]},
+             {LoginAttempt, :user_id, []},
+             {User, :id, [:hashed_password, :session_nonce]}
+           ]
 
   def owned_schemas, do: Enum.map(@owned, &elem(&1, 0))
 

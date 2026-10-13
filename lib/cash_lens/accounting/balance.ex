@@ -5,6 +5,7 @@ defmodule CashLens.Accounting.Balance do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "balances" do
+    belongs_to :user, CashLens.Users.User
     field :year, :integer
     field :month, :integer
     field :initial_balance, :decimal

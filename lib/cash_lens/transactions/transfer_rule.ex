@@ -5,6 +5,7 @@ defmodule CashLens.Transactions.TransferRule do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "transfer_rules" do
+    belongs_to :user, CashLens.Users.User
     field :label, :string
     field :description_patterns, {:array, :string}, default: []
     field :create_mirror, :boolean, default: true

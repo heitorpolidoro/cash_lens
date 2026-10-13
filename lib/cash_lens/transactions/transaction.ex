@@ -5,6 +5,7 @@ defmodule CashLens.Transactions.Transaction do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "transactions" do
+    belongs_to :user, CashLens.Users.User
     field :date, :date
     field :time, :time
     field :description, :string

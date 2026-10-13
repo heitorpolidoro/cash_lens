@@ -7,7 +7,8 @@ vocabulary the codebase uses for its business logic.
 ## Project Context & Purpose
 
 CashLens is a **personal finance tracking application** with no
-multi-tenancy yet: data is not owned per user. Access is gated by login (`users` table, bcrypt)
+multi-tenancy yet: every domain table carries a NOT NULL `user_id` (FK to `users`, `ON DELETE RESTRICT`),
+but queries are not scoped by it yet (CL-20 later parts). Access is gated by login (`users` table, bcrypt)
 plus an operator-controlled `enabled` flag that a new sign-up does not have until it is set by
 hand in the DB — see `BACKLOG.md` for future SaaS plans). It
 solves the problem of consolidating money movement across many disconnected sources — bank CSV/OFX
@@ -158,6 +159,9 @@ lib/cash_lens/                     Business logic ("contexts") — framework-agn
   audit.ex / audit/                Login audit log (`login_attempts`: one row per attempt, incl. unknown emails)
   privacy.ex                       Owned-data registry (`@owned`) behind `export/1` and `delete_account/2`
   health.ex                        DB check behind `GET /health`
+  ownership.ex                     Resolves the owner (`user_id`) of new rows: pinned user, then
+                                      CASH_LENS_OPERATOR_EMAIL, then the only user. `Repo.insert/2`
+                                      fills it; `insert_all` callers must set `user_id` themselves.
   transactions.ex / transactions/  Core transaction logic:
                                       transaction.ex          — schema + dedup fingerprinting
                                       auto_categorizer.ex      — rule-based categorization

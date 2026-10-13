@@ -5,6 +5,7 @@ defmodule CashLens.Categories.Category do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "categories" do
+    belongs_to :user, CashLens.Users.User
     field :name, :string
     field :slug, :string
     field :keywords, :string

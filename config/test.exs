@@ -62,3 +62,5 @@ config :cash_lens, CashLensWeb.Plugs.RateLimit,
 
 # Sentry events are collected in-process (Sentry.Test) instead of being sent.
 config :sentry, test_mode: true
+
+config :cash_lens, :auto_create_owner, true

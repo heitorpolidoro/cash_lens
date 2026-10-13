@@ -5,6 +5,7 @@ defmodule CashLens.Accounts.Account do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "accounts" do
+    belongs_to :user, CashLens.Users.User
     field :name, :string
     field :bank, :string
     field :balance, :decimal, default: 0

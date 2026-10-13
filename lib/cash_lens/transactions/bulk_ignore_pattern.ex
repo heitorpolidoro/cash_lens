@@ -5,6 +5,7 @@ defmodule CashLens.Transactions.BulkIgnorePattern do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "bulk_ignore_patterns" do
+    belongs_to :user, CashLens.Users.User
     field :pattern, :string
     field :description, :string
 

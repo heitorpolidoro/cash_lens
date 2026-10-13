@@ -556,6 +556,7 @@ defmodule CashLens.TransactionsTest do
         Repo.insert_all(Transaction, [
           %{
             id: Ecto.UUID.generate(),
+            user_id: CashLens.Ownership.current_user_id!(),
             account_id: account.id,
             date: ~D[2026-02-23],
             description: "other",
