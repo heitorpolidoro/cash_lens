@@ -14,7 +14,10 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
     alias CashLens.Categories
     alias CashLens.Categories.Category
 
-    def mount(_params, _session, socket) do
+    def mount(_params, session, socket) do
+      # Stands in for the auth on_mount: the LiveView acts for the logged-in user.
+      CashLens.Repo.put_current_user_id(session["user_id"])
+
       form = Phoenix.Component.to_form(Categories.change_category(%Category{}))
 
       {:ok,
@@ -53,20 +56,20 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
     :ok
   end
 
-  test "renders the modal", %{conn: conn} do
-    {:ok, _view, html} = live_isolated(conn, HostLive)
+  test "renders the modal", %{conn: conn, user: user} do
+    {:ok, _view, html} = live_isolated(conn, HostLive, session: %{"user_id" => user.id})
     assert html =~ "Nova Categoria"
     assert html =~ "Salvar Categoria"
   end
 
-  test "renders parent category options when categories exist", %{conn: conn} do
+  test "renders parent category options when categories exist", %{conn: conn, user: user} do
     parent = category_fixture()
-    {:ok, _view, html} = live_isolated(conn, HostLive)
+    {:ok, _view, html} = live_isolated(conn, HostLive, session: %{"user_id" => user.id})
     assert html =~ parent.name
   end
 
-  test "creates a category without parent", %{conn: conn} do
-    {:ok, view, _html} = live_isolated(conn, HostLive)
+  test "creates a category without parent", %{conn: conn, user: user} do
+    {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"user_id" => user.id})
 
     view
     |> element("#quick-category-form")
@@ -76,9 +79,9 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
     assert Categories.get_category_by_slug("my-new-category") != nil
   end
 
-  test "validate selects a parent and clear_parent resets it", %{conn: conn} do
+  test "validate selects a parent and clear_parent resets it", %{conn: conn, user: user} do
     parent = category_fixture(name: "Pai")
-    {:ok, view, _html} = live_isolated(conn, HostLive)
+    {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"user_id" => user.id})
 
     # Validate with no parent selected (empty parent_id) — no parent chip.
     no_parent =
@@ -99,9 +102,9 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
     refute html =~ "Limpar pai"
   end
 
-  test "creates a category with a parent", %{conn: conn} do
+  test "creates a category with a parent", %{conn: conn, user: user} do
     parent = category_fixture()
-    {:ok, view, _html} = live_isolated(conn, HostLive)
+    {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"user_id" => user.id})
 
     view
     |> element("#quick-category-form")
@@ -110,8 +113,8 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
     assert render(view) =~ "Category created!"
   end
 
-  test "handles error when category creation fails with invalid data", %{conn: conn} do
-    {:ok, view, _html} = live_isolated(conn, HostLive)
+  test "handles error when category creation fails with invalid data", %{conn: conn, user: user} do
+    {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"user_id" => user.id})
     count_before = length(Categories.list_categories())
 
     # Submit with empty name to fail validate_required(:name) — triggers the error branch

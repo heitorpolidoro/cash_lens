@@ -83,13 +83,21 @@ defmodule CashLens.PrivacyTest do
 
     test "delete_account removes domain rows and keeps others", %{
       user: user,
+      other: other,
       mine: mine,
       theirs: theirs
     } do
       assert {:ok, _} = Privacy.delete_account(user, valid_user_password())
-      refute Repo.get(CashLens.Categories.Category, mine.id)
-      assert Repo.get(CashLens.Categories.Category, theirs.id)
-      assert Repo.aggregate(CashLens.Accounts.Account, :count) == 0
+
+      # Row-level security: look at each owner's rows as that owner.
+      Repo.with_user(user.id, fn ->
+        refute Repo.get(CashLens.Categories.Category, mine.id)
+        assert Repo.aggregate(CashLens.Accounts.Account, :count) == 0
+      end)
+
+      Repo.with_user(other.id, fn ->
+        assert Repo.get(CashLens.Categories.Category, theirs.id)
+      end)
     end
   end
 end

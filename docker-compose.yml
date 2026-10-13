@@ -35,7 +35,9 @@ services:
 
   app:
     build: .
-    command: /bin/sh -c "mix deps.get && mix phx.server"
+    # Migrate as the owner, (re)provision the unprivileged `cash_lens_app` role the
+    # app runs as, then serve. See docs/security.md.
+    command: /bin/sh -c "mix deps.get && mix ecto.migrate && mix cash_lens.db.provision && mix phx.server"
     ports:
       - "4444:4444"
     env_file:

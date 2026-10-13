@@ -1,18 +1,33 @@
 import Config
 
-# Configure your database
-#
-# The MIX_TEST_PARTITION environment variable can be used
-# to provide built-in test partitioning in CI environment.
-# Run `mix help test` for more information.
+# Two database roles, as in dev: the suite runs as the unprivileged
+# `cash_lens_app` role with forced row-level security. The owner repo exists only
+# for the tests that need DDL (the migration test) and for ecto.migrate. The
+# `test` alias provisions the app role (`mix cash_lens.db.provision`).
+db_host = System.get_env("DATABASE_HOST") || "localhost"
+db_port = String.to_integer(System.get_env("DATABASE_PORT") || "5432")
+db_name = "cash_lens_test#{System.get_env("MIX_TEST_PARTITION")}"
+
 config :cash_lens, CashLens.Repo,
-  username: System.get_env("DATABASE_USER") || "postgres",
-  password: System.get_env("DATABASE_PASSWORD") || "postgres",
-  hostname: System.get_env("DATABASE_HOST") || "localhost",
-  port: String.to_integer(System.get_env("DATABASE_PORT") || "5432"),
-  database: "cash_lens_test#{System.get_env("MIX_TEST_PARTITION")}",
+  username: System.get_env("DATABASE_APP_USER") || "cash_lens_app",
+  password: System.get_env("DATABASE_APP_PASSWORD") || "cash_lens_app",
+  hostname: db_host,
+  port: db_port,
+  database: db_name,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
+
+config :cash_lens, CashLens.MigrationRepo,
+  username: System.get_env("DATABASE_USER") || "postgres",
+  password: System.get_env("DATABASE_PASSWORD") || "postgres",
+  hostname: db_host,
+  port: db_port,
+  database: db_name,
+  priv: "priv/repo",
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: 2
+
+config :cash_lens, :start_migration_repo, true
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.

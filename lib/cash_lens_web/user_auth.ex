@@ -10,6 +10,7 @@ defmodule CashLensWeb.UserAuth do
   import Plug.Conn
   import Phoenix.Controller
 
+  alias CashLens.Repo
   alias CashLens.Users
 
   def log_in_user(conn, user, to \\ "/") do
@@ -35,7 +36,25 @@ defmodule CashLensWeb.UserAuth do
 
   def fetch_current_user(conn, _opts) do
     user = session_user(get_session(conn, :user_id), get_session(conn, :session_nonce))
-    assign(conn, :current_user, user)
+
+    conn
+    |> assign(:current_user, user)
+    |> bind_database_user(user)
+  end
+
+  # Row-level security: the database sees this request as acting for `user` (and
+  # for nobody when `user` is nil). The request process is reused by keep-alive
+  # connections, so the previous binding (normally none) is put back before the
+  # response goes out.
+  defp bind_database_user(conn, user) do
+    previous = Repo.current_user_id()
+    Repo.put_current_user_id(user && user.id)
+    register_before_send(conn, fn conn -> restore_database_user(conn, previous) end)
+  end
+
+  defp restore_database_user(conn, previous) do
+    Repo.put_current_user_id(previous)
+    conn
   end
 
   def require_authenticated_user(conn, _opts) do
@@ -67,10 +86,11 @@ defmodule CashLensWeb.UserAuth do
 
     case session_user(get_session(conn, :user_id), get_session(conn, :session_nonce)) do
       %{enabled: true} = user ->
-        assign(conn, :current_user, user)
+        conn |> assign(:current_user, user) |> bind_database_user(user)
 
       _ ->
         conn
+        |> bind_database_user(nil)
         |> put_status(:unauthorized)
         |> json(%{errors: %{detail: "Unauthorized"}})
         |> halt()
@@ -81,6 +101,8 @@ defmodule CashLensWeb.UserAuth do
   def on_mount(:require_enabled_user, _params, session, socket) do
     case session_user(session["user_id"], session["session_nonce"]) do
       %{enabled: true} = user ->
+        # The LiveView process acts for this user for its whole life.
+        Repo.put_current_user_id(user.id)
         {:cont, Phoenix.Component.assign(socket, :current_user, user)}
 
       _ ->

@@ -29,9 +29,20 @@ defmodule CashLens.DataCase do
     end
   end
 
+  # The suite runs as the unprivileged app role with forced row-level security,
+  # so a test must act for some user. Every test gets one and the test process is
+  # pinned to it; `@tag :no_current_user` opts out (tests that need an empty
+  # users table or that exercise the unauthenticated state).
   setup tags do
     CashLens.DataCase.setup_sandbox(tags)
-    :ok
+
+    if tags[:no_current_user] do
+      :ok
+    else
+      user = CashLens.UsersFixtures.user_fixture()
+      CashLens.Repo.put_current_user_id(user.id)
+      {:ok, current_user_id: user.id}
+    end
   end
 
   @doc """

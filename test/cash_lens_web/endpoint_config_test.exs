@@ -78,6 +78,7 @@ defmodule CashLensWeb.EndpointConfigTest do
       read_runtime([
         {"SECRET_KEY_BASE", String.duplicate("a", 64)},
         {"DATABASE_URL", "ecto://u:p@localhost/db"},
+        {"MIGRATION_DATABASE_URL", "ecto://o:p@localhost/db"},
         {"PHX_HOST", "money.example.org"},
         {"MAILGUN_API_KEY", "key-for-test"},
         {"MAILGUN_DOMAIN", "mg.example.org"}
@@ -90,13 +91,21 @@ defmodule CashLensWeb.EndpointConfigTest do
 
   test "evaluating runtime.exs for prod raises when SECRET_KEY_BASE is unset" do
     assert_raise RuntimeError, ~r/SECRET_KEY_BASE/, fn ->
-      read_runtime([{"SECRET_KEY_BASE", nil}, {"DATABASE_URL", "ecto://u:p@localhost/db"}])
+      read_runtime([
+        {"SECRET_KEY_BASE", nil},
+        {"DATABASE_URL", "ecto://u:p@localhost/db"},
+        {"MIGRATION_DATABASE_URL", "ecto://o:p@localhost/db"}
+      ])
     end
   end
 
   test "evaluating runtime.exs for prod raises when DATABASE_URL is unset" do
     assert_raise RuntimeError, ~r/DATABASE_URL/, fn ->
-      read_runtime([{"SECRET_KEY_BASE", String.duplicate("a", 64)}, {"DATABASE_URL", nil}])
+      read_runtime([
+        {"SECRET_KEY_BASE", String.duplicate("a", 64)},
+        {"DATABASE_URL", nil},
+        {"MIGRATION_DATABASE_URL", "ecto://o:p@localhost/db"}
+      ])
     end
   end
 end

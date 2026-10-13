@@ -1,15 +1,30 @@
 import Config
 
-# Configure your database
+# Two database roles (see docs/security.md): the runtime Repo connects as the
+# unprivileged `cash_lens_app` role; migrations and role provisioning connect as
+# the owner (DATABASE_USER). `mix cash_lens.db.provision` creates the app role.
+db_host = System.get_env("DATABASE_HOST") || "localhost"
+db_port = String.to_integer(System.get_env("DATABASE_PORT") || "5432")
+db_name = System.get_env("DATABASE_NAME") || "cash_lens"
+
 config :cash_lens, CashLens.Repo,
-  username: System.get_env("DATABASE_USER") || "postgres",
-  password: System.get_env("DATABASE_PASSWORD") || "postgres",
-  hostname: System.get_env("DATABASE_HOST") || "localhost",
-  port: String.to_integer(System.get_env("DATABASE_PORT") || "5432"),
-  database: System.get_env("DATABASE_NAME") || "cash_lens",
+  username: System.get_env("DATABASE_APP_USER") || "cash_lens_app",
+  password: System.get_env("DATABASE_APP_PASSWORD") || "cash_lens_app",
+  hostname: db_host,
+  port: db_port,
+  database: db_name,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
+
+config :cash_lens, CashLens.MigrationRepo,
+  username: System.get_env("DATABASE_USER") || "postgres",
+  password: System.get_env("DATABASE_PASSWORD") || "postgres",
+  hostname: db_host,
+  port: db_port,
+  database: db_name,
+  priv: "priv/repo",
+  pool_size: 2
 
 # For development, we disable any cache and enable
 # debugging and code reloading.

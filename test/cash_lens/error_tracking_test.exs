@@ -16,6 +16,7 @@ defmodule CashLens.ErrorTrackingTest do
   test "runtime config enables Sentry in prod only when SENTRY_DSN is set" do
     env = %{
       "DATABASE_URL" => "ecto://u:p@localhost/db",
+      "MIGRATION_DATABASE_URL" => "ecto://o:p@localhost/db",
       "SECRET_KEY_BASE" => String.duplicate("a", 64),
       "MAILGUN_API_KEY" => "key",
       "MAILGUN_DOMAIN" => "mg.example.com"

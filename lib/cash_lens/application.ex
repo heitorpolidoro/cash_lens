@@ -13,23 +13,31 @@ defmodule CashLens.Application do
     })
 
     children =
-      [
-        CashLensWeb.Telemetry,
-        CashLens.Repo,
-        CashLensWeb.Plugs.RateLimit.Store,
-        {DNSCluster, query: Application.get_env(:cash_lens, :dns_cluster_query) || :ignore},
-        {Phoenix.PubSub, name: CashLens.PubSub},
-        {Oban, Application.fetch_env!(:cash_lens, Oban)},
-        # Start a worker by calling: CashLens.Worker.start_link(arg)
-        # {CashLens.Worker, arg},
-        # Start to serve requests, typically the last entry
-        CashLensWeb.Endpoint
-      ]
+      migration_repo() ++
+        [
+          CashLensWeb.Telemetry,
+          CashLens.Repo,
+          CashLensWeb.Plugs.RateLimit.Store,
+          {DNSCluster, query: Application.get_env(:cash_lens, :dns_cluster_query) || :ignore},
+          {Phoenix.PubSub, name: CashLens.PubSub},
+          {Oban, Application.fetch_env!(:cash_lens, Oban)},
+          # Start a worker by calling: CashLens.Worker.start_link(arg)
+          # {CashLens.Worker, arg},
+          # Start to serve requests, typically the last entry
+          CashLensWeb.Endpoint
+        ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: CashLens.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  # The owner repo is only needed at runtime by the schema tests.
+  defp migration_repo do
+    if Application.get_env(:cash_lens, :start_migration_repo, false),
+      do: [CashLens.MigrationRepo],
+      else: []
   end
 
   # Tell Phoenix to update the endpoint configuration

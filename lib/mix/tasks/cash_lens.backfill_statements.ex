@@ -21,6 +21,8 @@ defmodule Mix.Tasks.CashLens.BackfillStatements do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
+    # Row-level security: maintenance work acts for the operator (CL-53).
+    CashLens.Ownership.pin_operator!()
 
     path =
       case args do

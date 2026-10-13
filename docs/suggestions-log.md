@@ -1569,3 +1569,22 @@ commit claimed none were added. Fixed; back to 23.
 ## [CL-54] Production readiness: account recovery, audit, health and privacy — 2026-10-13
 - Code review: `mix.exs` adds `hackney` only for `Sentry.HackneyClient`; it is a second HTTP client alongside Req.
 - Code review: `runtime.exs` now raises at boot in prod if `MAILGUN_API_KEY` or `MAILGUN_DOMAIN` is missing; update the deploy env first.
+
+## [CL-50] Add user ownership schema and backfill existing data — 2026-10-13
+- Code review: `Repo.insert/insert!` is overridden globally to auto-assign the operator, with a test-only `:auto_create_owner` branch; this goes past "minimally pass a user through" and hides missing owners in later CL-20 parts. Prefer explicit `user_id` in fixtures and the ingestor. The `insert/3` arities are not covered by the override.
+- Code review: `Ownership.operator_user_id!/0` compares email with `==`; the spec requires a case-insensitive match (citext). Add a test for it.
+- Code review: the migration interpolates the operator id into SQL; use a parameterized `repo().query!`.
+- Code review: Privacy `@owned` now covers all domain schemas, so export and delete reach financial data. Confirm this is intended, since the spec does not list it.
+
+## [CL-51] Scope all queries by the current user — 2026-10-13
+- Spec review: the guard regex works on text blocks, so a query written without Repo.* in the same function block could slip through. Acceptable as a heuristic.
+- Spec review: Expected Result 1 says "enforced by user_scoping_audit_test.exs", but that test only checks scoping inside blocks, not the first-argument convention. Consider rewording later.
+
+## [CL-53] Database security review and hardening — 2026-10-13
+- Spec review: Result 4 bundles four assertions; Test criteria cover encryption, no plaintext and abort but not retention pruning. Add a pruning check with fake-dated files so QA can verify 7/4/6 mechanically.
+- Spec review: Result 5 and the RLS table list depend on CL-50's migration existing; keep CL-50 in `blockedBy`.
+- Spec review: Result 1 "exits 0 only when" is best verified with a negative case (running the task against the owner role must exit non-zero); mention it in the role test.
+- Spec review: running the suite as a non-owner role means migrations and test DB setup must run as owner; keep the `mix test` alias explicit about that.
+- Code review: `Repo` overrides a long list of functions to wrap them in a transaction; `query/3` and `stream/2` are not wrapped (documented). Consider a lint or test guarding new direct raw-SQL callers.
+- QA: Install age in CI so the real-age round-trip test is not skipped.
+- QA: The transaction_live "saves new transaction" test flaked once in the full run; watch for recurrence.

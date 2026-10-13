@@ -39,7 +39,11 @@ defmodule CashLensWeb.ConnCase do
     if tags[:logged_out] do
       {:ok, conn: Phoenix.ConnTest.build_conn()}
     else
-      register_and_log_in_user(%{conn: Phoenix.ConnTest.build_conn()})
+      context = register_and_log_in_user(%{conn: Phoenix.ConnTest.build_conn()})
+      # Fixtures run in the test process, under row-level security: act for the
+      # logged-in user, as the request will.
+      CashLens.Repo.put_current_user_id(context.user.id)
+      context
     end
   end
 

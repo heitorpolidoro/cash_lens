@@ -21,3 +21,5 @@ ExUnit.start(exclude: [:real_statements | privileged_exclusions])
 Mox.defmock(CashLens.Parsers.PDFConverterMock, for: CashLens.Parsers.PDFConverter)
 Mox.defmock(CashLens.Transactions.RepoMock, for: CashLens.Transactions.RepoBehaviour)
 Ecto.Adapters.SQL.Sandbox.mode(CashLens.Repo, :manual)
+# Never let the owner repo commit by accident: DDL tests check it out explicitly.
+Ecto.Adapters.SQL.Sandbox.mode(CashLens.MigrationRepo, :manual)

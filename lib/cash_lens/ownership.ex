@@ -48,6 +48,14 @@ defmodule CashLens.Ownership do
     :ok
   end
 
+  @doc "The owner pinned for the calling process, or `nil`."
+  def pinned_user_id, do: Process.get(@pdict_key)
+
+  @doc "Pins the operator (see the moduledoc) for the calling process; for maintenance code."
+  def pin_operator! do
+    put_user_id(current_user_id!())
+  end
+
   @doc "Returns the id that should own a new row, raising when it is ambiguous."
   def current_user_id! do
     Process.get(@pdict_key) || operator_user_id!()

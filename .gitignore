@@ -47,6 +47,9 @@ npm-debug.log
 /cash_lens.iml
 /statements/
 
+# Database backups (encrypted .dump.age; older ad hoc .dump files are plaintext!)
+/backups/
+
 # Universal
 .DS_Store
 .vscode/

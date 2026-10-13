@@ -243,7 +243,14 @@ defmodule CashLens.CategoriesTest do
     # These run under a timeout so a regression reports a hang instead of
     # wedging the suite.
     defp within(timeout_ms, fun) do
-      task = Task.async(fun)
+      # The task is a new process: it acts for the same user as the test.
+      user_id = CashLens.Repo.current_user_id()
+
+      task =
+        Task.async(fn ->
+          CashLens.Repo.put_current_user_id(user_id)
+          fun.()
+        end)
 
       case Task.yield(task, timeout_ms) || Task.shutdown(task, :brutal_kill) do
         {:ok, result} -> result

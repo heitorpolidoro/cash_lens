@@ -39,6 +39,8 @@ defmodule CashLens.Workers.SyncRecurringWorker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
+    # Row-level security: a job has no logged-in user, so it acts for the operator.
+    CashLens.Ownership.pin_operator!()
     result = Forecast.sync_all()
     %{created: created, updated: updated, deactivated: deactivated} = result
 

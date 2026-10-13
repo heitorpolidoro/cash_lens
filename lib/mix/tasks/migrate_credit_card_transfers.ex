@@ -41,6 +41,8 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
   @impl Mix.Task
   def run(_args) do
     Mix.Task.run("app.start")
+    # Row-level security: maintenance work acts for the operator (CL-53).
+    CashLens.Ownership.pin_operator!()
 
     case Categories.get_category_by_slug("cartao-de-credito") do
       nil ->

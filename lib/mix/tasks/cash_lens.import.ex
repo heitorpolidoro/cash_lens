@@ -19,6 +19,8 @@ defmodule Mix.Tasks.CashLens.Import do
   def run([path]) do
     Application.put_env(:cash_lens, :start_console_reporter, false)
     Mix.Task.run("app.start")
+    # Row-level security: maintenance work acts for the operator (CL-53).
+    CashLens.Ownership.pin_operator!()
 
     previous_level = Logger.level()
     Logger.configure(level: :warning)

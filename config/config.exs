@@ -8,7 +8,7 @@
 import Config
 
 config :cash_lens,
-  ecto_repos: [CashLens.Repo],
+  ecto_repos: [CashLens.MigrationRepo],
   generators: [timestamp_type: :utc_datetime, binary_id: true],
   pdf_converter: CashLens.Parsers.PDFConverter.SystemConverter
 

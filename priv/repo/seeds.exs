@@ -1,4 +1,8 @@
 alias CashLens.Repo
+
+# Row-level security: seed as the operator (see CashLens.Ownership).
+CashLens.Ownership.pin_operator!()
+
 alias CashLens.Categories.Category
 
 Repo.insert!(%Category{name: "Valor Inicial", slug: "initial_value"}, on_conflict: :nothing)

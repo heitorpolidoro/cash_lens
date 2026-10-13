@@ -142,6 +142,11 @@ export DATABASE_PORT="${_port:-$HOST_PORT}"
 export DATABASE_NAME="${_name:-cash_lens}"
 export PORT="${PORT:-4444}"
 
+# Migrate as the owner role and (re)provision the unprivileged app role the
+# server connects as (docs/security.md).
+mix ecto.migrate
+mix cash_lens.db.provision
+
 echo "💻 Starting Phoenix natively on port $PORT..."
 # Deliberately not `exec`: exec replaces this shell, which would discard the
 # EXIT trap and leave the Postgres container running after the server stops.

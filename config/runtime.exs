@@ -24,21 +24,61 @@ config :cash_lens, CashLensWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 if config_env() == :prod do
+  # Two database roles (docs/security.md): the runtime Repo connects as the
+  # unprivileged `cash_lens_app` role (DATABASE_URL); migrations, role
+  # provisioning and backups use the owner (MIGRATION_DATABASE_URL).
   database_url =
     System.get_env("DATABASE_URL") ||
       raise """
       environment variable DATABASE_URL is missing.
-      For example: ecto://USER:PASS@HOST/DATABASE
+      It must connect as the unprivileged app role (cash_lens_app).
+      For example: ecto://cash_lens_app:PASS@HOST/DATABASE
+      """
+
+  migration_database_url =
+    System.get_env("MIGRATION_DATABASE_URL") ||
+      raise """
+      environment variable MIGRATION_DATABASE_URL is missing.
+      It must connect as the owner role that runs migrations.
+      For example: ecto://OWNER:PASS@HOST/DATABASE
       """
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
+  # TLS to the database is always on and always verified: the certificate chain
+  # against DATABASE_CA_CERT_PATH (falling back to the system CA store) and the
+  # host name against the DB host. There is deliberately no switch to turn it off.
+  ssl_opts = fn url ->
+    host = URI.parse(url).host || raise "database URL has no host: #{inspect(url)}"
+
+    ca =
+      case System.get_env("DATABASE_CA_CERT_PATH") do
+        path when is_binary(path) and path != "" -> [cacertfile: path]
+        _ -> [cacerts: :public_key.cacerts_get()]
+      end
+
+    [
+      verify: :verify_peer,
+      server_name_indication: String.to_charlist(host),
+      customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
+    ] ++ ca
+  end
+
   config :cash_lens, CashLens.Repo,
-    # ssl: true,
+    ssl: true,
+    ssl_opts: ssl_opts.(database_url),
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
     # For machines with several cores, consider starting multiple pools of `pool_size`
     # pool_count: 4,
+    socket_options: maybe_ipv6
+
+  config :cash_lens, CashLens.MigrationRepo,
+    ssl: true,
+    ssl_opts: ssl_opts.(migration_database_url),
+    url: migration_database_url,
+    priv: "priv/repo",
+    pool_size: 2,
     socket_options: maybe_ipv6
 
   # The secret key base is used to sign/encrypt cookies and other secrets.

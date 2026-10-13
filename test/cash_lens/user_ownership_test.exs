@@ -3,6 +3,7 @@ defmodule CashLens.UserOwnershipTest do
 
   import CashLens.UsersFixtures
 
+  alias CashLens.Audit.LoginAttempt
   alias CashLens.Ownership
 
   @tables_and_schemas [
@@ -70,38 +71,47 @@ defmodule CashLens.UserOwnershipTest do
   defp now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
   describe "foreign key enforcement" do
+    # Row-level security rejects a row whose user_id is not the current user
+    # before the foreign key is looked at, so act as the unknown user.
     test "an account with an unknown user_id is rejected" do
+      ghost = Ecto.UUID.generate()
+
       assert_raise Postgrex.Error, ~r/foreign_key_violation/, fn ->
-        Repo.insert_all(CashLens.Accounts.Account, [
-          %{
-            id: Ecto.UUID.generate(),
-            name: "x",
-            bank: "b",
-            balance: 0,
-            user_id: Ecto.UUID.generate(),
-            inserted_at: now(),
-            updated_at: now()
-          }
-        ])
+        Repo.with_user(ghost, fn ->
+          Repo.insert_all(CashLens.Accounts.Account, [
+            %{
+              id: Ecto.UUID.generate(),
+              name: "x",
+              bank: "b",
+              balance: 0,
+              user_id: ghost,
+              inserted_at: now(),
+              updated_at: now()
+            }
+          ])
+        end)
       end
     end
 
     test "a transaction with an unknown user_id is rejected" do
       account = CashLens.AccountsFixtures.account_fixture()
+      ghost = Ecto.UUID.generate()
 
       assert_raise Postgrex.Error, ~r/foreign_key_violation/, fn ->
-        Repo.insert_all(CashLens.Transactions.Transaction, [
-          %{
-            id: Ecto.UUID.generate(),
-            date: ~D[2026-01-01],
-            amount: Decimal.new("1.00"),
-            description: "x",
-            account_id: account.id,
-            user_id: Ecto.UUID.generate(),
-            inserted_at: now(),
-            updated_at: now()
-          }
-        ])
+        Repo.with_user(ghost, fn ->
+          Repo.insert_all(CashLens.Transactions.Transaction, [
+            %{
+              id: Ecto.UUID.generate(),
+              date: ~D[2026-01-01],
+              amount: Decimal.new("1.00"),
+              description: "x",
+              account_id: account.id,
+              user_id: ghost,
+              inserted_at: now(),
+              updated_at: now()
+            }
+          ])
+        end)
       end
     end
 
@@ -124,20 +134,23 @@ defmodule CashLens.UserOwnershipTest do
       assert Ownership.current_user_id!() == user.id
     end
 
+    @tag :no_current_user
     test "uses the only user when none is pinned" do
       user = user_fixture()
       assert Ownership.current_user_id!() == user.id
     end
 
+    @tag :no_current_user
     test "raises when several users exist and nothing says which one" do
       user_fixture()
       user_fixture()
       assert_raise RuntimeError, ~r/CASH_LENS_OPERATOR_EMAIL/, &Ownership.current_user_id!/0
     end
 
+    @tag :no_current_user
     test "inserts without an owner get the operator" do
       user = user_fixture()
-      assert CashLens.CategoriesFixtures.category_fixture().user_id == user.id
+      assert Ownership.assign(%CashLens.Categories.Category{}).user_id == user.id
     end
 
     test "an explicit owner is kept" do
@@ -149,9 +162,9 @@ defmodule CashLens.UserOwnershipTest do
 
     test "schemas outside the domain registry are never stamped" do
       user_fixture()
-      attempt = %CashLens.Audit.LoginAttempt{user_id: nil}
+      attempt = %LoginAttempt{user_id: nil}
       assert Ownership.assign(attempt).user_id == nil
-      assert Ownership.assign(CashLens.Audit.LoginAttempt.__struct__()).user_id == nil
+      assert Ownership.assign(LoginAttempt.__struct__()).user_id == nil
     end
 
     test "domain_schemas lists the 12 owned schemas" do

@@ -15,6 +15,9 @@ defmodule CashLens.Workers.RecalculateBalanceWorker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"account_id" => account_id, "year" => year, "month" => month}}) do
+    # Row-level security: a job has no logged-in user, so it acts for the operator.
+    CashLens.Ownership.pin_operator!()
+
     # 1. Calculate the current month
     case Accounting.calculate_monthly_balance(account_id, year, month) do
       {:ok, _balance} ->

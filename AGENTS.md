@@ -8,7 +8,8 @@ vocabulary the codebase uses for its business logic.
 
 CashLens is a **personal finance tracking application** with no
 multi-tenancy yet: every domain table carries a NOT NULL `user_id` (FK to `users`, `ON DELETE RESTRICT`),
-but queries are not scoped by it yet (CL-20 later parts). Access is gated by login (`users` table, bcrypt)
+and PostgreSQL row-level security (CL-53) already confines every query to the current user, while
+application-level query scoping by `user_id` is still a later CL-20 part. Access is gated by login (`users` table, bcrypt)
 plus an operator-controlled `enabled` flag that a new sign-up does not have until it is set by
 hand in the DB — see `BACKLOG.md` for future SaaS plans). It
 solves the problem of consolidating money movement across many disconnected sources — bank CSV/OFX
@@ -140,6 +141,27 @@ So: **before running the container suite, check for a live `./run`** —
 and EXIT but not HUP, so it can survive as a child of init with its Postgres
 still holding the volume. `pgrep -f 'bash ./run'` finds it.
 
+### Two database roles (CL-53)
+
+The app never connects as the table owner. `CashLens.Repo` connects as the unprivileged
+`cash_lens_app` role (no superuser/createdb/createrole/bypassrls, no DDL, owns nothing), so
+row-level security applies to everything the app and the test suite do.
+`CashLens.MigrationRepo` connects as the owner (dev default `postgres`) and is the only entry in
+`ecto_repos`: `mix ecto.create`/`ecto.migrate` go through it. After migrating, run
+`mix cash_lens.db.provision` (applies `priv/repo/roles.sql`; `mix test`, `mix quality_check`,
+`mix ecto.setup`, the compose `app` command and `./run` already do) and check it with
+`mix cash_lens.db.verify_role`. Dev/test env vars: owner `DATABASE_USER`/`DATABASE_PASSWORD`,
+app role `DATABASE_APP_USER`/`DATABASE_APP_PASSWORD` (default `cash_lens_app`). In prod:
+`DATABASE_URL` (app role) and `MIGRATION_DATABASE_URL` (owner), with verified TLS.
+
+**Every Repo operation runs for a pinned user.** Web requests and LiveViews pin the logged-in
+user (`CashLensWeb.UserAuth`); anything else (Oban workers, mix tasks, new processes/tasks)
+must pin one with `Repo.put_current_user_id/1`, `Repo.with_user/2` or
+`CashLens.Ownership.pin_operator!/0`, otherwise it sees no rows and cannot insert. Raw SQL goes
+through `Repo.scoped_query/2`. Tests get a pinned user from `DataCase`/`ConnCase`
+(`@tag :no_current_user` opts out). New tables with a `user_id` need RLS: see
+`docs/migration-checklist.md`.
+
 Mix aliases worth knowing (`mix.exs`):
 - `mix setup` — deps, DB, assets, all in one.
 - `mix precommit` / `mix quality_check` — DB setup + compile with warnings-as-errors +
@@ -186,7 +208,9 @@ lib/cash_lens/                     Business logic ("contexts") — framework-agn
     directory_importer.ex — bulk folder import used by the `cash_lens.import` mix task
   settings.ex                      Flat-file (settings.json) key/value UI preferences
   workers/                         Oban workers (e.g. recalculate_balance_worker.ex)
-  repo.ex, application.ex, mailer.ex — standard Phoenix/OTP boilerplate
+  repo.ex                          Runtime repo (app role); binds the current user for row-level security
+  migration_repo.ex                Owner-role repo for DDL (migrations, provisioning); not started with the app
+  application.ex, mailer.ex        — standard Phoenix/OTP boilerplate
 
 lib/cash_lens_web/                 Web layer (Phoenix)
   router.ex                        Route table: browser (LiveView) + /api (JSON) pipelines
@@ -203,7 +227,7 @@ lib/cash_lens_web/                 Web layer (Phoenix)
   components/                      Shared UI components + app layouts
   formatters.ex                    Shared view-layer formatting helpers (currency, dates, etc.)
 
-lib/mix/tasks/                     Custom mix tasks (import, backfill_statements,
+lib/mix/tasks/                     Custom mix tasks (db.provision, db.verify_role, import, backfill_statements,
                                       migrate_ourocard_txt, recompute_competencia,
                                       reconcile_pending_statements, migrate_credit_card_transfers)
 
@@ -222,8 +246,10 @@ BACKLOG.md                         Architectural decisions + prioritized backlog
 ## Security
 
 Auth hardening (CSRF, session cookie, rate limiting, password policy, CSP/HSTS, secrets,
-upload validation) and the `mix security` gate are documented in
-[`docs/security.md`](docs/security.md), including accepted audit exceptions.
+upload validation), the database hardening of CL-53 (least-privilege role, row-level security,
+verified TLS to the database, encrypted backups with retention via `scripts/backup.sh`) and the
+`mix security` gate are documented in [`docs/security.md`](docs/security.md), including accepted
+audit exceptions. Migrations are reviewed against [`docs/migration-checklist.md`](docs/migration-checklist.md).
 
 ### Account recovery, audit, health and privacy (CL-54)
 

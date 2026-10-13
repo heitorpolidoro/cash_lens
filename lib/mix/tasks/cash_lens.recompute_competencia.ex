@@ -13,6 +13,8 @@ defmodule Mix.Tasks.CashLens.RecomputeCompetencia do
   @impl Mix.Task
   def run(_args) do
     Mix.Task.run("app.start")
+    # Row-level security: maintenance work acts for the operator (CL-53).
+    CashLens.Ownership.pin_operator!()
     n = CashLens.CreditCards.recompute_competencia()
     Mix.shell().info("Recomputed competência for #{n} statement(s).")
   end

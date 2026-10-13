@@ -29,14 +29,16 @@ defmodule CashLens.Privacy do
 
   @doc "Every owned row of `user`, as JSON-encodable maps keyed by table name."
   def export(%User{id: user_id}) do
-    Map.new(@owned, fn {schema, owner_field, omitted} ->
-      rows =
-        schema
-        |> owned_query(owner_field, user_id)
-        |> Repo.all()
-        |> Enum.map(&row_to_map(&1, schema, omitted))
+    Repo.with_user(user_id, fn ->
+      Map.new(@owned, fn {schema, owner_field, omitted} ->
+        rows =
+          schema
+          |> owned_query(owner_field, user_id)
+          |> Repo.all()
+          |> Enum.map(&row_to_map(&1, schema, omitted))
 
-      {schema.__schema__(:source), rows}
+        {schema.__schema__(:source), rows}
+      end)
     end)
   end
 
@@ -46,12 +48,14 @@ defmodule CashLens.Privacy do
   """
   def delete_account(%User{id: user_id} = user, password) do
     if User.valid_password?(user, password) do
-      Repo.transaction(fn ->
-        Enum.each(@owned, &delete_owned(&1, user_id))
-      end)
+      Repo.with_user(user_id, fn -> delete_all_owned(user_id) end)
     else
       {:error, :invalid_password}
     end
+  end
+
+  defp delete_all_owned(user_id) do
+    Repo.transaction(fn -> Enum.each(@owned, &delete_owned(&1, user_id)) end)
   end
 
   defp delete_owned({schema, owner_field, _omitted}, user_id) do

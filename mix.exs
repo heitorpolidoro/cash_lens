@@ -101,9 +101,16 @@ defmodule CashLens.MixProject do
   defp aliases do
     [
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
-      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
+      "ecto.setup": [
+        "ecto.create",
+        "ecto.migrate",
+        "cash_lens.db.provision",
+        "run priv/repo/seeds.exs"
+      ],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
-      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      # Migrate as the owner role, then (re)provision the unprivileged app role the
+      # suite runs as. See docs/security.md.
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "cash_lens.db.provision", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind cash_lens", "esbuild cash_lens"],
       "assets.deploy": [
@@ -118,6 +125,7 @@ defmodule CashLens.MixProject do
       quality_check: [
         "ecto.create --quiet",
         "ecto.migrate --quiet",
+        "cash_lens.db.provision",
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "format --check-formatted",

@@ -171,7 +171,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
     query =
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name"
 
-    case Repo.query(query) do
+    case Repo.scoped_query(query) do
       {:ok, %{rows: rows}} -> List.flatten(rows)
       {:error, _} -> []
     end
@@ -181,7 +181,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
     query =
       "SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND table_schema = 'public' ORDER BY ordinal_position"
 
-    case Repo.query(query, [table]) do
+    case Repo.scoped_query(query, [table]) do
       {:ok, %{rows: rows}} -> List.flatten(rows)
       {:error, _} -> []
     end
@@ -214,7 +214,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
 
     final_query = final_query <> " ORDER BY inserted_at DESC LIMIT 100"
 
-    case Repo.query(final_query, params) do
+    case Repo.scoped_query(final_query, params) do
       {:ok, %{rows: rows}} ->
         mapped_rows =
           Enum.map(rows, fn row ->
