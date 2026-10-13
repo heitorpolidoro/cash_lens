@@ -909,7 +909,8 @@ defmodule CashLens.Forecast do
     every bill in it would look unpaid. Nothing is claimed past that date.
   """
   def overdue_occurrences(today \\ Date.utc_today()) do
-    case CashLens.Transactions.get_latest_transaction_date() do
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    case CashLens.Transactions.get_latest_transaction_date(CashLens.Ownership.current_user!()) do
       nil -> []
       latest -> overdue_occurrences(today, latest)
     end

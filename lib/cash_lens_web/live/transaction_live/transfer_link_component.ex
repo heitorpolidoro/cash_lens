@@ -158,15 +158,21 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
 
   @impl true
   def handle_event("link_transfer", %{"pair-id" => pair_id}, socket) do
+    user = socket.assigns.current_user
     origin_tx = socket.assigns.transfer_origin
-    pair_tx = Transactions.get_transaction!(pair_id)
     transfer_key = Ecto.UUID.generate()
 
-    # Update both transactions with the same key
-    {:ok, _} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
-    {:ok, _} = Transactions.update_transaction(pair_tx, %{transfer_key: transfer_key})
+    case Transactions.get_transaction(user, pair_id) do
+      nil ->
+        send(self(), {:component_error, "Transação não encontrada."})
 
-    send(self(), {:transfer_linked, "Transferência vinculada com sucesso!"})
+      pair_tx ->
+        # Update both transactions with the same key
+        {:ok, _} = Transactions.update_transaction(user, origin_tx, %{transfer_key: transfer_key})
+        {:ok, _} = Transactions.update_transaction(user, pair_tx, %{transfer_key: transfer_key})
+
+        send(self(), {:transfer_linked, "Transferência vinculada com sucesso!"})
+    end
 
     {:noreply, socket}
   end
@@ -199,34 +205,35 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponent do
         },
         socket
       ) do
+    user = socket.assigns.current_user
     origin_tx = socket.assigns.transfer_origin
     transfer_key = Ecto.UUID.generate()
+    transfer_category = Categories.get_category_by_slug(user, "transfer")
 
-    # 1. Update origin transaction
-    {:ok, origin_tx} = Transactions.update_transaction(origin_tx, %{transfer_key: transfer_key})
+    # 1. Create target transaction. Done first so a target account that is not
+    # the user's leaves the origin untouched.
+    case Transactions.create_transaction(user, %{
+           account_id: target_account_id,
+           category_id: transfer_category.id,
+           description: description,
+           date: date,
+           amount: amount,
+           transfer_key: transfer_key
+         }) do
+      {:ok, %{} = pair_tx} ->
+        # 2. Update origin transaction
+        {:ok, origin_tx} =
+          Transactions.update_transaction(user, origin_tx, %{transfer_key: transfer_key})
 
-    # 2. Create target transaction
-    transfer_category = Categories.get_category_by_slug(socket.assigns.current_user, "transfer")
+        # 3. Recalculate balances
+        CashLens.Accounting.rebuild_account_balances(user, origin_tx.account_id)
+        CashLens.Accounting.rebuild_account_balances(user, pair_tx.account_id)
 
-    {:ok, pair_tx} =
-      Transactions.create_transaction(%{
-        account_id: target_account_id,
-        category_id: transfer_category.id,
-        description: description,
-        date: date,
-        amount: amount,
-        transfer_key: transfer_key
-      })
+        send(self(), {:transfer_linked, "Par de transferência criado e vinculado!"})
 
-    # 3. Recalculate balances
-    CashLens.Accounting.rebuild_account_balances(
-      socket.assigns.current_user,
-      origin_tx.account_id
-    )
-
-    CashLens.Accounting.rebuild_account_balances(socket.assigns.current_user, pair_tx.account_id)
-
-    send(self(), {:transfer_linked, "Par de transferência criado e vinculado!"})
+      _error ->
+        send(self(), {:component_error, "Não foi possível criar o par de transferência."})
+    end
 
     {:noreply, socket}
   end

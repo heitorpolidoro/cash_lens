@@ -1,10 +1,15 @@
 defmodule CashLensWeb.ReimbursementLiveTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
+  import Ecto.Query
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
+
+  alias CashLens.Repo
 
   describe "Index" do
     test "lists reimbursements", %{conn: conn} do
@@ -114,7 +119,9 @@ defmodule CashLensWeb.ReimbursementLiveTest do
         |> render_click()
 
       assert html =~ "Solicitado"
-      assert CashLens.Transactions.get_transaction!(tx.id).reimbursement_status == "requested"
+
+      assert CashLens.Transactions.get_transaction!(user(), tx.id).reimbursement_status ==
+               "requested"
     end
 
     test "unlinks a reimbursement", %{conn: conn} do
@@ -152,7 +159,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> render_click()
 
       assert render(index_live) =~ "desvinculado com sucesso"
-      updated = CashLens.Transactions.get_transaction!(expense.id)
+      updated = CashLens.Transactions.get_transaction!(user(), expense.id)
       assert is_nil(updated.reimbursement_link_key)
     end
 
@@ -280,11 +287,11 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       assert render(index_live) =~ "Reembolso vinculado com sucesso!"
 
-      updated_expense = CashLens.Transactions.get_transaction!(expense.id)
+      updated_expense = CashLens.Transactions.get_transaction!(user(), expense.id)
       assert updated_expense.reimbursement_status == "paid"
       assert updated_expense.reimbursement_link_key != nil
 
-      updated_credit = CashLens.Transactions.get_transaction!(credit.id)
+      updated_credit = CashLens.Transactions.get_transaction!(user(), credit.id)
       assert updated_credit.reimbursement_status == "paid"
       assert updated_credit.reimbursement_link_key == updated_expense.reimbursement_link_key
     end
@@ -325,8 +332,12 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> render_click()
 
       assert render(index_live) =~ "Reembolso vinculado com sucesso!"
-      assert CashLens.Transactions.get_transaction!(expense.id).reimbursement_status == "paid"
-      assert CashLens.Transactions.get_transaction!(credit.id).reimbursement_status == "paid"
+
+      assert CashLens.Transactions.get_transaction!(user(), expense.id).reimbursement_status ==
+               "paid"
+
+      assert CashLens.Transactions.get_transaction!(user(), credit.id).reimbursement_status ==
+               "paid"
     end
 
     test "shows category reconcile select modal when neither has category", %{conn: conn} do
@@ -369,8 +380,8 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> render_submit()
 
       assert render(index_live) =~ "Reembolso vinculado com sucesso!"
-      assert CashLens.Transactions.get_transaction!(expense.id).category_id == cat.id
-      assert CashLens.Transactions.get_transaction!(credit.id).category_id == cat.id
+      assert CashLens.Transactions.get_transaction!(user(), expense.id).category_id == cat.id
+      assert CashLens.Transactions.get_transaction!(user(), credit.id).category_id == cat.id
     end
 
     test "shows category reconcile buttons modal when both have different categories", %{
@@ -422,8 +433,8 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> render_click()
 
       assert render(index_live) =~ "Reembolso vinculado com sucesso!"
-      assert CashLens.Transactions.get_transaction!(expense.id).category_id == cat_a.id
-      assert CashLens.Transactions.get_transaction!(credit.id).category_id == cat_a.id
+      assert CashLens.Transactions.get_transaction!(user(), expense.id).category_id == cat_a.id
+      assert CashLens.Transactions.get_transaction!(user(), credit.id).category_id == cat_a.id
     end
 
     test "confirms all suggested reimbursement pairs", %{conn: conn} do
@@ -476,10 +487,18 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> render_click()
 
       assert render(index_live) =~ "2 reembolsos vinculados com sucesso!"
-      assert CashLens.Transactions.get_transaction!(expense1.id).reimbursement_status == "paid"
-      assert CashLens.Transactions.get_transaction!(credit1.id).reimbursement_status == "paid"
-      assert CashLens.Transactions.get_transaction!(expense2.id).reimbursement_status == "paid"
-      assert CashLens.Transactions.get_transaction!(credit2.id).reimbursement_status == "paid"
+
+      assert CashLens.Transactions.get_transaction!(user(), expense1.id).reimbursement_status ==
+               "paid"
+
+      assert CashLens.Transactions.get_transaction!(user(), credit1.id).reimbursement_status ==
+               "paid"
+
+      assert CashLens.Transactions.get_transaction!(user(), expense2.id).reimbursement_status ==
+               "paid"
+
+      assert CashLens.Transactions.get_transaction!(user(), credit2.id).reimbursement_status ==
+               "paid"
     end
 
     test "ignores suggestions from accounts that do not accept import", %{conn: conn} do
@@ -816,7 +835,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       |> element("button[phx-click='mark_reimbursable'][phx-value-id='#{candidate.id}']")
       |> render_click()
 
-      assert CashLens.Transactions.get_transaction!(candidate.id).reimbursement_status ==
+      assert CashLens.Transactions.get_transaction!(user(), candidate.id).reimbursement_status ==
                "pending"
 
       live_view |> element("button[phx-click='close_statement_modal']") |> render_click()
@@ -932,7 +951,7 @@ defmodule CashLensWeb.ReimbursementLiveTest do
       assert html =~ "PROT-2026-9812"
       assert html =~ "Bradesco Saúde"
 
-      updated = CashLens.Transactions.get_transaction!(tx.id)
+      updated = CashLens.Transactions.get_transaction!(user(), tx.id)
       assert updated.reimbursement_carrier == "Bradesco Saúde"
       assert updated.reimbursement_protocol == "PROT-2026-9812"
     end
@@ -1015,6 +1034,96 @@ defmodule CashLensWeb.ReimbursementLiveTest do
 
       assert modal_html =~ "Vincular Crédito de Reembolso"
       assert modal_html =~ "Total a Cobrir"
+    end
+  end
+
+  describe "tenancy" do
+    setup %{user: _user} do
+      %{a: other} = cross_tenant()
+
+      {expense, credit} =
+        CashLens.Tenancy.acting_as(other, fn ->
+          account = account_fixture(%{user: other, name: "Foreign account"})
+
+          expense =
+            transaction_fixture(%{
+              user: other,
+              account_id: account.id,
+              amount: "-60.00",
+              description: "Foreign lunch",
+              reimbursement_status: "pending"
+            })
+
+          credit =
+            transaction_fixture(%{
+              user: other,
+              account_id: account.id,
+              amount: "60.00",
+              description: "Foreign refund"
+            })
+
+          {expense, credit}
+        end)
+
+      %{other: other, expense: expense, credit: credit}
+    end
+
+    defp foreign_rows(other, ids) do
+      CashLens.Tenancy.acting_as(other, fn ->
+        Repo.all(from t in CashLens.Transactions.Transaction, where: t.id in ^ids, order_by: t.id)
+      end)
+    end
+
+    test "lists none of the other user's reimbursements", %{conn: conn} do
+      {:ok, _live, html} = live(conn, ~p"/reimbursements")
+      refute html =~ "Foreign lunch"
+      refute html =~ "Foreign refund"
+    end
+
+    test "forged ids in link, reject and status events flash an error and change nothing", ctx do
+      %{conn: conn, other: other, expense: expense, credit: credit} = ctx
+      ids = [expense.id, credit.id]
+      before = foreign_rows(other, ids)
+      {:ok, live, _html} = live(conn, ~p"/reimbursements")
+
+      assert render_hook(live, "confirm_pair", %{"a" => expense.id, "b" => credit.id}) =~
+               "Transação não encontrada"
+
+      assert render_hook(live, "reject_pair", %{"a" => expense.id, "b" => credit.id}) =~
+               "Transação não encontrada"
+
+      for event <- ["mark_requested", "mark_pending", "remove_reimbursable", "mark_reimbursable"] do
+        assert render_hook(live, event, %{"id" => expense.id}) =~ "Transação não encontrada"
+      end
+
+      assert render_hook(live, "save_reimbursement_details", %{
+               "tx_id" => expense.id,
+               "carrier" => "x",
+               "protocol" => "y"
+             }) =~ "Transação não encontrada"
+
+      assert render_hook(live, "unlink_reimbursement", %{"link-key" => Ecto.UUID.generate()}) =~
+               "Reembolso não encontrado"
+
+      assert foreign_rows(other, ids) == before
+
+      refute CashLens.Tenancy.acting_as(other, fn ->
+               Repo.exists?(CashLens.Transactions.RejectedReimbursementPair)
+             end)
+    end
+
+    test "a forged selection cannot be linked", ctx do
+      %{conn: conn, other: other, expense: expense, credit: credit} = ctx
+      ids = [expense.id, credit.id]
+      before = foreign_rows(other, ids)
+      {:ok, live, _html} = live(conn, ~p"/reimbursements")
+
+      render_hook(live, "link_single_expense", %{"id" => expense.id})
+      render_hook(live, "toggle_credit", %{"credit-id" => credit.id})
+      html = render_hook(live, "confirm_link", %{})
+
+      assert html =~ "Transação não encontrada"
+      assert foreign_rows(other, ids) == before
     end
   end
 end

@@ -1,6 +1,8 @@
 defmodule CashLens.Transactions.TransferRuleApplierTest do
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
 
@@ -28,7 +30,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
   # Insert a transaction directly (bypassing context hooks like maybe_apply_rule)
   # so we can test apply_rules in isolation.
   defp insert_raw_transaction(attrs) do
-    %Transaction{}
+    %Transaction{user_id: CashLens.Repo.current_user_id()}
     |> Transaction.changeset(attrs)
     |> Repo.insert!()
   end
@@ -48,7 +50,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      mirrors = TransferRuleApplier.apply_rules([tx])
+      mirrors = TransferRuleApplier.apply_rules(user(), [tx])
 
       assert length(mirrors) == 1
       [mirror] = mirrors
@@ -89,7 +91,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      mirrors = TransferRuleApplier.apply_rules([tx])
+      mirrors = TransferRuleApplier.apply_rules(user(), [tx])
 
       assert mirrors == []
 
@@ -126,7 +128,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
         })
 
       # Should NOT crash and should return [] because it's not a NEW transaction
-      mirrors = TransferRuleApplier.apply_rules([tx])
+      mirrors = TransferRuleApplier.apply_rules(user(), [tx])
 
       assert mirrors == []
 
@@ -153,7 +155,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      mirrors = TransferRuleApplier.apply_rules([tx])
+      mirrors = TransferRuleApplier.apply_rules(user(), [tx])
       assert length(mirrors) == 1
     end
 
@@ -171,7 +173,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      mirrors = TransferRuleApplier.apply_rules([tx])
+      mirrors = TransferRuleApplier.apply_rules(user(), [tx])
       assert length(mirrors) == 1
     end
 
@@ -189,7 +191,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      mirrors = TransferRuleApplier.apply_rules([tx])
+      mirrors = TransferRuleApplier.apply_rules(user(), [tx])
       assert mirrors == []
     end
 
@@ -219,7 +221,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
         })
 
       # apply_rules should find the existing mirror and link both — no new transaction created
-      result = TransferRuleApplier.apply_rules([tx])
+      result = TransferRuleApplier.apply_rules(user(), [tx])
       assert result == []
 
       updated_tx = Repo.get!(Transaction, tx.id)
@@ -246,12 +248,12 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
         })
 
       # First application creates the mirror
-      mirrors1 = TransferRuleApplier.apply_rules([tx])
+      mirrors1 = TransferRuleApplier.apply_rules(user(), [tx])
       assert length(mirrors1) == 1
       [mirror] = mirrors1
 
       # Second application should be idempotent
-      mirrors2 = TransferRuleApplier.apply_rules([tx])
+      mirrors2 = TransferRuleApplier.apply_rules(user(), [tx])
       assert mirrors2 == []
 
       # Both source and mirror should still share the same transfer_key
@@ -275,14 +277,14 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
         })
 
       assert ExUnit.CaptureLog.capture_log(fn ->
-               mirrors = TransferRuleApplier.apply_rules([tx])
+               mirrors = TransferRuleApplier.apply_rules(user(), [tx])
                assert mirrors == []
              end) =~ "TransferRuleApplier: 'transfer' category not found"
     end
 
     test "handles empty list of transactions" do
       create_transfer_category()
-      assert TransferRuleApplier.apply_rules([]) == []
+      assert TransferRuleApplier.apply_rules(user(), []) == []
     end
 
     test "returns [] and logs warning when mirror insert fails" do
@@ -309,7 +311,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
 
       try do
         assert ExUnit.CaptureLog.capture_log(fn ->
-                 assert TransferRuleApplier.apply_rules([tx]) == []
+                 assert TransferRuleApplier.apply_rules(user(), [tx]) == []
                end) =~ "TransferRuleApplier: Failed to insert mirror transaction"
       after
         Application.delete_env(:cash_lens, :transfer_rule_repo)
@@ -331,7 +333,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      mirrors = TransferRuleApplier.apply_rules([tx])
+      mirrors = TransferRuleApplier.apply_rules(user(), [tx])
       assert mirrors == []
     end
 
@@ -349,7 +351,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      mirrors = TransferRuleApplier.apply_rules([tx])
+      mirrors = TransferRuleApplier.apply_rules(user(), [tx])
 
       assert mirrors == []
       updated_tx = Repo.get!(Transaction, tx.id)
@@ -388,7 +390,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      TransferRuleApplier.apply_rules([tx])
+      TransferRuleApplier.apply_rules(user(), [tx])
 
       updated_tx = Repo.get!(Transaction, tx.id)
       updated_purchase = Repo.get!(Transaction, purchase.id)
@@ -417,7 +419,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-01-15]
         })
 
-      mirrors = TransferRuleApplier.apply_rules([tx])
+      mirrors = TransferRuleApplier.apply_rules(user(), [tx])
       assert mirrors == []
       assert Repo.all(from t in Transaction, where: t.account_id == ^card.id) == []
     end
@@ -439,7 +441,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
           date: ~D[2026-02-10]
         })
 
-      mirrors = TransferRuleApplier.maybe_apply_rule(tx)
+      mirrors = TransferRuleApplier.maybe_apply_rule(user(), tx)
 
       assert length(mirrors) == 1
       [mirror] = mirrors
@@ -458,14 +460,14 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
       source = account_fixture()
 
       {:ok, tx} =
-        Transactions.create_transaction(%{
+        Transactions.create_transaction(user(), %{
           account_id: source.id,
           description: "Unmatched description",
           amount: "100.00",
           date: ~D[2026-02-10]
         })
 
-      assert TransferRuleApplier.maybe_apply_rule(tx) == []
+      assert TransferRuleApplier.maybe_apply_rule(user(), tx) == []
     end
   end
 end

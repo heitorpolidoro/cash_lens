@@ -4,14 +4,18 @@ defmodule CashLens.Transactions.AutoCategorizer do
   """
   import Ecto.Query
 
+  alias CashLens.Categories
   alias CashLens.Categories.Category
+  alias CashLens.Ownership
   alias CashLens.Repo
   alias CashLens.Transactions.TransferRule
+  alias CashLens.Users.User
 
   @doc """
-  Analyzes a transaction map or struct and assigns a category_id based on DB rules.
+  Analyzes a transaction map or struct and assigns a category_id based on the
+  rules (categories and transfer rules) `user` owns.
   """
-  def categorize(transaction_params) do
+  def categorize(%User{} = user, transaction_params) do
     description =
       (transaction_params.description || "")
       |> String.upcase()
@@ -19,7 +23,11 @@ defmodule CashLens.Transactions.AutoCategorizer do
       |> String.trim()
 
     # 1. Get all categories that have keywords defined
-    rules = Repo.all(from c in Category, where: not is_nil(c.keywords) and c.keywords != "")
+    rules =
+      Repo.all(
+        from c in Ownership.scope(Category, user),
+          where: not is_nil(c.keywords) and c.keywords != ""
+      )
 
     require Logger
 
@@ -51,18 +59,18 @@ defmodule CashLens.Transactions.AutoCategorizer do
         params
       end
     else
-      check_transfer_rules(transaction_params) || transaction_params
+      check_transfer_rules(user, transaction_params) || transaction_params
     end
   end
 
-  defp check_transfer_rules(params) do
+  defp check_transfer_rules(user, params) do
     account_id = get_field_value(params, :account_id)
     description_lower = String.downcase(get_field_value(params, :description) || "")
 
     if account_id do
       matching_rule =
         Repo.one(
-          from r in TransferRule,
+          from r in Ownership.scope(TransferRule, user),
             where: r.source_account_id == ^account_id,
             where:
               fragment(
@@ -74,7 +82,7 @@ defmodule CashLens.Transactions.AutoCategorizer do
         )
 
       if matching_rule do
-        assign_category_by_slug(params, "transfer")
+        assign_category_by_slug(user, params, "transfer")
       end
     end
   end
@@ -82,8 +90,8 @@ defmodule CashLens.Transactions.AutoCategorizer do
   defp get_field_value(%_{} = struct, field), do: Map.get(struct, field)
   defp get_field_value(map, field) when is_map(map), do: map[field] || map[Atom.to_string(field)]
 
-  defp assign_category_by_slug(params, slug) do
-    case Repo.get_by(Category, slug: slug) do
+  defp assign_category_by_slug(user, params, slug) do
+    case Categories.get_category_by_slug(user, slug) do
       nil -> params
       category -> Map.put(params, :category_id, category.id)
     end

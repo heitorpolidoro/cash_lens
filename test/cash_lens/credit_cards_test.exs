@@ -1,5 +1,7 @@
 defmodule CashLens.CreditCardsTest do
   use CashLens.DataCase, async: true
+
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
   alias CashLens.CreditCards
   alias CashLens.CreditCards.Statement
   import Ecto.Query
@@ -479,7 +481,8 @@ defmodule CashLens.CreditCardsTest do
 
       {:ok, _} =
         CashLens.Transactions.delete_transaction(
-          CashLens.Transactions.get_transaction!(at_ceiling.id)
+          user(),
+          CashLens.Transactions.get_transaction!(user(), at_ceiling.id)
         )
 
       payment(ctx.bank, ctx.category, "-1200.01", Date.add(ctx.today, 5))
@@ -625,7 +628,7 @@ defmodule CashLens.CreditCardsTest do
 
       {:ok, _} = CashLens.CreditCards.link_payment(statement, pix.id)
 
-      assert CashLens.Transactions.get_transaction!(pix.id).category_id == ctx.category.id
+      assert CashLens.Transactions.get_transaction!(user(), pix.id).category_id == ctx.category.id
     end
 
     test "linking leaves a more specific card subcategory alone", ctx do
@@ -648,7 +651,7 @@ defmodule CashLens.CreditCardsTest do
       {:ok, _} = CashLens.CreditCards.link_payment(statement, already.id)
 
       # The operator's own, narrower choice is not overwritten by the parent.
-      assert CashLens.Transactions.get_transaction!(already.id).category_id == child.id
+      assert CashLens.Transactions.get_transaction!(user(), already.id).category_id == child.id
     end
 
     test "an internal transfer is not a candidate", ctx do
@@ -667,7 +670,7 @@ defmodule CashLens.CreditCardsTest do
         payment(ctx.bank, ctx.category, "-1300.00", ctx.today, "Transferencia interna")
 
       {:ok, _} =
-        CashLens.Transactions.update_transaction(transfer, %{
+        CashLens.Transactions.update_transaction(user(), transfer, %{
           transfer_key: Ecto.UUID.generate()
         })
 
@@ -714,7 +717,7 @@ defmodule CashLens.CreditCardsTest do
       receipt = payment(ctx.card, ctx.category, "1412.10", ctx.today, "Pagamento da fatura")
 
       {:ok, _} =
-        CashLens.Transactions.update_transaction(receipt, %{import_batch_id: statement.id})
+        CashLens.Transactions.update_transaction(user(), receipt, %{import_batch_id: statement.id})
 
       ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
       refute receipt.id in ids
@@ -892,7 +895,7 @@ defmodule CashLens.CreditCardsTest do
         transaction_fixture(%{account_id: card.id, amount: "-50.00", import_batch_id: other.id})
 
       assert {:ok, 0} = CreditCards.attach_transactions(st, [tx.id])
-      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == other.id
+      assert CashLens.Transactions.get_transaction!(user(), tx.id).import_batch_id == other.id
     end
 
     test "refuses a debit from a different card", %{statement: st} do
@@ -900,7 +903,7 @@ defmodule CashLens.CreditCardsTest do
       tx = transaction_fixture(%{account_id: outro.id, amount: "-50.00"})
 
       assert {:ok, 0} = CreditCards.attach_transactions(st, [tx.id])
-      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == nil
+      assert CashLens.Transactions.get_transaction!(user(), tx.id).import_batch_id == nil
     end
 
     test "detaching leaves the transaction itself alone", %{card: card, statement: st} do
@@ -909,7 +912,7 @@ defmodule CashLens.CreditCardsTest do
 
       assert {:ok, 1} = CreditCards.detach_transaction(st, tx.id)
 
-      survivor = CashLens.Transactions.get_transaction!(tx.id)
+      survivor = CashLens.Transactions.get_transaction!(user(), tx.id)
       assert survivor.import_batch_id == nil
       assert Decimal.equal?(survivor.amount, Decimal.new("-50.00"))
     end
@@ -925,7 +928,7 @@ defmodule CashLens.CreditCardsTest do
         transaction_fixture(%{account_id: card.id, amount: "-50.00", import_batch_id: other.id})
 
       assert {:ok, 0} = CreditCards.detach_transaction(st, tx.id)
-      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == other.id
+      assert CashLens.Transactions.get_transaction!(user(), tx.id).import_batch_id == other.id
     end
   end
 

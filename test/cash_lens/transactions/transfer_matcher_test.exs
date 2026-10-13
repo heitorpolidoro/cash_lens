@@ -1,5 +1,7 @@
 defmodule CashLens.Transactions.TransferMatcherTest do
   use CashLens.DataCase, async: false
+
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
   import CashLens.AccountsFixtures
@@ -41,7 +43,7 @@ defmodule CashLens.Transactions.TransferMatcherTest do
       tx1 = Repo.get(Transaction, tx1.id)
       tx2 = Repo.get(Transaction, tx2.id)
 
-      TransferMatcher.match_transfers([tx1, tx2])
+      TransferMatcher.match_transfers(user(), [tx1, tx2])
 
       updated_tx1 = Repo.get(Transaction, tx1.id)
       updated_tx2 = Repo.get(Transaction, tx2.id)
@@ -60,7 +62,7 @@ defmodule CashLens.Transactions.TransferMatcherTest do
 
       tx = Repo.get(Transaction, tx.id)
 
-      TransferMatcher.match_transfers([tx])
+      TransferMatcher.match_transfers(user(), [tx])
 
       updated = Repo.get(Transaction, tx.id)
       assert updated.transfer_key == existing_key
@@ -68,12 +70,12 @@ defmodule CashLens.Transactions.TransferMatcherTest do
 
     test "skips transactions with nil id", %{category: cat} do
       tx = %Transaction{id: nil, category_id: cat.id, transfer_key: nil}
-      assert TransferMatcher.match_transfers([tx]) in [:ok, nil, []]
+      assert TransferMatcher.match_transfers(user(), [tx]) in [:ok, nil, []]
     end
 
     test "skips transactions with nil category_id", %{acc1: a1} do
       tx = transaction_fixture(%{account_id: a1.id, category_id: nil})
-      TransferMatcher.match_transfers([tx])
+      TransferMatcher.match_transfers(user(), [tx])
       updated = Repo.get(Transaction, tx.id)
       assert is_nil(updated.transfer_key)
     end
@@ -81,18 +83,18 @@ defmodule CashLens.Transactions.TransferMatcherTest do
     test "skips transactions with non-transfer category", %{acc1: a1} do
       other_cat = category_fixture(%{name: "Food", slug: "food"})
       tx = transaction_fixture(%{account_id: a1.id, category_id: other_cat.id})
-      TransferMatcher.match_transfers([tx])
+      TransferMatcher.match_transfers(user(), [tx])
       updated = Repo.get(Transaction, tx.id)
       assert is_nil(updated.transfer_key)
     end
 
     test "handles empty list" do
-      assert TransferMatcher.match_transfers([]) in [:ok, nil, []]
+      assert TransferMatcher.match_transfers(user(), []) in [:ok, nil, []]
     end
 
     test "does nothing when transfer category does not exist" do
       Repo.delete_all(from c in CashLens.Categories.Category, where: c.slug == "transfer")
-      assert is_nil(TransferMatcher.match_transfers([]))
+      assert is_nil(TransferMatcher.match_transfers(user(), []))
     end
   end
 
@@ -148,7 +150,7 @@ defmodule CashLens.Transactions.TransferMatcherTest do
         })
 
       tx = Repo.get(Transaction, tx.id)
-      assert TransferMatcher.match_transfer(tx) == :no_twin_found
+      assert TransferMatcher.match_transfer(user(), tx) == :no_twin_found
       assert is_nil(Repo.get(Transaction, tx.id).transfer_key)
     end
 
@@ -156,7 +158,7 @@ defmodule CashLens.Transactions.TransferMatcherTest do
       cat = category_fixture(%{name: "Other", slug: "other"})
       tx = transaction_fixture(%{account_id: a1.id, category_id: cat.id})
 
-      assert :not_a_transfer == TransferMatcher.match_transfer(tx)
+      assert :not_a_transfer == TransferMatcher.match_transfer(user(), tx)
     end
 
     test "returns :no_twin_found when no opposite transaction exists", %{
@@ -173,7 +175,7 @@ defmodule CashLens.Transactions.TransferMatcherTest do
 
       tx = Repo.get(Transaction, tx.id)
       assert is_nil(tx.transfer_key)
-      assert TransferMatcher.match_transfer(tx) == :no_twin_found
+      assert TransferMatcher.match_transfer(user(), tx) == :no_twin_found
     end
 
     test "does not link transactions on different dates", %{category: cat, acc1: a1, acc2: a2} do
@@ -193,12 +195,12 @@ defmodule CashLens.Transactions.TransferMatcherTest do
         })
 
       tx = Repo.get(Transaction, tx.id)
-      assert TransferMatcher.match_transfer(tx) == :no_twin_found
+      assert TransferMatcher.match_transfer(user(), tx) == :no_twin_found
       assert is_nil(Repo.get(Transaction, tx.id).transfer_key)
     end
 
     test "returns :no_match for transaction with nil id" do
-      assert TransferMatcher.match_transfer(%Transaction{id: nil}) == :no_match
+      assert TransferMatcher.match_transfer(user(), %Transaction{id: nil}) == :no_match
     end
 
     test "categorizes both transactions as transfer when linking a matched pair", %{

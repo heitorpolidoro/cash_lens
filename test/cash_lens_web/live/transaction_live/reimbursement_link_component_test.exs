@@ -1,5 +1,7 @@
 defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponentTest do
   use CashLensWeb.ConnCase, async: false
+
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
   import CashLens.CategoriesFixtures
@@ -24,8 +26,8 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponentTest do
 
     assert render(index_live) =~ "Reembolso vinculado"
 
-    updated_credit = Transactions.get_transaction!(credit.id)
-    updated_expense = Transactions.get_transaction!(expense.id)
+    updated_credit = Transactions.get_transaction!(user(), credit.id)
+    updated_expense = Transactions.get_transaction!(user(), expense.id)
 
     assert updated_credit.reimbursement_status == "paid"
     assert updated_expense.reimbursement_status == "paid"
@@ -76,7 +78,7 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponentTest do
     |> element("button[phx-click='link_reimbursement'][phx-value-expense-id='#{expense.id}']")
     |> render_click()
 
-    assert Transactions.get_transaction!(credit.id).category_id == cat.id
+    assert Transactions.get_transaction!(user(), credit.id).category_id == cat.id
   end
 
   test "filters out positive transactions from candidates list", %{conn: conn} do

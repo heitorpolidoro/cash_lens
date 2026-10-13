@@ -1,6 +1,8 @@
 defmodule CashLensWeb.CreditCardStatementLiveTest do
   use CashLensWeb.ConnCase
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
@@ -680,12 +682,12 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       refute has_element?(view, "#attachable-#{tx.id}")
       assert has_element?(view, "#detach-#{tx.id}")
-      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == statement.id
+      assert CashLens.Transactions.get_transaction!(user(), tx.id).import_batch_id == statement.id
 
       render_click(view, "detach_transaction", %{"id" => tx.id})
 
       assert has_element?(view, "#attachable-#{tx.id}")
-      assert CashLens.Transactions.get_transaction!(tx.id).import_batch_id == nil
+      assert CashLens.Transactions.get_transaction!(user(), tx.id).import_batch_id == nil
     end
 
     test "incorporates a statement into another and releases it again", %{conn: conn} do

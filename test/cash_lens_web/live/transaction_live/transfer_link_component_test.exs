@@ -1,5 +1,7 @@
 defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
   use CashLensWeb.ConnCase, async: false
+
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
   import CashLens.AccountsFixtures
@@ -24,10 +26,10 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
 
     assert render(index_live) =~ "Transferência vinculada com sucesso!"
 
-    assert Transactions.get_transaction!(tx1.id).transfer_key != nil
+    assert Transactions.get_transaction!(user(), tx1.id).transfer_key != nil
 
-    assert Transactions.get_transaction!(tx1.id).transfer_key ==
-             Transactions.get_transaction!(tx2.id).transfer_key
+    assert Transactions.get_transaction!(user(), tx1.id).transfer_key ==
+             Transactions.get_transaction!(user(), tx2.id).transfer_key
   end
 
   test "quick transfer creation", %{conn: conn} do
@@ -56,7 +58,7 @@ defmodule CashLensWeb.TransactionLive.TransferLinkComponentTest do
     assert render(index_live) =~ "Par de transferência criado e vinculado!"
 
     # Verify new transaction
-    txs = Transactions.list_transactions(%{"account_id" => acc2.id})
+    txs = Transactions.list_transactions(user(), %{"account_id" => acc2.id})
     assert Enum.any?(txs, fn tx -> tx.description == "To acc2" and tx.transfer_key != nil end)
   end
 

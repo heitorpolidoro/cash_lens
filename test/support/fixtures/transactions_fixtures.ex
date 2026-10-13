@@ -24,7 +24,7 @@ defmodule CashLens.TransactionsFixtures do
           description: "some description",
           account_id: account_id
         })
-        |> CashLens.Transactions.create_transaction()
+        |> then(&CashLens.Transactions.create_transaction(user, &1))
       end)
 
     transaction
@@ -48,9 +48,9 @@ defmodule CashLens.TransactionsFixtures do
           source_account_id: source_account.id,
           destination_account_id: destination_account.id
         })
-        |> CashLens.Transactions.create_transfer_rule()
+        |> then(&CashLens.Transactions.create_transfer_rule(user, &1))
 
-      CashLens.Transactions.get_transfer_rule!(rule.id)
+      CashLens.Transactions.get_transfer_rule!(user, rule.id)
     end)
   end
 
@@ -67,7 +67,7 @@ defmodule CashLens.TransactionsFixtures do
         |> Enum.into(%{
           pattern: "pattern-#{unique_id}"
         })
-        |> CashLens.Transactions.create_bulk_ignore_pattern()
+        |> then(&CashLens.Transactions.create_bulk_ignore_pattern(user, &1))
       end)
 
     pattern

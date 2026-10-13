@@ -121,7 +121,7 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
 
     defp manual_transaction(account, date, description) do
       {:ok, %Transaction{}} =
-        Transactions.create_transaction(%{
+        Transactions.create_transaction(user(), %{
           account_id: account.id,
           date: date,
           description: description,

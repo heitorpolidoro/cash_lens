@@ -1,6 +1,8 @@
 defmodule CashLens.Transactions.TransferRuleContextTest do
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import CashLens.AccountsFixtures
   import CashLens.TransactionsFixtures
 
@@ -24,7 +26,7 @@ defmodule CashLens.Transactions.TransferRuleContextTest do
           destination_account_id: destination.id
         })
 
-      rules = Transactions.list_transfer_rules()
+      rules = Transactions.list_transfer_rules(user())
       refute rules == []
       rule = hd(rules)
       assert %TransferRule{} = rule
@@ -44,7 +46,7 @@ defmodule CashLens.Transactions.TransferRuleContextTest do
           destination_account_id: destination.id
         })
 
-      fetched = Transactions.get_transfer_rule!(rule.id)
+      fetched = Transactions.get_transfer_rule!(user(), rule.id)
       assert fetched.id == rule.id
       assert fetched.source_account.id == source.id
       assert fetched.destination_account.id == destination.id
@@ -52,7 +54,7 @@ defmodule CashLens.Transactions.TransferRuleContextTest do
 
     test "raises when rule not found" do
       assert_raise Ecto.NoResultsError, fn ->
-        Transactions.get_transfer_rule!(Ecto.UUID.generate())
+        Transactions.get_transfer_rule!(user(), Ecto.UUID.generate())
       end
     end
   end
@@ -66,7 +68,7 @@ defmodule CashLens.Transactions.TransferRuleContextTest do
         destination_account_id: destination.id
       }
 
-      assert {:ok, %TransferRule{} = rule} = Transactions.create_transfer_rule(attrs)
+      assert {:ok, %TransferRule{} = rule} = Transactions.create_transfer_rule(user(), attrs)
       assert rule.label == "My Rule"
       assert rule.description_patterns == ["TEST PATTERN"]
       assert rule.source_account_id == source.id
@@ -74,7 +76,7 @@ defmodule CashLens.Transactions.TransferRuleContextTest do
     end
 
     test "returns error changeset with invalid attrs" do
-      assert {:error, changeset} = Transactions.create_transfer_rule(%{})
+      assert {:error, changeset} = Transactions.create_transfer_rule(user(), %{})
 
       assert %{description_patterns: _, source_account_id: _, destination_account_id: _} =
                errors_on(changeset)
@@ -87,7 +89,7 @@ defmodule CashLens.Transactions.TransferRuleContextTest do
         destination_account_id: source.id
       }
 
-      assert {:error, changeset} = Transactions.create_transfer_rule(attrs)
+      assert {:error, changeset} = Transactions.create_transfer_rule(user(), attrs)
       assert %{destination_account_id: [_]} = errors_on(changeset)
     end
   end
@@ -100,7 +102,9 @@ defmodule CashLens.Transactions.TransferRuleContextTest do
           destination_account_id: destination.id
         })
 
-      assert {:ok, updated} = Transactions.update_transfer_rule(rule, %{label: "Updated Label"})
+      assert {:ok, updated} =
+               Transactions.update_transfer_rule(user(), rule, %{label: "Updated Label"})
+
       assert updated.label == "Updated Label"
     end
 
@@ -112,7 +116,7 @@ defmodule CashLens.Transactions.TransferRuleContextTest do
         })
 
       assert {:error, changeset} =
-               Transactions.update_transfer_rule(rule, %{description_patterns: []})
+               Transactions.update_transfer_rule(user(), rule, %{description_patterns: []})
 
       assert changeset.errors != []
     end
@@ -126,10 +130,10 @@ defmodule CashLens.Transactions.TransferRuleContextTest do
           destination_account_id: destination.id
         })
 
-      assert {:ok, _} = Transactions.delete_transfer_rule(rule)
+      assert {:ok, _} = Transactions.delete_transfer_rule(user(), rule)
 
       assert_raise Ecto.NoResultsError, fn ->
-        Transactions.get_transfer_rule!(rule.id)
+        Transactions.get_transfer_rule!(user(), rule.id)
       end
     end
   end

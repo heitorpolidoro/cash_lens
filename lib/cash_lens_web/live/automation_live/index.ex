@@ -425,11 +425,23 @@ defmodule CashLensWeb.AutomationLive.Index do
   end
 
   def handle_event("edit_transfer", %{"id" => id}, socket) do
-    {:noreply, open_transfer_modal(socket, Transactions.get_transfer_rule!(id))}
+    {:noreply,
+     fetch_or_flash(socket, fn ->
+       open_transfer_modal(
+         socket,
+         Transactions.get_transfer_rule!(socket.assigns.current_user, id)
+       )
+     end)}
   end
 
   def handle_event("edit_exclusion", %{"id" => id}, socket) do
-    {:noreply, open_exclusion_modal(socket, Transactions.get_bulk_ignore_pattern!(id))}
+    {:noreply,
+     fetch_or_flash(socket, fn ->
+       open_exclusion_modal(
+         socket,
+         Transactions.get_bulk_ignore_pattern!(socket.assigns.current_user, id)
+       )
+     end)}
   end
 
   def handle_event("validate_transfer", %{"transfer_rule" => params}, socket) do
@@ -447,11 +459,14 @@ defmodule CashLensWeb.AutomationLive.Index do
 
     result =
       case record.id do
-        nil -> Transactions.create_transfer_rule(attrs)
-        _id -> Transactions.update_transfer_rule(record, attrs)
+        nil -> Transactions.create_transfer_rule(socket.assigns.current_user, attrs)
+        _id -> Transactions.update_transfer_rule(socket.assigns.current_user, record, attrs)
       end
 
     case result do
+      {:error, :not_found} ->
+        {:noreply, socket |> put_flash(:error, "Regra não encontrada.") |> close_modal()}
+
       {:ok, _rule} ->
         {:noreply,
          socket
@@ -465,13 +480,18 @@ defmodule CashLensWeb.AutomationLive.Index do
   end
 
   def handle_event("delete_transfer", %{"id" => id}, socket) do
-    rule = Transactions.get_transfer_rule!(id)
-    {:ok, _} = Transactions.delete_transfer_rule(rule)
+    user = socket.assigns.current_user
 
-    {:noreply,
-     socket
-     |> put_flash(:success, "Regra de transferência excluída.")
-     |> load_rules()}
+    with rule when not is_nil(rule) <-
+           fetch_or_nil(fn -> Transactions.get_transfer_rule!(user, id) end),
+         {:ok, _} <- Transactions.delete_transfer_rule(user, rule) do
+      {:noreply,
+       socket
+       |> put_flash(:success, "Regra de transferência excluída.")
+       |> load_rules()}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Regra não encontrada.")}
+    end
   end
 
   def handle_event("validate_exclusion", %{"bulk_ignore_pattern" => params}, socket) do
@@ -488,11 +508,17 @@ defmodule CashLensWeb.AutomationLive.Index do
 
     result =
       case record.id do
-        nil -> Transactions.create_bulk_ignore_pattern(params)
-        _id -> Transactions.update_bulk_ignore_pattern(record, params)
+        nil ->
+          Transactions.create_bulk_ignore_pattern(socket.assigns.current_user, params)
+
+        _id ->
+          Transactions.update_bulk_ignore_pattern(socket.assigns.current_user, record, params)
       end
 
     case result do
+      {:error, :not_found} ->
+        {:noreply, socket |> put_flash(:error, "Padrão não encontrado.") |> close_modal()}
+
       {:ok, _pattern} ->
         {:noreply,
          socket
@@ -507,14 +533,19 @@ defmodule CashLensWeb.AutomationLive.Index do
   end
 
   def handle_event("delete_exclusion", %{"id" => id}, socket) do
-    pattern = Transactions.get_bulk_ignore_pattern!(id)
-    {:ok, _} = Transactions.delete_bulk_ignore_pattern(pattern)
+    user = socket.assigns.current_user
 
-    {:noreply,
-     socket
-     |> put_flash(:success, "Padrão removido.")
-     |> load_rules()
-     |> refresh_verdict()}
+    with pattern when not is_nil(pattern) <-
+           fetch_or_nil(fn -> Transactions.get_bulk_ignore_pattern!(user, id) end),
+         {:ok, _} <- Transactions.delete_bulk_ignore_pattern(user, pattern) do
+      {:noreply,
+       socket
+       |> put_flash(:success, "Padrão removido.")
+       |> load_rules()
+       |> refresh_verdict()}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Padrão não encontrado.")}
+    end
   end
 
   def handle_event("test_regex", %{"description" => description}, socket) do
@@ -523,15 +554,32 @@ defmodule CashLensWeb.AutomationLive.Index do
   end
 
   def handle_event("reapply_rules", _params, socket) do
-    {:ok, categorized} = Transactions.reapply_transfer_rules()
+    {:ok, categorized} = Transactions.reapply_transfer_rules(socket.assigns.current_user)
 
     {:noreply, put_flash(socket, :success, reapply_message(categorized))}
   end
 
   defp load_rules(socket) do
+    user = socket.assigns.current_user
+
     socket
-    |> assign(:transfer_rules, Transactions.list_transfer_rules())
-    |> assign(:patterns, Transactions.list_bulk_ignore_patterns())
+    |> assign(:transfer_rules, Transactions.list_transfer_rules(user))
+    |> assign(:patterns, Transactions.list_bulk_ignore_patterns(user))
+  end
+
+  # An id that is not the user's raises Ecto.NoResultsError in the scoped getters.
+  defp fetch_or_nil(fun) do
+    fun.()
+  rescue
+    Ecto.NoResultsError -> nil
+    Ecto.Query.CastError -> nil
+  end
+
+  defp fetch_or_flash(socket, fun) do
+    fun.()
+  rescue
+    Ecto.NoResultsError -> put_flash(socket, :error, "Registro não encontrado.")
+    Ecto.Query.CastError -> put_flash(socket, :error, "Registro não encontrado.")
   end
 
   defp close_modal(socket), do: socket |> assign(:rule_modal, nil) |> assign(:form, nil)

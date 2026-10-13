@@ -11,7 +11,9 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
   alias Mix.Tasks.MigrateCreditCardTransfers
 
   defp insert_raw(attrs) do
-    %Transaction{} |> Transaction.changeset(attrs) |> Repo.insert!()
+    %Transaction{user_id: CashLens.Repo.current_user_id()}
+    |> Transaction.changeset(attrs)
+    |> Repo.insert!()
   end
 
   defp link(tx_a, tx_b) do

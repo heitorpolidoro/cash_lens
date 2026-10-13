@@ -548,7 +548,8 @@ defmodule CashLens.Installments do
     case existing do
       [] ->
         %{description: base, account_id: account_id}
-        |> AutoCategorizer.categorize()
+        # TRANSITIONAL: removed when CL-51 converts the caller
+        |> then(&AutoCategorizer.categorize(CashLens.Ownership.current_user!(), &1))
         |> Map.get(:category_id)
 
       ids ->

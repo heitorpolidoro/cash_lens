@@ -642,16 +642,17 @@ defmodule CashLensWeb.AccountLive.Index do
       account
       |> create_income_transaction(
         diff,
-        Categories.get_category_by_slug(socket.assigns.current_user, "rendimento")
+        Categories.get_category_by_slug(socket.assigns.current_user, "rendimento"),
+        socket.assigns.current_user
       )
       |> then(&apply_transaction_result(socket, &1))
     end
   end
 
-  defp create_income_transaction(_account, _diff, nil), do: {:error, :category_not_found}
+  defp create_income_transaction(_account, _diff, nil, _user), do: {:error, :category_not_found}
 
-  defp create_income_transaction(account, diff, category) do
-    Transactions.create_transaction(%{
+  defp create_income_transaction(account, diff, category, user) do
+    Transactions.create_transaction(user, %{
       account_id: account.id,
       date: Date.utc_today(),
       description: "Rendimento",

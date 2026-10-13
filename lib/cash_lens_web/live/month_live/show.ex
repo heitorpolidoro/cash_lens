@@ -72,7 +72,7 @@ defmodule CashLensWeb.MonthLive.Show do
     else
       transactions =
         Map.get_lazy(single.transactions, row_key, fn ->
-          load_row_transactions(single, row_key)
+          load_row_transactions(socket.assigns.current_user, single, row_key)
         end)
 
       {:noreply,
@@ -87,10 +87,10 @@ defmodule CashLensWeb.MonthLive.Show do
   # row_key is namespaced as "<type>:<category_id>" so the income and expense
   # sections never collide (e.g. both have an "Uncategorized" row) and each
   # expansion only loads transactions of the matching sign.
-  defp load_row_transactions(single, row_key) do
+  defp load_row_transactions(user, single, row_key) do
     [type, category_id] = String.split(row_key, ":", parts: 2)
 
-    Transactions.list_all_transactions(%{
+    Transactions.list_all_transactions(user, %{
       "category_id" => category_id,
       "type" => type,
       # The rows above count cash accounts only, so the drill-down must list the
@@ -138,13 +138,13 @@ defmodule CashLensWeb.MonthLive.Show do
     socket
     |> assign(:year_options, year_options([analysis, base]))
     |> assign(:single, nil)
-    |> assign(:comparison, build_comparison(base, analysis))
+    |> assign(:comparison, build_comparison(socket.assigns.current_user, base, analysis))
   end
 
   defp build_single(user, {year, month}) do
     {opening, final} = consolidated_balances(user, year, month)
-    income_rows = Transactions.get_month_income_breakdown(year, month)
-    expense_rows = Transactions.get_month_category_breakdown(year, month)
+    income_rows = Transactions.get_month_income_breakdown(user, year, month)
+    expense_rows = Transactions.get_month_category_breakdown(user, year, month)
     income_total = total_of(income_rows)
     expense_total = total_of(expense_rows)
 
@@ -163,9 +163,9 @@ defmodule CashLensWeb.MonthLive.Show do
     }
   end
 
-  defp build_comparison(base, analysis) do
-    base_totals = month_totals(base)
-    analysis_totals = month_totals(analysis)
+  defp build_comparison(user, base, analysis) do
+    base_totals = month_totals(user, base)
+    analysis_totals = month_totals(user, analysis)
 
     %{
       base: base_totals,
@@ -191,9 +191,9 @@ defmodule CashLensWeb.MonthLive.Show do
     }
   end
 
-  defp month_totals({year, month}) do
-    income_breakdown = Transactions.get_month_income_breakdown(year, month)
-    expense_breakdown = Transactions.get_month_category_breakdown(year, month)
+  defp month_totals(user, {year, month}) do
+    income_breakdown = Transactions.get_month_income_breakdown(user, year, month)
+    expense_breakdown = Transactions.get_month_category_breakdown(user, year, month)
     income_total = total_of(income_breakdown)
     expense_total = total_of(expense_breakdown)
 

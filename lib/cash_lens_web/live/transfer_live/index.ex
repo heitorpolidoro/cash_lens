@@ -37,14 +37,19 @@ defmodule CashLensWeb.TransferLive.Index do
 
   @impl true
   def handle_event("confirm_pair", %{"a" => id_a, "b" => id_b}, socket) do
-    {:ok, _} = Transactions.link_transfer_pair(id_a, id_b)
-    {:noreply, socket |> put_flash(:success, "Transferência vinculada!") |> load_data()}
+    case Transactions.link_transfer_pair(socket.assigns.current_user, id_a, id_b) do
+      {:ok, _} ->
+        {:noreply, socket |> put_flash(:success, "Transferência vinculada!") |> load_data()}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Transação não encontrada.")}
+    end
   end
 
   @impl true
   def handle_event("confirm_all", _params, socket) do
     Enum.each(socket.assigns.suggestions, fn {out, inc} ->
-      Transactions.link_transfer_pair(out.id, inc.id)
+      Transactions.link_transfer_pair(socket.assigns.current_user, out.id, inc.id)
     end)
 
     count = length(socket.assigns.suggestions)
@@ -55,36 +60,60 @@ defmodule CashLensWeb.TransferLive.Index do
 
   @impl true
   def handle_event("open_link_modal", %{"id" => id}, socket) do
-    origin = Transactions.get_transaction!(id)
+    user = socket.assigns.current_user
 
-    {:noreply,
-     socket
-     |> assign(:link_origin, origin)
-     |> assign(:link_candidates, Transactions.list_transfer_link_candidates(origin))}
+    case Transactions.get_transaction(user, id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Transação não encontrada.")}
+
+      origin ->
+        {:noreply,
+         socket
+         |> assign(:link_origin, origin)
+         |> assign(:link_candidates, Transactions.list_transfer_link_candidates(user, origin))}
+    end
   end
 
   @impl true
   def handle_event("link_candidate", %{"id" => candidate_id}, socket) do
-    {:ok, _} = Transactions.link_transfer_pair(socket.assigns.link_origin.id, candidate_id)
+    case Transactions.link_transfer_pair(
+           socket.assigns.current_user,
+           socket.assigns.link_origin.id,
+           candidate_id
+         ) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> close_modals()
+         |> put_flash(:success, "Transferência vinculada!")
+         |> load_data()}
 
-    {:noreply,
-     socket
-     |> close_modals()
-     |> put_flash(:success, "Transferência vinculada!")
-     |> load_data()}
+      {:error, :not_found} ->
+        {:noreply, socket |> close_modals() |> put_flash(:error, "Transação não encontrada.")}
+    end
   end
 
   @impl true
   def handle_event("open_mirror_modal", %{"id" => id}, socket) do
-    {:noreply,
-     socket
-     |> assign(:mirror_origin, Transactions.get_transaction!(id))
-     |> assign(:mirror_form, to_form(%{}))}
+    case Transactions.get_transaction(socket.assigns.current_user, id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Transação não encontrada.")}
+
+      origin ->
+        {:noreply,
+         socket
+         |> assign(:mirror_origin, origin)
+         |> assign(:mirror_form, to_form(%{}))}
+    end
   end
 
   @impl true
   def handle_event("create_mirror", %{"account_id" => account_id}, socket) do
-    case Transactions.create_mirror_transaction(socket.assigns.mirror_origin.id, account_id) do
+    case Transactions.create_mirror_transaction(
+           socket.assigns.current_user,
+           socket.assigns.mirror_origin.id,
+           account_id
+         ) do
       {:ok, _mirror} ->
         {:noreply,
          socket
@@ -104,8 +133,13 @@ defmodule CashLensWeb.TransferLive.Index do
 
   @impl true
   def handle_event("unlink", %{"key" => key}, socket) do
-    Transactions.unlink_transfer_pair(key)
-    {:noreply, socket |> put_flash(:success, "Transferência desvinculada.") |> load_data()}
+    case Transactions.unlink_transfer_pair(socket.assigns.current_user, key) do
+      {:ok, _} ->
+        {:noreply, socket |> put_flash(:success, "Transferência desvinculada.") |> load_data()}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Transferência não encontrada.")}
+    end
   end
 
   defp mirror_error_message(:same_account),
@@ -113,6 +147,8 @@ defmodule CashLensWeb.TransferLive.Index do
 
   defp mirror_error_message(:already_linked),
     do: "Esta transação já faz parte de um par conciliado."
+
+  defp mirror_error_message(:not_found), do: "Transação ou conta não encontrada."
 
   defp mirror_error_message(_), do: "Não foi possível criar a transação espelho."
 
@@ -124,13 +160,14 @@ defmodule CashLensWeb.TransferLive.Index do
   end
 
   defp load_data(socket) do
-    suggestions = Transactions.list_transfer_suggestions()
-    unmatched = Transactions.list_unmatched_transfers_without_suggestion(suggestions)
+    user = socket.assigns.current_user
+    suggestions = Transactions.list_transfer_suggestions(user)
+    unmatched = Transactions.list_unmatched_transfers_without_suggestion(user, suggestions)
 
     socket
     |> assign(:suggestions, suggestions)
     |> assign(:unmatched, unmatched)
-    |> assign(:linked, Transactions.list_linked_transfer_pairs())
+    |> assign(:linked, Transactions.list_linked_transfer_pairs(user))
     |> assign(:pending_count, length(suggestions) * 2 + length(unmatched))
   end
 

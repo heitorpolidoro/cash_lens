@@ -467,7 +467,8 @@ defmodule CashLens.CreditCards do
         |> Map.put(:import_batch_id, statement.id)
         |> Map.put(:source, "manual")
 
-      case CashLens.Transactions.create_transaction(attrs) do
+      # TRANSITIONAL: removed when CL-51 converts the caller
+      case CashLens.Transactions.create_transaction(CashLens.Ownership.current_user!(), attrs) do
         {:ok, :duplicate} -> {:cont, {:ok, acc}}
         {:ok, transaction} -> {:cont, {:ok, [transaction | acc]}}
         {:error, changeset} -> {:halt, {:error, changeset}}

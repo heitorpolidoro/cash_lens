@@ -1,5 +1,7 @@
 defmodule CashLens.Transactions.AutoCategorizerTest do
   use CashLens.DataCase, async: false
+
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
   alias CashLens.Transactions.AutoCategorizer
   import CashLens.CategoriesFixtures
 
@@ -8,7 +10,7 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
       category = category_fixture(%{name: "Food", keywords: "IFOOD,RESTAURANT,MARKET"})
 
       params = %{description: "IFOOD * LUNCH"}
-      result = AutoCategorizer.categorize(params)
+      result = AutoCategorizer.categorize(user(), params)
 
       assert result.category_id == category.id
     end
@@ -22,7 +24,7 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
         })
 
       params = %{description: "PHARMACY EXPENDITURE"}
-      result = AutoCategorizer.categorize(params)
+      result = AutoCategorizer.categorize(user(), params)
 
       assert result.category_id == category.id
       assert result.reimbursement_status == "pending"
@@ -30,7 +32,7 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
 
     test "returns original params if no match" do
       params = %{description: "UNKNOWN STORE"}
-      result = AutoCategorizer.categorize(params)
+      result = AutoCategorizer.categorize(user(), params)
 
       assert result == params
       assert is_nil(Map.get(result, :category_id))
@@ -41,7 +43,7 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
 
       # Test lowercase description match
       params = %{description: "posto de gasolina"}
-      result = AutoCategorizer.categorize(params)
+      result = AutoCategorizer.categorize(user(), params)
       assert result.category_id == category.id
     end
 
@@ -50,7 +52,7 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
       _params = %{description: "RANDOM"}
       # Triggering check_special_rules with a string that matches but has no category in DB
       params_with_transfer_desc = %{description: "BB MM OURO"}
-      result = AutoCategorizer.categorize(params_with_transfer_desc)
+      result = AutoCategorizer.categorize(user(), params_with_transfer_desc)
       assert result == params_with_transfer_desc
     end
 
@@ -61,7 +63,7 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
       dest = account_fixture()
 
       {:ok, _rule} =
-        CashLens.Transactions.create_transfer_rule(%{
+        CashLens.Transactions.create_transfer_rule(user(), %{
           label: "Auto categorizer rule",
           description_patterns: ["pix test pattern"],
           source_account_id: source.id,
@@ -69,7 +71,7 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
         })
 
       params = %{description: "pix test pattern", account_id: source.id}
-      result = AutoCategorizer.categorize(params)
+      result = AutoCategorizer.categorize(user(), params)
 
       assert result.category_id == transfer_category.id
     end
@@ -81,7 +83,7 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
       dest = account_fixture()
 
       {:ok, _rule} =
-        CashLens.Transactions.create_transfer_rule(%{
+        CashLens.Transactions.create_transfer_rule(user(), %{
           label: "Auto categorizer rule",
           description_patterns: ["OUROCARD FACIL VISA"],
           source_account_id: source.id,
@@ -89,7 +91,7 @@ defmodule CashLens.Transactions.AutoCategorizerTest do
         })
 
       params = %{description: "Pagto cartão crédito - OUROCARD FACIL VISA", account_id: source.id}
-      result = AutoCategorizer.categorize(params)
+      result = AutoCategorizer.categorize(user(), params)
 
       assert result.category_id == transfer_category.id
     end

@@ -1,6 +1,8 @@
 defmodule CashLensWeb.AutomationLive.IndexTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
@@ -168,7 +170,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
       assert html =~ "Rótulo Novo"
       refute html =~ "Rótulo Antigo"
 
-      reloaded = Transactions.get_transfer_rule!(rule.id)
+      reloaded = Transactions.get_transfer_rule!(user(), rule.id)
       assert reloaded.label == "Rótulo Novo"
       assert reloaded.description_patterns == ["PIX UM", "PIX TRES"]
     end
@@ -195,7 +197,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
 
       html = render_click(delete_button)
       refute html =~ "Regra Descartável"
-      assert Transactions.list_transfer_rules() == []
+      assert Transactions.list_transfer_rules(user()) == []
     end
   end
 
@@ -245,7 +247,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
       updated = "^SALDO ATUAL"
 
       {:ok, record} =
-        Transactions.create_bulk_ignore_pattern(%{
+        Transactions.create_bulk_ignore_pattern(user(), %{
           pattern: original,
           description: "Motivo antigo"
         })
@@ -280,7 +282,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
       assert html =~ "Motivo novo"
       refute html =~ "Motivo antigo"
 
-      reloaded = Transactions.get_bulk_ignore_pattern!(record.id)
+      reloaded = Transactions.get_bulk_ignore_pattern!(user(), record.id)
       assert reloaded.pattern == updated
       assert reloaded.description == "Motivo novo"
     end
@@ -298,14 +300,17 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
         |> render_submit()
 
       assert html =~ "Regex inválida"
-      assert Transactions.list_bulk_ignore_patterns() == []
+      assert Transactions.list_bulk_ignore_patterns(user()) == []
     end
 
     test "deletes a pattern behind a confirmation guard", %{conn: conn} do
       pattern = "^TARIFA"
 
       {:ok, record} =
-        Transactions.create_bulk_ignore_pattern(%{pattern: pattern, description: "Tarifas"})
+        Transactions.create_bulk_ignore_pattern(user(), %{
+          pattern: pattern,
+          description: "Tarifas"
+        })
 
       {:ok, live, _html} = live(conn, ~p"/automation")
       render_click(element(live, "#tab-exclusions"))
@@ -317,14 +322,14 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
 
       html = render_click(delete_button)
       refute html =~ pattern
-      assert Transactions.list_bulk_ignore_patterns() == []
+      assert Transactions.list_bulk_ignore_patterns(user()) == []
     end
 
     test "a pattern row renders only its pattern and its description", %{conn: conn} do
       pattern = "^RENDIMENTO"
 
       {:ok, record} =
-        Transactions.create_bulk_ignore_pattern(%{
+        Transactions.create_bulk_ignore_pattern(user(), %{
           pattern: pattern,
           description: "Ignora rendimentos automáticos"
         })
@@ -345,7 +350,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
       pattern = "^SALDO ANTERIOR"
 
       {:ok, _record} =
-        Transactions.create_bulk_ignore_pattern(%{
+        Transactions.create_bulk_ignore_pattern(user(), %{
           pattern: pattern,
           description: "Linhas informativas de saldo"
         })
@@ -366,7 +371,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
 
     test "reports the keep verdict when no pattern matches", %{conn: conn} do
       {:ok, _record} =
-        Transactions.create_bulk_ignore_pattern(%{
+        Transactions.create_bulk_ignore_pattern(user(), %{
           pattern: "^SALDO ANTERIOR",
           description: "Saldo"
         })
@@ -437,7 +442,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
              ) =~ ~s(value="PIX UM, TED DOIS")
 
       assert html =~ "Nova Regra de Transferência"
-      assert Transactions.list_transfer_rules() == []
+      assert Transactions.list_transfer_rules(user()) == []
     end
 
     test "save_transfer re-renders the changeset errors instead of saving", %{
@@ -460,7 +465,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
         })
         |> render_submit()
 
-      assert Transactions.list_transfer_rules() == []
+      assert Transactions.list_transfer_rules(user()) == []
       assert has_element?(live, "#transfer-rule-form")
       refute html =~ "Regra de transferência salva!"
 
@@ -485,7 +490,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
         |> render_change()
 
       assert html =~ "Regex inválida"
-      assert Transactions.list_bulk_ignore_patterns() == []
+      assert Transactions.list_bulk_ignore_patterns(user()) == []
 
       assert render(element(live, "#exclusion-form input[name='bulk_ignore_pattern[pattern]']")) =~
                ~s(value="[aberto(")
@@ -500,7 +505,7 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
 
     defp create_rule(source, destination, patterns, create_mirror) do
       {:ok, rule} =
-        Transactions.create_transfer_rule(%{
+        Transactions.create_transfer_rule(user(), %{
           label: "Regra de Reaplicação",
           description_patterns: patterns,
           source_account_id: source.id,
@@ -583,6 +588,68 @@ defmodule CashLensWeb.AutomationLive.IndexTest do
       html = click_reapply(conn)
 
       assert html =~ "2 transações categorizadas como transferência."
+    end
+  end
+
+  describe "tenancy" do
+    setup do
+      %{a: other} = cross_tenant()
+
+      {rule, pattern} =
+        CashLens.Tenancy.acting_as(other, fn ->
+          {transfer_rule_fixture(%{user: other, label: "Foreign rule"}),
+           insert_bulk_ignore_pattern(%{user: other, pattern: "foreign-pattern"})}
+        end)
+
+      %{other: other, rule: rule, pattern: pattern}
+    end
+
+    test "lists only the logged-in user's rules and patterns", %{conn: conn} do
+      transfer_rule_fixture(%{label: "My rule"})
+      {:ok, live, html} = live(conn, ~p"/automation")
+
+      assert html =~ "My rule"
+      refute html =~ "Foreign rule"
+      refute render_click(element(live, "#tab-exclusions")) =~ "foreign-pattern"
+    end
+
+    test "forged ids in edit and delete events flash an error and change nothing", ctx do
+      %{conn: conn, other: other, rule: rule, pattern: pattern} = ctx
+      {:ok, live, _html} = live(conn, ~p"/automation")
+
+      for {event, id} <- [
+            {"edit_transfer", rule.id},
+            {"delete_transfer", rule.id},
+            {"edit_exclusion", pattern.id},
+            {"delete_exclusion", pattern.id}
+          ] do
+        html = render_hook(live, event, %{"id" => id})
+        assert html =~ "não encontrad", "#{event} did not flash"
+        refute html =~ "Foreign rule"
+      end
+
+      CashLens.Tenancy.acting_as(other, fn ->
+        assert Transactions.get_transfer_rule!(other, rule.id).label == "Foreign rule"
+
+        assert Transactions.get_bulk_ignore_pattern!(other, pattern.id).pattern ==
+                 "foreign-pattern"
+      end)
+    end
+
+    test "reapplying rules for the user does not touch the other user's transactions", ctx do
+      %{conn: conn, other: other} = ctx
+
+      tx =
+        CashLens.Tenancy.acting_as(other, fn ->
+          transaction_fixture(%{user: other, description: "untouched"})
+        end)
+
+      {:ok, live, _html} = live(conn, ~p"/automation")
+      render_hook(live, "reapply_rules", %{})
+
+      assert CashLens.Tenancy.acting_as(other, fn ->
+               CashLens.Repo.get!(CashLens.Transactions.Transaction, tx.id)
+             end) == tx
     end
   end
 end

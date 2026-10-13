@@ -1,6 +1,8 @@
 defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
   import CashLens.AccountsFixtures
@@ -22,8 +24,8 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       |> element("#transactions-#{tx1.id} button[phx-click='unmark_reimbursable']")
       |> render_click()
 
-      updated1 = Transactions.get_transaction!(tx1.id)
-      updated2 = Transactions.get_transaction!(tx2.id)
+      updated1 = Transactions.get_transaction!(user(), tx1.id)
+      updated2 = Transactions.get_transaction!(user(), tx2.id)
 
       assert is_nil(updated1.reimbursement_link_key)
       assert is_nil(updated1.reimbursement_status)
@@ -37,7 +39,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       render_click(index_live, "mark_reimbursable", %{"id" => tx.id})
 
-      assert Transactions.get_transaction!(tx.id).reimbursement_status == "pending"
+      assert Transactions.get_transaction!(user(), tx.id).reimbursement_status == "pending"
     end
 
     test "open_quick_category", %{conn: conn} do
@@ -68,7 +70,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       index_live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert Transactions.get_transaction!(tx2.id).category_id == cat.id
+      assert Transactions.get_transaction!(user(), tx2.id).category_id == cat.id
       assert render(index_live) =~ "transações categorizadas!"
     end
 
@@ -289,7 +291,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       send(index_live.pid, {:category_created, cat, tx.id})
 
       html = render(index_live)
-      assert Transactions.get_transaction!(tx.id).category_id == cat.id
+      assert Transactions.get_transaction!(user(), tx.id).category_id == cat.id
       assert html =~ "Categoria criada!"
     end
 

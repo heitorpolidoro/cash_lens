@@ -1,6 +1,8 @@
 defmodule CashLensWeb.TransactionLiveTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
   import CashLens.AccountsFixtures
@@ -148,7 +150,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       reimb_cat = category_fixture(%{name: "Reimbursable", slug: "reimbursable"})
 
       {:ok, expense} =
-        CashLens.Transactions.update_transaction(expense, %{
+        CashLens.Transactions.update_transaction(user(), expense, %{
           category_id: reimb_cat.id,
           reimbursement_status: "pending"
         })
@@ -510,7 +512,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       assert Enum.take(full, 50) == first_page
 
       dates =
-        Enum.map(full, fn id -> CashLens.Transactions.get_transaction!(id).date end)
+        Enum.map(full, fn id -> CashLens.Transactions.get_transaction!(user(), id).date end)
 
       assert dates == Enum.sort(dates, {:desc, Date})
     end
@@ -539,7 +541,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       assert length(Enum.uniq(full)) == 60
 
       assert MapSet.new(full) ==
-               MapSet.new(Enum.map(CashLens.Transactions.list_all_transactions(), & &1.id))
+               MapSet.new(Enum.map(CashLens.Transactions.list_all_transactions(user()), & &1.id))
     end
 
     test "applying a filter resets the stream instead of appending to it", %{
@@ -594,7 +596,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       |> element("#transactions-#{pending.id} button[data-role='category-suggestion']")
       |> render_click()
 
-      assert CashLens.Transactions.get_transaction!(pending.id).category_id == category.id
+      assert CashLens.Transactions.get_transaction!(user(), pending.id).category_id == category.id
     end
 
     test "shows reimbursement badges linking the expense and its deposit credit", %{
@@ -610,7 +612,9 @@ defmodule CashLensWeb.TransactionLiveTest do
         })
 
       {:ok, expense} =
-        CashLens.Transactions.update_transaction(expense, %{reimbursement_status: "pending"})
+        CashLens.Transactions.update_transaction(user(), expense, %{
+          reimbursement_status: "pending"
+        })
 
       credit =
         transaction_fixture(%{
@@ -621,7 +625,7 @@ defmodule CashLensWeb.TransactionLiveTest do
         })
 
       {:ok, {_expense, _credit}} =
-        CashLens.Transactions.link_reimbursement_pair(expense.id, credit.id)
+        CashLens.Transactions.link_reimbursement_pair(user(), expense.id, credit.id)
 
       {:ok, live, _html} = live(conn, ~p"/transactions")
 
@@ -768,7 +772,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       assert_patch(live, ~p"/transactions")
 
       [created] =
-        CashLens.Transactions.list_all_transactions()
+        CashLens.Transactions.list_all_transactions(user())
         |> Enum.filter(&(&1.description == "Despesa assinada"))
 
       assert Decimal.equal?(created.amount, Decimal.new("-1234.56"))
@@ -786,7 +790,7 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       assert html =~ "Valor inválido"
       assert has_element?(live, "#transaction-form-modal")
-      assert CashLens.Transactions.list_all_transactions() == []
+      assert CashLens.Transactions.list_all_transactions(user()) == []
     end
 
     test "editing and saving an existing expense keeps its negative sign", %{
@@ -810,7 +814,7 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       assert_patch(live, ~p"/transactions")
 
-      updated = CashLens.Transactions.get_transaction!(transaction.id)
+      updated = CashLens.Transactions.get_transaction!(user(), transaction.id)
       assert updated.description == "Consulta revisada"
       assert Decimal.equal?(updated.amount, Decimal.new("-800.00"))
     end
@@ -842,7 +846,7 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       # Cancelling leaves the transaction untouched.
       live |> element("#confirm-modal button[phx-click='close_modal']") |> render_click()
-      assert CashLens.Transactions.get_transaction!(transaction.id)
+      assert CashLens.Transactions.get_transaction!(user(), transaction.id)
     end
 
     test "edit modal shows the traceability block for a linked transaction", %{
@@ -858,7 +862,9 @@ defmodule CashLensWeb.TransactionLiveTest do
         })
 
       {:ok, expense} =
-        CashLens.Transactions.update_transaction(expense, %{reimbursement_status: "pending"})
+        CashLens.Transactions.update_transaction(user(), expense, %{
+          reimbursement_status: "pending"
+        })
 
       credit =
         transaction_fixture(%{
@@ -869,7 +875,7 @@ defmodule CashLensWeb.TransactionLiveTest do
         })
 
       {:ok, {expense, _credit}} =
-        CashLens.Transactions.link_reimbursement_pair(expense.id, credit.id)
+        CashLens.Transactions.link_reimbursement_pair(user(), expense.id, credit.id)
 
       {:ok, live, html} = live(conn, ~p"/transactions/#{expense}/edit")
 
@@ -906,10 +912,12 @@ defmodule CashLensWeb.TransactionLiveTest do
         amount: "500.00",
         description: "Entrada do destino"
       })
-      |> CashLens.Transactions.update_transaction(%{transfer_key: transfer_key})
+      |> then(
+        &CashLens.Transactions.update_transaction(user(), &1, %{transfer_key: transfer_key})
+      )
 
       {:ok, origin} =
-        CashLens.Transactions.update_transaction(origin, %{
+        CashLens.Transactions.update_transaction(user(), origin, %{
           transfer_key: transfer_key,
           installment_group_id: group.id,
           installment_number: 1
@@ -978,7 +986,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       assert has_element?(live, "#duplicate-confirmation")
       assert render(live) =~ "Já existe um lançamento idêntico"
 
-      assert CashLens.Transactions.list_all_transactions()
+      assert CashLens.Transactions.list_all_transactions(user())
              |> Enum.count(&(&1.description == "Lancamento repetido")) == 1
     end
 
@@ -1188,6 +1196,127 @@ defmodule CashLensWeb.TransactionLiveTest do
 
       refute render(live) =~ "Filtrando por conta"
       assert render(live) =~ "COMPRA NO BANCO"
+    end
+  end
+
+  describe "tenancy" do
+    setup %{user: user} do
+      %{a: other} = cross_tenant()
+      foreign_account = account_fixture(%{user: other, name: "Foreign account"})
+
+      foreign =
+        transaction_fixture(%{
+          user: other,
+          account_id: foreign_account.id,
+          description: "Foreign purchase",
+          amount: "-42.00"
+        })
+
+      mine = transaction_fixture(%{user: user, description: "My purchase"})
+      %{other: other, foreign: foreign, mine: mine}
+    end
+
+    defp foreign_row(other, foreign) do
+      CashLens.Tenancy.acting_as(other, fn ->
+        Repo.get!(CashLens.Transactions.Transaction, foreign.id)
+      end)
+    end
+
+    test "the list shows only the logged-in user's rows", %{conn: conn} do
+      {:ok, _live, html} = live(conn, ~p"/transactions")
+
+      assert html =~ "My purchase"
+      refute html =~ "Foreign purchase"
+    end
+
+    test "showing another user's transaction redirects with an error flash", %{
+      conn: conn,
+      foreign: foreign
+    } do
+      assert {:error, {:live_redirect, %{to: "/transactions", flash: flash}}} =
+               live(conn, ~p"/transactions/#{foreign.id}")
+
+      assert flash["error"] =~ "não encontrada"
+    end
+
+    test "editing another user's transaction redirects without rendering its data", %{
+      conn: conn,
+      foreign: foreign
+    } do
+      assert {:error, {:live_redirect, %{to: "/transactions", flash: flash}}} =
+               live(conn, ~p"/transactions/#{foreign.id}/edit")
+
+      assert flash["error"] =~ "não encontrada"
+
+      {:ok, _live, html} = live(conn, ~p"/transactions")
+      refute html =~ "Foreign purchase"
+    end
+
+    test "forged ids in events give an error flash and change nothing", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+      category = category_fixture(%{name: "My category"})
+
+      events = [
+        {"delete", %{"id" => foreign.id}},
+        {"confirm_delete", %{"id" => foreign.id}},
+        {"update_category", %{"transaction_id" => foreign.id, "category_id" => category.id}},
+        {"mark_reimbursable", %{"id" => foreign.id}},
+        {"unmark_reimbursable", %{"id" => foreign.id}},
+        {"open_reimbursement_link", %{"id" => foreign.id}},
+        {"open_transfer_link", %{"id" => foreign.id}},
+        {"open_notes", %{"id" => foreign.id}},
+        {"save_notes", %{"tx_id" => foreign.id, "notes" => "hijacked"}},
+        {"link_installment", %{"id" => foreign.id, "group_id" => Ecto.UUID.generate()}},
+        {"unlink_installment", %{"id" => foreign.id}},
+        {"load_installment_suggestion", %{"id" => foreign.id}}
+      ]
+
+      for {event, params} <- events do
+        html = render_hook(live, event, params)
+        assert html =~ "Transação não encontrada", "#{event} did not flash"
+        refute html =~ "Foreign purchase"
+      end
+
+      assert foreign_row(other, foreign) == foreign
+    end
+
+    test "a forged transfer key unlinks nothing", %{conn: conn, other: other} do
+      {account, key, out} =
+        CashLens.Tenancy.acting_as(other, fn ->
+          account = account_fixture(%{user: other})
+          out = transaction_fixture(%{user: other, account_id: account.id, amount: "-5.00"})
+          inc = transaction_fixture(%{user: other, account_id: account.id, amount: "5.00"})
+          {:ok, key} = CashLens.Transactions.link_transfer_pair(other, out.id, inc.id)
+          {account, key, out}
+        end)
+
+      _ = account
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      assert render_hook(live, "unlink_transfer_pair", %{"key" => key}) =~
+               "Par de transferência não encontrado"
+
+      assert render_hook(live, "open_transfer_pair", %{"key" => key}) =~
+               "Par de transferência não encontrado"
+
+      assert foreign_row(other, out).transfer_key == key
+    end
+
+    test "a forged bulk selection and category apply change no foreign row", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/transactions")
+
+      render_hook(live, "toggle_bulk_tx", %{"id" => foreign.id})
+      render_hook(live, "close_modal", %{})
+
+      assert foreign_row(other, foreign) == foreign
     end
   end
 end

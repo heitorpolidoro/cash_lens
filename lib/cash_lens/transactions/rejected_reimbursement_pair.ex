@@ -19,6 +19,8 @@ defmodule CashLens.Transactions.RejectedReimbursementPair do
     |> validate_required([:transaction_a_id, :transaction_b_id])
     # Enforce order: transaction_a_id < transaction_b_id
     |> sort_ids()
+    |> CashLens.Ownership.validate_owned(:transaction_a_id, CashLens.Transactions.Transaction)
+    |> CashLens.Ownership.validate_owned(:transaction_b_id, CashLens.Transactions.Transaction)
     |> unique_constraint([:transaction_a_id, :transaction_b_id],
       name: :rejected_reimbursement_pairs_transaction_a_id_transaction_b_id_
     )

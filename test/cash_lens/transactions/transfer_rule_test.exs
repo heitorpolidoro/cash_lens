@@ -18,7 +18,9 @@ defmodule CashLens.Transactions.TransferRuleTest do
         destination_account_id: destination.id
       }
 
-      changeset = TransferRule.changeset(%TransferRule{}, attrs)
+      changeset =
+        TransferRule.changeset(%TransferRule{user_id: CashLens.Repo.current_user_id()}, attrs)
+
       assert changeset.valid?
     end
 
@@ -30,7 +32,9 @@ defmodule CashLens.Transactions.TransferRuleTest do
         destination_account_id: destination.id
       }
 
-      changeset = TransferRule.changeset(%TransferRule{}, attrs)
+      changeset =
+        TransferRule.changeset(%TransferRule{user_id: CashLens.Repo.current_user_id()}, attrs)
+
       assert changeset.valid?
       assert get_change(changeset, :label) == "My Rule"
     end
@@ -42,7 +46,9 @@ defmodule CashLens.Transactions.TransferRuleTest do
         destination_account_id: destination.id
       }
 
-      changeset = TransferRule.changeset(%TransferRule{}, attrs)
+      changeset =
+        TransferRule.changeset(%TransferRule{user_id: CashLens.Repo.current_user_id()}, attrs)
+
       assert changeset.valid?
     end
 
@@ -55,7 +61,9 @@ defmodule CashLens.Transactions.TransferRuleTest do
         destination_account_id: destination.id
       }
 
-      changeset = TransferRule.changeset(%TransferRule{}, attrs)
+      changeset =
+        TransferRule.changeset(%TransferRule{user_id: CashLens.Repo.current_user_id()}, attrs)
+
       assert %{description_patterns: ["can't be blank"]} = errors_on(changeset)
     end
 
@@ -69,7 +77,9 @@ defmodule CashLens.Transactions.TransferRuleTest do
         destination_account_id: destination.id
       }
 
-      changeset = TransferRule.changeset(%TransferRule{}, attrs)
+      changeset =
+        TransferRule.changeset(%TransferRule{user_id: CashLens.Repo.current_user_id()}, attrs)
+
       refute changeset.valid?
     end
 
@@ -79,7 +89,9 @@ defmodule CashLens.Transactions.TransferRuleTest do
         destination_account_id: destination.id
       }
 
-      changeset = TransferRule.changeset(%TransferRule{}, attrs)
+      changeset =
+        TransferRule.changeset(%TransferRule{user_id: CashLens.Repo.current_user_id()}, attrs)
+
       assert %{source_account_id: ["can't be blank"]} = errors_on(changeset)
     end
 
@@ -89,7 +101,9 @@ defmodule CashLens.Transactions.TransferRuleTest do
         source_account_id: source.id
       }
 
-      changeset = TransferRule.changeset(%TransferRule{}, attrs)
+      changeset =
+        TransferRule.changeset(%TransferRule{user_id: CashLens.Repo.current_user_id()}, attrs)
+
       assert %{destination_account_id: ["can't be blank"]} = errors_on(changeset)
     end
 
@@ -100,7 +114,9 @@ defmodule CashLens.Transactions.TransferRuleTest do
         destination_account_id: source.id
       }
 
-      changeset = TransferRule.changeset(%TransferRule{}, attrs)
+      changeset =
+        TransferRule.changeset(%TransferRule{user_id: CashLens.Repo.current_user_id()}, attrs)
+
       assert %{destination_account_id: [_]} = errors_on(changeset)
     end
 
@@ -117,7 +133,9 @@ defmodule CashLens.Transactions.TransferRuleTest do
         destination_account_id: destination.id
       }
 
-      changeset = TransferRule.changeset(%TransferRule{}, attrs)
+      changeset =
+        TransferRule.changeset(%TransferRule{user_id: CashLens.Repo.current_user_id()}, attrs)
+
       assert %{description_patterns: ["can't be blank"]} = errors_on(changeset)
     end
   end

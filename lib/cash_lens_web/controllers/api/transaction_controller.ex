@@ -16,9 +16,10 @@ defmodule CashLensWeb.Api.TransactionController do
     page = parse_int(params["page"], 1)
     page_size = params["page_size"] |> parse_int(@default_page_size) |> min(@max_page_size)
     filters = build_filters(params)
+    user = conn.assigns.current_user
 
-    transactions = Transactions.list_transactions(filters, page, page_size)
-    total = Transactions.count_transactions(filters)
+    transactions = Transactions.list_transactions(user, filters, page, page_size)
+    total = Transactions.count_transactions(user, filters)
 
     json(conn, %{
       data: Enum.map(transactions, &serialize/1),
@@ -32,33 +33,42 @@ defmodule CashLensWeb.Api.TransactionController do
   end
 
   def show(conn, %{"id" => id}) do
-    transaction = Transactions.get_transaction!(id)
+    transaction = Transactions.get_transaction!(conn.assigns.current_user, id)
     json(conn, %{data: serialize(transaction)})
   rescue
     Ecto.NoResultsError -> not_found(conn)
   end
 
   def update(conn, %{"id" => id} = params) do
-    transaction = Transactions.get_transaction!(id)
+    user = conn.assigns.current_user
+    transaction = Transactions.get_transaction!(user, id)
 
     attrs =
       params
       |> Map.take(["description", "amount", "date", "notes", "reimbursement_status"])
       |> maybe_put_category(params["category_id"])
 
-    case Transactions.update_transaction(transaction, attrs) do
-      {:ok, updated} -> json(conn, %{data: serialize(updated)})
-      {:error, cs} -> conn |> put_status(422) |> json(%{error: format_errors(cs)})
+    case Transactions.update_transaction(user, transaction, attrs) do
+      {:ok, updated} ->
+        json(conn, %{data: serialize(Transactions.get_transaction!(user, updated.id))})
+
+      {:error, :not_found} ->
+        not_found(conn)
+
+      {:error, cs} ->
+        conn |> put_status(422) |> json(%{error: format_errors(cs)})
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)
   end
 
   def delete(conn, %{"id" => id}) do
-    transaction = Transactions.get_transaction!(id)
+    user = conn.assigns.current_user
+    transaction = Transactions.get_transaction!(user, id)
 
-    case Transactions.delete_transaction(transaction) do
+    case Transactions.delete_transaction(user, transaction) do
       {:ok, _} -> send_resp(conn, 204, "")
+      {:error, :not_found} -> not_found(conn)
       {:error, cs} -> conn |> put_status(422) |> json(%{error: format_errors(cs)})
     end
   rescue

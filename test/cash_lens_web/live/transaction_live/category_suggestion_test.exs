@@ -1,6 +1,8 @@
 defmodule CashLensWeb.TransactionLive.CategorySuggestionTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Phoenix.LiveViewTest
   import CashLens.CategoriesFixtures
   import CashLens.TransactionsFixtures
@@ -20,7 +22,7 @@ defmodule CashLensWeb.TransactionLive.CategorySuggestionTest do
     |> element("button[data-role='category-suggestion'][phx-value-transaction_id='#{target.id}']")
     |> render_click()
 
-    assert Transactions.get_transaction!(target.id).category_id == category.id
+    assert Transactions.get_transaction!(user(), target.id).category_id == category.id
     refute has_element?(live, "button[data-role='category-suggestion']")
   end
 

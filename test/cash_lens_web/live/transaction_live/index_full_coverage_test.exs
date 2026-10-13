@@ -1,6 +1,8 @@
 defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
   import CashLens.CategoriesFixtures
@@ -98,7 +100,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
 
       index_live |> render_click("delete_all")
 
-      assert Transactions.list_transactions() == []
+      assert Transactions.list_transactions(user()) == []
     end
 
     test "delete single transaction", %{conn: conn} do
@@ -108,7 +110,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       index_live |> render_click("confirm_delete", %{"id" => tx.id})
       index_live |> render_click("delete", %{"id" => tx.id})
 
-      assert_raise Ecto.NoResultsError, fn -> Transactions.get_transaction!(tx.id) end
+      assert_raise Ecto.NoResultsError, fn -> Transactions.get_transaction!(user(), tx.id) end
     end
 
     test "handle_info messages", %{conn: conn} do
@@ -137,7 +139,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       send(index_live.pid, {:category_created, cat, tx.id})
 
       assert render(index_live) =~ "Categoria criada!"
-      assert Transactions.get_transaction!(tx.id).category_id == cat.id
+      assert Transactions.get_transaction!(user(), tx.id).category_id == cat.id
     end
 
     test "toggle_sort event", %{conn: conn} do
@@ -164,7 +166,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
       {:ok, index_live, _html} = live(conn, ~p"/transactions")
 
       index_live |> render_click("unmark_reimbursable", %{"id" => tx.id})
-      assert is_nil(Transactions.get_transaction!(tx.id).reimbursement_status)
+      assert is_nil(Transactions.get_transaction!(user(), tx.id).reimbursement_status)
     end
 
     test "unmark_reimbursable with link key", %{conn: conn} do
@@ -176,8 +178,8 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
 
       index_live |> render_click("unmark_reimbursable", %{"id" => tx1.id})
 
-      assert is_nil(Transactions.get_transaction!(tx1.id).reimbursement_link_key)
-      assert is_nil(Transactions.get_transaction!(tx2.id).reimbursement_link_key)
+      assert is_nil(Transactions.get_transaction!(user(), tx1.id).reimbursement_link_key)
+      assert is_nil(Transactions.get_transaction!(user(), tx2.id).reimbursement_link_key)
     end
 
     test "update_category error branch", %{conn: conn} do
@@ -196,7 +198,7 @@ defmodule CashLensWeb.TransactionLive.IndexFullCoverageTest do
 
     test "get_bulk_items_for_tx with bulk ignore pattern", %{conn: conn} do
       # Create a pattern
-      Transactions.create_bulk_ignore_pattern(%{pattern: "SKIP_ME", description: "Skip"})
+      Transactions.create_bulk_ignore_pattern(user(), %{pattern: "SKIP_ME", description: "Skip"})
 
       tx = transaction_fixture(description: "SKIP_ME 123")
       cat = category_fixture()

@@ -1,6 +1,8 @@
 defmodule CashLensWeb.TransferLiveTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Ecto.Query
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
@@ -247,7 +249,7 @@ defmodule CashLensWeb.TransferLiveTest do
       html = live |> element("button[phx-click='confirm_all']") |> render_click()
 
       assert html =~ "vinculadas!"
-      assert Transactions.list_transfer_suggestions() == []
+      assert Transactions.list_transfer_suggestions(user()) == []
     end
   end
 
@@ -414,6 +416,70 @@ defmodule CashLensWeb.TransferLiveTest do
 
       assert result =~ "desvinculada"
       assert is_nil(Repo.get!(Transaction, l1.id).transfer_key)
+    end
+  end
+
+  describe "tenancy" do
+    setup %{user: _user} do
+      %{a: other} = cross_tenant()
+
+      {out, inc, key} =
+        CashLens.Tenancy.acting_as(other, fn ->
+          account_a = account_fixture(%{user: other, name: "Foreign A"})
+          account_b = account_fixture(%{user: other, name: "Foreign B"})
+
+          out =
+            transaction_fixture(%{
+              user: other,
+              account_id: account_a.id,
+              amount: "-77.00",
+              description: "Foreign out"
+            })
+
+          inc =
+            transaction_fixture(%{
+              user: other,
+              account_id: account_b.id,
+              amount: "77.00",
+              description: "Foreign in"
+            })
+
+          {:ok, key} = Transactions.link_transfer_pair(other, out.id, inc.id)
+          {out, inc, key}
+        end)
+
+      %{other: other, out: out, inc: inc, key: key}
+    end
+
+    defp foreign_rows(other, ids) do
+      CashLens.Tenancy.acting_as(other, fn ->
+        Repo.all(from t in Transaction, where: t.id in ^ids, order_by: t.id)
+      end)
+    end
+
+    test "the pages show none of the other user's transfers", %{conn: conn} do
+      {:ok, live, html} = live(conn, ~p"/transfers")
+      refute html =~ "Foreign out"
+      refute render(live) =~ "Foreign A"
+    end
+
+    test "forged ids and keys give an error flash and change nothing", ctx do
+      %{conn: conn, other: other, out: out, inc: inc, key: key} = ctx
+      before = foreign_rows(other, [out.id, inc.id])
+      {:ok, live, _html} = live(conn, ~p"/transfers")
+
+      assert render_hook(live, "confirm_pair", %{"a" => out.id, "b" => inc.id}) =~
+               "Transação não encontrada"
+
+      assert render_hook(live, "open_link_modal", %{"id" => out.id}) =~
+               "Transação não encontrada"
+
+      assert render_hook(live, "open_mirror_modal", %{"id" => out.id}) =~
+               "Transação não encontrada"
+
+      assert render_hook(live, "unlink", %{"key" => key}) =~ "Transferência não encontrada"
+
+      assert foreign_rows(other, [out.id, inc.id]) == before
     end
   end
 end

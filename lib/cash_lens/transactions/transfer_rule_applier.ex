@@ -1,15 +1,22 @@
 defmodule CashLens.Transactions.TransferRuleApplier do
   @moduledoc """
   Applies transfer rules to transactions, creating mirrored transactions in destination accounts.
+
+  Every function names the user whose rules apply: only that user's rules,
+  accounts, categories and transactions are read or written, and a transaction
+  owned by someone else is left alone.
   """
   require Logger
   import Ecto.Query
 
+  alias CashLens.Accounts.Account
   alias CashLens.Categories
   alias CashLens.CreditCards.Matcher, as: CreditCardMatcher
+  alias CashLens.Ownership
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferRule
+  alias CashLens.Users.User
 
   @doc """
   Applies transfer rules to a list of transactions (batch variant for import pipeline).
@@ -19,14 +26,14 @@ defmodule CashLens.Transactions.TransferRuleApplier do
 
   Returns the list of newly created mirror transactions.
   """
-  def apply_rules(transactions) when is_list(transactions) do
-    case load_rules_by_source() do
+  def apply_rules(%User{} = user, transactions) when is_list(transactions) do
+    case load_rules_by_source(user) do
       rules when rules == %{} ->
         []
 
       rules_by_source ->
         Enum.flat_map(transactions, fn tx ->
-          apply_rules_to_transaction(tx, rules_by_source)
+          apply_rules_to_transaction(user, tx, rules_by_source)
         end)
     end
   end
@@ -36,25 +43,26 @@ defmodule CashLens.Transactions.TransferRuleApplier do
 
   Returns a list of newly created mirror transactions (0 or 1 elements).
   """
-  def maybe_apply_rule(%Transaction{} = transaction) do
-    case load_rules_by_source() do
+  def maybe_apply_rule(%User{} = user, %Transaction{} = transaction) do
+    case load_rules_by_source(user) do
       rules when rules == %{} ->
         []
 
       rules_by_source ->
-        apply_rules_to_transaction(transaction, rules_by_source)
+        apply_rules_to_transaction(user, transaction, rules_by_source)
     end
   end
 
-  defp load_rules_by_source do
+  defp load_rules_by_source(user) do
     TransferRule
+    |> Ownership.scope(user)
     |> Repo.all()
-    |> Repo.preload(:destination_account)
+    |> Repo.preload(destination_account: Ownership.scope(Account, user))
     |> Enum.group_by(& &1.source_account_id)
   end
 
-  defp get_transfer_category do
-    case Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer") do
+  defp get_transfer_category(user) do
+    case Categories.get_category_by_slug(user, "transfer") do
       nil ->
         Logger.warning(
           "TransferRuleApplier: 'transfer' category not found; skipping rule application."
@@ -67,7 +75,12 @@ defmodule CashLens.Transactions.TransferRuleApplier do
     end
   end
 
-  defp apply_rules_to_transaction(tx, rules_by_source) do
+  # A transaction the user does not own is never touched.
+  defp apply_rules_to_transaction(%User{id: user_id}, %Transaction{user_id: owner_id}, _rules)
+       when owner_id != user_id,
+       do: []
+
+  defp apply_rules_to_transaction(user, tx, rules_by_source) do
     account_rules = Map.get(rules_by_source, tx.account_id, [])
     description_lower = String.downcase(tx.description || "")
 
@@ -80,32 +93,32 @@ defmodule CashLens.Transactions.TransferRuleApplier do
 
     case matched_rule do
       nil -> []
-      rule -> apply_matched_rule(tx, rule)
+      rule -> apply_matched_rule(user, tx, rule)
     end
   end
 
-  defp apply_matched_rule(tx, %{destination_account: %{is_credit_card: true}} = rule) do
-    apply_credit_card_rule(tx, rule)
+  defp apply_matched_rule(user, tx, %{destination_account: %{is_credit_card: true}} = rule) do
+    apply_credit_card_rule(user, tx, rule)
   end
 
-  defp apply_matched_rule(tx, rule) do
-    case get_transfer_category() do
+  defp apply_matched_rule(user, tx, rule) do
+    case get_transfer_category(user) do
       nil ->
         []
 
       transfer_category ->
-        set_category(tx, transfer_category)
+        set_category(user, tx, transfer_category)
 
         if rule.create_mirror do
-          maybe_create_mirror(tx, rule, transfer_category)
+          maybe_create_mirror(user, tx, rule, transfer_category)
         else
           []
         end
     end
   end
 
-  defp apply_credit_card_rule(tx, rule) do
-    case Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "cartao-de-credito") do
+  defp apply_credit_card_rule(user, tx, rule) do
+    case Categories.get_category_by_slug(user, "cartao-de-credito") do
       nil ->
         Logger.warning(
           "TransferRuleApplier: 'cartao-de-credito' category not found; skipping rule application."
@@ -114,7 +127,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
         []
 
       category ->
-        set_category(tx, category)
+        set_category(user, tx, category)
 
         CreditCardMatcher.match_payment(
           %{tx | category_id: category.id},
@@ -125,9 +138,9 @@ defmodule CashLens.Transactions.TransferRuleApplier do
     end
   end
 
-  defp set_category(tx, category) do
+  defp set_category(user, tx, category) do
     if tx.category_id != category.id do
-      from(t in Transaction, where: t.id == ^tx.id)
+      from(t in Ownership.scope(Transaction, user), where: t.id == ^tx.id)
       |> Repo.update_all(
         set: [
           category_id: category.id,
@@ -137,7 +150,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
     end
   end
 
-  defp maybe_create_mirror(tx, rule, transfer_category) do
+  defp maybe_create_mirror(user, tx, rule, transfer_category) do
     mirror_amount = Decimal.negate(tx.amount)
     link_id = Ecto.UUID.generate()
     mirror_id = Ecto.UUID.generate()
@@ -158,7 +171,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
       transfer_key: link_id
     }
 
-    changeset = Transaction.changeset(%Transaction{}, mirror_params)
+    changeset = Transaction.changeset(%Transaction{user_id: user.id}, mirror_params)
 
     case repo_mod().insert(changeset,
            on_conflict: {:replace, [:updated_at]},
@@ -166,7 +179,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
            returning: true
          ) do
       {:ok, mirror} ->
-        link_mirror(tx, mirror, link_id, mirror.id == mirror_id)
+        link_mirror(user, tx, mirror, link_id, mirror.id == mirror_id)
 
       {:error, reason} ->
         Logger.warning(
@@ -180,9 +193,9 @@ defmodule CashLens.Transactions.TransferRuleApplier do
   # Links the mirror to its source transaction. A mirror that already carries a
   # different transfer_key was linked elsewhere, so it is left untouched. Only a
   # freshly inserted mirror is returned to the caller.
-  defp link_mirror(tx, mirror, link_id, is_new) do
+  defp link_mirror(user, tx, mirror, link_id, is_new) do
     if is_nil(mirror.transfer_key) || mirror.transfer_key == link_id do
-      link_pair(tx.id, mirror.id, link_id)
+      link_pair(user, tx.id, mirror.id, link_id)
       if is_new, do: [%{mirror | transfer_key: link_id}], else: []
     else
       []
@@ -191,12 +204,12 @@ defmodule CashLens.Transactions.TransferRuleApplier do
 
   defp repo_mod, do: Application.get_env(:cash_lens, :transfer_rule_repo, CashLens.Repo)
 
-  defp link_pair(tx_id, twin_id, link_id) do
-    transfer_cat = Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "transfer")
+  defp link_pair(user, tx_id, twin_id, link_id) do
+    transfer_cat = Categories.get_category_by_slug(user, "transfer")
     cat_id = transfer_cat && transfer_cat.id
 
     Repo.transaction(fn ->
-      from(t in Transaction, where: t.id in [^tx_id, ^twin_id])
+      from(t in Ownership.scope(Transaction, user), where: t.id in [^tx_id, ^twin_id])
       |> Repo.update_all(
         set: [
           transfer_key: link_id,

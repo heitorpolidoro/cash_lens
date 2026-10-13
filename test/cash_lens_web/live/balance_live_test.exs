@@ -1,6 +1,8 @@
 defmodule CashLensWeb.BalanceLiveTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Ecto.Query, only: [from: 2]
   import Phoenix.LiveViewTest
   import CashLens.AccountingFixtures
@@ -543,7 +545,7 @@ defmodule CashLensWeb.BalanceLiveTest do
       category = category_fixture(%{name: "Rendimento"})
 
       {:ok, %Transaction{}} =
-        Transactions.create_transaction(%{
+        Transactions.create_transaction(user(), %{
           account_id: balance.account_id,
           date: today,
           description: "Rendimento",

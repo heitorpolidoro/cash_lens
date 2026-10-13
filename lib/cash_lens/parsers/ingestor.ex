@@ -249,14 +249,15 @@ defmodule CashLens.Parsers.Ingestor do
   defp finalize_import(transactions_data, account_id, statement_id) do
     transactions_data = reject_future_dated(transactions_data)
 
-    {entries, failed} = prepare_entries(transactions_data, account_id, statement_id)
-
-    {inserted_count, affected_account_ids} =
-      process_entries(entries, transactions_data, account_id, statement_id)
-
-    # Rebuild balances for all affected accounts up to the current month/year
     # TRANSITIONAL: removed when CL-51 converts the caller
     user = CashLens.Ownership.current_user!()
+
+    {entries, failed} = prepare_entries(user, transactions_data, account_id, statement_id)
+
+    {inserted_count, affected_account_ids} =
+      process_entries(user, entries, transactions_data, account_id, statement_id)
+
+    # Rebuild balances for all affected accounts up to the current month/year
 
     Enum.each(affected_account_ids, fn acc_id ->
       Accounting.rebuild_account_balances(user, acc_id)
@@ -320,7 +321,9 @@ defmodule CashLens.Parsers.Ingestor do
   defp preview_import(transactions_data, account_id, claimed_fingerprints) do
     transactions_data = reject_future_dated(transactions_data)
 
-    {entries, failed} = prepare_entries(transactions_data, account_id, nil)
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    user = CashLens.Ownership.current_user!()
+    {entries, failed} = prepare_entries(user, transactions_data, account_id, nil)
 
     already_present = existing_fingerprints(Enum.map(entries, & &1.fingerprint))
 
@@ -380,7 +383,7 @@ defmodule CashLens.Parsers.Ingestor do
     |> MapSet.new()
   end
 
-  defp prepare_entries(transactions_data, account_id, statement_id) do
+  defp prepare_entries(user, transactions_data, account_id, statement_id) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     {valid, failed} =
@@ -388,7 +391,7 @@ defmodule CashLens.Parsers.Ingestor do
       |> assign_occurrence_indices(account_id)
       |> Enum.map(fn {data, index} ->
         try do
-          {:ok, prepare_transaction_entry(data, account_id, now, index, statement_id)}
+          {:ok, prepare_transaction_entry(user, data, account_id, now, index, statement_id)}
         rescue
           e -> {:error, {data[:description] || "unknown", Exception.message(e)}}
         end
@@ -436,7 +439,7 @@ defmodule CashLens.Parsers.Ingestor do
     |> Transaction.dedup_key()
   end
 
-  defp process_entries(entries, _transactions_data, account_id, statement_id) do
+  defp process_entries(user, entries, _transactions_data, account_id, statement_id) do
     # 2. Batch Insert with on_conflict: :nothing
     # We use returning: true to get the actually inserted transactions for TransferMatcher.
     # `count` is the number of rows actually inserted (conflicts are not counted),
@@ -450,7 +453,7 @@ defmodule CashLens.Parsers.Ingestor do
     statement_lines = claim_existing_lines(entries, inserted_transactions, statement_id)
 
     # 3. Apply transfer rules for newly inserted transactions, creating mirrors as needed
-    mirror_transactions = TransferRuleApplier.apply_rules(inserted_transactions)
+    mirror_transactions = TransferRuleApplier.apply_rules(user, inserted_transactions)
 
     # 3b. Try to link a freshly-imported credit-card invoice batch to an
     # existing "Cartão de Crédito" payment transaction.
@@ -469,7 +472,7 @@ defmodule CashLens.Parsers.Ingestor do
 
     # 4. Run TransferMatcher for new transactions (including mirrors) in batch
     matched_account_ids =
-      TransferMatcher.match_transfers(inserted_transactions ++ mirror_transactions) || []
+      TransferMatcher.match_transfers(user, inserted_transactions ++ mirror_transactions) || []
 
     # Note: installment detection runs once over the full set after the whole batch
     # import (see DirectoryImporter), because a purchase's parcels can span
@@ -485,7 +488,7 @@ defmodule CashLens.Parsers.Ingestor do
     {count, all_affected_account_ids}
   end
 
-  defp prepare_transaction_entry(data, account_id, now, occurrence_index, statement_id) do
+  defp prepare_transaction_entry(user, data, account_id, now, occurrence_index, statement_id) do
     categorizer = Application.get_env(:cash_lens, :auto_categorizer, AutoCategorizer)
 
     attrs =
@@ -493,12 +496,12 @@ defmodule CashLens.Parsers.Ingestor do
       |> Map.put(:account_id, account_id)
       |> Map.put(:occurrence_index, occurrence_index)
       |> Map.put(:source, "file")
-      |> categorizer.categorize()
+      |> then(&categorizer.categorize(user, &1))
 
     # Generate changeset to get fingerprint and validate
     changeset =
       Transaction.changeset(
-        %Transaction{},
+        %Transaction{user_id: user.id},
         attrs
       )
 

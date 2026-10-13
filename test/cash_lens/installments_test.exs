@@ -1,6 +1,8 @@
 defmodule CashLens.InstallmentsTest do
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Ecto.Query
   import CashLens.AccountsFixtures
   import CashLens.TransactionsFixtures
@@ -398,7 +400,7 @@ defmodule CashLens.InstallmentsTest do
       assert linked_new.id == tx_new.id
 
       # Verify old is unlinked
-      refute CashLens.Transactions.get_transaction!(tx_old.id).installment_group_id
+      refute CashLens.Transactions.get_transaction!(user(), tx_old.id).installment_group_id
     end
 
     test "does not auto-associate for auto-detected pattern format groups" do
@@ -733,7 +735,7 @@ defmodule CashLens.InstallmentsTest do
       assert {:ok, _} = Installments.delete_installment_group(g)
 
       # The transaction survives the grouping being undone.
-      survivor = CashLens.Transactions.get_transaction!(tx.id)
+      survivor = CashLens.Transactions.get_transaction!(user(), tx.id)
       assert survivor.installment_group_id == nil
       assert survivor.installment_number == nil
     end

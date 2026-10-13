@@ -1,6 +1,8 @@
 defmodule CashLens.ForecastTest do
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   alias CashLens.Forecast
   alias CashLens.Forecast.RecurringItem
 
@@ -1442,7 +1444,7 @@ defmodule CashLens.ForecastTest do
       assert Decimal.equal?(Forecast.variable_baseline_rate().daily, Decimal.new("-10.00"))
 
       {:ok, _} =
-        CashLens.Transactions.update_transaction(tx, %{transfer_key: Ecto.UUID.generate()})
+        CashLens.Transactions.update_transaction(user(), tx, %{transfer_key: Ecto.UUID.generate()})
 
       refute Forecast.variable_baseline_rate()
     end

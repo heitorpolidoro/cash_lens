@@ -27,13 +27,20 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
      |> assign(:amount_error, nil)
      |> assign(:duplicate_of, nil)
      |> assign(:pending_params, nil)
-     |> assign(:links, if(action == :edit, do: build_links(transaction), else: []))
+     |> assign(
+       :links,
+       if(action == :edit, do: build_links(assigns.current_user, transaction), else: [])
+     )
      |> assign(:form, to_form(Transactions.change_transaction(transaction)))}
   end
 
   @impl true
   def handle_event("confirm_duplicate", _params, socket) do
-    case Transactions.create_transaction(socket.assigns.pending_params, allow_duplicate: true) do
+    case Transactions.create_transaction(
+           socket.assigns.current_user,
+           socket.assigns.pending_params,
+           allow_duplicate: true
+         ) do
       {:ok, %{} = transaction} ->
         send(self(), {:transaction_saved, transaction, :new})
         {:noreply, socket}
@@ -92,11 +99,11 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
   # which of the two it is. Falsifying the date to get past it, the other way
   # out, breaks reconciliation against the statement the charge belongs to.
   defp persist(socket, :new, params) do
-    case Transactions.create_transaction(params) do
+    case Transactions.create_transaction(socket.assigns.current_user, params) do
       {:ok, :duplicate} ->
         {:noreply,
          socket
-         |> assign(:duplicate_of, Transactions.duplicate_of(params))
+         |> assign(:duplicate_of, Transactions.duplicate_of(socket.assigns.current_user, params))
          |> assign(:pending_params, params)}
 
       {:ok, transaction} ->
@@ -109,9 +116,17 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
   end
 
   defp persist(socket, :edit, params) do
-    case Transactions.update_transaction(socket.assigns.transaction, params) do
+    case Transactions.update_transaction(
+           socket.assigns.current_user,
+           socket.assigns.transaction,
+           params
+         ) do
       {:ok, transaction} ->
         send(self(), {:transaction_saved, transaction, :edit})
+        {:noreply, socket}
+
+      {:error, :not_found} ->
+        send(self(), {:component_error, "Transação não encontrada."})
         {:noreply, socket}
 
       {:error, changeset} ->
@@ -140,26 +155,26 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
     {socket, Map.put(params, "amount", value)}
   end
 
-  defp build_links(transaction) do
+  defp build_links(user, transaction) do
     []
-    |> add_reimbursement_links(transaction)
-    |> add_transfer_links(transaction)
+    |> add_reimbursement_links(user, transaction)
+    |> add_transfer_links(user, transaction)
     |> add_installment_link(transaction)
     |> add_statement_link(transaction)
     |> Enum.reverse()
   end
 
-  defp add_reimbursement_links(links, %{reimbursement_link_key: nil} = transaction) do
+  defp add_reimbursement_links(links, _user, %{reimbursement_link_key: nil} = transaction) do
     case transaction.reimbursement_status do
       nil -> links
       status -> [{"Reembolso", "Marcada como reembolsável (#{status})"} | links]
     end
   end
 
-  defp add_reimbursement_links(links, transaction) do
+  defp add_reimbursement_links(links, user, transaction) do
     transaction.reimbursement_link_key
     |> List.wrap()
-    |> Transactions.get_reimbursement_pairs()
+    |> then(&Transactions.get_reimbursement_pairs(user, &1))
     |> Map.get(transaction.reimbursement_link_key, [])
     |> counterparts(transaction)
     |> Enum.reduce(links, fn other, acc ->
@@ -167,12 +182,12 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
     end)
   end
 
-  defp add_transfer_links(links, %{transfer_key: nil}), do: links
+  defp add_transfer_links(links, _user, %{transfer_key: nil}), do: links
 
-  defp add_transfer_links(links, transaction) do
+  defp add_transfer_links(links, user, transaction) do
     transaction.transfer_key
     |> List.wrap()
-    |> Transactions.get_transfer_pairs()
+    |> then(&Transactions.get_transfer_pairs(user, &1))
     |> Map.get(transaction.transfer_key, [])
     |> counterparts(transaction)
     |> Enum.reduce(links, fn other, acc ->

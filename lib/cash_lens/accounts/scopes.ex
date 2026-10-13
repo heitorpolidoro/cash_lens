@@ -55,6 +55,19 @@ defmodule CashLens.Accounts.Scopes do
   end
 
   @doc """
+  Like `cash_accounts_only/1`, but the joined account is also restricted to the
+  accounts `user` owns (`CashLens.Ownership.scope/2`), so a transaction never
+  matches through another user's account.
+  """
+  def cash_accounts_only(query, %CashLens.Users.User{} = user) do
+    accounts = CashLens.Ownership.scope(CashLens.Accounts.Account, user)
+
+    query
+    |> join(:inner, [t], a in ^accounts, on: a.id == t.account_id, as: :cash_scope_account)
+    |> cash_account_binding(:cash_scope_account)
+  end
+
+  @doc """
   Applies the cash-accounts predicate to an account binding the caller has
   already named with `as:`.
 

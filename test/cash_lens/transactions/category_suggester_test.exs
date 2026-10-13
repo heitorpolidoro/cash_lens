@@ -1,6 +1,8 @@
 defmodule CashLens.Transactions.CategorySuggesterTest do
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import CashLens.CategoriesFixtures
   import CashLens.TransactionsFixtures
   import Ecto.Query
@@ -16,7 +18,7 @@ defmodule CashLens.Transactions.CategorySuggesterTest do
 
       target = transaction_fixture(description: "  Padaria São José ", amount: "10.0")
 
-      suggestions = CategorySuggester.suggest_for([target])
+      suggestions = CategorySuggester.suggest_for(user(), [target])
 
       assert suggestions[target.id] == %{
                category_id: category.id,
@@ -34,7 +36,7 @@ defmodule CashLens.Transactions.CategorySuggesterTest do
 
       target = transaction_fixture(description: "Mercado X", amount: "9.0")
 
-      assert %{} = suggestions = CategorySuggester.suggest_for([target])
+      assert %{} = suggestions = CategorySuggester.suggest_for(user(), [target])
       assert suggestions[target.id].category_id == frequent.id
     end
 
@@ -59,12 +61,12 @@ defmodule CashLens.Transactions.CategorySuggesterTest do
 
       target = transaction_fixture(description: "Farmacia Y", amount: "9.0")
 
-      assert CategorySuggester.suggest_for([target])[target.id].category_id == new_cat.id
+      assert CategorySuggester.suggest_for(user(), [target])[target.id].category_id == new_cat.id
     end
 
     test "returns no entry for descriptions without categorized history" do
       target = transaction_fixture(description: "NUNCA VISTA")
-      assert CategorySuggester.suggest_for([target]) == %{}
+      assert CategorySuggester.suggest_for(user(), [target]) == %{}
     end
 
     test "tolerates categorized history rows with nil description" do
@@ -90,18 +92,18 @@ defmodule CashLens.Transactions.CategorySuggesterTest do
       ])
 
       target = transaction_fixture(description: "QUALQUER COISA")
-      assert CategorySuggester.suggest_for([target]) == %{}
+      assert CategorySuggester.suggest_for(user(), [target]) == %{}
     end
 
     test "ignores transactions that already have a category" do
       category = category_fixture(name: "Qualquer")
       categorized = transaction_fixture(description: "JA TEM", category_id: category.id)
 
-      assert CategorySuggester.suggest_for([categorized]) == %{}
+      assert CategorySuggester.suggest_for(user(), [categorized]) == %{}
     end
 
     test "returns empty map for an empty list without querying" do
-      assert CategorySuggester.suggest_for([]) == %{}
+      assert CategorySuggester.suggest_for(user(), []) == %{}
     end
   end
 
@@ -113,7 +115,7 @@ defmodule CashLens.Transactions.CategorySuggesterTest do
       with_match = transaction_fixture(description: "Padaria São José", amount: "10.0")
       without_match = transaction_fixture(description: "OUTRA COISA", amount: "11.0")
 
-      [a, b] = CategorySuggester.annotate([with_match, without_match])
+      [a, b] = CategorySuggester.annotate(user(), [with_match, without_match])
 
       assert a.suggested_category == %{category_id: category.id, category_name: "Padaria"}
       assert is_nil(b.suggested_category)
@@ -126,7 +128,7 @@ defmodule CashLens.Transactions.CategorySuggesterTest do
       transaction_fixture(description: "PADARIA SAO JOSE", category_id: category.id)
       target = transaction_fixture(description: "Padaria São José", amount: "10.0")
 
-      rows = CashLens.Transactions.list_transactions()
+      rows = CashLens.Transactions.list_transactions(user())
       row = Enum.find(rows, &(&1.id == target.id))
 
       assert row.suggested_category == %{category_id: category.id, category_name: "Padaria"}

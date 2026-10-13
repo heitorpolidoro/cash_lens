@@ -1,6 +1,8 @@
 defmodule CashLens.TransactionsTransferPairingTest do
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Ecto.Query
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
@@ -54,7 +56,7 @@ defmodule CashLens.TransactionsTransferPairingTest do
           date: ~D[2026-03-03]
         })
 
-      assert [{suggested_out, suggested_in}] = Transactions.list_transfer_suggestions()
+      assert [{suggested_out, suggested_in}] = Transactions.list_transfer_suggestions(user())
       assert suggested_out.id == out.id
       assert suggested_in.id == inc.id
     end
@@ -78,7 +80,7 @@ defmodule CashLens.TransactionsTransferPairingTest do
         date: ~D[2026-03-05]
       })
 
-      assert Transactions.list_transfer_suggestions() == []
+      assert Transactions.list_transfer_suggestions(user()) == []
     end
 
     test "uses each transaction in at most one suggestion, preferring the closest date", %{
@@ -112,7 +114,7 @@ defmodule CashLens.TransactionsTransferPairingTest do
 
       clear_all_transfer_keys()
 
-      assert [{suggested_out, suggested_in}] = Transactions.list_transfer_suggestions()
+      assert [{suggested_out, suggested_in}] = Transactions.list_transfer_suggestions(user())
       assert suggested_out.id == out.id
       assert suggested_in.id == near.id
     end
@@ -147,7 +149,7 @@ defmodule CashLens.TransactionsTransferPairingTest do
         })
 
       ids =
-        Transactions.list_unmatched_transfers_without_suggestion() |> Enum.map(& &1.id)
+        Transactions.list_unmatched_transfers_without_suggestion(user()) |> Enum.map(& &1.id)
 
       assert ids == [lonely.id]
     end
@@ -183,7 +185,7 @@ defmodule CashLens.TransactionsTransferPairingTest do
           date: ~D[2026-03-04]
         })
 
-      candidates = Transactions.list_transfer_link_candidates(origin)
+      candidates = Transactions.list_transfer_link_candidates(user(), origin)
 
       assert [first, second] = candidates
       assert first.transaction.id == exact.id
@@ -228,7 +230,7 @@ defmodule CashLens.TransactionsTransferPairingTest do
         set: [transfer_key: Ecto.UUID.generate()]
       )
 
-      assert Transactions.list_transfer_link_candidates(origin) == []
+      assert Transactions.list_transfer_link_candidates(user(), origin) == []
     end
   end
 
@@ -247,7 +249,7 @@ defmodule CashLens.TransactionsTransferPairingTest do
           date: ~D[2026-03-01]
         })
 
-      assert {:ok, mirror} = Transactions.create_mirror_transaction(origin.id, b.id)
+      assert {:ok, mirror} = Transactions.create_mirror_transaction(user(), origin.id, b.id)
 
       assert mirror.account_id == b.id
       assert mirror.date == origin.date
@@ -270,7 +272,8 @@ defmodule CashLens.TransactionsTransferPairingTest do
           date: ~D[2026-03-01]
         })
 
-      assert {:error, :same_account} = Transactions.create_mirror_transaction(origin.id, a.id)
+      assert {:error, :same_account} =
+               Transactions.create_mirror_transaction(user(), origin.id, a.id)
     end
 
     test "refuses to mirror an already linked transaction", %{
@@ -290,7 +293,8 @@ defmodule CashLens.TransactionsTransferPairingTest do
         set: [transfer_key: Ecto.UUID.generate()]
       )
 
-      assert {:error, :already_linked} = Transactions.create_mirror_transaction(origin.id, b.id)
+      assert {:error, :already_linked} =
+               Transactions.create_mirror_transaction(user(), origin.id, b.id)
     end
   end
 end

@@ -29,6 +29,8 @@ defmodule CashLens.Transactions.TransferRule do
     |> validate_required([:source_account_id, :destination_account_id])
     |> validate_description_patterns()
     |> validate_accounts_differ()
+    |> CashLens.Ownership.validate_owned(:source_account_id, CashLens.Accounts.Account)
+    |> CashLens.Ownership.validate_owned(:destination_account_id, CashLens.Accounts.Account)
     |> foreign_key_constraint(:source_account_id)
     |> foreign_key_constraint(:destination_account_id)
     |> check_constraint(:source_account_id,

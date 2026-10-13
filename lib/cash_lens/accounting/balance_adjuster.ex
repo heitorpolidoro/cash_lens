@@ -126,15 +126,13 @@ defmodule CashLens.Accounting.BalanceAdjuster do
   defp create_income_transaction(category, user, account_id, year, month, diff) do
     attrs = %{
       account_id: account_id,
-      date: income_date(account_id, year, month),
+      date: income_date(user, account_id, year, month),
       description: @income_description,
       amount: diff,
       category_id: category.id
     }
 
-    # Transactions is not user-aware yet (next CL-51 part): it takes the owner from the
-    # pinned user, so pin `user` for the call.
-    case Repo.with_user(user.id, fn -> Transactions.create_transaction(attrs) end) do
+    case Repo.with_user(user.id, fn -> Transactions.create_transaction(user, attrs) end) do
       {:ok, :duplicate} -> {:error, :duplicate}
       {:ok, _transaction} -> {:ok, :rendimento}
       {:error, reason} -> {:error, reason}
@@ -144,7 +142,7 @@ defmodule CashLens.Accounting.BalanceAdjuster do
   # The account's last file/manual transaction inside the month, never after today, so the
   # income never lands in the future. Without one: the month's last day for a past month,
   # today for the running month.
-  defp income_date(account_id, year, month) do
+  defp income_date(user, account_id, year, month) do
     first = Date.new!(year, month, 1)
     last = Date.end_of_month(first)
     today = Date.utc_today()
@@ -154,7 +152,7 @@ defmodule CashLens.Accounting.BalanceAdjuster do
       last
     else
       upper = Enum.min([last, today], Date)
-      Transactions.latest_transaction_date_between(account_id, first, upper) || upper
+      Transactions.latest_transaction_date_between(user, account_id, first, upper) || upper
     end
   end
 end

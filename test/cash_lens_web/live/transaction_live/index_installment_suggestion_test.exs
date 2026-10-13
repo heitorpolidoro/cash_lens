@@ -9,6 +9,8 @@ defmodule CashLensWeb.TransactionLive.IndexInstallmentSuggestionTest do
 
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   import Ecto.Query
   import Phoenix.LiveViewTest
   import CashLens.TransactionsFixtures
@@ -134,7 +136,7 @@ defmodule CashLensWeb.TransactionLive.IndexInstallmentSuggestionTest do
 
       html = render_click(installment_button(live, matching))
 
-      suggestion = Transactions.suggest_installment_link(matching)
+      suggestion = Transactions.suggest_installment_link(user(), matching)
 
       assert html =~
                "Vincular a #{suggestion.group_name}? (#{suggestion.next_installment}/#{suggestion.total_installments})"

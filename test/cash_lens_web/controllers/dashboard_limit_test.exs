@@ -1,6 +1,8 @@
 defmodule CashLensWeb.DashboardLimitTest do
   use CashLensWeb.ConnCase
 
+  defp user, do: CashLens.Repo.get!(CashLens.Users.User, CashLens.Repo.current_user_id())
+
   alias CashLens.Accounting
   alias CashLens.Transactions
   import CashLens.AccountsFixtures
@@ -52,7 +54,7 @@ defmodule CashLensWeb.DashboardLimitTest do
     end
 
     test "Transactions.get_historical_summary limits to 12 months" do
-      results = Transactions.get_historical_summary(limit: 12)
+      results = Transactions.get_historical_summary(user(), limit: 12)
       assert length(results) == 12
 
       first = List.first(results)

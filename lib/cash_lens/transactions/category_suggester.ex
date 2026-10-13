@@ -7,8 +7,11 @@ defmodule CashLens.Transactions.CategorySuggester do
   """
   import Ecto.Query
 
+  alias CashLens.Categories.Category
+  alias CashLens.Ownership
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
+  alias CashLens.Users.User
 
   @doc """
   Returns `%{transaction_id => %{category_id: ..., category_name: ...}}` for
@@ -16,7 +19,7 @@ defmodule CashLens.Transactions.CategorySuggester do
   previously categorized transactions. The most frequent category wins; ties
   break toward the most recently inserted occurrence.
   """
-  def suggest_for(transactions) do
+  def suggest_for(%User{} = user, transactions) do
     targets =
       transactions
       |> Enum.filter(&(is_nil(&1.category_id) and not is_nil(&1.description)))
@@ -25,7 +28,7 @@ defmodule CashLens.Transactions.CategorySuggester do
     if targets == [] do
       %{}
     else
-      history = history_by_normalized_description()
+      history = history_by_normalized_description(user)
 
       for {id, normalized} <- targets,
           suggestion = history[normalized],
@@ -39,8 +42,8 @@ defmodule CashLens.Transactions.CategorySuggester do
   Fills the `:suggested_category` virtual field of uncategorized transactions
   that have a suggestion. Other transactions pass through unchanged.
   """
-  def annotate(transactions) do
-    suggestions = suggest_for(transactions)
+  def annotate(%User{} = user, transactions) do
+    suggestions = suggest_for(user, transactions)
 
     Enum.map(transactions, fn tx ->
       case suggestions[tx.id] do
@@ -50,13 +53,16 @@ defmodule CashLens.Transactions.CategorySuggester do
     end)
   end
 
-  defp history_by_normalized_description do
+  defp history_by_normalized_description(user) do
     # `description` can be nil on rows inserted outside the changeset (and such a
     # row can later gain a category via update_transaction_category, which only
     # casts category_id) — normalize_description/1 would crash on it.
-    from(t in Transaction,
+    categories = Ownership.scope(Category, user)
+
+    from(t in Ownership.scope(Transaction, user),
       where: not is_nil(t.category_id) and not is_nil(t.description),
-      join: c in assoc(t, :category),
+      join: c in ^categories,
+      on: c.id == t.category_id,
       select: {t.description, t.inserted_at, c.id, c.name}
     )
     |> Repo.all()

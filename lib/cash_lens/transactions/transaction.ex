@@ -74,6 +74,8 @@ defmodule CashLens.Transactions.Transaction do
     |> validate_required([:date, :description, :amount, :account_id])
     |> put_default_source()
     |> validate_inclusion(:source, ["file", "manual"])
+    |> CashLens.Ownership.validate_owned(:account_id, CashLens.Accounts.Account)
+    |> CashLens.Ownership.validate_owned(:category_id, CashLens.Categories.Category)
     |> put_dedup_key()
     |> generate_fingerprint()
     |> unique_constraint(:fingerprint)

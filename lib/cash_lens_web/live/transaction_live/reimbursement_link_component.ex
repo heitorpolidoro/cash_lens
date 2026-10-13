@@ -135,27 +135,33 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponent do
 
   @impl true
   def handle_event("link_reimbursement", %{"expense-id" => expense_id}, socket) do
+    user = socket.assigns.current_user
     credit_tx = socket.assigns.reimbursement_credit
-    expense_tx = Transactions.get_transaction!(expense_id)
-    link_key = Ecto.UUID.generate()
 
-    final_category_id = expense_tx.category_id || credit_tx.category_id
+    case Transactions.get_transaction(user, expense_id) do
+      nil ->
+        send(self(), {:component_error, "Transação não encontrada."})
 
-    {:ok, _} =
-      Transactions.update_transaction(expense_tx, %{
-        reimbursement_status: "paid",
-        reimbursement_link_key: link_key,
-        category_id: final_category_id
-      })
+      expense_tx ->
+        link_key = Ecto.UUID.generate()
+        final_category_id = expense_tx.category_id || credit_tx.category_id
 
-    {:ok, _} =
-      Transactions.update_transaction(credit_tx, %{
-        reimbursement_status: "paid",
-        reimbursement_link_key: link_key,
-        category_id: final_category_id
-      })
+        {:ok, _} =
+          Transactions.update_transaction(user, expense_tx, %{
+            reimbursement_status: "paid",
+            reimbursement_link_key: link_key,
+            category_id: final_category_id
+          })
 
-    send(self(), :reimbursement_linked)
+        {:ok, _} =
+          Transactions.update_transaction(user, credit_tx, %{
+            reimbursement_status: "paid",
+            reimbursement_link_key: link_key,
+            category_id: final_category_id
+          })
+
+        send(self(), :reimbursement_linked)
+    end
 
     {:noreply, socket}
   end
@@ -172,13 +178,13 @@ defmodule CashLensWeb.TransactionLive.ReimbursementLinkComponent do
       if search != "", do: Map.put(exact_filters, "search", search), else: exact_filters
 
     exact_matches =
-      Transactions.list_transactions(exact_filters, 1, 100)
+      Transactions.list_transactions(socket.assigns.current_user, exact_filters, 1, 100)
       |> Enum.filter(&is_nil(&1.reimbursement_link_key))
 
     # 2. CONTEXTUAL SEARCH (recent items or description match)
     filters = %{"amount_max" => -0.01}
     filters = if search != "", do: Map.put(filters, "search", search), else: filters
-    recent_items = Transactions.list_transactions(filters, 1, 500)
+    recent_items = Transactions.list_transactions(socket.assigns.current_user, filters, 1, 500)
 
     # Combine and deduplicate (by ID)
     all_pending =

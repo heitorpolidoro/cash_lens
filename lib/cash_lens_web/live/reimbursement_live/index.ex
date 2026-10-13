@@ -936,13 +936,17 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   def handle_event("confirm_pair", %{"a" => id_a, "b" => id_b}, socket) do
-    expense = Transactions.get_transaction!(id_a)
-    credit = Transactions.get_transaction!(id_b)
+    user = socket.assigns.current_user
 
-    {expense, credit} =
-      if Decimal.lt?(expense.amount, 0), do: {expense, credit}, else: {credit, expense}
+    with %{} = expense <- Transactions.get_transaction(user, id_a),
+         %{} = credit <- Transactions.get_transaction(user, id_b) do
+      {expense, credit} =
+        if Decimal.lt?(expense.amount, 0), do: {expense, credit}, else: {credit, expense}
 
-    link_or_reconcile(socket, [expense], [credit])
+      link_or_reconcile(socket, [expense], [credit])
+    else
+      nil -> {:noreply, put_flash(socket, :error, "Transação não encontrada.")}
+    end
   end
 
   def handle_event("confirm_reject_pair", %{"a" => id_a, "b" => id_b}, socket) do
@@ -961,13 +965,20 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   def handle_event("reject_pair", %{"a" => id_a, "b" => id_b}, socket) do
-    {:ok, _} = Transactions.reject_reimbursement_pair(id_a, id_b)
+    case Transactions.reject_reimbursement_pair(socket.assigns.current_user, id_a, id_b) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:success, "Sugestão de reembolso ignorada.")
+         |> assign(:confirm_modal, nil)
+         |> load_data()}
 
-    {:noreply,
-     socket
-     |> put_flash(:success, "Sugestão de reembolso ignorada.")
-     |> assign(:confirm_modal, nil)
-     |> load_data()}
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Transação não encontrada.")
+         |> assign(:confirm_modal, nil)}
+    end
   end
 
   def handle_event("confirm_all_suggestions", _params, socket) do
@@ -987,7 +998,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
 
   def handle_event("confirm_all", _params, socket) do
     Enum.each(socket.assigns.suggestions, fn {a, b} ->
-      Transactions.link_reimbursement_pair(a.id, b.id)
+      Transactions.link_reimbursement_pair(socket.assigns.current_user, a.id, b.id)
     end)
 
     count = length(socket.assigns.suggestions)
@@ -1012,15 +1023,18 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   def handle_event("save_reimbursement_details", params, socket) do
-    tx = Transactions.get_transaction!(params["tx_id"])
+    user = socket.assigns.current_user
 
-    {:ok, _} =
-      Transactions.update_transaction(tx, %{
-        reimbursement_carrier: blank_to_nil(params["carrier"]),
-        reimbursement_protocol: blank_to_nil(params["protocol"])
-      })
-
-    {:noreply, socket |> put_flash(:success, "Dados do reembolso salvos.") |> load_data()}
+    with %{} = tx <- Transactions.get_transaction(user, params["tx_id"]),
+         {:ok, _} <-
+           Transactions.update_transaction(user, tx, %{
+             reimbursement_carrier: blank_to_nil(params["carrier"]),
+             reimbursement_protocol: blank_to_nil(params["protocol"])
+           }) do
+      {:noreply, socket |> put_flash(:success, "Dados do reembolso salvos.") |> load_data()}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Transação não encontrada.")}
+    end
   end
 
   def handle_event("open_statement_modal", _params, socket) do
@@ -1040,14 +1054,18 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   def handle_event("mark_reimbursable", %{"id" => id}, socket) do
-    tx = Transactions.get_transaction!(id)
-    {:ok, _} = Transactions.update_transaction(tx, %{reimbursement_status: "pending"})
+    user = socket.assigns.current_user
 
-    {:noreply,
-     socket
-     |> put_flash(:success, "Despesa marcada como reembolsável.")
-     |> load_data()
-     |> load_statement_candidates()}
+    with %{} = tx <- Transactions.get_transaction(user, id),
+         {:ok, _} <- Transactions.update_transaction(user, tx, %{reimbursement_status: "pending"}) do
+      {:noreply,
+       socket
+       |> put_flash(:success, "Despesa marcada como reembolsável.")
+       |> load_data()
+       |> load_statement_candidates()}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Transação não encontrada.")}
+    end
   end
 
   def handle_event("link_single_expense", %{"id" => id}, socket) do
@@ -1074,13 +1092,20 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   def handle_event("unlink_reimbursement", %{"link-key" => link_key}, socket) do
-    :ok = Transactions.unlink_reimbursement_by_key(link_key)
+    case Transactions.unlink_reimbursement_by_key(socket.assigns.current_user, link_key) do
+      :ok ->
+        {:noreply,
+         socket
+         |> put_flash(:success, "Reembolso desvinculado com sucesso.")
+         |> assign(:confirm_modal, nil)
+         |> load_data()}
 
-    {:noreply,
-     socket
-     |> put_flash(:success, "Reembolso desvinculado com sucesso.")
-     |> assign(:confirm_modal, nil)
-     |> load_data()}
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Reembolso não encontrado.")
+         |> assign(:confirm_modal, nil)}
+    end
   end
 
   def handle_event("linker_search_change", %{"value" => search}, socket) do
@@ -1099,10 +1124,17 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   def handle_event("confirm_link", _params, socket) do
-    expenses = Enum.map(socket.assigns.selected_ids, &Transactions.get_transaction!/1)
-    credits = Enum.map(socket.assigns.selected_credit_ids, &Transactions.get_transaction!/1)
+    user = socket.assigns.current_user
+    expenses = Enum.map(socket.assigns.selected_ids, &Transactions.get_transaction(user, &1))
 
-    link_or_reconcile(socket, expenses, credits)
+    credits =
+      Enum.map(socket.assigns.selected_credit_ids, &Transactions.get_transaction(user, &1))
+
+    if Enum.any?(expenses ++ credits, &is_nil/1) do
+      {:noreply, put_flash(socket, :error, "Transação não encontrada.")}
+    else
+      link_or_reconcile(socket, expenses, credits)
+    end
   end
 
   def handle_event("close_modal", _params, socket) do
@@ -1168,18 +1200,30 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   defp finish_link(socket, category_id) do
     %{expense_ids: expense_ids, credit_ids: credit_ids} = socket.assigns.reconcile_modal
 
-    {:ok, _} = Transactions.link_reimbursement_group(expense_ids, credit_ids, category_id)
+    case Transactions.link_reimbursement_group(
+           socket.assigns.current_user,
+           expense_ids,
+           credit_ids,
+           category_id
+         ) do
+      {:ok, _} ->
+        socket
+        |> put_flash(
+          :success,
+          "Reembolso vinculado com sucesso! #{length(credit_ids)} crédito(s) conciliado(s)."
+        )
+        |> assign(:reconcile_modal, nil)
+        |> assign(:show_linker_modal, false)
+        |> assign_credit_selection(MapSet.new())
+        |> assign_selection(MapSet.new())
+        |> load_data()
 
-    socket
-    |> put_flash(
-      :success,
-      "Reembolso vinculado com sucesso! #{length(credit_ids)} crédito(s) conciliado(s)."
-    )
-    |> assign(:reconcile_modal, nil)
-    |> assign(:show_linker_modal, false)
-    |> assign_credit_selection(MapSet.new())
-    |> assign_selection(MapSet.new())
-    |> load_data()
+      {:error, :not_found} ->
+        socket
+        |> put_flash(:error, "Transação ou categoria não encontrada.")
+        |> assign(:reconcile_modal, nil)
+        |> assign(:show_linker_modal, false)
+    end
   end
 
   defp list_all_categories(socket),
@@ -1242,12 +1286,16 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   end
 
   defp update_status(socket, id, status) do
-    tx = Transactions.get_transaction!(id)
-    {:ok, _} = Transactions.update_transaction(tx, %{reimbursement_status: status})
+    user = socket.assigns.current_user
 
-    socket
-    |> assign_selection(MapSet.delete(socket.assigns.selected_ids, id))
-    |> load_data()
+    with %{} = tx <- Transactions.get_transaction(user, id),
+         {:ok, _} <- Transactions.update_transaction(user, tx, %{reimbursement_status: status}) do
+      socket
+      |> assign_selection(MapSet.delete(socket.assigns.selected_ids, id))
+      |> load_data()
+    else
+      _ -> put_flash(socket, :error, "Transação não encontrada.")
+    end
   end
 
   defp blank_to_nil(nil), do: nil
@@ -1262,12 +1310,13 @@ defmodule CashLensWeb.ReimbursementLive.Index do
   # -- data loading ----------------------------------------------------------
 
   defp load_data(socket) do
-    suggestions = Transactions.list_reimbursement_suggestions()
-    unmatched = Transactions.list_unmatched_reimbursements_without_suggestion()
+    user = socket.assigns.current_user
+    suggestions = Transactions.list_reimbursement_suggestions(user)
+    unmatched = Transactions.list_unmatched_reimbursements_without_suggestion(user)
 
-    pending = Transactions.list_all_transactions(%{"reimbursement_status" => "pending"})
-    requested = Transactions.list_all_transactions(%{"reimbursement_status" => "requested"})
-    paid = Transactions.list_all_transactions(%{"reimbursement_status" => "paid"})
+    pending = Transactions.list_all_transactions(user, %{"reimbursement_status" => "pending"})
+    requested = Transactions.list_all_transactions(user, %{"reimbursement_status" => "requested"})
+    paid = Transactions.list_all_transactions(user, %{"reimbursement_status" => "paid"})
 
     received = received_last_12_months(paid)
 
@@ -1338,20 +1387,20 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     candidates =
       socket.assigns.statement_search
       |> String.trim()
-      |> fetch_statement_candidates()
+      |> then(&fetch_statement_candidates(socket.assigns.current_user, &1))
 
     assign(socket, :statement_candidates, candidates)
   end
 
-  defp fetch_statement_candidates("") do
+  defp fetch_statement_candidates(user, "") do
     %{"type" => "expense", "sort_order" => "desc"}
-    |> scan_statement()
+    |> then(&scan_statement(user, &1))
     |> finish_candidates()
   end
 
-  defp fetch_statement_candidates(term) do
+  defp fetch_statement_candidates(user, term) do
     by_description =
-      scan_statement(%{"type" => "expense", "sort_order" => "desc", "search" => term})
+      scan_statement(user, %{"type" => "expense", "sort_order" => "desc", "search" => term})
 
     by_amount =
       case numeric_term(term) do
@@ -1359,7 +1408,11 @@ defmodule CashLensWeb.ReimbursementLive.Index do
           []
 
         amount ->
-          scan_statement(%{"type" => "expense", "sort_order" => "desc", "amount" => amount})
+          scan_statement(user, %{
+            "type" => "expense",
+            "sort_order" => "desc",
+            "amount" => amount
+          })
       end
 
     (by_description ++ by_amount)
@@ -1367,8 +1420,8 @@ defmodule CashLensWeb.ReimbursementLive.Index do
     |> finish_candidates()
   end
 
-  defp scan_statement(filters) do
-    Transactions.list_transactions(filters, 1, @statement_scan_limit)
+  defp scan_statement(user, filters) do
+    Transactions.list_transactions(user, filters, 1, @statement_scan_limit)
   end
 
   # Only transactions that are not part of the reimbursement flow yet may be
@@ -1401,7 +1454,7 @@ defmodule CashLensWeb.ReimbursementLive.Index do
 
     sorted =
       desc_search
-      |> Transactions.list_reimbursement_credit_candidates()
+      |> then(&Transactions.list_reimbursement_credit_candidates(socket.assigns.current_user, &1))
       |> filter_credits(search)
       |> Enum.sort(&credit_rank(&1, &2, target, expense_date))
       |> Enum.take(30)

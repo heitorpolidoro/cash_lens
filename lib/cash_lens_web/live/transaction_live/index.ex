@@ -63,8 +63,11 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:form_transaction, nil)
      |> assign(:show_transaction, nil)
      |> assign(:return_to, nil)
-     |> assign(:pending_count, Transactions.count_pending_transactions())
-     |> assign(:statement_health, Transactions.statement_health())
+     |> assign(
+       :pending_count,
+       Transactions.count_pending_transactions(socket.assigns.current_user)
+     )
+     |> assign(:statement_health, Transactions.statement_health(socket.assigns.current_user))
      |> assign(:installment_groups, CashLens.Installments.list_installment_groups())
      |> assign(:installment_suggestions, %{})
      |> assign_transfer_category_id()}
@@ -121,30 +124,44 @@ defmodule CashLensWeb.TransactionLive.Index do
     # no longer exists for one that is not an account -- so an unknown or
     # malformed id lands on the old behaviour of opening with none chosen, and
     # never on the insert, which takes the account from what was submitted.
-    |> assign(:form_transaction, %Transaction{date: Date.utc_today(), account_id: for_account})
+    |> assign(:form_transaction, %Transaction{
+      user_id: socket.assigns.current_user.id,
+      date: Date.utc_today(),
+      account_id: for_account
+    })
     |> assign(:show_transaction, nil)
   end
 
   defp apply_action(socket, :edit, id, _for_account) do
-    transaction = Transactions.get_transaction!(id)
+    case Transactions.get_transaction(socket.assigns.current_user, id) do
+      nil ->
+        transaction_not_found(socket)
 
-    socket
-    |> assign(:page_title, "Editar Transação")
-    |> assign(:form_action, :edit)
-    |> assign(:form_transaction, transaction)
-    |> assign(
-      :accounts,
-      with_account(socket.assigns.current_user, socket.assigns.accounts, transaction)
-    )
-    |> assign(:show_transaction, nil)
+      transaction ->
+        socket
+        |> assign(:page_title, "Editar Transação")
+        |> assign(:form_action, :edit)
+        |> assign(:form_transaction, transaction)
+        |> assign(
+          :accounts,
+          with_account(socket.assigns.current_user, socket.assigns.accounts, transaction)
+        )
+        |> assign(:show_transaction, nil)
+    end
   end
 
   defp apply_action(socket, :show, id, _for_account) do
-    socket
-    |> assign(:page_title, "Detalhes da Transação")
-    |> assign(:form_action, nil)
-    |> assign(:form_transaction, nil)
-    |> assign(:show_transaction, Transactions.get_transaction!(id))
+    case Transactions.get_transaction(socket.assigns.current_user, id) do
+      nil ->
+        transaction_not_found(socket)
+
+      transaction ->
+        socket
+        |> assign(:page_title, "Detalhes da Transação")
+        |> assign(:form_action, nil)
+        |> assign(:form_transaction, nil)
+        |> assign(:show_transaction, transaction)
+    end
   end
 
   defp apply_action(socket, _index, _id, _for_account) do
@@ -153,6 +170,23 @@ defmodule CashLensWeb.TransactionLive.Index do
     |> assign(:form_action, nil)
     |> assign(:form_transaction, nil)
     |> assign(:show_transaction, nil)
+  end
+
+  # A transaction that does not exist, or is somebody else's, is the same thing
+  # to the caller: back to the list, without rendering anything about it.
+  defp transaction_not_found(socket) do
+    socket
+    |> put_flash(:error, "Transação não encontrada.")
+    |> push_navigate(to: ~p"/transactions")
+  end
+
+  # Resolves a transaction id from an event to the user's own transaction; an id
+  # that is not theirs (forged or stale) is an error flash and nothing else.
+  defp with_own_transaction(socket, id, fun) do
+    case Transactions.get_transaction(socket.assigns.current_user, id) do
+      nil -> {:noreply, put_flash(socket, :error, "Transação não encontrada.")}
+      tx -> fun.(tx)
+    end
   end
 
   # A transaction may sit on a closed account that the select no longer lists;
@@ -179,141 +213,150 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("unmark_reimbursable", %{"id" => id}, socket) do
-    tx = Transactions.get_transaction!(id)
+    user = socket.assigns.current_user
 
-    # If it has a link key, we must clear it from both transactions in the pair
-    if tx.reimbursement_link_key do
-      # Ensure we get everything
-      Transactions.list_transactions(%{"search" => "", "reimbursement_status" => ""})
-      |> Enum.filter(&(&1.reimbursement_link_key == tx.reimbursement_link_key))
-      |> Enum.each(fn t ->
-        Transactions.update_transaction(t, %{
-          reimbursement_status: nil,
-          reimbursement_link_key: nil
-        })
-      end)
+    with_own_transaction(socket, id, fn tx ->
+      # If it has a link key, we must clear it from both transactions in the pair
+      if tx.reimbursement_link_key do
+        unlink_reimbursement_pair(user, tx.reimbursement_link_key)
 
-      {:noreply,
-       socket
-       |> put_flash(:success, "Vínculo de reembolso removido.")
-       |> refresh_transactions_page1(socket.assigns.filters)}
-    else
-      {:ok, updated} =
-        Transactions.update_transaction(tx, %{
-          reimbursement_status: nil,
-          reimbursement_link_key: nil
-        })
+        {:noreply,
+         socket
+         |> put_flash(:success, "Vínculo de reembolso removido.")
+         |> refresh_transactions_page1(socket.assigns.filters)}
+      else
+        {:ok, updated} = clear_reimbursement(user, tx)
 
-      {:noreply, stream_insert(socket, :transactions, annotate_one(updated))}
-    end
+        {:noreply, stream_update_transaction(socket, updated)}
+      end
+    end)
   end
 
   @impl true
   def handle_event("load_installment_suggestion", %{"id" => id}, socket) do
-    tx = annotate_one(Transactions.get_transaction!(id))
+    with_own_transaction(socket, id, fn tx ->
+      tx = annotate_one(socket, tx)
 
-    {suggestion, memo} =
-      resolve_installment_suggestion(socket.assigns.installment_suggestions, id, tx)
+      {suggestion, memo} =
+        resolve_installment_suggestion(
+          socket.assigns.current_user,
+          socket.assigns.installment_suggestions,
+          id,
+          tx
+        )
 
-    {:noreply,
-     socket
-     |> assign(:installment_suggestions, memo)
-     |> stream_insert(:transactions, %{tx | installment_suggestion: suggestion})}
+      {:noreply,
+       socket
+       |> assign(:installment_suggestions, memo)
+       |> stream_insert(:transactions, %{tx | installment_suggestion: suggestion})}
+    end)
   end
 
   @impl true
   def handle_event("link_installment", %{"id" => id, "group_id" => group_id}, socket) do
-    tx = Transactions.get_transaction!(id)
-    socket = forget_installment_suggestion(socket, id)
-    group = CashLens.Installments.get_group_with_progress(group_id)
+    with_own_transaction(socket, id, fn tx ->
+      socket = forget_installment_suggestion(socket, id)
+      group = CashLens.Installments.get_group_with_progress(group_id)
 
-    case Transactions.update_transaction(tx, %{
-           installment_group_id: group_id,
-           installment_number: group.paid_count + 1
-         }) do
-      {:ok, updated_tx} ->
-        # Reload so the installment_group association is preloaded for rendering.
-        {:noreply,
-         socket
-         |> put_flash(:success, "Vinculado a #{group.description_pattern}!")
-         |> stream_insert(
-           :transactions,
-           annotate_one(Transactions.get_transaction!(updated_tx.id))
-         )}
+      case Transactions.update_transaction(socket.assigns.current_user, tx, %{
+             installment_group_id: group_id,
+             installment_number: group.paid_count + 1
+           }) do
+        {:ok, updated_tx} ->
+          # Reload so the installment_group association is preloaded for rendering.
+          {:noreply,
+           socket
+           |> put_flash(:success, "Vinculado a #{group.description_pattern}!")
+           |> stream_insert(
+             :transactions,
+             annotate_one(
+               socket,
+               Transactions.get_transaction!(socket.assigns.current_user, updated_tx.id)
+             )
+           )}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Falha ao vincular.")}
-    end
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Falha ao vincular.")}
+      end
+    end)
   end
 
   @impl true
   def handle_event("unlink_installment", %{"id" => id}, socket) do
-    tx = Transactions.get_transaction!(id)
-    socket = forget_installment_suggestion(socket, id)
+    with_own_transaction(socket, id, fn tx ->
+      socket = forget_installment_suggestion(socket, id)
 
-    {:ok, updated_tx} =
-      Transactions.update_transaction(tx, %{
-        installment_group_id: nil,
-        installment_number: nil
-      })
+      {:ok, updated_tx} =
+        Transactions.update_transaction(socket.assigns.current_user, tx, %{
+          installment_group_id: nil,
+          installment_number: nil
+        })
 
-    {:noreply, stream_insert(socket, :transactions, annotate_one(updated_tx))}
+      {:noreply, stream_update_transaction(socket, updated_tx)}
+    end)
   end
 
   @impl true
   def handle_event("mark_reimbursable", %{"id" => id}, socket) do
-    tx = Transactions.get_transaction!(id)
-    {:ok, updated} = Transactions.update_transaction(tx, %{reimbursement_status: "pending"})
-    {:noreply, stream_insert(socket, :transactions, annotate_one(updated))}
+    with_own_transaction(socket, id, fn tx ->
+      {:ok, updated} =
+        Transactions.update_transaction(socket.assigns.current_user, tx, %{
+          reimbursement_status: "pending"
+        })
+
+      {:noreply, stream_update_transaction(socket, updated)}
+    end)
   end
 
   @impl true
   def handle_event("open_reimbursement_link", %{"id" => id}, socket) do
-    credit_tx = Transactions.get_transaction!(id)
-
-    {:noreply,
-     socket
-     |> assign(:show_reimbursement_modal, true)
-     |> assign(:reimbursement_credit, credit_tx)}
+    with_own_transaction(socket, id, fn credit_tx ->
+      {:noreply,
+       socket
+       |> assign(:show_reimbursement_modal, true)
+       |> assign(:reimbursement_credit, credit_tx)}
+    end)
   end
 
   @impl true
   def handle_event("open_transfer_link", %{"id" => id}, socket) do
-    origin_tx = Transactions.get_transaction!(id)
-
-    {:noreply,
-     socket
-     |> assign(:show_transfer_modal, true)
-     |> assign(:transfer_origin, origin_tx)
-     |> update_transfer_linker_list()}
+    with_own_transaction(socket, id, fn origin_tx ->
+      {:noreply,
+       socket
+       |> assign(:show_transfer_modal, true)
+       |> assign(:transfer_origin, origin_tx)
+       |> update_transfer_linker_list()}
+    end)
   end
 
   @impl true
   def handle_event("open_notes", %{"id" => id}, socket) do
-    transaction = Transactions.get_transaction!(id)
-
-    {:noreply,
-     socket
-     |> assign(:show_notes_modal, true)
-     |> assign(:editing_transaction, transaction)}
+    with_own_transaction(socket, id, fn transaction ->
+      {:noreply,
+       socket
+       |> assign(:show_notes_modal, true)
+       |> assign(:editing_transaction, transaction)}
+    end)
   end
 
   @impl true
   def handle_event("save_notes", %{"tx_id" => id, "notes" => notes}, socket) do
-    transaction = Transactions.get_transaction!(id)
+    with_own_transaction(socket, id, fn transaction ->
+      case Transactions.update_transaction(socket.assigns.current_user, transaction, %{
+             notes: notes
+           }) do
+        {:ok, updated_tx} ->
+          {:noreply,
+           socket
+           |> assign(:show_notes_modal, false)
+           |> assign(:editing_transaction, nil)
+           |> put_flash(:success, "Notas atualizadas!")
+           |> stream_update_transaction(updated_tx)}
 
-    case Transactions.update_transaction(transaction, %{notes: notes}) do
-      {:ok, updated_tx} ->
-        {:noreply,
-         socket
-         |> assign(:show_notes_modal, false)
-         |> assign(:editing_transaction, nil)
-         |> put_flash(:success, "Notas atualizadas!")
-         |> stream_insert(:transactions, annotate_one(updated_tx))}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Falha ao atualizar notas.")}
-    end
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Falha ao atualizar notas.")}
+      end
+    end)
   end
 
   @impl true
@@ -360,7 +403,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("open_transfer_pair", %{"key" => key}, socket) do
     pair =
-      case Transactions.get_transfer_pairs([key]) do
+      case Transactions.get_transfer_pairs(socket.assigns.current_user, [key]) do
         %{^key => txs} -> Enum.sort_by(txs, &Decimal.to_float(&1.amount))
         _ -> []
       end
@@ -375,7 +418,7 @@ defmodule CashLensWeb.TransactionLive.Index do
   @impl true
   def handle_event("open_reimbursement_pair", %{"key" => key}, socket) do
     pair =
-      case Transactions.get_reimbursement_pairs([key]) do
+      case Transactions.get_reimbursement_pairs(socket.assigns.current_user, [key]) do
         %{^key => txs} -> txs
         _ -> []
       end
@@ -389,24 +432,28 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("unlink_transfer_pair", %{"key" => key}, socket) do
-    pair = Transactions.get_transfer_pairs([key]) |> Map.get(key, [])
-    Transactions.unlink_transfer_pair(key)
+    user = socket.assigns.current_user
+    pair = Transactions.get_transfer_pairs(user, [key]) |> Map.get(key, [])
 
-    # Pairing affects each account's balance split, so rebuild the affected chains.
-    pair
-    |> Enum.map(& &1.account_id)
-    |> Enum.uniq()
-    |> Enum.each(&CashLens.Accounting.rebuild_account_balances(socket.assigns.current_user, &1))
+    case Transactions.unlink_transfer_pair(user, key) do
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Par de transferência não encontrado.")}
 
-    socket =
-      pair
-      |> Enum.reduce(socket, fn tx, acc ->
-        stream_update_transaction(acc, Transactions.get_transaction!(tx.id))
-      end)
-      |> assign(:transfer_pair_view, nil)
-      |> put_flash(:success, "Transferência desvinculada.")
+      {:ok, _} ->
+        # Pairing affects each account's balance split, so rebuild the affected chains.
+        pair
+        |> Enum.map(& &1.account_id)
+        |> Enum.uniq()
+        |> Enum.each(&CashLens.Accounting.rebuild_account_balances(user, &1))
 
-    {:noreply, socket}
+        socket =
+          pair
+          |> Enum.reduce(socket, fn tx, acc -> stream_update_transaction(acc, tx) end)
+          |> assign(:transfer_pair_view, nil)
+          |> put_flash(:success, "Transferência desvinculada.")
+
+        {:noreply, socket}
+    end
   end
 
   @impl true
@@ -417,7 +464,10 @@ defmodule CashLensWeb.TransactionLive.Index do
       ) do
     category_id = if category_id == "", do: nil, else: category_id
 
-    case Transactions.update_transaction_category(id, category_id) do
+    case Transactions.update_transaction_category(socket.assigns.current_user, id, category_id) do
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Transação não encontrada.")}
+
       {:ok, updated_tx} ->
         # Explicit feedback so the action is never silent — especially under the
         # "Pendentes" filter, where a just-categorized row correctly leaves the list.
@@ -428,7 +478,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
         socket =
           socket
-          |> assign(:pending_count, Transactions.count_pending_transactions())
+          |> assign(:pending_count, count_pending(socket))
           |> calculate_summary()
           |> put_flash(:success, flash_msg)
           |> handle_bulk_suggestion(updated_tx, category_id)
@@ -449,7 +499,10 @@ defmodule CashLensWeb.TransactionLive.Index do
     selected_ids = socket.assigns.bulk_selected_ids
 
     selected_items = Enum.filter(items, &MapSet.member?(selected_ids, &1.id))
-    Enum.each(selected_items, &Transactions.update_transaction_category(&1.id, category_id))
+
+    Enum.each(selected_items, fn item ->
+      Transactions.update_transaction_category(socket.assigns.current_user, item.id, category_id)
+    end)
 
     rule = maybe_create_rule(socket, category_id)
 
@@ -458,7 +511,7 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> assign(:bulk_confirmation, nil)
      |> assign(:bulk_selected_ids, MapSet.new())
      |> assign(:categories, Categories.list_categories(socket.assigns.current_user))
-     |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> assign(:pending_count, count_pending(socket))
      |> put_flash(:success, bulk_flash(length(selected_items), rule))
      |> refresh_transactions_page1(socket.assigns.filters)}
   end
@@ -691,7 +744,11 @@ defmodule CashLensWeb.TransactionLive.Index do
       next_page = socket.assigns.page + 1
 
       items =
-        Transactions.list_transactions(map_filters(socket.assigns.filters), next_page)
+        Transactions.list_transactions(
+          socket.assigns.current_user,
+          map_filters(socket.assigns.filters),
+          next_page
+        )
 
       # A short page means the last row has been reached — stop before issuing
       # an extra empty query when the sentinel scrolls into view again.
@@ -707,12 +764,11 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("confirm_delete", %{"id" => id}, socket) do
-    confirm = %{
-      action: JS.push("delete", value: %{id: id}),
-      transaction: Transactions.get_transaction!(id)
-    }
+    with_own_transaction(socket, id, fn transaction ->
+      confirm = %{action: JS.push("delete", value: %{id: id}), transaction: transaction}
 
-    {:noreply, assign(socket, :confirm_modal, confirm)}
+      {:noreply, assign(socket, :confirm_modal, confirm)}
+    end)
   end
 
   @impl true
@@ -723,20 +779,21 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    transaction = Transactions.get_transaction!(id)
-    {:ok, _} = Transactions.delete_transaction(transaction)
+    with_own_transaction(socket, id, fn transaction ->
+      {:ok, _} = Transactions.delete_transaction(socket.assigns.current_user, transaction)
 
-    {:noreply,
-     socket
-     |> assign(:confirm_modal, nil)
-     |> stream_delete(:transactions, transaction)
-     |> calculate_summary()
-     |> assign(:pending_count, Transactions.count_pending_transactions())}
+      {:noreply,
+       socket
+       |> assign(:confirm_modal, nil)
+       |> stream_delete(:transactions, transaction)
+       |> calculate_summary()
+       |> assign(:pending_count, count_pending(socket))}
+    end)
   end
 
   @impl true
   def handle_event("delete_all", _params, socket) do
-    Transactions.delete_all_transactions()
+    Transactions.delete_all_transactions(socket.assigns.current_user)
 
     {:noreply,
      socket
@@ -744,6 +801,20 @@ defmodule CashLensWeb.TransactionLive.Index do
      |> stream(:transactions, [], reset: true)
      |> calculate_summary()
      |> assign(:pending_count, 0)}
+  end
+
+  defp unlink_reimbursement_pair(user, link_key) do
+    # Ensure we get everything
+    Transactions.list_transactions(user, %{"search" => "", "reimbursement_status" => ""})
+    |> Enum.filter(&(&1.reimbursement_link_key == link_key))
+    |> Enum.each(&clear_reimbursement(user, &1))
+  end
+
+  defp clear_reimbursement(user, tx) do
+    Transactions.update_transaction(user, tx, %{
+      reimbursement_status: nil,
+      reimbursement_link_key: nil
+    })
   end
 
   defp apply_filter_change(params, valid_keys, socket) do
@@ -771,9 +842,19 @@ defmodule CashLensWeb.TransactionLive.Index do
      socket
      |> put_flash(:success, message)
      |> insert_saved_transaction(transaction, action)
-     |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> assign(:pending_count, count_pending(socket))
      |> calculate_summary()
      |> push_patch(to: ~p"/transactions")}
+  end
+
+  @impl true
+  def handle_info({:component_error, message}, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_reimbursement_modal, false)
+     |> assign(:show_transfer_modal, false)
+     |> assign(:show_quick_transfer_modal, false)
+     |> put_flash(:error, message)}
   end
 
   @impl true
@@ -786,12 +867,12 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   @impl true
   def handle_info(:do_auto_categorize, socket) do
-    Transactions.reapply_auto_categorization()
+    Transactions.reapply_auto_categorization(socket.assigns.current_user)
 
     {:noreply,
      socket
      |> assign(:auto_categorizing, false)
-     |> assign(:pending_count, Transactions.count_pending_transactions())
+     |> assign(:pending_count, count_pending(socket))
      |> put_flash(:success, "Regras aplicadas!")
      |> refresh_transactions_page1(socket.assigns.filters)}
   end
@@ -841,18 +922,32 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   # Helpers
   defp process_category_created_with_tx(socket, category, target_transaction_id) do
-    Transactions.update_transaction_category(target_transaction_id, category.id)
-    tx = Transactions.get_transaction!(target_transaction_id)
+    user = socket.assigns.current_user
 
+    with {:ok, _} <-
+           Transactions.update_transaction_category(user, target_transaction_id, category.id),
+         %{} = tx <- Transactions.get_transaction(user, target_transaction_id) do
+      apply_category_created(socket, category, tx)
+    else
+      _ ->
+        {:noreply,
+         socket
+         |> assign(:show_quick_category_modal, false)
+         |> assign(:categories, Categories.list_categories(user))
+         |> put_flash(:error, "Transação não encontrada.")}
+    end
+  end
+
+  defp apply_category_created(socket, category, tx) do
     socket =
       socket
       |> assign(:show_quick_category_modal, false)
       |> assign(:categories, Categories.list_categories(socket.assigns.current_user))
-      |> assign(:pending_count, Transactions.count_pending_transactions())
+      |> assign(:pending_count, count_pending(socket))
       |> calculate_summary()
       |> put_flash(:success, "Categoria criada!")
 
-    bulk_items = get_bulk_items_for_tx(tx, category.id)
+    bulk_items = get_bulk_items_for_tx(socket.assigns.current_user, tx, category.id)
 
     socket =
       if Enum.any?(bulk_items) do
@@ -879,8 +974,8 @@ defmodule CashLensWeb.TransactionLive.Index do
     {:noreply, socket}
   end
 
-  defp get_bulk_items_for_tx(tx, category_id) do
-    ignore_patterns = Transactions.list_bulk_ignore_patterns()
+  defp get_bulk_items_for_tx(user, tx, category_id) do
+    ignore_patterns = Transactions.list_bulk_ignore_patterns(user)
 
     should_skip_bulk =
       Enum.any?(ignore_patterns, fn p ->
@@ -893,20 +988,20 @@ defmodule CashLensWeb.TransactionLive.Index do
     if should_skip_bulk do
       []
     else
-      Transactions.list_transactions(%{"search" => tx.description})
+      Transactions.list_transactions(user, %{"search" => tx.description})
       |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id))
     end
   end
 
   # The memo keeps `nil` results too, so a transaction with nothing to suggest
   # is not re-queried every time its menu is opened.
-  defp resolve_installment_suggestion(memo, id, tx) do
+  defp resolve_installment_suggestion(user, memo, id, tx) do
     case Map.fetch(memo, id) do
       {:ok, cached} ->
         {cached, memo}
 
       :error ->
-        suggestion = Transactions.suggest_installment_link(tx)
+        suggestion = Transactions.suggest_installment_link(user, tx)
         {suggestion, Map.put(memo, id, suggestion)}
     end
   end
@@ -917,12 +1012,15 @@ defmodule CashLensWeb.TransactionLive.Index do
     update(socket, :installment_suggestions, &Map.delete(&1, id))
   end
 
-  # Single-row convenience over CategorySuggester.annotate/1 so streamed rows
+  defp count_pending(socket),
+    do: Transactions.count_pending_transactions(socket.assigns.current_user)
+
+  # Single-row convenience over CategorySuggester.annotate/2 so streamed rows
   # never lose their suggestion pill.
-  defp annotate_one(tx) do
+  defp annotate_one(socket, tx) do
     [tx] =
-      [tx]
-      |> CategorySuggester.annotate()
+      socket.assigns.current_user
+      |> CategorySuggester.annotate([tx])
 
     tx
   end
@@ -931,7 +1029,11 @@ defmodule CashLensWeb.TransactionLive.Index do
   # edited one goes through the filter-aware update path so it disappears when
   # the change moved it out of the current filter.
   defp insert_saved_transaction(socket, transaction, :new) do
-    tx = annotate_one(Transactions.get_transaction!(transaction.id))
+    tx =
+      annotate_one(
+        socket,
+        Transactions.get_transaction!(socket.assigns.current_user, transaction.id)
+      )
 
     if matches_filters?(tx, socket.assigns.filters, socket.assigns.transfer_category_id) do
       stream_insert(socket, :transactions, tx, at: 0)
@@ -945,7 +1047,8 @@ defmodule CashLensWeb.TransactionLive.Index do
   end
 
   defp stream_update_transaction(socket, tx) do
-    tx = annotate_one(Transactions.get_transaction!(tx.id))
+    tx =
+      annotate_one(socket, Transactions.get_transaction!(socket.assigns.current_user, tx.id))
 
     if matches_filters?(tx, socket.assigns.filters, socket.assigns.transfer_category_id),
       do: stream_insert(socket, :transactions, tx),
@@ -962,13 +1065,14 @@ defmodule CashLensWeb.TransactionLive.Index do
   defp handle_bulk_suggestion(socket, _tx, nil), do: socket
 
   defp handle_bulk_suggestion(socket, tx, category_id) do
-    ignore_patterns = Transactions.list_bulk_ignore_patterns()
+    user = socket.assigns.current_user
+    ignore_patterns = Transactions.list_bulk_ignore_patterns(user)
 
     if should_skip_bulk?(tx.description, ignore_patterns) do
       socket
     else
       bulk_items =
-        Transactions.list_transactions_by_description(tx.description)
+        Transactions.list_transactions_by_description(user, tx.description)
         |> Enum.reject(&(&1.id == tx.id or &1.category_id == category_id))
 
       if Enum.any?(bulk_items) do
@@ -1107,7 +1211,7 @@ defmodule CashLensWeb.TransactionLive.Index do
     # 1. Broad search for opposite value transactions
     # Criteria: same absolute amount (opposite signal), no transfer_key, different account, uncategorized or transfer
     candidates =
-      Transactions.list_transactions(%{"amount" => target_amount})
+      Transactions.list_transactions(socket.assigns.current_user, %{"amount" => target_amount})
       |> Enum.filter(fn t ->
         is_nil(t.transfer_key) and
           t.id != origin_tx.id and
@@ -1130,7 +1234,7 @@ defmodule CashLensWeb.TransactionLive.Index do
 
   defp refresh_transactions_page1(socket, filters) do
     db_transactions =
-      Transactions.list_transactions(map_filters(filters), 1)
+      Transactions.list_transactions(socket.assigns.current_user, map_filters(filters), 1)
 
     socket
     |> assign(:page, 1)
@@ -1151,12 +1255,13 @@ defmodule CashLensWeb.TransactionLive.Index do
 
     # The count only ever backs the filtered-summary card, so it is not worth
     # a COUNT(*) over the whole table while the health bar is the one showing.
-    filtered_count = if active?, do: Transactions.count_transactions(mapped), else: nil
+    user = socket.assigns.current_user
+    filtered_count = if active?, do: Transactions.count_transactions(user, mapped), else: nil
 
-    summary = Transactions.get_filtered_summary(mapped)
+    summary = Transactions.get_filtered_summary(user, mapped)
 
     socket
-    |> assign(:statement_health, Transactions.statement_health())
+    |> assign(:statement_health, Transactions.statement_health(user))
     |> assign(:filtered_count, filtered_count)
     |> assign(:filters_active?, active?)
     |> assign(:summary, summary)
@@ -1169,7 +1274,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
-    new_pairs = Transactions.get_reimbursement_pairs(keys)
+    new_pairs = Transactions.get_reimbursement_pairs(socket.assigns.current_user, keys)
 
     assign(
       socket,
@@ -1195,7 +1300,7 @@ defmodule CashLensWeb.TransactionLive.Index do
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
-    new_pairs = Transactions.get_transfer_pairs(keys)
+    new_pairs = Transactions.get_transfer_pairs(socket.assigns.current_user, keys)
     assign(socket, :transfer_pairs, Map.merge(socket.assigns.transfer_pairs, new_pairs))
   end
 
