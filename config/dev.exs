@@ -63,6 +63,11 @@ config :cash_lens, CashLensWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :cash_lens, dev_routes: true
 
+# Skip the login page locally: with CASH_LENS_DEV_LOGIN_AS=<email> set, every
+# visitor is signed in as that (enabled) user. Compiled in for dev only
+# (CashLensWeb.Plugs.DevLoginAs).
+config :cash_lens, dev_login_as: true
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

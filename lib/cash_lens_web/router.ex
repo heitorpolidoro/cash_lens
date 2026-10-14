@@ -10,6 +10,7 @@ defmodule CashLensWeb.Router do
     plug :put_root_layout, html: {CashLensWeb.Layouts, :root}
     plug :protect_from_forgery
     plug CashLensWeb.Plugs.SecurityHeaders
+    plug CashLensWeb.Plugs.DevLoginAs
     plug :fetch_current_user
   end
 
