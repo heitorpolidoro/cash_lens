@@ -1653,3 +1653,7 @@ commit claimed none were added. Fixed; back to 23.
 - Spec review: Say explicitly that test/cash_lens/operator_test.exs (CashLens.OperatorTest) is removed or merged into ownership_test.exs, so no test references the deleted module.
 - Code review: AGENTS.md:161 and AGENTS.md:195 still reference the deleted `CashLens.Operator.user!/1` / `operator.ex`; update to `CashLens.Ownership.operator_user!/1`.
 - Code review: Pre-existing (moved verbatim): `operator_user!("")` silently falls back to the only user.
+
+## [CL-51] Scope all queries by the current user — 2026-10-14
+- QA: Compiler warnings in tests (unused `user` variables in test/cash_lens/categories_test.exs lines 149/180/196/237/241, unused alias `Index` in a ForecastLive test, one near credit_cards_test.exs:7) appear in precommit output; not failing.
+- QA: Repo.ex still defines insert/2 etc. overrides (for RLS binding); the wording of result 3 ("no insert override") is satisfied in spirit (no owner assignment), not literally.
