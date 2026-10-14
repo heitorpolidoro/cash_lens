@@ -1,6 +1,10 @@
 defmodule CashLensWeb.AdminDatabaseLive do
   use CashLensWeb, :live_view
+  alias CashLens.Ownership
   alias CashLens.Repo
+
+  # The tables whose rows belong to a user: only the current user's are listed.
+  @domain_tables Enum.map(Ownership.domain_schemas(), & &1.__schema__(:source))
 
   @impl true
   def render(assigns) do
@@ -196,11 +200,13 @@ defmodule CashLensWeb.AdminDatabaseLive do
     base_query = "SELECT * FROM #{table}"
 
     # Build WHERE clauses using positional parameters for safety
+    {owner_clauses, owner_params} = owner_filter(table, socket.assigns.current_user)
+
     {where_clauses, params} =
       filters
       |> Enum.filter(fn {_, v} -> v != "" and v != nil end)
-      |> Enum.with_index(1)
-      |> Enum.reduce({[], []}, fn {{col, val}, idx}, {clauses, acc_params} ->
+      |> Enum.with_index(length(owner_params) + 1)
+      |> Enum.reduce({owner_clauses, owner_params}, fn {{col, val}, idx}, {clauses, acc_params} ->
         # Use $1, $2, etc for security and text casting for matching
         {clauses ++ ["#{col}::text ILIKE $#{idx}"], acc_params ++ ["%#{val}%"]}
       end)
@@ -227,6 +233,13 @@ defmodule CashLensWeb.AdminDatabaseLive do
         assign(socket, rows: [])
     end
   end
+
+  # A domain table lists only the current user's rows (`user_id` is the first
+  # parameter); any other table is shown as it is.
+  defp owner_filter(table, %{id: user_id}) when table in @domain_tables,
+    do: {["user_id = $1"], [Ecto.UUID.dump!(user_id)]}
+
+  defp owner_filter(_table, _user), do: {[], []}
 
   defp format_val(nil), do: "NULL"
 

@@ -1,7 +1,7 @@
 defmodule CashLens.Parsers.DirectoryImporterTest do
   use CashLens.DataCase, async: false
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
   import CashLens.AccountsFixtures
   import CashLens.CreditCardsFixtures
 
@@ -28,7 +28,9 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
   describe "run/2 on an invalid path" do
     test "returns an error instead of raising when the path does not exist" do
       assert %Result{accounts: [], warnings: [], errors: [error]} =
-               DirectoryImporter.run("/no/such/path/#{System.unique_integer([:positive])}",
+               DirectoryImporter.run(
+                 user(),
+                 "/no/such/path/#{System.unique_integer([:positive])}",
                  skip_installments: true
                )
 
@@ -46,7 +48,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
         ])
 
       assert %Result{accounts: [entry], warnings: [], errors: []} =
-               DirectoryImporter.run(dir, skip_installments: true)
+               DirectoryImporter.run(user(), dir, skip_installments: true)
 
       assert entry.bank == "Banco do Brasil"
       assert entry.name == "Conta Corrente"
@@ -64,7 +66,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
         ])
 
       assert %Result{accounts: [entry], warnings: [warning]} =
-               DirectoryImporter.run(dir, skip_installments: true)
+               DirectoryImporter.run(user(), dir, skip_installments: true)
 
       assert entry.imported == 3
       assert warning =~ "fatura.ofx"
@@ -74,7 +76,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       dir = account_folder(root, "x", "Banco Fantasma", "Conta X", [{"e.csv", @bb_sample}])
 
       assert %Result{accounts: [], errors: [error]} =
-               DirectoryImporter.run(dir, skip_installments: true)
+               DirectoryImporter.run(user(), dir, skip_installments: true)
 
       assert error =~ "não encontrada"
     end
@@ -84,7 +86,9 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       account_fixture(bank: "Banco Dup", name: "Conta Corrente", parser_type: "bb_csv")
       dir = account_folder(root, "d", "Banco Dup", "Conta Corrente", [{"e.csv", @bb_sample}])
 
-      assert %Result{errors: [error]} = DirectoryImporter.run(dir, skip_installments: true)
+      assert %Result{errors: [error]} =
+               DirectoryImporter.run(user(), dir, skip_installments: true)
+
       assert error =~ "ambígua"
     end
 
@@ -94,8 +98,10 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       dir =
         account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [{"e.csv", @bb_sample}])
 
-      DirectoryImporter.run(dir, skip_installments: true)
-      assert %Result{accounts: [entry]} = DirectoryImporter.run(dir, skip_installments: true)
+      DirectoryImporter.run(user(), dir, skip_installments: true)
+
+      assert %Result{accounts: [entry]} =
+               DirectoryImporter.run(user(), dir, skip_installments: true)
 
       assert entry.imported == 0
       assert entry.skipped == 3
@@ -113,7 +119,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
         ])
 
       assert %Result{accounts: [entry], errors: []} =
-               DirectoryImporter.run(dir, skip_installments: true, dry_run: true)
+               DirectoryImporter.run(user(), dir, skip_installments: true, dry_run: true)
 
       assert entry.imported == 3
       assert entry.skipped == 0
@@ -121,7 +127,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
 
       # A real run afterward imports exactly what the preview said it would.
       assert %Result{accounts: [real_entry]} =
-               DirectoryImporter.run(dir, skip_installments: true)
+               DirectoryImporter.run(user(), dir, skip_installments: true)
 
       assert real_entry.imported == 3
       assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
@@ -143,7 +149,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
         ])
 
       assert %Result{accounts: [preview_entry], errors: []} =
-               DirectoryImporter.run(dir, skip_installments: true, dry_run: true)
+               DirectoryImporter.run(user(), dir, skip_installments: true, dry_run: true)
 
       assert preview_entry.imported == 3
       assert preview_entry.skipped == 3
@@ -152,7 +158,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       # The preview's `imported` count must equal what a subsequent real run
       # actually imports — this is the exact promise the preview makes.
       assert %Result{accounts: [real_entry]} =
-               DirectoryImporter.run(dir, skip_installments: true)
+               DirectoryImporter.run(user(), dir, skip_installments: true)
 
       assert real_entry.imported == preview_entry.imported
       assert real_entry.imported == 3
@@ -173,7 +179,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       # than mocking that function directly (grep this file for the existing
       # pattern before assuming a different one is expected).
       assert CashLens.Installments.list_installment_groups(user()) == []
-      DirectoryImporter.run(dir, dry_run: true)
+      DirectoryImporter.run(user(), dir, dry_run: true)
       assert CashLens.Installments.list_installment_groups(user()) == []
     end
   end
@@ -187,7 +193,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       account_folder(root, "brad", "Bradesco", "Conta Corrente", [{"e.csv", @bb_sample}])
 
       assert %Result{accounts: accounts, warnings: [], errors: []} =
-               DirectoryImporter.run(root, skip_installments: true)
+               DirectoryImporter.run(user(), root, skip_installments: true)
 
       assert length(accounts) == 2
       assert length(CashLens.Repo.all(CashLens.Transactions.Transaction)) == 6
@@ -210,7 +216,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       File.write!(Path.join(year_dir, "e.csv"), @bb_sample)
 
       assert %Result{accounts: [entry], warnings: [], errors: []} =
-               DirectoryImporter.run(root, skip_installments: true)
+               DirectoryImporter.run(user(), root, skip_installments: true)
 
       assert entry.bank == "Banco do Brasil"
       assert entry.name == "Conta Corrente"
@@ -227,7 +233,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       File.write!(Path.join(no_acct, "x.csv"), @bb_sample)
 
       assert %Result{accounts: [_], warnings: [warning]} =
-               DirectoryImporter.run(root, skip_installments: true)
+               DirectoryImporter.run(user(), root, skip_installments: true)
 
       assert warning =~ "fatura-antiga"
       assert warning =~ "sem .account"
@@ -239,7 +245,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       account_folder(root, "bad", "Banco Fantasma", "Conta X", [{"e.csv", @bb_sample}])
 
       assert %Result{accounts: [_], errors: [error]} =
-               DirectoryImporter.run(root, skip_installments: true)
+               DirectoryImporter.run(user(), root, skip_installments: true)
 
       assert error =~ "não encontrada"
     end
@@ -300,7 +306,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
 
       test_pid = self()
 
-      DirectoryImporter.run(root,
+      DirectoryImporter.run(user(), root,
         skip_installments: true,
         on_event: &send(test_pid, {:event, &1})
       )
@@ -323,7 +329,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
 
       test_pid = self()
 
-      DirectoryImporter.run(root,
+      DirectoryImporter.run(user(), root,
         skip_installments: true,
         on_event: &send(test_pid, {:event, &1})
       )
@@ -338,7 +344,7 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       account_folder(root, "bb", "Banco do Brasil", "Conta Corrente", [{"e.csv", @bb_sample}])
 
       assert %Result{accounts: [entry], warnings: [], errors: []} =
-               DirectoryImporter.run(root, skip_installments: true)
+               DirectoryImporter.run(user(), root, skip_installments: true)
 
       assert entry.imported == 3
     end

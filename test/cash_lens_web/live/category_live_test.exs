@@ -258,14 +258,14 @@ defmodule CashLensWeb.CategoryLiveTest do
       |> element("input[phx-click='toggle_fixed'][phx-value-id='#{child.id}']")
       |> render_click()
 
-      assert Categories.get_category!(CashLens.Ownership.current_user!(), child.id).type ==
+      assert Categories.get_category!(CashLens.Tenancy.current_user(), child.id).type ==
                "variable"
 
       live
       |> element("input[phx-click='toggle_fixed'][phx-value-id='#{child.id}']")
       |> render_click()
 
-      assert Categories.get_category!(CashLens.Ownership.current_user!(), child.id).type ==
+      assert Categories.get_category!(CashLens.Tenancy.current_user(), child.id).type ==
                "fixed"
     end
 
@@ -277,7 +277,7 @@ defmodule CashLensWeb.CategoryLiveTest do
 
       live |> element("#toggle-type-#{root.id}") |> render_click()
 
-      assert Categories.get_category!(CashLens.Ownership.current_user!(), root.id).type ==
+      assert Categories.get_category!(CashLens.Tenancy.current_user(), root.id).type ==
                "variable"
     end
 
@@ -417,7 +417,7 @@ defmodule CashLensWeb.CategoryLiveTest do
       assert_patch(live, ~p"/categories")
 
       created =
-        Categories.list_categories(CashLens.Ownership.current_user!())
+        Categories.list_categories(CashLens.Tenancy.current_user())
         |> Enum.find(&(&1.name == "Água"))
 
       assert created.parent_id == root.id
@@ -525,7 +525,7 @@ defmodule CashLensWeb.CategoryLiveTest do
 
         created =
           Enum.find(
-            Categories.list_categories(CashLens.Ownership.current_user!()),
+            Categories.list_categories(CashLens.Tenancy.current_user()),
             &(&1.name == "Invariante #{index}")
           )
 
@@ -666,7 +666,7 @@ defmodule CashLensWeb.CategoryLiveTest do
       cabelo = category_fixture(%{name: "Cabeleireiro", keywords: "HAIR"})
 
       assert [conflict] =
-               Categories.list_categories(CashLens.Ownership.current_user!())
+               Categories.list_categories(CashLens.Tenancy.current_user())
                |> Categories.keyword_conflicts()
 
       assert conflict.exact?
@@ -681,7 +681,7 @@ defmodule CashLensWeb.CategoryLiveTest do
       category_fixture(%{name: "Cabeleireiro", keywords: "ALEX HAIR"})
 
       assert [conflict] =
-               Categories.list_categories(CashLens.Ownership.current_user!())
+               Categories.list_categories(CashLens.Tenancy.current_user())
                |> Categories.keyword_conflicts()
 
       refute conflict.exact?

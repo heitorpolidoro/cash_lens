@@ -1,7 +1,7 @@
 defmodule CashLens.CreditCards.MatcherTest do
   use CashLens.DataCase, async: true
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
   import CashLens.CreditCardsFixtures
   import Ecto.Query
   alias CashLens.CreditCards.Matcher
@@ -43,7 +43,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
     cat =
       CashLens.Categories.get_category_by_slug(
-        CashLens.Ownership.current_user!(),
+        CashLens.Tenancy.current_user(),
         "cartao-de-credito"
       )
 
@@ -74,7 +74,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
     parent =
       CashLens.Categories.get_category_by_slug(
-        CashLens.Ownership.current_user!(),
+        CashLens.Tenancy.current_user(),
         "cartao-de-credito"
       )
 
@@ -121,7 +121,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
     cat =
       CashLens.Categories.get_category_by_slug(
-        CashLens.Ownership.current_user!(),
+        CashLens.Tenancy.current_user(),
         "cartao-de-credito"
       )
 
@@ -150,7 +150,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
     cat =
       CashLens.Categories.get_category_by_slug(
-        CashLens.Ownership.current_user!(),
+        CashLens.Tenancy.current_user(),
         "cartao-de-credito"
       )
 
@@ -175,7 +175,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
       cat =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 
@@ -211,7 +211,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
       cat =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 
@@ -240,7 +240,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
       cat =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 
@@ -277,7 +277,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
       cat =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 

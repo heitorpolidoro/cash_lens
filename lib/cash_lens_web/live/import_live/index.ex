@@ -692,7 +692,10 @@ defmodule CashLensWeb.ImportLive.Index do
         {:noreply, socket}
 
       entry ->
-        {:noreply, socket |> discard_drop() |> assign(:inspect, build_inspection(entry))}
+        {:noreply,
+         socket
+         |> discard_drop()
+         |> assign(:inspect, build_inspection(socket.assigns.current_user, entry))}
     end
   end
 
@@ -729,7 +732,7 @@ defmodule CashLensWeb.ImportLive.Index do
     {:noreply,
      socket
      |> assign(:drop, drop)
-     |> assign(:inspect, drop_inspection(drop, account))}
+     |> assign(:inspect, drop_inspection(socket.assigns.current_user, drop, account))}
   end
 
   @impl true
@@ -769,7 +772,7 @@ defmodule CashLensWeb.ImportLive.Index do
   # path: account resolution is a SELECT and the Ingestor runs with
   # `dry_run: true`, which writes no transaction, no `imported_files` row, no
   # `import_runs` row and no credit-card statement.
-  defp build_inspection(entry) do
+  defp build_inspection(user, entry) do
     base = %{
       source: :folder,
       entry: entry,
@@ -779,15 +782,15 @@ defmodule CashLensWeb.ImportLive.Index do
       error: nil
     }
 
-    case Imports.account_for_entry(entry) do
-      {:ok, account} -> %{base | account: account} |> run_preview()
+    case Imports.account_for_entry(user, entry) do
+      {:ok, account} -> %{base | account: account} |> run_preview(user)
       {:error, :not_found} -> %{base | error: account_error(:not_found, entry)}
       {:error, :ambiguous} -> %{base | error: account_error(:ambiguous, entry)}
     end
   end
 
-  defp run_preview(%{entry: entry, account: account} = inspection) do
-    case Ingestor.import_file(account, entry.absolute_path, dry_run: true) do
+  defp run_preview(%{entry: entry, account: account} = inspection, user) do
+    case Ingestor.import_file(user, account, entry.absolute_path, dry_run: true) do
       {:ok, summary} -> %{inspection | summary: summary, error: nil}
       {:error, reason} -> %{inspection | summary: nil, error: to_string(reason)}
     end
@@ -822,7 +825,9 @@ defmodule CashLensWeb.ImportLive.Index do
   defp run_real_import(socket, entry, account) do
     root = socket.assigns.root
 
-    case Ingestor.import_file(account, entry.absolute_path, import_root: root) do
+    case Ingestor.import_file(socket.assigns.current_user, account, entry.absolute_path,
+           import_root: root
+         ) do
       {:ok, summary} ->
         grouped = regroup_installments(socket.assigns.current_user, summary)
 
@@ -843,14 +848,14 @@ defmodule CashLensWeb.ImportLive.Index do
   # the operator never confirms something they did not see.
   defp refresh_stale_preview(socket, entry) do
     refreshed =
-      case Imports.scan(socket.assigns.root) do
+      case Imports.scan(socket.assigns.current_user, socket.assigns.root) do
         {:ok, entries} -> Enum.find(entries, &(&1.path == entry.path)) || entry
         {:error, _reason} -> entry
       end
 
     {:noreply,
      socket
-     |> assign(:inspect, build_inspection(refreshed))
+     |> assign(:inspect, build_inspection(socket.assigns.current_user, refreshed))
      |> put_flash(:error, "O arquivo mudou no disco. Inspecione novamente.")}
   end
 
@@ -867,7 +872,7 @@ defmodule CashLensWeb.ImportLive.Index do
   end
 
   defp assign_drop(socket, file, verdict) do
-    candidates = Imports.candidate_accounts(verdict)
+    candidates = Imports.candidate_accounts(socket.assigns.current_user, verdict)
     {selected, reason} = Imports.preselect_account(candidates, verdict)
 
     drop = %{
@@ -884,7 +889,7 @@ defmodule CashLensWeb.ImportLive.Index do
     socket
     |> assign(:drop, drop)
     |> assign(:drop_error, nil)
-    |> assign(:inspect, drop_inspection(drop, selected))
+    |> assign(:inspect, drop_inspection(socket.assigns.current_user, drop, selected))
   end
 
   # The unrecognised case leaves nothing behind: the staging directory goes in
@@ -929,7 +934,7 @@ defmodule CashLensWeb.ImportLive.Index do
   # The drop's `@inspect` is CL-24's map plus `source: :drop`. `entry` is
   # synthetic but carries the same keys the rest of the code reads, so the
   # drawer, the hash check and the confirm stay a single code path.
-  defp drop_inspection(drop, account) do
+  defp drop_inspection(user, drop, account) do
     base = %{
       source: :drop,
       entry: drop_entry(drop, account),
@@ -942,7 +947,7 @@ defmodule CashLensWeb.ImportLive.Index do
     cond do
       drop.candidates == [] -> %{base | error: "Nenhuma conta compatível com este formato."}
       is_nil(account) -> base
-      true -> run_preview(base)
+      true -> run_preview(base, user)
     end
   end
 
@@ -989,7 +994,11 @@ defmodule CashLensWeb.ImportLive.Index do
   # a content-addressed key the same bytes hit again from a later session.
   defp run_drop_import(socket, entry, account) do
     root = Imports.session_drop_root(socket.assigns.session_id)
-    result = Ingestor.import_file(account, entry.absolute_path, import_root: root)
+
+    result =
+      Ingestor.import_file(socket.assigns.current_user, account, entry.absolute_path,
+        import_root: root
+      )
 
     socket = socket |> discard_drop() |> assign(:inspect, nil)
 
@@ -1130,7 +1139,7 @@ defmodule CashLensWeb.ImportLive.Index do
 
   defp assign_scan(socket, root) do
     {entries, error} =
-      case Imports.scan(root) do
+      case Imports.scan(socket.assigns.current_user, root) do
         {:ok, entries} -> {entries, nil}
         {:error, reason} -> {[], reason}
       end
@@ -1181,7 +1190,11 @@ defmodule CashLensWeb.ImportLive.Index do
   # The single history path: `mount/3`, `"rescan"` and a confirmed import all go
   # through it, so a confirmed import's row appears without a page reload.
   defp assign_history(socket) do
-    assign(socket, :history, Imports.list_recent_runs(@history_limit))
+    assign(
+      socket,
+      :history,
+      Imports.list_recent_runs(socket.assigns.current_user, @history_limit)
+    )
   end
 
   # Total over any string the column can physically hold: a value written around

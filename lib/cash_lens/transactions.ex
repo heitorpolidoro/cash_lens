@@ -768,11 +768,10 @@ defmodule CashLens.Transactions do
   defp build_summary_base_query(query, user, excluded_ids) do
     categories = owned_query(:category, user)
 
-    from t in query,
-      left_join: c in ^categories,
-      on: c.id == t.category_id,
-      where: is_nil(c.id) or c.id not in ^excluded_ids,
-      where: is_nil(t.reimbursement_link_key)
+    query
+    |> join(:left, [t], c in ^categories, on: c.id == t.category_id)
+    |> where([t, c], is_nil(c.id) or c.id not in ^excluded_ids)
+    |> where([t], is_nil(t.reimbursement_link_key))
   end
 
   defp apply_summary_date_filters(query, _first, _last, %{"category_id" => "nil"}), do: query
@@ -795,12 +794,10 @@ defmodule CashLens.Transactions do
   end
 
   defp aggregate_summary_totals(query) do
-    from(t in query,
-      select: %{
-        income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", t.amount, t.amount)),
-        expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", t.amount, t.amount))
-      }
-    )
+    select(query, [t], %{
+      income: sum(fragment("CASE WHEN ? > 0 THEN ? ELSE 0 END", t.amount, t.amount)),
+      expenses: sum(fragment("CASE WHEN ? < 0 THEN ABS(?) ELSE 0 END", t.amount, t.amount))
+    })
   end
 
   @doc """
@@ -862,8 +859,7 @@ defmodule CashLens.Transactions do
     limit = Keyword.get(opts, :limit)
 
     res =
-      query_historical_category_totals(user)
-      |> Repo.all()
+      historical_category_totals(user)
       |> Enum.group_by(&group_by_month_year/1)
       |> Enum.map(&format_month_summary/1)
       |> Enum.sort_by(fn %{year: y, month: m} -> {y, m} end, :desc)
@@ -873,7 +869,7 @@ defmodule CashLens.Transactions do
     Enum.sort_by(res, fn %{year: y, month: m} -> {y, m} end)
   end
 
-  defp query_historical_category_totals(user) do
+  defp historical_category_totals(user) do
     categories = owned_query(:category, user)
     excluded_ids = excluded_report_category_ids(user)
 
@@ -897,6 +893,7 @@ defmodule CashLens.Transactions do
       }
     )
     |> exclude_transactions_with_children(user)
+    |> Repo.all()
   end
 
   # Category ids to exclude from cash flow summaries (monthly and historical):
@@ -1606,21 +1603,25 @@ defmodule CashLens.Transactions do
     }
   end
 
-  defp reimbursements_receivable_query(user) do
-    from(t in Ownership.scope(Transaction, user),
-      where: is_nil(t.reimbursement_link_key),
-      where: t.amount < 0,
-      where: t.reimbursement_status in ["pending", "requested"]
-    )
+  defp reimbursements_receivable(queryable) do
+    queryable
+    |> where([t], is_nil(t.reimbursement_link_key))
+    |> where([t], t.amount < 0)
+    |> where([t], t.reimbursement_status in ["pending", "requested"])
   end
 
   defp count_reimbursements_receivable(user) do
-    Repo.aggregate(reimbursements_receivable_query(user), :count)
+    Transaction
+    |> Ownership.scope(user)
+    |> reimbursements_receivable()
+    |> Repo.aggregate(:count)
   end
 
   defp total_reimbursements_receivable(user) do
     total =
-      reimbursements_receivable_query(user)
+      Transaction
+      |> Ownership.scope(user)
+      |> reimbursements_receivable()
       |> select([t], sum(fragment("ABS(?)", t.amount)))
       |> Repo.one()
 
@@ -1652,13 +1653,12 @@ defmodule CashLens.Transactions do
     transfer_cat = Categories.get_category_by_slug(user, "transfer")
     transfer_cat_id = transfer_cat && transfer_cat.id
 
-    transfer_suggestion_candidates_query(user, transfer_cat_id)
-    |> Repo.all()
+    transfer_suggestion_candidates(user, transfer_cat_id)
     |> pick_disjoint_pairs()
     |> Enum.map(&order_transfer_pair(user, &1))
   end
 
-  defp transfer_suggestion_candidates_query(user, transfer_cat_id) do
+  defp transfer_suggestion_candidates(user, transfer_cat_id) do
     window = @transfer_pairing_window_days
     # A user without a transfer category only matches uncategorized rows.
     transfer_ids = List.wrap(transfer_cat_id)
@@ -1687,6 +1687,7 @@ defmodule CashLens.Transactions do
     )
     |> Scopes.cash_account_binding(:acct_a)
     |> Scopes.cash_account_binding(:acct_b)
+    |> Repo.all()
   end
 
   # Greedily keeps the best candidate pair for each transaction: the closest
@@ -1885,8 +1886,7 @@ defmodule CashLens.Transactions do
   def list_reimbursement_suggestions(%User{} = user) do
     excluded_ids = excluded_reimbursement_category_ids(user)
 
-    reimbursement_suggestions_query(user, excluded_ids)
-    |> Repo.all()
+    reimbursement_suggestions(user, excluded_ids)
     |> Enum.filter(fn {a, b} ->
       {expense, credit} = if Decimal.lt?(a.amount, Decimal.new("0")), do: {a, b}, else: {b, a}
       diff = Date.diff(credit.date, expense.date)
@@ -1898,7 +1898,7 @@ defmodule CashLens.Transactions do
     |> Enum.map(&order_reimbursement_pair(user, &1))
   end
 
-  defp reimbursement_suggestions_query(user, excluded_ids) do
+  defp reimbursement_suggestions(user, excluded_ids) do
     accounts = owned_query(:account, user)
     transactions = Ownership.scope(Transaction, user)
     rejected = Ownership.scope(RejectedReimbursementPair, user)
@@ -1922,6 +1922,7 @@ defmodule CashLens.Transactions do
       order_by: [desc: a.date],
       select: {a, b}
     )
+    |> Repo.all()
   end
 
   defp excluded_reimbursement_category_ids(user) do

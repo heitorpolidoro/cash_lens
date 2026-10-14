@@ -9,7 +9,7 @@ defmodule Mix.Tasks.CashLens.MigrateOurocardTxt do
   @shortdoc "Wipes ourocard_ofx accounts and switches them to the TXT parser"
 
   @moduledoc """
-      mix cash_lens.migrate_ourocard_txt
+      mix cash_lens.migrate_ourocard_txt [--user <email>]
 
   One-time migration: for every account with parser_type "ourocard_ofx",
   deletes its statements and transactions and sets parser_type to
@@ -18,15 +18,14 @@ defmodule Mix.Tasks.CashLens.MigrateOurocardTxt do
   """
 
   @impl Mix.Task
-  def run(_args) do
+  def run(args) do
     Mix.Task.run("app.start")
-    # Row-level security: maintenance work acts for the operator (CL-53).
-    CashLens.Ownership.pin_operator!()
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    user = CashLens.Ownership.current_user!()
+    {email, _rest} = CashLens.Operator.parse_args(args)
+    user = CashLens.Operator.user!(email)
 
     accounts =
       from(a in Account, where: a.parser_type == "ourocard_ofx")
+      |> CashLens.Ownership.scope(user)
       |> Repo.all()
 
     Enum.each(accounts, fn account ->

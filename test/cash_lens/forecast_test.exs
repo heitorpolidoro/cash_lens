@@ -608,7 +608,7 @@ defmodule CashLens.ForecastTest do
       regular_account = account_fixture()
 
       {:ok, category} =
-        CashLens.Categories.create_category(CashLens.Ownership.current_user!(), %{
+        CashLens.Categories.create_category(CashLens.Tenancy.current_user(), %{
           name: "Cartão de Crédito",
           slug: "cartao-de-credito",
           type: "fixed"

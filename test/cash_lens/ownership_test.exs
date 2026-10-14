@@ -73,54 +73,6 @@ defmodule CashLens.OwnershipTest do
     end
   end
 
-  describe "operator_user!/0" do
-    @env "CASH_LENS_OPERATOR_EMAIL"
-
-    setup do
-      previous = System.get_env(@env)
-      System.delete_env(@env)
-
-      on_exit(fn ->
-        if previous, do: System.put_env(@env, previous), else: System.delete_env(@env)
-      end)
-    end
-
-    @tag :no_current_user
-    test "returns the user named by the env var" do
-      user_fixture()
-      target = user_fixture()
-      System.put_env(@env, target.email)
-      assert Ownership.operator_user!().id == target.id
-    end
-
-    @tag :no_current_user
-    test "raises for an unknown email" do
-      user_fixture()
-      System.put_env(@env, "ghost@example.com")
-      assert_raise RuntimeError, ~r/does not match/, &Ownership.operator_user!/0
-    end
-
-    @tag :no_current_user
-    test "returns the only user when the env var is unset or empty" do
-      user = user_fixture()
-      assert Ownership.operator_user!().id == user.id
-      System.put_env(@env, "")
-      assert Ownership.operator_user!().id == user.id
-    end
-
-    @tag :no_current_user
-    test "raises with no users" do
-      assert_raise RuntimeError, ~r/no user/, &Ownership.operator_user!/0
-    end
-
-    @tag :no_current_user
-    test "raises with several users and no env var" do
-      user_fixture()
-      user_fixture()
-      assert_raise RuntimeError, ~r/several users/, &Ownership.operator_user!/0
-    end
-  end
-
   describe "tenancy fixtures" do
     test "account_fixture honours :user and defaults to the pinned user", ctx do
       %{b: b} = cross_tenant()

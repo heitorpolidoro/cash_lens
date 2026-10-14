@@ -1,7 +1,7 @@
 defmodule CashLens.CreditCardsBackfillTest do
   use CashLens.DataCase, async: true
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
 
   test "backfill_file stamps existing rows by fingerprint without touching category" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})

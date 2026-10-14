@@ -94,7 +94,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords in [
+      assert CashLens.Categories.get_category!(CashLens.Tenancy.current_user(), cat.id).keywords in [
                nil,
                ""
              ]
@@ -117,7 +117,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords ==
+      assert CashLens.Categories.get_category!(CashLens.Tenancy.current_user(), cat.id).keywords ==
                "Restaurante A"
 
       assert render(live) =~ "Regra criada para &quot;Restaurante A&quot;."
@@ -144,7 +144,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords ==
+      assert CashLens.Categories.get_category!(CashLens.Tenancy.current_user(), cat.id).keywords ==
                "PORTO SEGURO ADMIN"
     end
 
@@ -160,7 +160,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       render_click(live, "toggle_bulk_rule", %{})
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords ==
+      assert CashLens.Categories.get_category!(CashLens.Tenancy.current_user(), cat.id).keywords ==
                "IFOOD, Restaurante A"
     end
 
@@ -178,7 +178,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords in [
+      assert CashLens.Categories.get_category!(CashLens.Tenancy.current_user(), cat.id).keywords in [
                nil,
                ""
              ]
@@ -216,7 +216,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
 
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), other.id).keywords in [
+      assert CashLens.Categories.get_category!(CashLens.Tenancy.current_user(), other.id).keywords in [
                nil,
                ""
              ]
@@ -244,7 +244,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       # A warning, not a block: the rule is still created if the user wants it.
       live |> element("button[phx-click='apply_bulk_category']") |> render_click()
 
-      assert CashLens.Categories.get_category!(CashLens.Ownership.current_user!(), cat.id).keywords ==
+      assert CashLens.Categories.get_category!(CashLens.Tenancy.current_user(), cat.id).keywords ==
                "HAIR"
     end
 
@@ -384,7 +384,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       Repo.insert_all(CashLens.Transactions.BulkIgnorePattern, [
         %{
           id: Ecto.UUID.generate(),
-          user_id: CashLens.Ownership.current_user_id!(),
+          user_id: CashLens.Repo.current_user_id(),
           pattern: "[invalid",
           inserted_at: now,
           updated_at: now
@@ -464,7 +464,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
       Repo.insert_all(CashLens.Transactions.BulkIgnorePattern, [
         %{
           id: Ecto.UUID.generate(),
-          user_id: CashLens.Ownership.current_user_id!(),
+          user_id: CashLens.Repo.current_user_id(),
           pattern: "[bad_regex",
           inserted_at: now,
           updated_at: now
@@ -534,7 +534,7 @@ defmodule CashLensWeb.TransactionLive.IndexCoverageTest do
           [
             %{
               id: Ecto.UUID.generate(),
-              user_id: CashLens.Ownership.current_user_id!(),
+              user_id: CashLens.Repo.current_user_id(),
               date: ~D[2026-02-23],
               description: nil,
               amount: Decimal.new("50.00"),

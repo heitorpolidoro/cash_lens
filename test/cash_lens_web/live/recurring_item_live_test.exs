@@ -1,7 +1,7 @@
 defmodule CashLensWeb.RecurringItemLiveTest do
   use CashLensWeb.ConnCase
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
 
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures

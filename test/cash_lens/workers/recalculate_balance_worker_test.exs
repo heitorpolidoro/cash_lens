@@ -12,6 +12,7 @@ defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
     account = account_fixture()
     # Create current month balance
     CashLens.Repo.insert!(%Balance{
+      user_id: CashLens.Repo.current_user_id(),
       account_id: account.id,
       year: 2026,
       month: 1,
@@ -24,6 +25,7 @@ defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
 
     # Create next month balance to trigger enqueueing
     CashLens.Repo.insert!(%Balance{
+      user_id: CashLens.Repo.current_user_id(),
       account_id: account.id,
       year: 2026,
       month: 2,
@@ -47,6 +49,7 @@ defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
     account = account_fixture()
 
     CashLens.Repo.insert!(%Balance{
+      user_id: CashLens.Repo.current_user_id(),
       account_id: account.id,
       year: 2026,
       month: 1,
@@ -66,6 +69,7 @@ defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
     account = account_fixture()
 
     CashLens.Repo.insert!(%Balance{
+      user_id: CashLens.Repo.current_user_id(),
       account_id: account.id,
       year: 2026,
       month: 12,
@@ -77,6 +81,7 @@ defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
     })
 
     CashLens.Repo.insert!(%Balance{
+      user_id: CashLens.Repo.current_user_id(),
       account_id: account.id,
       year: 2027,
       month: 1,
@@ -104,6 +109,7 @@ defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
     account = account_fixture()
 
     CashLens.Repo.insert!(%Balance{
+      user_id: CashLens.Repo.current_user_id(),
       account_id: account.id,
       year: 2026,
       month: 1,
@@ -115,6 +121,7 @@ defmodule CashLens.Workers.RecalculateBalanceWorkerTest do
     })
 
     CashLens.Repo.insert!(%Balance{
+      user_id: CashLens.Repo.current_user_id(),
       account_id: account.id,
       year: 2026,
       month: 2,

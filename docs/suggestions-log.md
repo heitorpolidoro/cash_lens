@@ -1642,3 +1642,8 @@ commit claimed none were added. Fixed; back to 23.
 ## [CL-60] Scope Forecast and recurring items by the current user — 2026-10-13
 - Code review: `with_owned`/`fetch_item` re-fetch costs one extra query per write; acceptable for safety.
 - Code review: The remaining `# TRANSITIONAL` shim in Ingestor enqueue is allowed by the spec.
+
+## [CL-61] Scope imports and tooling by user, then remove the owner fallback — 2026-10-13
+- Code review: `Operator.user!/1` catch-all clause treats a non-binary or empty email as `nil`, so `--user ""` silently falls back to the only user. Consider raising for an empty string.
+- Code review: The audit scan is textual and coarse by design; a `user_id` mention anywhere in a function block satisfies it, even when it is not used as a filter.
+- Code review: Spec says `:parent_id` but the code correctly uses `:parent_transaction_id`; fix the spec wording.

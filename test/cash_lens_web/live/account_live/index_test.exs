@@ -66,7 +66,7 @@ defmodule CashLensWeb.AccountLive.IndexTest do
       assert transaction.date == Date.utc_today()
 
       category =
-        CashLens.Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "rendimento")
+        CashLens.Categories.get_category_by_slug(CashLens.Tenancy.current_user(), "rendimento")
 
       assert transaction.category_id == category.id
     end

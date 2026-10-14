@@ -3,7 +3,7 @@ defmodule Mix.Tasks.CashLens.ReconcilePendingStatements do
   @shortdoc "Absorbs existing pending statements into their boletos"
 
   @moduledoc """
-      mix cash_lens.reconcile_pending_statements
+      mix cash_lens.reconcile_pending_statements [--user <email>]
 
   One-time reconciliation over already-imported data: absorbs each non-boleto
   (no Vencimento) statement into the next boleto whose accounts reconcile
@@ -11,12 +11,10 @@ defmodule Mix.Tasks.CashLens.ReconcilePendingStatements do
   """
 
   @impl Mix.Task
-  def run(_args) do
+  def run(args) do
     Mix.Task.run("app.start")
-    # Row-level security: maintenance work acts for the operator (CL-53).
-    CashLens.Ownership.pin_operator!()
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    user = CashLens.Ownership.current_user!()
+    {email, _rest} = CashLens.Operator.parse_args(args)
+    user = CashLens.Operator.user!(email)
     n = CashLens.CreditCards.reconcile_pending(user)
     Mix.shell().info("Reconciled: #{n} statement(s) absorbed.")
   end

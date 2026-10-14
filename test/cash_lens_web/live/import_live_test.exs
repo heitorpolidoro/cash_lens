@@ -10,6 +10,8 @@ defmodule CashLensWeb.ImportLiveTest do
   """
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Tenancy.current_user()
+
   import CashLens.AccountsFixtures
   import Phoenix.LiveViewTest
 
@@ -63,7 +65,7 @@ defmodule CashLensWeb.ImportLiveTest do
   end
 
   defp record_import(path_key, file) do
-    Imports.upsert_imported_file(%{
+    Imports.upsert_imported_file(user(), %{
       path: path_key,
       content_hash: Imports.content_hash(File.read!(file)),
       mtime: Imports.file_mtime(file),
@@ -309,7 +311,7 @@ defmodule CashLensWeb.ImportLiveTest do
       dir = account_folder(root, "bb")
       file = write_file(dir, "extrato.csv", @bb_sample)
 
-      {:ok, %{imported: expected}} = Ingestor.import_file(account, file, dry_run: true)
+      {:ok, %{imported: expected}} = Ingestor.import_file(user(), account, file, dry_run: true)
 
       {:ok, view, _html} = live(conn, ~p"/imports")
 
@@ -368,7 +370,7 @@ defmodule CashLensWeb.ImportLiveTest do
 
       assert [run] = Repo.all(ImportRun)
       assert run.imported_count == expected
-      assert Imports.get_imported_file_by_path("bb/extrato.csv")
+      assert Imports.get_imported_file_by_path(user(), "bb/extrato.csv")
 
       refute html =~ ~s(id="inspect-drawer")
       assert has_element?(view, ~s(tr[data-path="bb/extrato.csv"][data-status="synced"]))
@@ -383,7 +385,7 @@ defmodule CashLensWeb.ImportLiveTest do
       dir = account_folder(root, "bb")
       file = write_file(dir, "extrato.csv", @bb_sample)
 
-      {:ok, _} = Ingestor.import_file(account, file, import_root: root)
+      {:ok, _} = Ingestor.import_file(user(), account, file, import_root: root)
       before = Repo.aggregate(Transaction, :count)
 
       {:ok, view, _html} = live(conn, ~p"/imports")
@@ -501,6 +503,7 @@ defmodule CashLensWeb.ImportLiveTest do
     defp run_fixture(attrs) do
       {:ok, run} =
         Imports.record_run(
+          user(),
           Enum.into(attrs, %{
             ran_at: DateTime.utc_now() |> DateTime.truncate(:second),
             file_path: "bb/extrato.csv",
@@ -588,6 +591,7 @@ defmodule CashLensWeb.ImportLiveTest do
       # any string the column can physically hold.
       {:ok, run} =
         Repo.insert(%ImportRun{
+          user_id: user().id,
           ran_at: DateTime.utc_now() |> DateTime.truncate(:second),
           account_id: account.id,
           file_path: "bb/extrato.csv",
@@ -678,6 +682,29 @@ defmodule CashLensWeb.ImportLiveTest do
       refute file_cell =~ @hash
     end
 
+    test "logged in as B shows only B's runs, never A's", %{conn: conn} do
+      %{a: a} = cross_tenant()
+
+      {:ok, _run_a} =
+        CashLens.Tenancy.acting_as(a, fn ->
+          Imports.record_run(a, %{
+            ran_at: DateTime.utc_now() |> DateTime.truncate(:second),
+            file_path: "a-secret/extrato-de-a.csv",
+            status: "success"
+          })
+        end)
+
+      run_b = run_fixture(file_path: "b-open/extrato-de-b.csv")
+
+      {:ok, view, html} = live(conn, ~p"/imports")
+
+      assert html =~ "extrato-de-b.csv"
+      refute html =~ "extrato-de-a.csv"
+      refute html =~ "a-secret"
+      assert [row] = Enum.to_list(history_rows(view))
+      assert row |> LazyHTML.attribute("data-run-id") |> List.first() == run_b.id
+    end
+
     test "renders the empty state with no runs at all", %{conn: conn} do
       {:ok, view, html} = live(conn, ~p"/imports")
 
@@ -722,7 +749,7 @@ defmodule CashLensWeb.ImportLiveTest do
       {:ok, view, _html} = live(conn, ~p"/imports")
       assert has_element?(view, "#history-empty")
 
-      {:ok, _summary} = Ingestor.import_file(account, file, import_root: root)
+      {:ok, _summary} = Ingestor.import_file(user(), account, file, import_root: root)
 
       view |> element("#rescan-button") |> render_click()
 
@@ -1019,7 +1046,7 @@ defmodule CashLensWeb.ImportLiveTest do
       # The bank hint of the BB sample is "Banco do Brasil": with the two
       # candidates banking elsewhere it matches neither, so no rule can fire.
       {:ok, _} =
-        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), account, %{
+        CashLens.Accounts.update_account(CashLens.Tenancy.current_user(), account, %{
           accepts_import: false
         })
 
@@ -1258,7 +1285,7 @@ defmodule CashLensWeb.ImportLiveTest do
       # Imported outside the LiveView, so the installment row is already in the
       # database and still ungrouped: a scan running on the confirm below would
       # grab it. That is what keeps the assertions here from being vacuous.
-      {:ok, _summary} = Ingestor.import_file(ofx_account, file, import_root: root)
+      {:ok, _summary} = Ingestor.import_file(user(), ofx_account, file, import_root: root)
       assert grouped_transactions() == []
 
       {:ok, view, _html} = live(conn, ~p"/imports")
@@ -1285,7 +1312,7 @@ defmodule CashLensWeb.ImportLiveTest do
       dir = account_folder(root, "bb")
       file = write_file(dir, "extrato.csv", @bb_sample)
 
-      {:ok, %{imported: already}} = Ingestor.import_file(account, file, import_root: root)
+      {:ok, %{imported: already}} = Ingestor.import_file(user(), account, file, import_root: root)
       assert already > 0
 
       File.write!(file, @bb_sample <> "28/02/2026,1234,5678,COMPRA NOVA,321.654,-12.34,\n")

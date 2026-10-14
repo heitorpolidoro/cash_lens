@@ -57,7 +57,12 @@ defmodule CashLens.Categories.Category do
 
         final_slug =
           if parent_id do
-            parent = CashLens.Repo.get!(CashLens.Categories.Category, parent_id)
+            parent =
+              CashLens.Repo.get_by!(CashLens.Categories.Category,
+                id: parent_id,
+                user_id: get_field(changeset, :user_id)
+              )
+
             "#{parent.slug}-#{base_slug}"
           else
             base_slug

@@ -11,7 +11,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
   automatically. Every other transfer_key pair touching a credit-card
   account is left untouched and logged for manual review.
 
-      mix migrate_credit_card_transfers
+      mix migrate_credit_card_transfers [--user <email>]
   """
   use Mix.Task
 
@@ -20,6 +20,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
 
   alias CashLens.Categories
   alias CashLens.CreditCards.Matcher, as: CreditCardMatcher
+  alias CashLens.Ownership
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferRule
@@ -39,33 +40,33 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
   @safety_threshold 500
 
   @impl Mix.Task
-  def run(_args) do
+  def run(args) do
     Mix.Task.run("app.start")
-    # Row-level security: maintenance work acts for the operator (CL-53).
-    CashLens.Ownership.pin_operator!()
+    {email, _rest} = CashLens.Operator.parse_args(args)
+    user = CashLens.Operator.user!(email)
 
-    case Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "cartao-de-credito") do
+    case Categories.get_category_by_slug(user, "cartao-de-credito") do
       nil ->
         Logger.error(
           "MigrateCreditCardTransfers: 'cartao-de-credito' category not found — run seeds first."
         )
 
       category ->
-        migrate(category)
+        migrate(user, category)
     end
   end
 
-  defp migrate(category) do
-    rules = mirror_rules_by_destination()
+  defp migrate(user, category) do
+    rules = mirror_rules_by_destination(user)
 
     {migrated, ambiguous} =
-      transfer_pairs()
+      transfer_pairs(user)
       |> Enum.split_with(fn {payer, card_side} -> eligible?(payer, card_side, rules) end)
 
     if length(migrated) > @safety_threshold do
       abort_on_anomaly(migrated)
     else
-      run_migration(migrated, ambiguous, category)
+      run_migration(user, migrated, ambiguous, category)
     end
   end
 
@@ -79,7 +80,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
     )
   end
 
-  defp run_migration(migrated, ambiguous, category) do
+  defp run_migration(user, migrated, ambiguous, category) do
     mirror_ids = Enum.map(migrated, fn {_payer, %{tx: mirror}} -> mirror.id end)
 
     Logger.info(
@@ -87,7 +88,9 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
         "transaction(s) (audit trail before destructive action): " <> inspect(mirror_ids)
     )
 
-    Enum.each(migrated, fn {payer, card_side} -> migrate_pair(payer, card_side, category) end)
+    Enum.each(migrated, fn {payer, card_side} ->
+      migrate_pair(user, payer, card_side, category)
+    end)
 
     Logger.info(
       "MigrateCreditCardTransfers: migrated #{length(migrated)} pair(s); " <>
@@ -96,26 +99,28 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
     )
   end
 
-  defp mirror_rules_by_destination do
+  defp mirror_rules_by_destination(user) do
     from(r in TransferRule, where: r.create_mirror == true)
+    |> Ownership.scope(user)
     |> Repo.all()
     |> Map.new(&{&1.destination_account_id, &1})
   end
 
-  defp transfer_pairs do
+  defp transfer_pairs(user) do
     from(a in Transaction,
       join: b in Transaction,
-      on: a.transfer_key == b.transfer_key and a.id < b.id,
+      on: a.transfer_key == b.transfer_key and a.id < b.id and b.user_id == ^user.id,
       where: not is_nil(a.transfer_key),
       select: {a, b}
     )
+    |> Ownership.scope(user)
     |> Repo.all()
-    |> Enum.map(&order_by_credit_card_side/1)
+    |> Enum.map(&order_by_credit_card_side(user, &1))
   end
 
-  defp order_by_credit_card_side({a, b}) do
-    account_a = Repo.get!(CashLens.Accounts.Account, a.account_id)
-    account_b = Repo.get!(CashLens.Accounts.Account, b.account_id)
+  defp order_by_credit_card_side(user, {a, b}) do
+    account_a = CashLens.Accounts.get_account!(user, a.account_id)
+    account_b = CashLens.Accounts.get_account!(user, b.account_id)
 
     cond do
       account_b.is_credit_card -> {a, %{tx: b, account: account_b}}
@@ -133,22 +138,18 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
     end
   end
 
-  defp migrate_pair(payer, %{tx: mirror, account: card_account}, category) do
+  defp migrate_pair(user, payer, %{tx: mirror, account: card_account}, category) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     Repo.transaction(fn ->
       from(t in Transaction, where: t.id == ^payer.id)
+      |> Ownership.scope(user)
       |> Repo.update_all(set: [category_id: category.id, transfer_key: nil, updated_at: now])
 
       Repo.delete!(mirror)
     end)
 
-    updated_payer = Repo.get!(Transaction, payer.id)
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    CreditCardMatcher.match_payment(
-      CashLens.Ownership.current_user!(),
-      updated_payer,
-      card_account.id
-    )
+    updated_payer = Repo.get_by!(Transaction, id: payer.id, user_id: user.id)
+    CreditCardMatcher.match_payment(user, updated_payer, card_account.id)
   end
 end

@@ -231,10 +231,14 @@ defmodule CashLens.RlsTest do
       attrs = %{pattern: "dup-#{a}"}
 
       assert {:ok, _} =
-               %BulkIgnorePattern{} |> BulkIgnorePattern.changeset(attrs) |> Repo.insert()
+               %BulkIgnorePattern{user_id: CashLens.Repo.current_user_id()}
+               |> BulkIgnorePattern.changeset(attrs)
+               |> Repo.insert()
 
       assert {:error, changeset} =
-               %BulkIgnorePattern{} |> BulkIgnorePattern.changeset(attrs) |> Repo.insert()
+               %BulkIgnorePattern{user_id: CashLens.Repo.current_user_id()}
+               |> BulkIgnorePattern.changeset(attrs)
+               |> Repo.insert()
 
       assert %{pattern: ["has already been taken"]} = errors_on(changeset)
       assert Repo.aggregate(Account, :count) == 2

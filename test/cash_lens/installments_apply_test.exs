@@ -1,7 +1,7 @@
 defmodule CashLens.InstallmentsApplyTest do
   use CashLens.DataCase, async: false
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
 
   import Ecto.Query
 
@@ -445,7 +445,7 @@ defmodule CashLens.InstallmentsApplyTest do
         |> Map.delete(:slug)
         |> Map.put_new(:name, "Cat #{System.unique_integer([:positive])}")
 
-      {:ok, cat} = Categories.create_category(CashLens.Ownership.current_user!(), attrs)
+      {:ok, cat} = Categories.create_category(CashLens.Tenancy.current_user(), attrs)
       cat
     end
 

@@ -1,7 +1,7 @@
 defmodule CashLens.Parsers.IngestorTest do
   use CashLens.DataCase, async: false
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
   import Mox
   alias CashLens.Parsers.Ingestor
   alias CashLens.Parsers.MercadoPagoPDFParser
@@ -92,7 +92,7 @@ defmodule CashLens.Parsers.IngestorTest do
 
     test "imports CSV file successfully" do
       account = account_fixture(parser_type: "bb_csv")
-      assert {:ok, %{imported: 3, failed: []}} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, %{imported: 3, failed: []}} = Ingestor.import_file(user(), account, @bb_sample)
       assert length(CashLens.Repo.all(CashLens.Transactions.Transaction)) == 3
     end
 
@@ -107,7 +107,7 @@ defmodule CashLens.Parsers.IngestorTest do
           "#{future},0,0,COMPRA FUTURA,1,-50.00,\n"
 
       File.write!(file_path, content)
-      assert {:ok, %{imported: 1}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 1}} = Ingestor.import_file(user(), account, file_path)
       File.rm!(file_path)
 
       descriptions =
@@ -122,7 +122,7 @@ defmodule CashLens.Parsers.IngestorTest do
       file_path = "test/support/fixtures/files/test_#{account.id}.ofx"
       File.write!(file_path, "invalid_data")
       # Most parsers will just return 0 transactions for garbage data
-      assert {:ok, %{imported: 0}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 0}} = Ingestor.import_file(user(), account, file_path)
       File.rm!(file_path)
     end
 
@@ -132,7 +132,7 @@ defmodule CashLens.Parsers.IngestorTest do
       # "Data,Valor,Hist\n" in Latin1
       content = <<68, 97, 116, 97, 44, 86, 97, 108, 111, 114, 44, 72, 105, 115, 116, 10>>
       File.write!(file_path, content)
-      assert {:ok, %{imported: 0}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 0}} = Ingestor.import_file(user(), account, file_path)
       File.rm!(file_path)
     end
 
@@ -148,7 +148,7 @@ defmodule CashLens.Parsers.IngestorTest do
       file_path = "test/support/fixtures/files/bb_related_#{account.id}.csv"
       File.write!(file_path, content)
 
-      assert {:ok, %{imported: 2}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 2}} = Ingestor.import_file(user(), account, file_path)
       File.rm!(file_path)
     end
 
@@ -162,7 +162,7 @@ defmodule CashLens.Parsers.IngestorTest do
       file_path = "test/support/fixtures/files/bb_missing_#{account.id}.csv"
       File.write!(file_path, content)
 
-      assert {:ok, %{imported: 2}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 2}} = Ingestor.import_file(user(), account, file_path)
       File.rm!(file_path)
     end
 
@@ -175,7 +175,10 @@ defmodule CashLens.Parsers.IngestorTest do
       on_exit(fn -> Application.delete_env(:cash_lens, :auto_categorizer) end)
 
       account = account_fixture(parser_type: "bb_csv")
-      assert {:ok, %{imported: 0, failed: failed}} = Ingestor.import_file(account, @bb_sample)
+
+      assert {:ok, %{imported: 0, failed: failed}} =
+               Ingestor.import_file(user(), account, @bb_sample)
+
       assert length(failed) == 3
     end
 
@@ -183,7 +186,7 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture()
 
       assert {:error, "Could not read file: enoent"} =
-               Ingestor.import_file(account, "non_existent_file.csv")
+               Ingestor.import_file(user(), account, "non_existent_file.csv")
     end
 
     test "handles pdftotext failure branch" do
@@ -198,7 +201,7 @@ defmodule CashLens.Parsers.IngestorTest do
       end)
 
       # pdftotext will fail, returning the original content
-      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(user(), account, file_path)
       File.rm!(file_path)
     end
 
@@ -217,7 +220,7 @@ defmodule CashLens.Parsers.IngestorTest do
 
       expect(CashLens.Parsers.PDFConverterMock, :convert, fn ^file_path -> {:ok, content} end)
 
-      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(user(), account, file_path)
 
       rows =
         CashLens.Transactions.Transaction
@@ -249,7 +252,7 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture(parser_type: "bb_csv")
       file_path = "test/support/fixtures/files/empty_#{account.id}.csv"
       File.write!(file_path, "Data,Dep,Term,Hist,Doc,Valor,\n")
-      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(user(), account, file_path)
       File.rm!(file_path)
     end
 
@@ -264,7 +267,7 @@ defmodule CashLens.Parsers.IngestorTest do
       end)
 
       # Even if pdftotext fails, it falls back to content and parses
-      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(user(), account, file_path)
       File.rm!(file_path)
     end
 
@@ -273,7 +276,7 @@ defmodule CashLens.Parsers.IngestorTest do
       file_path = "test/support/fixtures/files/generic_#{account.id}.txt"
       on_exit(fn -> File.rm(file_path) end)
       File.write!(file_path, "Data,Dep,Term,Hist,Doc,Valor,\n")
-      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(user(), account, file_path)
     end
 
     test "handles invalid UTF-8 by converting from Latin1" do
@@ -284,7 +287,7 @@ defmodule CashLens.Parsers.IngestorTest do
       content = "Data,Dep,Term,Hist,Doc,Valor,\n01/01/2026,0,0,M\xE1-formado,1,-10.00,\n"
       File.write!(file_path, content)
 
-      assert {:ok, %{imported: _}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: _}} = Ingestor.import_file(user(), account, file_path)
 
       tx = CashLens.Repo.one(CashLens.Transactions.Transaction)
       assert tx.description == "M\u00E1-formado"
@@ -305,7 +308,7 @@ defmodule CashLens.Parsers.IngestorTest do
           description: "pagamento fatura"
         })
 
-      assert {:ok, %{imported: 3}} = Ingestor.import_file(card, @bb_sample)
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(user(), card, @bb_sample)
 
       linked_count =
         CashLens.Repo.aggregate(
@@ -321,7 +324,7 @@ defmodule CashLens.Parsers.IngestorTest do
     test "importing a credit-card file creates a statement and stamps import_batch_id" do
       account = account_fixture(%{is_credit_card: true, parser_type: "bb_csv"})
 
-      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(user(), account, @bb_sample)
 
       assert [statement] = CashLens.Repo.all(CashLens.CreditCards.Statement)
       assert statement.account_id == account.id
@@ -339,7 +342,7 @@ defmodule CashLens.Parsers.IngestorTest do
     test "does not create a statement for non-credit-card accounts" do
       account = account_fixture(parser_type: "bb_csv")
 
-      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(user(), account, @bb_sample)
 
       assert CashLens.Repo.all(CashLens.CreditCards.Statement) == []
 
@@ -361,7 +364,7 @@ defmodule CashLens.Parsers.IngestorTest do
       path = Path.join(System.tmp_dir!(), "nb_#{System.unique_integer([:positive])}.txt")
       File.write!(path, content)
 
-      {:ok, %{imported: 1}} = Ingestor.import_file(account, path)
+      {:ok, %{imported: 1}} = Ingestor.import_file(user(), account, path)
 
       [s] =
         CashLens.Repo.all(
@@ -397,7 +400,7 @@ defmodule CashLens.Parsers.IngestorTest do
       File.write!(path, content)
       on_exit(fn -> File.rm(path) end)
 
-      assert {:ok, %{imported: 1}} = Ingestor.import_file(account, path)
+      assert {:ok, %{imported: 1}} = Ingestor.import_file(user(), account, path)
 
       assert CashLens.CreditCards.get_statement!(user(), pending.id).absorbed_by_statement_id !=
                nil
@@ -407,12 +410,12 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture(parser_type: "bb_csv")
 
       assert {:ok, %{imported: 3, skipped: 0, failed: []}} =
-               Ingestor.import_file(account, @bb_sample, dry_run: true)
+               Ingestor.import_file(user(), account, @bb_sample, dry_run: true)
 
       assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 0
 
       assert {:ok, %{imported: 3, skipped: 0, failed: []}} =
-               Ingestor.import_file(account, @bb_sample)
+               Ingestor.import_file(user(), account, @bb_sample)
 
       assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
     end
@@ -420,11 +423,11 @@ defmodule CashLens.Parsers.IngestorTest do
     test "dry_run: true reports rows already present as skipped, without inserting anything" do
       account = account_fixture(parser_type: "bb_csv")
 
-      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(user(), account, @bb_sample)
       assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
 
       assert {:ok, %{imported: 0, skipped: 3, failed: []}} =
-               Ingestor.import_file(account, @bb_sample, dry_run: true)
+               Ingestor.import_file(user(), account, @bb_sample, dry_run: true)
 
       # Still exactly 3 — the dry run above did not insert or delete anything.
       assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 3
@@ -438,7 +441,8 @@ defmodule CashLens.Parsers.IngestorTest do
       # combination for a REAL import) — so no PDF fixture is needed here.
       account = account_fixture(is_credit_card: true, parser_type: "bb_csv")
 
-      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample, dry_run: true)
+      assert {:ok, %{imported: 3}} =
+               Ingestor.import_file(user(), account, @bb_sample, dry_run: true)
 
       assert CashLens.Repo.aggregate(CashLens.CreditCards.Statement, :count) == 0
       assert CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count) == 0
@@ -447,7 +451,7 @@ defmodule CashLens.Parsers.IngestorTest do
     test "dry_run: true returns one preview row per prepared entry, all new on a virgin DB" do
       account = account_fixture(parser_type: "bb_csv")
 
-      assert {:ok, summary} = Ingestor.import_file(account, @bb_sample, dry_run: true)
+      assert {:ok, summary} = Ingestor.import_file(user(), account, @bb_sample, dry_run: true)
 
       assert length(summary.preview) == summary.imported + summary.skipped
 
@@ -466,10 +470,10 @@ defmodule CashLens.Parsers.IngestorTest do
     test "dry_run: true marks every row as duplicate after a real import, writing nothing" do
       account = account_fixture(parser_type: "bb_csv")
 
-      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(user(), account, @bb_sample)
       before = CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count)
 
-      assert {:ok, summary} = Ingestor.import_file(account, @bb_sample, dry_run: true)
+      assert {:ok, summary} = Ingestor.import_file(user(), account, @bb_sample, dry_run: true)
 
       assert summary.imported == 0
       assert length(summary.preview) == 3
@@ -480,7 +484,7 @@ defmodule CashLens.Parsers.IngestorTest do
     test "the real import result carries no :preview key" do
       account = account_fixture(parser_type: "bb_csv")
 
-      assert {:ok, summary} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, summary} = Ingestor.import_file(user(), account, @bb_sample)
 
       refute Map.has_key?(summary, :preview)
     end
@@ -489,7 +493,7 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture(parser_type: "bb_csv")
 
       assert {{:ok, summary}, claimed} =
-               Ingestor.preview_file(account, @bb_sample, MapSet.new())
+               Ingestor.preview_file(user(), account, @bb_sample, MapSet.new())
 
       assert length(summary.preview) == 3
       assert MapSet.size(claimed) == 3
@@ -515,8 +519,8 @@ defmodule CashLens.Parsers.IngestorTest do
       File.write!(file_path, ofx)
       on_exit(fn -> File.rm(file_path) end)
 
-      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, file_path)
-      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(user(), account, file_path)
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(user(), account, file_path)
 
       assert Repo.aggregate(Transaction, :count) == 2
     end
@@ -535,13 +539,13 @@ defmodule CashLens.Parsers.IngestorTest do
       File.write!(file_path, ofx)
       on_exit(fn -> File.rm(file_path) end)
 
-      assert {:ok, %{imported: 2}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 2}} = Ingestor.import_file(user(), account, file_path)
 
       # Orphan the rows, reproducing a statement imported before the file was
       # re-run: the transactions exist, no statement claims them.
       Repo.update_all(Transaction, set: [import_batch_id: nil])
 
-      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, file_path)
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(user(), account, file_path)
 
       statements = Repo.all(CashLens.CreditCards.Statement)
       latest = Enum.max_by(statements, & &1.inserted_at)
@@ -581,8 +585,8 @@ defmodule CashLens.Parsers.IngestorTest do
       File.write!(p2, second)
       on_exit(fn -> File.rm(p1) && File.rm(p2) end)
 
-      assert {:ok, %{imported: 1, skipped: 0}} = Ingestor.import_file(account, p1)
-      assert {:ok, %{imported: 0, skipped: 1}} = Ingestor.import_file(account, p2)
+      assert {:ok, %{imported: 1, skipped: 0}} = Ingestor.import_file(user(), account, p1)
+      assert {:ok, %{imported: 0, skipped: 1}} = Ingestor.import_file(user(), account, p2)
 
       assert Repo.aggregate(Transaction, :count) == 1
     end
@@ -603,12 +607,12 @@ defmodule CashLens.Parsers.IngestorTest do
       File.write!(path, ofx)
       on_exit(fn -> File.rm(path) end)
 
-      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, path)
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(user(), account, path)
       assert Repo.aggregate(Transaction, :count) == 2
 
       # Re-importing the exact same fatura reproduces indices 0 and 1, so BOTH
       # collide with the stored rows: zero new rows, both reported skipped.
-      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, path)
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(user(), account, path)
       assert Repo.aggregate(Transaction, :count) == 2
     end
 
@@ -629,12 +633,12 @@ defmodule CashLens.Parsers.IngestorTest do
       File.write!(path, ofx)
       on_exit(fn -> File.rm(path) end)
 
-      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, path)
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(user(), account, path)
       assert Repo.aggregate(Transaction, :count) == 2
 
       # Re-importing the exact same fatura reproduces times (00:00:00) AND
       # ordinals (0, 1), so both collide: zero duplicates.
-      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, path)
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(user(), account, path)
       assert Repo.aggregate(Transaction, :count) == 2
     end
 
@@ -654,11 +658,11 @@ defmodule CashLens.Parsers.IngestorTest do
       File.write!(path, ofx)
       on_exit(fn -> File.rm(path) end)
 
-      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(account, path)
+      assert {:ok, %{imported: 2, skipped: 0}} = Ingestor.import_file(user(), account, path)
       assert Repo.aggregate(Transaction, :count) == 2
 
       # Re-import reproduces the same times -> same fingerprints -> zero dups.
-      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(account, path)
+      assert {:ok, %{imported: 0, skipped: 2}} = Ingestor.import_file(user(), account, path)
       assert Repo.aggregate(Transaction, :count) == 2
     end
 
@@ -684,11 +688,11 @@ defmodule CashLens.Parsers.IngestorTest do
       on_exit(fn -> File.rm(p1) && File.rm(p2) end)
 
       # First import stores one row at index 0.
-      assert {:ok, %{imported: 1, skipped: 0}} = Ingestor.import_file(account, p1)
+      assert {:ok, %{imported: 1, skipped: 0}} = Ingestor.import_file(user(), account, p1)
 
       # Second import has two identical lines: the first matches the stored index
       # 0 (skipped), the second takes index 1 (a genuine new repeat, inserted).
-      assert {:ok, %{imported: 1, skipped: 1}} = Ingestor.import_file(account, p2)
+      assert {:ok, %{imported: 1, skipped: 1}} = Ingestor.import_file(user(), account, p2)
       assert Repo.aggregate(Transaction, :count) == 2
     end
   end
@@ -748,28 +752,28 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture(parser_type: "bb_csv")
       File.cp!(@bb_sample, Path.join(tmp_dir, "sample.csv"))
 
-      assert {:ok, %{imported: _}} = Ingestor.import_directory(account, tmp_dir)
+      assert {:ok, %{imported: _}} = Ingestor.import_directory(user(), account, tmp_dir)
     end
 
     test "returns error for a non-directory path" do
       account = account_fixture(parser_type: "bb_csv")
 
       assert {:error, "Path is not a directory"} =
-               Ingestor.import_directory(account, "/nonexistent/path")
+               Ingestor.import_directory(user(), account, "/nonexistent/path")
     end
 
     test "skips unsupported file types", %{tmp_dir: tmp_dir} do
       account = account_fixture(parser_type: "bb_csv")
       File.write!(Path.join(tmp_dir, "readme.doc"), "ignored")
 
-      assert {:ok, %{imported: _}} = Ingestor.import_directory(account, tmp_dir)
+      assert {:ok, %{imported: _}} = Ingestor.import_directory(user(), account, tmp_dir)
     end
 
     test "returns error summary when files fail to import", %{tmp_dir: tmp_dir} do
       account = account_fixture(parser_type: "unknown_parser")
       File.write!(Path.join(tmp_dir, "file.csv"), "Data,Dep,Term,Hist,Doc,Valor,\n")
 
-      assert {:error, msg} = Ingestor.import_directory(account, tmp_dir)
+      assert {:error, msg} = Ingestor.import_directory(user(), account, tmp_dir)
       assert msg =~ "files failed to import"
     end
   end
@@ -787,7 +791,7 @@ defmodule CashLens.Parsers.IngestorTest do
       # until someone remembered to press it.
       account = account_fixture(parser_type: "bb_csv")
 
-      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(user(), account, @bb_sample)
 
       assert_enqueued(
         worker: SyncRecurringWorker,
@@ -798,17 +802,17 @@ defmodule CashLens.Parsers.IngestorTest do
     test "a dry run queues nothing: it wrote no history to re-derive from" do
       account = account_fixture(parser_type: "bb_csv")
 
-      assert {:ok, _} = Ingestor.import_file(account, @bb_sample, dry_run: true)
+      assert {:ok, _} = Ingestor.import_file(user(), account, @bb_sample, dry_run: true)
       refute_enqueued(worker: SyncRecurringWorker)
     end
 
     test "an import that wrote nothing queues nothing" do
       account = account_fixture(parser_type: "bb_csv")
 
-      assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, %{imported: 3}} = Ingestor.import_file(user(), account, @bb_sample)
       Oban.drain_queue(queue: :default, with_scheduled: true)
 
-      assert {:ok, %{imported: 0}} = Ingestor.import_file(account, @bb_sample)
+      assert {:ok, %{imported: 0}} = Ingestor.import_file(user(), account, @bb_sample)
       refute_enqueued(worker: SyncRecurringWorker)
     end
   end

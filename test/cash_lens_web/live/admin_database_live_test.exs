@@ -19,6 +19,42 @@ defmodule CashLensWeb.AdminDatabaseLiveTest do
     assert html =~ "No records found for the applied filters."
   end
 
+  test "as user B lists none of user A's rows in a domain table", %{conn: conn} do
+    %{a: a} = cross_tenant()
+
+    CashLens.Tenancy.acting_as(a, fn ->
+      CashLens.AccountsFixtures.account_fixture(%{user: a, name: "SecretAccountOfA"})
+    end)
+
+    CashLens.AccountsFixtures.account_fixture(%{name: "OwnAccountOfB"})
+
+    {:ok, live, _html} = live(conn, ~p"/admin/db/accounts")
+    html = render(live)
+
+    assert html =~ "OwnAccountOfB"
+    refute html =~ "SecretAccountOfA"
+    assert html =~ "1 records"
+  end
+
+  test "keeps the owner filter when a column filter is applied", %{conn: conn} do
+    %{a: a} = cross_tenant()
+
+    CashLens.Tenancy.acting_as(a, fn ->
+      CashLens.AccountsFixtures.account_fixture(%{user: a, name: "SharedNameAccount"})
+    end)
+
+    CashLens.AccountsFixtures.account_fixture(%{name: "SharedNameAccount"})
+
+    {:ok, live, _html} = live(conn, ~p"/admin/db/accounts")
+
+    html =
+      live
+      |> form("#filter-form-accounts", %{"filters" => %{"name" => "SharedName"}})
+      |> render_change()
+
+    assert html =~ "1 records"
+  end
+
   test "fetch_rows error path: invalid column name in filter", %{conn: conn} do
     {:ok, live, _html} = live(conn, ~p"/admin/db/accounts")
 

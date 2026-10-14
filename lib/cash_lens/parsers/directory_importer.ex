@@ -6,23 +6,24 @@ defmodule CashLens.Parsers.DirectoryImporter do
   alias CashLens.Accounts
   alias CashLens.Parsers.AccountFile
   alias CashLens.Parsers.Ingestor
+  alias CashLens.Users.User
 
   @doc """
   Scans `path` for `.account` files and checks whether all referenced accounts
   exist. Returns:
 
-    * `:ok`                              — all accounts found, safe to `run/2`
+    * `:ok`                              — all accounts found, safe to `run/3`
     * `{:needs_confirmation, [attrs]}`   — some accounts missing but parsers valid;
                                            each entry has `:bank`, `:account`, `:parser`, `:credit_card`
     * `{:error, [reason]}`              — one or more `.account` files have invalid parsers
   """
-  def preflight(path) do
+  def preflight(%User{} = user, path) do
     if File.dir?(path) do
       {account_dirs, _skipped} = account_dirs(path)
 
       {errors, missing} =
         Enum.reduce(account_dirs, {[], []}, fn dir, {errs, miss} ->
-          preflight_dir(dir, errs, miss)
+          preflight_dir(user, dir, errs, miss)
         end)
 
       cond do
@@ -35,14 +36,10 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end
   end
 
-  defp preflight_dir(dir, errs, miss) do
+  defp preflight_dir(user, dir, errs, miss) do
     with {:ok, attrs} <- AccountFile.read(dir),
          :ok <- AccountFile.validate_parser(attrs) do
-      case Accounts.find_accounts_by_bank_and_name(
-             CashLens.Ownership.current_user!(),
-             attrs.bank,
-             attrs.account
-           ) do
+      case Accounts.find_accounts_by_bank_and_name(user, attrs.bank, attrs.account) do
         [_] -> {errs, miss}
         _ -> {errs, [attrs | miss]}
       end
@@ -69,17 +66,17 @@ defmodule CashLens.Parsers.DirectoryImporter do
       would, with zero writes (no transactions, no statements, no balance
       rebuild, no installment scan — regardless of `:skip_installments`).
   """
-  def run(path, opts \\ []) do
+  def run(%User{} = user, path, opts \\ []) do
     if File.dir?(path) do
-      run_existing(path, opts)
+      run_existing(user, path, opts)
     else
       %Result{errors: ["caminho '#{path}' não existe ou não é uma pasta"]}
     end
   end
 
-  defp run_existing(path, opts) do
+  defp run_existing(user, path, opts) do
     if Keyword.get(opts, :create_missing, false) do
-      create_missing_accounts(path)
+      create_missing_accounts(user, path)
     end
 
     emit = Keyword.get(opts, :on_event, fn _ -> :ok end)
@@ -91,31 +88,26 @@ defmodule CashLens.Parsers.DirectoryImporter do
     result =
       account_dirs
       |> Enum.reduce(%Result{}, fn dir, acc ->
-        import_account_folder(dir, path, acc, emit, dry_run)
+        import_account_folder(user, dir, path, acc, emit, dry_run)
       end)
       |> add_skipped_warnings(skipped_dirs)
 
     unless dry_run or Keyword.get(opts, :skip_installments, false) do
-      # TRANSITIONAL: removed when CL-51 converts the caller
-      CashLens.Installments.scan_and_apply_all(CashLens.Ownership.current_user!())
+      CashLens.Installments.scan_and_apply_all(user)
     end
 
     result
   end
 
-  defp create_missing_accounts(path) do
+  defp create_missing_accounts(user, path) do
     {account_dirs, _} = account_dirs(path)
 
     Enum.each(account_dirs, fn dir ->
       with {:ok, attrs} <- AccountFile.read(dir),
            :ok <- AccountFile.validate_parser(attrs),
            [] <-
-             Accounts.find_accounts_by_bank_and_name(
-               CashLens.Ownership.current_user!(),
-               attrs.bank,
-               attrs.account
-             ) do
-        Accounts.create_account(CashLens.Ownership.current_user!(), %{
+             Accounts.find_accounts_by_bank_and_name(user, attrs.bank, attrs.account) do
+        Accounts.create_account(user, %{
           name: attrs.account,
           bank: attrs.bank,
           parser_type: attrs.parser,
@@ -196,25 +188,25 @@ defmodule CashLens.Parsers.DirectoryImporter do
     end)
   end
 
-  defp import_account_folder(dir, root_path, result, emit, dry_run) do
+  defp import_account_folder(user, dir, root_path, result, emit, dry_run) do
     with {:ok, %{bank: bank, account: name}} <- AccountFile.read(dir),
-         {:ok, account} <- resolve_account(bank, name) do
-      do_import(dir, root_path, account, bank, name, result, emit, dry_run)
+         {:ok, account} <- resolve_account(user, bank, name) do
+      do_import(user, dir, root_path, account, {bank, name}, result, emit, dry_run)
     else
       {:error, reason} ->
         add_error(result, "pasta #{Path.basename(dir)}/ — #{reason}")
     end
   end
 
-  defp resolve_account(bank, name) do
-    case Accounts.find_accounts_by_bank_and_name(CashLens.Ownership.current_user!(), bank, name) do
+  defp resolve_account(user, bank, name) do
+    case Accounts.find_accounts_by_bank_and_name(user, bank, name) do
       [account] -> {:ok, account}
       [] -> {:error, "conta '#{bank} / #{name}' não encontrada"}
       _ -> {:error, "conta '#{bank} / #{name}' é ambígua"}
     end
   end
 
-  defp do_import(dir, root_path, account, bank, name, result, emit, dry_run) do
+  defp do_import(user, dir, root_path, account, {bank, name}, result, emit, dry_run) do
     label = format_label(dir, root_path)
     expected = Ingestor.expected_extensions(account.parser_type)
     {matching, mismatched} = partition_files(dir, expected)
@@ -240,9 +232,9 @@ defmodule CashLens.Parsers.DirectoryImporter do
         # since file 1's rows are actually on disk by the time file 2 inserts).
         {result, claimed} =
           if dry_run do
-            Ingestor.preview_file(account, file, claimed)
+            Ingestor.preview_file(user, account, file, claimed)
           else
-            {Ingestor.import_file(account, file,
+            {Ingestor.import_file(user, account, file,
                dry_run: dry_run,
                import_root: root_path
              ), claimed}
@@ -269,12 +261,7 @@ defmodule CashLens.Parsers.DirectoryImporter do
 
     entry = Map.merge(summary, %{account: account, bank: bank, name: name, folder_path: label})
 
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    statements =
-      CashLens.CreditCards.list_boletos_for_account(
-        CashLens.Ownership.current_user!(),
-        account.id
-      )
+    statements = CashLens.CreditCards.list_boletos_for_account(user, account.id)
 
     divergences = cycle_divergences(account, statements)
 
@@ -318,19 +305,19 @@ defmodule CashLens.Parsers.DirectoryImporter do
   Used by the backfill mix task, which needs the parsed rows and file
   metadata without re-inserting transactions.
   """
-  def each_credit_card_file(path, fun) do
+  def each_credit_card_file(%User{} = user, path, fun) do
     if File.dir?(path) do
       {account_dirs, _skipped} = account_dirs(path)
 
-      Enum.each(account_dirs, &visit_credit_card_dir(&1, fun))
+      Enum.each(account_dirs, &visit_credit_card_dir(user, &1, fun))
     else
       {:error, "caminho '#{path}' não existe ou não é uma pasta"}
     end
   end
 
-  defp visit_credit_card_dir(dir, fun) do
+  defp visit_credit_card_dir(user, dir, fun) do
     with {:ok, %{bank: bank, account: name}} <- AccountFile.read(dir),
-         {:ok, account} <- resolve_account(bank, name),
+         {:ok, account} <- resolve_account(user, bank, name),
          true <- account.is_credit_card do
       visit_account_files(dir, account, fun)
     else

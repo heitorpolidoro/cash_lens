@@ -956,7 +956,7 @@ defmodule CashLens.Installments do
   defp filter_by_description(queryable, blank) when blank in [nil, ""], do: queryable
 
   defp filter_by_description(queryable, query) do
-    from(t in queryable, where: ilike(t.description, ^"%#{query}%"))
+    where(queryable, [t], ilike(t.description, ^"%#{query}%"))
   end
 
   # The newest debit per description. Ordered exactly like `load_dynamic_fields/1`

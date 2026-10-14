@@ -1,7 +1,7 @@
 defmodule CashLensWeb.ForecastLiveTest do
   use CashLensWeb.ConnCase, async: false
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
 
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures

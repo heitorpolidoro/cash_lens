@@ -251,7 +251,7 @@ defmodule CashLensWeb.AccountLiveTest do
       |> element(~s(#account-#{account.id} button[phx-click="toggle_archive"]))
       |> render_click()
 
-      assert CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id).is_closed
+      assert CashLens.Accounts.get_account!(CashLens.Tenancy.current_user(), account.id).is_closed
       refute has_element?(live, "#account-#{account.id}")
     end
 
@@ -265,7 +265,7 @@ defmodule CashLensWeb.AccountLiveTest do
       |> element(~s(#account-#{account.id} button[phx-click="toggle_archive"]))
       |> render_click()
 
-      refute CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id).is_closed
+      refute CashLens.Accounts.get_account!(CashLens.Tenancy.current_user(), account.id).is_closed
       assert has_element?(live, "#account-#{account.id}")
     end
   end
@@ -405,7 +405,7 @@ defmodule CashLensWeb.AccountLiveTest do
 
       assert_patch(live, ~p"/accounts")
 
-      reloaded = CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id)
+      reloaded = CashLens.Accounts.get_account!(CashLens.Tenancy.current_user(), account.id)
       assert reloaded.parser_type == "standard_ofx"
       assert reloaded.icon == "https://example.com/new-icon.png"
       assert render(live) =~ "Conta atualizada com sucesso"
@@ -458,7 +458,7 @@ defmodule CashLensWeb.AccountLiveTest do
       assert_patch(live, ~p"/accounts")
 
       assert Decimal.equal?(
-               CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id).balance,
+               CashLens.Accounts.get_account!(CashLens.Tenancy.current_user(), account.id).balance,
                Decimal.new("120.00")
              )
     end
@@ -481,7 +481,7 @@ defmodule CashLensWeb.AccountLiveTest do
 
       assert_patch(live, ~p"/accounts")
 
-      assert CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id).is_closed
+      assert CashLens.Accounts.get_account!(CashLens.Tenancy.current_user(), account.id).is_closed
 
       refute has_element?(live, "#account-#{account.id}")
     end
@@ -530,7 +530,7 @@ defmodule CashLensWeb.AccountLiveTest do
       assert form_html =~ ~s(value="15")
       assert form_html =~ ~s(value="8")
 
-      reloaded = CashLens.Accounts.get_account!(CashLens.Ownership.current_user!(), account.id)
+      reloaded = CashLens.Accounts.get_account!(CashLens.Tenancy.current_user(), account.id)
       assert reloaded.closing_day == nil
       assert reloaded.due_day == nil
     end

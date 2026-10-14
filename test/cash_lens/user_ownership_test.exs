@@ -3,7 +3,6 @@ defmodule CashLens.UserOwnershipTest do
 
   import CashLens.UsersFixtures
 
-  alias CashLens.Audit.LoginAttempt
   alias CashLens.Ownership
 
   @tables_and_schemas [
@@ -128,43 +127,25 @@ defmodule CashLens.UserOwnershipTest do
   end
 
   describe "CashLens.Ownership" do
-    test "uses the pinned user" do
+    test "an insert without user_id fails instead of getting an owner" do
+      assert_raise Postgrex.Error, ~r/not_null_violation|null value|row-level security/, fn ->
+        Repo.insert!(%CashLens.Categories.Category{name: "Orphan", slug: "orphan"})
+      end
+    end
+
+    test "the owner-fallback API is gone" do
+      refute function_exported?(Ownership, :assign, 1)
+      refute function_exported?(Ownership, :current_user_id!, 0)
+      refute function_exported?(Ownership, :pin_operator!, 0)
+      refute function_exported?(Ownership, :operator_user!, 0)
+      assert Application.get_env(:cash_lens, :auto_create_owner) == nil
+    end
+
+    test "Repo.with_user/2 still pins and restores the user" do
       user = user_fixture()
-      Ownership.put_user_id(user.id)
-      assert Ownership.current_user_id!() == user.id
-    end
-
-    @tag :no_current_user
-    test "uses the only user when none is pinned" do
-      user = user_fixture()
-      assert Ownership.current_user_id!() == user.id
-    end
-
-    @tag :no_current_user
-    test "raises when several users exist and nothing says which one" do
-      user_fixture()
-      user_fixture()
-      assert_raise RuntimeError, ~r/CASH_LENS_OPERATOR_EMAIL/, &Ownership.current_user_id!/0
-    end
-
-    @tag :no_current_user
-    test "inserts without an owner get the operator" do
-      user = user_fixture()
-      assert Ownership.assign(%CashLens.Categories.Category{}).user_id == user.id
-    end
-
-    test "an explicit owner is kept" do
-      user_fixture()
-      other = user_fixture()
-      Ownership.put_user_id(other.id)
-      assert Ownership.assign(%CashLens.Accounts.Account{user_id: "keep"}).user_id == "keep"
-    end
-
-    test "schemas outside the domain registry are never stamped" do
-      user_fixture()
-      attempt = %LoginAttempt{user_id: nil}
-      assert Ownership.assign(attempt).user_id == nil
-      assert Ownership.assign(LoginAttempt.__struct__()).user_id == nil
+      before = Repo.current_user_id()
+      assert Repo.with_user(user.id, fn -> Repo.current_user_id() end) == user.id
+      assert Repo.current_user_id() == before
     end
 
     test "domain_schemas lists the 12 owned schemas" do

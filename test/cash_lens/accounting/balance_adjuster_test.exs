@@ -239,7 +239,7 @@ defmodule CashLens.Accounting.BalanceAdjusterTest do
                  :correcao
                )
 
-      updated = Accounts.get_account!(CashLens.Ownership.current_user!(), account.id)
+      updated = Accounts.get_account!(CashLens.Tenancy.current_user(), account.id)
       assert Decimal.equal?(updated.balance, Decimal.new("130.00"))
     end
   end

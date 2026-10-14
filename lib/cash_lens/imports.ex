@@ -28,12 +28,14 @@ defmodule CashLens.Imports do
   alias CashLens.Accounts
   alias CashLens.Imports.ImportedFile
   alias CashLens.Imports.ImportRun
+  alias CashLens.Ownership
   alias CashLens.Parsers.AccountFile
   alias CashLens.Parsers.DirectoryImporter
   alias CashLens.Parsers.FormatDetector
   alias CashLens.Parsers.Ingestor
   alias CashLens.Repo
   alias CashLens.Settings
+  alias CashLens.Users.User
 
   require Logger
 
@@ -66,15 +68,15 @@ defmodule CashLens.Imports do
   omitted. A recorded path that no longer exists on disk simply does not
   appear (its row is deliberately kept: the file may come back from the mount).
   """
-  def scan(root) when is_binary(root) do
+  def scan(%User{} = user, root) when is_binary(root) do
     if File.dir?(root) do
-      {:ok, do_scan(root)}
+      {:ok, do_scan(user, root)}
     else
       {:error, :not_a_directory}
     end
   end
 
-  def scan(_root), do: {:error, :not_a_directory}
+  def scan(%User{}, _root), do: {:error, :not_a_directory}
 
   @doc """
   Resolves the monitored root from `opts`: the `:import_root` option when it is
@@ -179,15 +181,18 @@ defmodule CashLens.Imports do
   end
 
   @doc "Fetches the `imported_files` row for a path key, or `nil`."
-  def get_imported_file_by_path(path) when is_binary(path) do
-    Repo.get_by(ImportedFile, path: path)
+  def get_imported_file_by_path(%User{} = user, path) when is_binary(path) do
+    ImportedFile
+    |> Ownership.scope(user)
+    |> Repo.get_by(path: path)
   end
 
   @doc "Fetches the `imported_files` rows for a list of path keys, indexed by path."
-  def map_by_paths([]), do: %{}
+  def map_by_paths(%User{}, []), do: %{}
 
-  def map_by_paths(paths) when is_list(paths) do
+  def map_by_paths(%User{} = user, paths) when is_list(paths) do
     ImportedFile
+    |> Ownership.scope(user)
     |> where([f], f.path in ^paths)
     |> Repo.all()
     |> Map.new(&{&1.path, &1})
@@ -201,8 +206,8 @@ defmodule CashLens.Imports do
   to what was stored, so the only visible effect is a refreshed
   `last_imported_at`. There is no "leave the old hash" case.
   """
-  def upsert_imported_file(attrs) do
-    %ImportedFile{}
+  def upsert_imported_file(%User{} = user, attrs) do
+    %ImportedFile{user_id: user.id}
     |> ImportedFile.changeset(attrs)
     |> Repo.insert(
       on_conflict: {:replace, [:content_hash, :mtime, :last_imported_at, :updated_at]},
@@ -212,21 +217,21 @@ defmodule CashLens.Imports do
   end
 
   @doc "Records one executed file import in the history."
-  def record_run(attrs) do
-    %ImportRun{}
+  def record_run(%User{} = user, attrs) do
+    %ImportRun{user_id: user.id}
     |> ImportRun.changeset(attrs)
     |> Repo.insert()
   end
 
   @doc "The most recent runs, newest first, with their account preloaded."
-  def list_recent_runs(limit \\ 20) do
-    Repo.all(
-      from(r in ImportRun,
-        order_by: [desc: r.ran_at, desc: r.inserted_at],
-        limit: ^limit,
-        preload: [:account]
-      )
+  def list_recent_runs(%User{} = user, limit \\ 20) do
+    from(r in ImportRun,
+      order_by: [desc: r.ran_at, desc: r.inserted_at],
+      limit: ^limit,
+      preload: [:account]
     )
+    |> Ownership.scope(user)
+    |> Repo.all()
   end
 
   @doc """
@@ -238,16 +243,16 @@ defmodule CashLens.Imports do
   kept in the context so the web layer never queries `CashLens.Accounts`
   directly and a preview always targets the account a real import would use.
   """
-  def account_for_entry(%{bank: bank, account: name})
+  def account_for_entry(%User{} = user, %{bank: bank, account: name})
       when is_binary(bank) and is_binary(name) do
-    case Accounts.find_accounts_by_bank_and_name(CashLens.Ownership.current_user!(), bank, name) do
+    case Accounts.find_accounts_by_bank_and_name(user, bank, name) do
       [account] -> {:ok, account}
       [] -> {:error, :not_found}
       _many -> {:error, :ambiguous}
     end
   end
 
-  def account_for_entry(_entry), do: {:error, :not_found}
+  def account_for_entry(%User{}, _entry), do: {:error, :not_found}
 
   @doc """
   The root of every dropped file's staging area: `<tmp>/#{@drop_dir}`.
@@ -390,11 +395,11 @@ defmodule CashLens.Imports do
 
   Exact `parser_type` matches are listed first, the rest of the family after.
   """
-  def candidate_accounts(%{format: format} = verdict) do
+  def candidate_accounts(%User{} = user, %{format: format} = verdict) do
     extension = extension_of(format)
 
     {exact, family} =
-      Accounts.list_accounts(CashLens.Ownership.current_user!())
+      Accounts.list_accounts(user)
       |> Enum.filter(&importable_for?(&1, extension))
       |> Enum.sort_by(&{&1.bank, &1.name})
       |> Enum.split_with(&exact_parser?(&1, Map.get(verdict, :parser_type)))
@@ -528,17 +533,17 @@ defmodule CashLens.Imports do
   defp extension_of(:txt), do: ".txt"
   defp extension_of(_format), do: nil
 
-  defp do_scan(root) do
+  defp do_scan(user, root) do
     expanded_root = Path.expand(root)
     {account_dirs, _skipped} = DirectoryImporter.account_dirs(expanded_root)
 
-    measured = Enum.flat_map(account_dirs, &measure_account_dir(&1, expanded_root))
+    measured = Enum.flat_map(account_dirs, &measure_account_dir(user, &1, expanded_root))
 
     recorded =
       measured
       |> Enum.flat_map(&[&1.path, &1.absolute_path])
       |> Enum.uniq()
-      |> map_by_paths()
+      |> then(&map_by_paths(user, &1))
 
     measured
     |> Enum.map(&classify_entry(&1, recorded))
@@ -554,9 +559,9 @@ defmodule CashLens.Imports do
   defp status_rank(:synced), do: 2
   defp status_rank(_other), do: 3
 
-  defp measure_account_dir(dir, root) do
+  defp measure_account_dir(user, dir, root) do
     with {:ok, attrs} <- AccountFile.read(dir),
-         {:ok, parser_type} <- resolve_parser_type(attrs) do
+         {:ok, parser_type} <- resolve_parser_type(user, attrs) do
       {matching, _mismatched} =
         DirectoryImporter.partition_files(dir, Ingestor.expected_extensions(parser_type))
 
@@ -570,8 +575,8 @@ defmodule CashLens.Imports do
   # The parser is the one the import would actually use: the registered
   # account's `parser_type`, falling back to the `.account` file's own `parser`
   # when the account does not exist (or is ambiguous) yet.
-  defp resolve_parser_type(%{bank: bank, account: name, parser: parser}) do
-    case Accounts.find_accounts_by_bank_and_name(CashLens.Ownership.current_user!(), bank, name) do
+  defp resolve_parser_type(user, %{bank: bank, account: name, parser: parser}) do
+    case Accounts.find_accounts_by_bank_and_name(user, bank, name) do
       [account] -> {:ok, account.parser_type}
       _ when is_binary(parser) -> {:ok, parser}
       _ -> :error

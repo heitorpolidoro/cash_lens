@@ -19,6 +19,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
   defp create_rule(source_id, dest_id, patterns) do
     {:ok, rule} =
       Repo.insert(%TransferRule{
+        user_id: CashLens.Repo.current_user_id(),
         description_patterns: patterns,
         source_account_id: source_id,
         destination_account_id: dest_id
@@ -77,6 +78,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
 
       {:ok, _rule} =
         Repo.insert(%TransferRule{
+          user_id: CashLens.Repo.current_user_id(),
           description_patterns: ["salary payment"],
           source_account_id: source.id,
           destination_account_id: destination.id,
@@ -405,6 +407,7 @@ defmodule CashLens.Transactions.TransferRuleApplierTest do
 
       {:ok, _rule} =
         Repo.insert(%TransferRule{
+          user_id: CashLens.Repo.current_user_id(),
           description_patterns: ["pagamento fatura"],
           source_account_id: source.id,
           destination_account_id: card.id,

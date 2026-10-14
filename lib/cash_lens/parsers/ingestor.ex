@@ -6,6 +6,7 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Accounting
   alias CashLens.CreditCards.Matcher
   alias CashLens.Imports
+  alias CashLens.Ownership
   alias CashLens.Parsers.CSVParser
   alias CashLens.Parsers.MercadoPagoPDFParser
   alias CashLens.Parsers.OFXParser
@@ -15,6 +16,7 @@ defmodule CashLens.Parsers.Ingestor do
   alias CashLens.Transactions.Transaction
   alias CashLens.Transactions.TransferMatcher
   alias CashLens.Transactions.TransferRuleApplier
+  alias CashLens.Users.User
   alias CashLens.Workers.SyncRecurringWorker
   alias Ecto.UUID
   import Ecto.Query, only: [from: 2]
@@ -84,19 +86,22 @@ defmodule CashLens.Parsers.Ingestor do
   entries and stay in `failed` instead. The real (non-dry-run) path does
   **not** carry `:preview` — it keeps returning the three-key map.
   """
-  def import_file(account, file_path, opts \\ []) do
+  def import_file(%User{} = user, account, file_path, opts \\ []) do
     notify_fn = Keyword.get(opts, :notify_fn)
     dry_run = Keyword.get(opts, :dry_run, false)
 
     case File.read(file_path) do
       {:ok, content} ->
         content
-        |> process_imported_content(account, file_path, notify_fn, dry_run, opts)
-        |> maybe_sync_recurring(dry_run)
+        |> process_imported_content(user, account, file_path, notify_fn, dry_run, opts)
+        |> maybe_sync_recurring(user, dry_run)
 
       {:error, reason} ->
         message = "Could not read file: #{reason}"
-        if dry_run == false, do: record_import(account, file_path, opts, {:error, message}, nil)
+
+        if dry_run == false,
+          do: record_import(user, account, file_path, opts, {:error, message}, nil)
+
         {:error, message}
     end
   end
@@ -104,18 +109,18 @@ defmodule CashLens.Parsers.Ingestor do
   # Detection reads transactions, so an import is the moment its answer can have
   # changed. A dry run wrote nothing, and a run that imported nothing changed no
   # history, so neither has anything to re-derive.
-  defp maybe_sync_recurring({:ok, %{imported: imported}} = result, false) when imported > 0 do
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    SyncRecurringWorker.enqueue(CashLens.Ownership.current_user_id!())
+  defp maybe_sync_recurring({:ok, %{imported: imported}} = result, user, false)
+       when imported > 0 do
+    SyncRecurringWorker.enqueue(user.id)
     result
   end
 
-  defp maybe_sync_recurring(result, _dry_run), do: result
+  defp maybe_sync_recurring(result, _user, _dry_run), do: result
 
   @doc """
   Imports all supported files from a directory.
   """
-  def import_directory(account, dir_path) do
+  def import_directory(%User{} = user, account, dir_path) do
     if File.dir?(dir_path) do
       results =
         dir_path
@@ -123,7 +128,7 @@ defmodule CashLens.Parsers.Ingestor do
         |> Enum.filter(&supported_file?(&1))
         |> Enum.map(fn filename ->
           path = Path.join(dir_path, filename)
-          import_file(account, path)
+          import_file(user, account, path)
         end)
 
       summarize_results(results)
@@ -159,7 +164,7 @@ defmodule CashLens.Parsers.Ingestor do
     end
   end
 
-  defp process_imported_content(raw_content, account, file_path, notify_fn, dry_run, opts) do
+  defp process_imported_content(raw_content, user, account, file_path, notify_fn, dry_run, opts) do
     content = prepare_content(raw_content, account, file_path)
 
     Logger.info("INGESTOR: #{account.parser_type} <- #{file_path} (#{account.name})")
@@ -169,7 +174,9 @@ defmodule CashLens.Parsers.Ingestor do
         Logger.error("INGESTOR: Parsing failed: #{reason}")
         # This branch is shared with the dry run (it sits above the `if dry_run`
         # below), so the recording carries an explicit non-dry-run guard.
-        if dry_run == false, do: record_import(account, file_path, opts, {:error, reason}, nil)
+        if dry_run == false,
+          do: record_import(user, account, file_path, opts, {:error, reason}, nil)
+
         {:error, reason}
 
       transactions_data ->
@@ -177,14 +184,16 @@ defmodule CashLens.Parsers.Ingestor do
         if notify_fn, do: notify_fn.(length(transactions_data))
 
         if dry_run do
-          {result, _claimed} = preview_import(transactions_data, account.id, MapSet.new())
+          {result, _claimed} = preview_import(user, transactions_data, account.id, MapSet.new())
           result
         else
           statement_id =
-            maybe_create_statement(account, content, file_path, transactions_data)
+            maybe_create_statement(user, account, content, file_path, transactions_data)
 
-          {:ok, summary} = result = finalize_import(transactions_data, account.id, statement_id)
-          record_import(account, file_path, opts, {:ok, summary}, raw_content)
+          {:ok, summary} =
+            result = finalize_import(user, transactions_data, account.id, statement_id)
+
+          record_import(user, account, file_path, opts, {:ok, summary}, raw_content)
           result
         end
     end
@@ -192,11 +201,14 @@ defmodule CashLens.Parsers.Ingestor do
 
   # Returns the new statement id for credit-card accounts (so rows can be
   # stamped and matched), or nil for regular accounts.
-  defp maybe_create_statement(%{is_credit_card: true} = account, content, file_path, transactions) do
+  defp maybe_create_statement(
+         user,
+         %{is_credit_card: true} = account,
+         content,
+         file_path,
+         transactions
+       ) do
     meta = statement_meta(content, file_path)
-
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    user = CashLens.Ownership.current_user!()
 
     {:ok, statement} =
       CashLens.CreditCards.create_statement(user, %{
@@ -210,7 +222,7 @@ defmodule CashLens.Parsers.Ingestor do
     statement.id
   end
 
-  defp maybe_create_statement(_account, _content, _file_path, _transactions), do: nil
+  defp maybe_create_statement(_user, _account, _content, _file_path, _transactions), do: nil
 
   # Statement metadata (due date, total, competência) extracted from the file,
   # by source format. OFX carries a ledger balance; PDF a Vencimento + total;
@@ -250,11 +262,8 @@ defmodule CashLens.Parsers.Ingestor do
       else: :unicode.characters_to_binary(content, :latin1, :utf8)
   end
 
-  defp finalize_import(transactions_data, account_id, statement_id) do
+  defp finalize_import(user, transactions_data, account_id, statement_id) do
     transactions_data = reject_future_dated(transactions_data)
-
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    user = CashLens.Ownership.current_user!()
 
     {entries, failed} = prepare_entries(user, transactions_data, account_id, statement_id)
 
@@ -294,7 +303,7 @@ defmodule CashLens.Parsers.Ingestor do
   The returned summary carries the same `:preview` rows `import_file/3` with
   `dry_run: true` returns.
   """
-  def preview_file(account, file_path, claimed_fingerprints) do
+  def preview_file(%User{} = user, account, file_path, claimed_fingerprints) do
     case File.read(file_path) do
       {:ok, content} ->
         content = prepare_content(content, account, file_path)
@@ -304,7 +313,7 @@ defmodule CashLens.Parsers.Ingestor do
             {{:error, reason}, claimed_fingerprints}
 
           transactions_data ->
-            preview_import(transactions_data, account.id, claimed_fingerprints)
+            preview_import(user, transactions_data, account.id, claimed_fingerprints)
         end
 
       {:error, reason} ->
@@ -322,14 +331,12 @@ defmodule CashLens.Parsers.Ingestor do
   # `claimed_fingerprints`) — the same meaning `finalize_import/3`'s
   # `on_conflict: :nothing` insert would produce for the same input across
   # files. Returns `{{:ok, summary}, updated_claimed_fingerprints}`.
-  defp preview_import(transactions_data, account_id, claimed_fingerprints) do
+  defp preview_import(user, transactions_data, account_id, claimed_fingerprints) do
     transactions_data = reject_future_dated(transactions_data)
 
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    user = CashLens.Ownership.current_user!()
     {entries, failed} = prepare_entries(user, transactions_data, account_id, nil)
 
-    already_present = existing_fingerprints(Enum.map(entries, & &1.fingerprint))
+    already_present = existing_fingerprints(user, Enum.map(entries, & &1.fingerprint))
 
     {new_count, skipped_count, updated_claimed, reversed_preview} =
       Enum.reduce(entries, {0, 0, claimed_fingerprints, []}, fn entry,
@@ -378,12 +385,12 @@ defmodule CashLens.Parsers.Ingestor do
     Enum.reject(transactions_data, &(Date.compare(&1.date, today) == :gt))
   end
 
-  defp existing_fingerprints([]), do: MapSet.new()
+  defp existing_fingerprints(_user, []), do: MapSet.new()
 
-  defp existing_fingerprints(fingerprints) do
-    CashLens.Repo.all(
-      from(t in Transaction, where: t.fingerprint in ^fingerprints, select: t.fingerprint)
-    )
+  defp existing_fingerprints(user, fingerprints) do
+    from(t in Transaction, where: t.fingerprint in ^fingerprints, select: t.fingerprint)
+    |> Ownership.scope(user)
+    |> CashLens.Repo.all()
     |> MapSet.new()
   end
 
@@ -448,13 +455,13 @@ defmodule CashLens.Parsers.Ingestor do
     # We use returning: true to get the actually inserted transactions for TransferMatcher.
     # `count` is the number of rows actually inserted (conflicts are not counted),
     # which lets the caller compute how many input rows were skipped as duplicates.
-    {count, inserted_transactions} = batch_insert_transactions(entries)
+    {count, inserted_transactions} = batch_insert_transactions(user, entries)
 
     # `insert_all` drops conflicting rows silently, so a re-import of a
     # statement whose transactions already exist stamps nothing: the statement
     # is created and every one of its lines stays orphaned. Those rows are
     # known by the fingerprints that conflicted, so they are stamped here.
-    statement_lines = claim_existing_lines(entries, inserted_transactions, statement_id)
+    statement_lines = claim_existing_lines(user, entries, inserted_transactions, statement_id)
 
     # 3. Apply transfer rules for newly inserted transactions, creating mirrors as needed
     mirror_transactions = TransferRuleApplier.apply_rules(user, inserted_transactions)
@@ -528,21 +535,21 @@ defmodule CashLens.Parsers.Ingestor do
   #
   # Recording must never fail an import: any error is logged and the caller's
   # original return value is preserved byte-for-byte.
-  defp record_import(account, file_path, opts, outcome, raw_content) do
+  defp record_import(user, account, file_path, opts, outcome, raw_content) do
     ran_at = DateTime.utc_now() |> DateTime.truncate(:second)
     path_key = Imports.relative_path(file_path, Imports.import_root(opts))
 
     base = %{ran_at: ran_at, account_id: account.id, file_path: path_key}
 
     base
-    |> Map.merge(run_attrs(outcome, path_key, file_path, raw_content, ran_at))
-    |> Imports.record_run()
+    |> Map.merge(run_attrs(user, outcome, path_key, file_path, raw_content, ran_at))
+    |> then(&Imports.record_run(user, &1))
     |> log_record_failure(file_path)
   rescue
     e -> Logger.error("INGESTOR: could not record import run: #{Exception.message(e)}")
   end
 
-  defp run_attrs({:error, reason}, _path_key, _file_path, _raw_content, _ran_at) do
+  defp run_attrs(_user, {:error, reason}, _path_key, _file_path, _raw_content, _ran_at) do
     %{
       status: "error",
       imported_count: 0,
@@ -552,20 +559,20 @@ defmodule CashLens.Parsers.Ingestor do
     }
   end
 
-  defp run_attrs({:ok, summary}, path_key, file_path, raw_content, ran_at) do
+  defp run_attrs(user, {:ok, summary}, path_key, file_path, raw_content, ran_at) do
     %{
       status: if(summary.failed == [], do: "success", else: "warning"),
       imported_count: summary.imported,
       skipped_count: Map.get(summary, :skipped, 0),
       failed_count: length(summary.failed),
-      imported_file_id: touch_imported_file(path_key, file_path, raw_content, ran_at)
+      imported_file_id: touch_imported_file(user, path_key, file_path, raw_content, ran_at)
     }
   end
 
   # The hash is taken over the *raw* bytes read from disk, before
   # `prepare_content/3` normalizes encoding or extracts PDF text, so the value
   # matches what `Imports.scan/1` measures on the same file.
-  defp touch_imported_file(path_key, file_path, raw_content, ran_at) do
+  defp touch_imported_file(user, path_key, file_path, raw_content, ran_at) do
     attrs = %{
       path: path_key,
       content_hash: raw_content && Imports.content_hash(raw_content),
@@ -573,7 +580,7 @@ defmodule CashLens.Parsers.Ingestor do
       last_imported_at: ran_at
     }
 
-    case Imports.upsert_imported_file(attrs) do
+    case Imports.upsert_imported_file(user, attrs) do
       {:ok, imported_file} -> imported_file.id
       {:error, _changeset} -> nil
     end
@@ -589,9 +596,9 @@ defmodule CashLens.Parsers.Ingestor do
   # already existed, and returns every line the statement now covers (inserted
   # plus claimed). Returns the inserted rows unchanged for a regular account,
   # where there is no statement to stamp.
-  defp claim_existing_lines(_entries, inserted, nil), do: inserted
+  defp claim_existing_lines(_user, _entries, inserted, nil), do: inserted
 
-  defp claim_existing_lines(entries, inserted, statement_id) do
+  defp claim_existing_lines(user, entries, inserted, statement_id) do
     inserted_ids = MapSet.new(inserted, & &1.id)
 
     skipped_fingerprints =
@@ -610,6 +617,7 @@ defmodule CashLens.Parsers.Ingestor do
             where: t.fingerprint in ^skipped_fingerprints,
             select: t
           )
+          |> Ownership.scope(user)
           |> CashLens.Repo.update_all(
             [set: [import_batch_id: statement_id, updated_at: now]],
             returning: true
@@ -621,11 +629,10 @@ defmodule CashLens.Parsers.Ingestor do
     inserted ++ claimed
   end
 
-  defp batch_insert_transactions([]), do: {0, []}
+  defp batch_insert_transactions(_user, []), do: {0, []}
 
-  defp batch_insert_transactions(entries) do
-    user_id = CashLens.Ownership.current_user_id!()
-    entries = Enum.map(entries, &Map.put_new(&1, :user_id, user_id))
+  defp batch_insert_transactions(user, entries) do
+    entries = Enum.map(entries, &Map.put(&1, :user_id, user.id))
 
     CashLens.Repo.insert_all(
       Transaction,

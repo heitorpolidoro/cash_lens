@@ -298,7 +298,7 @@ defmodule CashLens.AccountingTest do
       acc = account_fixture(balance: "100")
 
       {:ok, _} =
-        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), acc, %{
+        CashLens.Accounts.update_account(CashLens.Tenancy.current_user(), acc, %{
           is_closed: true
         })
 
@@ -311,7 +311,7 @@ defmodule CashLens.AccountingTest do
 
     test "accounts passed in are attached without reading accounts again" do
       healthy_accounts(2)
-      accounts = CashLens.Accounts.list_accounts(CashLens.Ownership.current_user!())
+      accounts = CashLens.Accounts.list_accounts(CashLens.Tenancy.current_user())
 
       {balances, counts} =
         CashLens.QueryCounter.count(fn ->
@@ -362,7 +362,7 @@ defmodule CashLens.AccountingTest do
 
       # Mark account as closed
       {:ok, closed_acc} =
-        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), acc, %{
+        CashLens.Accounts.update_account(CashLens.Tenancy.current_user(), acc, %{
           is_closed: true
         })
 
@@ -389,7 +389,7 @@ defmodule CashLens.AccountingTest do
       assert Decimal.equal?(original.initial_balance, "100")
 
       {:ok, updated_acc} =
-        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), acc, %{
+        CashLens.Accounts.update_account(CashLens.Tenancy.current_user(), acc, %{
           balance: "200"
         })
 
@@ -411,7 +411,7 @@ defmodule CashLens.AccountingTest do
       Accounting.calculate_monthly_balance(user(), acc.id, 2026, 3)
 
       {:ok, updated_acc} =
-        CashLens.Accounts.update_account(CashLens.Ownership.current_user!(), acc, %{
+        CashLens.Accounts.update_account(CashLens.Tenancy.current_user(), acc, %{
           balance: "500"
         })
 

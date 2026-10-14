@@ -3,7 +3,10 @@ defmodule Mix.Tasks.CashLens.Import do
   @moduledoc """
   Importa extratos de uma pasta.
 
-      mix cash_lens.import <caminho>
+      mix cash_lens.import [--user <email>] <caminho>
+
+  `--user` escolhe o usuário dono dos dados; pode ser omitido quando existe um
+  único usuário.
 
   Se `<caminho>` contém um arquivo `.account`, é tratado como uma única conta.
   Caso contrário, cada subpasta com `.account` é importada para a conta declarada
@@ -16,27 +19,41 @@ defmodule Mix.Tasks.CashLens.Import do
   alias CashLens.Parsers.DirectoryImporter
 
   @impl Mix.Task
-  def run([path]) do
+  def run(args) do
+    case CashLens.Operator.parse_args(args) do
+      {email, [path]} -> import_path(email, path)
+      _ -> usage()
+    end
+  end
+
+  defp usage do
+    Mix.shell().error("Uso: mix cash_lens.import [--user <email>] <caminho>")
+    exit({:shutdown, 2})
+  end
+
+  defp import_path(email, path) do
     Application.put_env(:cash_lens, :start_console_reporter, false)
     Mix.Task.run("app.start")
-    # Row-level security: maintenance work acts for the operator (CL-53).
-    CashLens.Ownership.pin_operator!()
+    user = CashLens.Operator.user!(email)
 
     previous_level = Logger.level()
     Logger.configure(level: :warning)
     ansi? = IO.ANSI.enabled?()
 
     try do
-      extra_opts = preflight_opts(path)
+      extra_opts = preflight_opts(user, path)
 
       {result, agent} =
         if ansi? do
           {on_event, agent} = build_on_event()
-          result = DirectoryImporter.run(path, Keyword.merge(extra_opts, on_event: on_event))
+
+          result =
+            DirectoryImporter.run(user, path, Keyword.merge(extra_opts, on_event: on_event))
+
           Owl.LiveScreen.await_render()
           {result, agent}
         else
-          {DirectoryImporter.run(path, extra_opts), nil}
+          {DirectoryImporter.run(user, path, extra_opts), nil}
         end
 
       result
@@ -51,13 +68,8 @@ defmodule Mix.Tasks.CashLens.Import do
     end
   end
 
-  def run(_args) do
-    Mix.shell().error("Uso: mix cash_lens.import <caminho>")
-    exit({:shutdown, 2})
-  end
-
-  defp preflight_opts(path) do
-    case DirectoryImporter.preflight(path) do
+  defp preflight_opts(user, path) do
+    case DirectoryImporter.preflight(user, path) do
       :ok ->
         []
 

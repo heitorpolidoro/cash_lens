@@ -1,10 +1,15 @@
+alias CashLens.Categories.Category
+alias CashLens.Operator
 alias CashLens.Repo
 
-# Row-level security: seed as the operator (see CashLens.Ownership).
-CashLens.Ownership.pin_operator!()
+# Seeds run through `mix run`, with no session: name the owner explicitly via
+# CASH_LENS_OPERATOR_EMAIL (or leave it unset when there is a single user).
+user = Operator.user!(System.get_env("CASH_LENS_OPERATOR_EMAIL"))
 
-alias CashLens.Categories.Category
-
-Repo.insert!(%Category{name: "Valor Inicial", slug: "initial_value"}, on_conflict: :nothing)
-Repo.insert!(%Category{name: "Transferência", slug: "transfer"}, on_conflict: :nothing)
-Repo.insert!(%Category{name: "Cartão de Crédito", slug: "cartao-de-credito"}, on_conflict: :nothing)
+for {name, slug} <- [
+      {"Valor Inicial", "initial_value"},
+      {"Transferência", "transfer"},
+      {"Cartão de Crédito", "cartao-de-credito"}
+    ] do
+  Repo.insert!(%Category{user_id: user.id, name: name, slug: slug}, on_conflict: :nothing)
+end

@@ -33,6 +33,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
     card = account_fixture(%{is_credit_card: true})
 
     Repo.insert!(%TransferRule{
+      user_id: CashLens.Repo.current_user_id(),
       description_patterns: ["fatura"],
       source_account_id: checking.id,
       destination_account_id: card.id,
@@ -91,6 +92,7 @@ defmodule Mix.Tasks.MigrateCreditCardTransfersTest do
     card = account_fixture(%{is_credit_card: true})
 
     Repo.insert!(%TransferRule{
+      user_id: CashLens.Repo.current_user_id(),
       description_patterns: ["fatura"],
       source_account_id: checking.id,
       destination_account_id: card.id,

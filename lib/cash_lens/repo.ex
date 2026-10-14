@@ -31,8 +31,9 @@ defmodule CashLens.Repo do
   @setting "app.current_user_id"
   @bound_key :cash_lens_rls_bound
 
-  # Domain rows are user-owned. Callers that do not name an owner get the
-  # operator (see `CashLens.Ownership`).
+  # Every write and read below is wrapped so it runs with the current user bound
+  # for row-level security (see `bound/2`). Rows must name their owner: nothing
+  # fills `user_id` in.
   defoverridable insert: 2,
                  insert!: 2,
                  update: 2,
@@ -104,17 +105,8 @@ defmodule CashLens.Repo do
     result
   end
 
-  def insert(struct_or_changeset, opts) do
-    struct_or_changeset
-    |> Ownership.assign()
-    |> then(fn assigned -> bound(opts, &super(assigned, &1)) end)
-  end
-
-  def insert!(struct_or_changeset, opts) do
-    struct_or_changeset
-    |> Ownership.assign()
-    |> then(fn assigned -> bound(opts, &super(assigned, &1)) end)
-  end
+  def insert(struct_or_changeset, opts), do: bound(opts, &super(struct_or_changeset, &1))
+  def insert!(struct_or_changeset, opts), do: bound(opts, &super(struct_or_changeset, &1))
 
   def update(changeset, opts), do: bound(opts, &super(changeset, &1))
   def update!(changeset, opts), do: bound(opts, &super(changeset, &1))

@@ -80,7 +80,7 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
 
     assert render(view) =~ "Category created!"
 
-    assert Categories.get_category_by_slug(CashLens.Ownership.current_user!(), "my-new-category") !=
+    assert Categories.get_category_by_slug(CashLens.Tenancy.current_user(), "my-new-category") !=
              nil
   end
 
@@ -120,13 +120,13 @@ defmodule CashLensWeb.TransactionLive.QuickCategoryComponentTest do
 
   test "handles error when category creation fails with invalid data", %{conn: conn, user: user} do
     {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"user_id" => user.id})
-    count_before = length(Categories.list_categories(CashLens.Ownership.current_user!()))
+    count_before = length(Categories.list_categories(CashLens.Tenancy.current_user()))
 
     # Submit with empty name to fail validate_required(:name) — triggers the error branch
     view
     |> element("#quick-category-form")
     |> render_submit(%{"name" => "", "parent_id" => ""})
 
-    assert length(Categories.list_categories(CashLens.Ownership.current_user!())) == count_before
+    assert length(Categories.list_categories(CashLens.Tenancy.current_user())) == count_before
   end
 end

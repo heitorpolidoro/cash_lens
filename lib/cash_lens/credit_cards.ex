@@ -1055,10 +1055,9 @@ defmodule CashLens.CreditCards do
   defp within_candidate_window(query, %Statement{due_date: nil}), do: query
 
   defp within_candidate_window(query, %Statement{due_date: due}) do
-    from(t in query,
-      where: t.date >= ^Date.add(due, -@candidate_days_before),
-      where: t.date <= ^Date.add(due, @candidate_days_after)
-    )
+    query
+    |> where([t], t.date >= ^Date.add(due, -@candidate_days_before))
+    |> where([t], t.date <= ^Date.add(due, @candidate_days_after))
   end
 
   # A payment leaves the current account, so its amount is negative while

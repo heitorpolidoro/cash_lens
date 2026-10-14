@@ -13,7 +13,7 @@ defmodule CashLens.ForecastScopeGuardTest do
   """
   use CashLens.DataCase, async: false
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
 
   import CashLens.AccountsFixtures
   import CashLens.CreditCardsFixtures

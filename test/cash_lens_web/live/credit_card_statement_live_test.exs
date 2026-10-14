@@ -218,7 +218,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       category =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 
@@ -390,7 +390,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
     } do
       category =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 
@@ -426,7 +426,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       category =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 
@@ -482,7 +482,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       category =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 
@@ -539,7 +539,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       category =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 
@@ -584,7 +584,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       category =
         CashLens.Categories.get_category_by_slug(
-          CashLens.Ownership.current_user!(),
+          CashLens.Tenancy.current_user(),
           "cartao-de-credito"
         )
 

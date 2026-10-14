@@ -1,7 +1,7 @@
 defmodule Mix.Tasks.CashLens.BackfillStatements do
   @shortdoc "Re-reads credit-card statement files and stamps import_batch_id"
   @moduledoc """
-      mix cash_lens.backfill_statements <caminho>
+      mix cash_lens.backfill_statements [--user <email>] <caminho>
 
   Defaults `<caminho>` to the saved `last_batch_import_path` setting. Walks
   the `.account` folder structure exactly like `mix cash_lens.import`, but
@@ -21,16 +21,16 @@ defmodule Mix.Tasks.CashLens.BackfillStatements do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
-    # Row-level security: maintenance work acts for the operator (CL-53).
-    CashLens.Ownership.pin_operator!()
+    {email, rest} = CashLens.Operator.parse_args(args)
+    user = CashLens.Operator.user!(email)
 
     path =
-      case args do
+      case rest do
         [p | _] -> p
         [] -> CashLens.Settings.get("last_batch_import_path", "")
       end
 
-    case DirectoryImporter.each_credit_card_file(path, &backfill_one/3) do
+    case DirectoryImporter.each_credit_card_file(user, path, &backfill_one(user, &1, &2, &3)) do
       {:error, reason} ->
         Mix.shell().error(reason)
         exit({:shutdown, 1})
@@ -40,7 +40,7 @@ defmodule Mix.Tasks.CashLens.BackfillStatements do
     end
   end
 
-  defp backfill_one(account, content, file_path) do
+  defp backfill_one(user, account, content, file_path) do
     meta = Ingestor.statement_meta(content, file_path)
 
     case Ingestor.parse(content, account.parser_type) do
@@ -50,8 +50,7 @@ defmodule Mix.Tasks.CashLens.BackfillStatements do
       parsed ->
         {:ok, _statement} =
           CreditCards.backfill_file(
-            # TRANSITIONAL: removed when CL-51 converts the caller
-            CashLens.Ownership.current_user!(),
+            user,
             account,
             parsed,
             meta,

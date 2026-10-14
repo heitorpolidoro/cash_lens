@@ -39,11 +39,11 @@ defmodule CashLens.Users.UserToken do
     case Base.url_decode64(raw, padding: false) do
       {:ok, decoded} ->
         {:ok,
-         from(t in by_token_and_context(hash(decoded), context),
-           join: u in assoc(t, :user),
-           where: t.inserted_at > ^cutoff(context) and t.sent_to == u.email,
-           select: {u, t}
-         )}
+         hash(decoded)
+         |> by_token_and_context(context)
+         |> join(:inner, [t], u in assoc(t, :user))
+         |> where([t, u], t.inserted_at > ^cutoff(context) and t.sent_to == u.email)
+         |> select([t, u], {u, t})}
 
       :error ->
         :error
@@ -53,7 +53,7 @@ defmodule CashLens.Users.UserToken do
   def verify_query(_raw, _context), do: :error
 
   def by_token_and_context(hashed, context),
-    do: from(t in __MODULE__, where: t.token == ^hashed and t.context == ^context)
+    do: where(__MODULE__, [t], t.token == ^hashed and t.context == ^context)
 
   def by_user_and_contexts(user_id, contexts),
     do: from(t in __MODULE__, where: t.user_id == ^user_id and t.context in ^contexts)

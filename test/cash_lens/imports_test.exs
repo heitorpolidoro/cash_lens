@@ -1,6 +1,8 @@
 defmodule CashLens.ImportsTest do
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Tenancy.current_user()
+
   import CashLens.AccountsFixtures
 
   alias CashLens.Imports
@@ -56,8 +58,10 @@ defmodule CashLens.ImportsTest do
 
   describe "scan/1 on an invalid root" do
     test "returns an error tuple instead of raising" do
-      assert {:error, :not_a_directory} = Imports.scan("/no/such/dir/#{System.unique_integer()}")
-      assert {:error, :not_a_directory} = Imports.scan(nil)
+      assert {:error, :not_a_directory} =
+               Imports.scan(user(), "/no/such/dir/#{System.unique_integer()}")
+
+      assert {:error, :not_a_directory} = Imports.scan(user(), nil)
     end
   end
 
@@ -66,7 +70,7 @@ defmodule CashLens.ImportsTest do
       dir = account_folder(root, "bb")
       write_file(dir, "extrato.csv", @bb_sample)
 
-      assert {:ok, [entry]} = Imports.scan(root)
+      assert {:ok, [entry]} = Imports.scan(user(), root)
       assert entry.path == "bb/extrato.csv"
       assert entry.status == :new
       assert entry.bank == "Banco do Brasil"
@@ -82,9 +86,9 @@ defmodule CashLens.ImportsTest do
       dir = account_folder(root, "bb")
       path = write_file(dir, "extrato.csv", @bb_sample)
 
-      assert {:ok, _summary} = Ingestor.import_file(account, path, import_root: root)
+      assert {:ok, _summary} = Ingestor.import_file(user(), account, path, import_root: root)
 
-      assert {:ok, [entry]} = Imports.scan(root)
+      assert {:ok, [entry]} = Imports.scan(user(), root)
       assert entry.status == :synced
       assert %DateTime{} = entry.last_imported_at
     end
@@ -92,25 +96,25 @@ defmodule CashLens.ImportsTest do
     test "reports :updated when only the content changed", %{root: root, account: account} do
       dir = account_folder(root, "bb")
       path = write_file(dir, "extrato.csv", @bb_sample)
-      assert {:ok, _} = Ingestor.import_file(account, path, import_root: root)
+      assert {:ok, _} = Ingestor.import_file(user(), account, path, import_root: root)
 
       %{mtime: mtime} = File.stat!(path, time: :posix)
       File.write!(path, @other_sample)
       File.touch!(path, mtime)
 
-      assert {:ok, [entry]} = Imports.scan(root)
+      assert {:ok, [entry]} = Imports.scan(user(), root)
       assert entry.status == :updated
     end
 
     test "reports :updated when only the mtime changed", %{root: root, account: account} do
       dir = account_folder(root, "bb")
       path = write_file(dir, "extrato.csv", @bb_sample)
-      assert {:ok, _} = Ingestor.import_file(account, path, import_root: root)
+      assert {:ok, _} = Ingestor.import_file(user(), account, path, import_root: root)
 
-      recorded = Imports.get_imported_file_by_path("bb/extrato.csv")
+      recorded = Imports.get_imported_file_by_path(user(), "bb/extrato.csv")
       File.touch!(path, System.os_time(:second) + 3600)
 
-      assert {:ok, [entry]} = Imports.scan(root)
+      assert {:ok, [entry]} = Imports.scan(user(), root)
       assert entry.status == :updated
       assert entry.content_hash == recorded.content_hash
     end
@@ -125,15 +129,15 @@ defmodule CashLens.ImportsTest do
       synced = write_file(dir, "a_synced.csv", @bb_sample)
       updated = write_file(dir, "b_updated.csv", @bb_sample)
 
-      assert {:ok, _} = Ingestor.import_file(account, synced, import_root: root)
-      assert {:ok, _} = Ingestor.import_file(account, updated, import_root: root)
+      assert {:ok, _} = Ingestor.import_file(user(), account, synced, import_root: root)
+      assert {:ok, _} = Ingestor.import_file(user(), account, updated, import_root: root)
 
       File.touch!(updated, System.os_time(:second) + 3600)
 
       write_file(dir, "z_new_second.csv", @bb_sample)
       write_file(dir, "c_new_first.csv", @bb_sample)
 
-      assert {:ok, entries} = Imports.scan(root)
+      assert {:ok, entries} = Imports.scan(user(), root)
 
       assert Enum.map(entries, &{&1.status, &1.path}) == [
                {:new, "bb/c_new_first.csv"},
@@ -148,10 +152,10 @@ defmodule CashLens.ImportsTest do
       path = write_file(dir, "extrato.csv", @bb_sample)
 
       # No :import_root and no configured setting root → the row is keyed absolutely.
-      assert {:ok, _} = Ingestor.import_file(account, path, import_root: nil)
-      assert Imports.get_imported_file_by_path(Path.expand(path))
+      assert {:ok, _} = Ingestor.import_file(user(), account, path, import_root: nil)
+      assert Imports.get_imported_file_by_path(user(), Path.expand(path))
 
-      assert {:ok, [entry]} = Imports.scan(root)
+      assert {:ok, [entry]} = Imports.scan(user(), root)
       assert entry.path == "bb/extrato.csv"
       assert entry.status == :synced
     end
@@ -166,7 +170,7 @@ defmodule CashLens.ImportsTest do
       File.mkdir_p!(loose)
       write_file(loose, "avulso.csv", @bb_sample)
 
-      assert {:ok, entries} = Imports.scan(root)
+      assert {:ok, entries} = Imports.scan(user(), root)
       assert Enum.map(entries, & &1.path) == ["bb/extrato.csv"]
     end
 
@@ -175,7 +179,7 @@ defmodule CashLens.ImportsTest do
       write_file(dir, "extrato.csv", @bb_sample)
       File.ln_s!(Path.join(dir, "nao_existe.csv"), Path.join(dir, "quebrado.csv"))
 
-      assert {:ok, entries} = Imports.scan(root)
+      assert {:ok, entries} = Imports.scan(user(), root)
       assert Enum.map(entries, & &1.path) == ["bb/extrato.csv"]
     end
 
@@ -187,7 +191,7 @@ defmodule CashLens.ImportsTest do
       File.chmod!(secret, 0o000)
       on_exit(fn -> File.chmod(secret, 0o644) end)
 
-      assert {:ok, entries} = Imports.scan(root)
+      assert {:ok, entries} = Imports.scan(user(), root)
       assert Enum.map(entries, & &1.path) == ["bb/extrato.csv"]
     end
 
@@ -196,16 +200,16 @@ defmodule CashLens.ImportsTest do
       write_file(dir, "extrato.csv", @bb_sample)
 
       {:ok, _row} =
-        Imports.upsert_imported_file(%{
+        Imports.upsert_imported_file(user(), %{
           path: "bb/sumiu.csv",
           content_hash: "deadbeef",
           mtime: DateTime.utc_now() |> DateTime.truncate(:second),
           last_imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
-      assert {:ok, entries} = Imports.scan(root)
+      assert {:ok, entries} = Imports.scan(user(), root)
       assert Enum.map(entries, & &1.path) == ["bb/extrato.csv"]
-      assert Imports.get_imported_file_by_path("bb/sumiu.csv")
+      assert Imports.get_imported_file_by_path(user(), "bb/sumiu.csv")
     end
 
     test "omits files whose extension does not match the account's parser_type", %{root: root} do
@@ -213,7 +217,7 @@ defmodule CashLens.ImportsTest do
       write_file(dir, "extrato.csv", @bb_sample)
       write_file(dir, "fatura.ofx", "<OFX></OFX>")
 
-      assert {:ok, entries} = Imports.scan(root)
+      assert {:ok, entries} = Imports.scan(user(), root)
       assert Enum.map(entries, & &1.path) == ["bb/extrato.csv"]
     end
   end
@@ -255,7 +259,7 @@ defmodule CashLens.ImportsTest do
       dir = account_folder(root, "bb")
       path = write_file(dir, "extrato.csv", @bb_sample)
 
-      assert {:ok, summary} = Ingestor.import_file(account, path, import_root: root)
+      assert {:ok, summary} = Ingestor.import_file(user(), account, path, import_root: root)
 
       assert [file_row] = Repo.all(ImportedFile)
       assert file_row.path == "bb/extrato.csv"
@@ -281,10 +285,10 @@ defmodule CashLens.ImportsTest do
       dir = account_folder(root, "bb")
       path = write_file(dir, "extrato.csv", @bb_sample)
 
-      assert {:ok, first} = Ingestor.import_file(account, path, import_root: root)
+      assert {:ok, first} = Ingestor.import_file(user(), account, path, import_root: root)
       assert first.imported == 3
 
-      assert {:ok, second} = Ingestor.import_file(account, path, import_root: root)
+      assert {:ok, second} = Ingestor.import_file(user(), account, path, import_root: root)
       assert second.imported == 0
 
       assert [_only_one] = Repo.all(ImportedFile)
@@ -297,7 +301,7 @@ defmodule CashLens.ImportsTest do
     test "records an error run for an unreadable file", %{root: root, account: account} do
       missing = Path.join(root, "nao_existe.csv")
 
-      assert {:error, reason} = Ingestor.import_file(account, missing, import_root: root)
+      assert {:error, reason} = Ingestor.import_file(user(), account, missing, import_root: root)
       assert reason =~ "Could not read file"
 
       assert [] = Repo.all(ImportedFile)
@@ -315,7 +319,7 @@ defmodule CashLens.ImportsTest do
       dir = account_folder(root, "x", bank: "Banco X", account: "Sem Parser")
       path = write_file(dir, "extrato.csv", @bb_sample)
 
-      assert {:error, _reason} = Ingestor.import_file(account, path, import_root: root)
+      assert {:error, _reason} = Ingestor.import_file(user(), account, path, import_root: root)
 
       assert [] = Repo.all(ImportedFile)
       assert [run] = Repo.all(ImportRun)
@@ -335,10 +339,10 @@ defmodule CashLens.ImportsTest do
       }
 
       for status <- ImportRun.statuses() do
-        assert {:ok, _run} = Imports.record_run(Map.put(base, :status, status))
+        assert {:ok, _run} = Imports.record_run(user(), Map.put(base, :status, status))
       end
 
-      assert {:error, changeset} = Imports.record_run(Map.put(base, :status, "partial"))
+      assert {:error, changeset} = Imports.record_run(user(), Map.put(base, :status, "partial"))
       assert "is invalid" in errors_on(changeset).status
     end
   end
@@ -349,7 +353,7 @@ defmodule CashLens.ImportsTest do
       path = write_file(dir, "extrato.csv", @bb_sample)
 
       assert {:ok, summary} =
-               Ingestor.import_file(account, path, dry_run: true, import_root: root)
+               Ingestor.import_file(user(), account, path, dry_run: true, import_root: root)
 
       assert summary.imported == 3
 
@@ -361,7 +365,7 @@ defmodule CashLens.ImportsTest do
       missing = Path.join(root, "nao_existe.csv")
 
       assert {:error, _} =
-               Ingestor.import_file(account, missing, dry_run: true, import_root: root)
+               Ingestor.import_file(user(), account, missing, dry_run: true, import_root: root)
 
       assert Repo.all(ImportedFile) == []
       assert Repo.all(ImportRun) == []
@@ -374,7 +378,8 @@ defmodule CashLens.ImportsTest do
       dir = account_folder(root, "y", bank: "Banco Y", account: "Sem Parser")
       path = write_file(dir, "extrato.csv", @bb_sample)
 
-      assert {:error, _} = Ingestor.import_file(account, path, dry_run: true, import_root: root)
+      assert {:error, _} =
+               Ingestor.import_file(user(), account, path, dry_run: true, import_root: root)
 
       assert Repo.all(ImportedFile) == []
       assert Repo.all(ImportRun) == []
@@ -384,7 +389,7 @@ defmodule CashLens.ImportsTest do
       dir = account_folder(root, "bb")
       write_file(dir, "extrato.csv", @bb_sample)
 
-      DirectoryImporter.run(root, dry_run: true, skip_installments: true)
+      DirectoryImporter.run(user(), root, dry_run: true, skip_installments: true)
 
       assert Repo.all(ImportedFile) == []
       assert Repo.all(ImportRun) == []
@@ -396,13 +401,13 @@ defmodule CashLens.ImportsTest do
       dir = account_folder(root, "bb")
       write_file(dir, "extrato.csv", @bb_sample)
 
-      DirectoryImporter.run(root, skip_installments: true)
+      DirectoryImporter.run(user(), root, skip_installments: true)
 
       assert [file_row] = Repo.all(ImportedFile)
       refute String.starts_with?(file_row.path, "/")
       assert file_row.path == "bb/extrato.csv"
 
-      assert {:ok, entries} = Imports.scan(root)
+      assert {:ok, entries} = Imports.scan(user(), root)
       assert entry_for(entries, "bb/extrato.csv").status == :synced
     end
   end
@@ -415,10 +420,10 @@ defmodule CashLens.ImportsTest do
       dir = account_folder(root, "bb")
       path = write_file(dir, "extrato.csv", @bb_sample)
 
-      assert {:ok, _} = Ingestor.import_file(account, path, import_root: root)
-      assert {:ok, _} = Ingestor.import_file(account, path, import_root: root)
+      assert {:ok, _} = Ingestor.import_file(user(), account, path, import_root: root)
+      assert {:ok, _} = Ingestor.import_file(user(), account, path, import_root: root)
 
-      runs = Imports.list_recent_runs(1)
+      runs = Imports.list_recent_runs(user(), 1)
       assert length(runs) == 1
       assert hd(runs).account.id == account.id
     end
@@ -428,14 +433,14 @@ defmodule CashLens.ImportsTest do
     test "resolves the single account matching the entry's bank and name", %{account: account} do
       entry = %{bank: "Banco do Brasil", account: "Conta Corrente"}
 
-      assert {:ok, resolved} = Imports.account_for_entry(entry)
+      assert {:ok, resolved} = Imports.account_for_entry(user(), entry)
       assert resolved.id == account.id
     end
 
     test "returns :not_found when no account matches" do
       entry = %{bank: "Banco Inexistente", account: "Conta Fantasma"}
 
-      assert {:error, :not_found} = Imports.account_for_entry(entry)
+      assert {:error, :not_found} = Imports.account_for_entry(user(), entry)
     end
 
     test "returns :ambiguous when more than one account matches" do
@@ -444,7 +449,7 @@ defmodule CashLens.ImportsTest do
 
       entry = %{bank: "Itau", account: "Conta Dupla"}
 
-      assert {:error, :ambiguous} = Imports.account_for_entry(entry)
+      assert {:error, :ambiguous} = Imports.account_for_entry(user(), entry)
     end
   end
 

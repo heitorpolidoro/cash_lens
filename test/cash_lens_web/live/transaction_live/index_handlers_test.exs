@@ -1,7 +1,7 @@
 defmodule CashLensWeb.TransactionLive.IndexHandlersTest do
   use CashLensWeb.ConnCase, async: false
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
 
   import Ecto.Query
   import Phoenix.LiveViewTest

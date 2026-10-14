@@ -9,7 +9,7 @@ vocabulary the codebase uses for its business logic.
 CashLens is a **personal finance tracking application** with no
 multi-tenancy yet: every domain table carries a NOT NULL `user_id` (FK to `users`, `ON DELETE RESTRICT`),
 and PostgreSQL row-level security (CL-53) already confines every query to the current user, while
-application-level query scoping by `user_id` is still a later CL-20 part. Access is gated by login (`users` table, bcrypt)
+the application scopes every query by `user_id` as well (`Ownership.scope/2`). Access is gated by login (`users` table, bcrypt)
 plus an operator-controlled `enabled` flag that a new sign-up does not have until it is set by
 hand in the DB — see `BACKLOG.md` for future SaaS plans). It
 solves the problem of consolidating money movement across many disconnected sources — bank CSV/OFX
@@ -155,9 +155,16 @@ app role `DATABASE_APP_USER`/`DATABASE_APP_PASSWORD` (default `cash_lens_app`). 
 `DATABASE_URL` (app role) and `MIGRATION_DATABASE_URL` (owner), with verified TLS.
 
 **Every Repo operation runs for a pinned user.** Web requests and LiveViews pin the logged-in
-user (`CashLensWeb.UserAuth`); anything else (Oban workers, mix tasks, new processes/tasks)
-must pin one with `Repo.put_current_user_id/1`, `Repo.with_user/2` or
-`CashLens.Ownership.pin_operator!/0`, otherwise it sees no rows and cannot insert. Raw SQL goes
+user (`CashLensWeb.UserAuth`); anything else (Oban workers, new processes/tasks) must pin one with
+`Repo.put_current_user_id/1` or `Repo.with_user/2`, otherwise it sees no rows and cannot insert.
+Mix tasks and seeds take `--user <email>` (seeds: `CASH_LENS_OPERATOR_EMAIL`) and resolve it with
+`CashLens.Operator.user!/1`, which also pins that user.
+
+**Ownership conventions.** The first argument of context functions is the `%User{}` they act for.
+Reads filter through `Ownership.scope/2`, creates set `user_id` from that user, and references
+to other rows are checked with `Ownership.validate_owned/3`. There is no fallback owner:
+an insert without `user_id` fails. `test/cash_lens/user_scoping_audit_test.exs` fails for any
+function under `lib/` that queries without `Ownership.scope(` or a `user_id` filter. Raw SQL goes
 through `Repo.scoped_query/2`. Tests get a pinned user from `DataCase`/`ConnCase`
 (`@tag :no_current_user` opts out). New tables with a `user_id` need RLS: see
 `docs/migration-checklist.md`.
@@ -167,7 +174,7 @@ Mix aliases worth knowing (`mix.exs`):
 - `mix precommit` / `mix quality_check` — DB setup + compile with warnings-as-errors +
   `deps.unlock --unused` + `mix format --check-formatted` + `credo --strict` + full test suite.
   This is the canonical "is this change safe to commit" command.
-- `mix cash_lens.import <path>` — bulk-import statement files from account folders marked with a
+- `mix cash_lens.import [--user <email>] <path>` — bulk-import statement files from account folders marked with a
   `.account` file (see README.md for the full folder-convention rules).
 
 ## Directory Structure
@@ -181,9 +188,13 @@ lib/cash_lens/                     Business logic ("contexts") — framework-agn
   audit.ex / audit/                Login audit log (`login_attempts`: one row per attempt, incl. unknown emails)
   privacy.ex                       Owned-data registry (`@owned`) behind `export/1` and `delete_account/2`
   health.ex                        DB check behind `GET /health`
-  ownership.ex                     Resolves the owner (`user_id`) of new rows: pinned user, then
-                                      CASH_LENS_OPERATOR_EMAIL, then the only user. `Repo.insert/2`
-                                      fills it; `insert_all` callers must set `user_id` themselves.
+  ownership.ex                     Tenant isolation helpers: `domain_schemas/0`, `scope/2` (the
+                                      `user_id` query filter) and `validate_owned/3` (references must
+                                      belong to the row's owner). There is no owner fallback: nothing
+                                      fills `user_id` in, so every insert names its owner.
+  operator.ex                      `CashLens.Operator.user!/1`: picks the user for mix tasks and
+                                      seeds only (`--user <email>`, or the only user); raises
+                                      `Mix.Error` otherwise. Never called from web or context code.
   transactions.ex / transactions/  Core transaction logic:
                                       transaction.ex          — schema + dedup fingerprinting
                                       auto_categorizer.ex      — rule-based categorization

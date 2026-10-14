@@ -56,7 +56,7 @@ defmodule CashLens.Accounts do
   # Postgres felt like putting it -- which is what every list did before there
   # was a position at all.
   defp in_display_order(query) do
-    from a in query, order_by: [asc_nulls_last: a.position, asc: a.name]
+    order_by(query, [a], asc_nulls_last: a.position, asc: a.name)
   end
 
   @doc """
@@ -122,7 +122,7 @@ defmodule CashLens.Accounts do
     if Keyword.get(opts, :include_closed, true) do
       query
     else
-      from a in query, where: a.is_closed == false
+      where(query, [a], a.is_closed == false)
     end
   end
 

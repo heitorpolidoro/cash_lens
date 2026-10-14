@@ -18,7 +18,7 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # fixed numeric budget is no place to also be racing other tests.
   use CashLensWeb.ConnCase, async: false
 
-  defp user, do: CashLens.Ownership.current_user!()
+  defp user, do: CashLens.Tenancy.current_user()
 
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
