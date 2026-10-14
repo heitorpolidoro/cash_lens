@@ -1,10 +1,9 @@
 alias CashLens.Categories.Category
-alias CashLens.Operator
 alias CashLens.Repo
 
 # Seeds run through `mix run`, with no session: name the owner explicitly via
 # CASH_LENS_OPERATOR_EMAIL (or leave it unset when there is a single user).
-user = Operator.user!(System.get_env("CASH_LENS_OPERATOR_EMAIL"))
+user = CashLens.Ownership.operator_user!(System.get_env("CASH_LENS_OPERATOR_EMAIL"))
 
 for {name, slug} <- [
       {"Valor Inicial", "initial_value"},

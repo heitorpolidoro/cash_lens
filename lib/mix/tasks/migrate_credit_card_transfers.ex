@@ -42,8 +42,8 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
-    {email, _rest} = CashLens.Operator.parse_args(args)
-    user = CashLens.Operator.user!(email)
+    {email, _rest} = CashLens.Ownership.operator_parse_args(args)
+    user = CashLens.Ownership.operator_user!(email)
 
     case Categories.get_category_by_slug(user, "cartao-de-credito") do
       nil ->

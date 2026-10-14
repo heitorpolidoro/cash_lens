@@ -6,7 +6,7 @@ defmodule CashLens.Ownership do
   Every domain table carries a NOT NULL `user_id`. Nothing fills it in: contexts
   take the `%CashLens.Users.User{}` first and set `user_id` on what they create,
   and read through `scope/2`. Tooling picks its user with
-  `CashLens.Operator.user!/1`.
+  `operator_user!/1`.
 
   The pin kept by `put_user_id/1` / `pinned_user_id/0` is only what
   `CashLens.Repo` binds for row-level security.
@@ -15,6 +15,7 @@ defmodule CashLens.Ownership do
   import Ecto.Query
 
   alias CashLens.Repo
+  alias CashLens.Users.User
 
   # Ordered so that rows referencing others (transactions, ...) come first:
   # `CashLens.Privacy` deletes in this order.
@@ -34,6 +35,7 @@ defmodule CashLens.Ownership do
   ]
 
   @pdict_key :cash_lens_owner_user_id
+  @operator_usage "pass --user <email> to pick the user the data belongs to"
 
   @doc "The schemas whose rows belong to a user, dependents first."
   def domain_schemas, do: @domain_schemas
@@ -77,6 +79,46 @@ defmodule CashLens.Ownership do
           Ecto.Changeset.add_error(changeset, field, "does not exist")
         end
     end
+  end
+
+  @doc """
+  Resolves the user that mix tasks and seeds act for and pins it for the calling
+  process (row-level security needs a pinned user for every read and write that
+  follows). Tooling has no session, so it names its user explicitly: the
+  `--user <email>` option, or `CASH_LENS_OPERATOR_EMAIL` for seeds.
+
+    * with an email, returns the user having it, or raises `Mix.Error`;
+    * with `nil`, returns the only user, or raises `Mix.Error` when there are
+      none or several.
+
+  Never creates a user. Call it before any write.
+  """
+  def operator_user!(email) when is_binary(email) and email != "" do
+    case Repo.get_by(User, email: email) do
+      nil -> Mix.raise("no user has the email #{email}")
+      user -> pin_operator(user)
+    end
+  end
+
+  def operator_user!(nil) do
+    case Repo.all(from(u in User, limit: 2)) do
+      [user] -> pin_operator(user)
+      [] -> Mix.raise("no user exists: register one first")
+      _several -> Mix.raise("several users exist: #{@operator_usage}")
+    end
+  end
+
+  def operator_user!(_email), do: operator_user!(nil)
+
+  @doc "Reads the `--user` option out of `args`; returns `{email_or_nil, remaining_args}`."
+  def operator_parse_args(args) do
+    {opts, rest, _invalid} = OptionParser.parse(args, strict: [user: :string])
+    {Keyword.get(opts, :user), rest}
+  end
+
+  defp pin_operator(user) do
+    Repo.put_current_user_id(user.id)
+    user
   end
 
   defp owned?(nil, _id, _schema), do: false

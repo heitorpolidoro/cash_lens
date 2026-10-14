@@ -24,8 +24,6 @@ defmodule CashLens.UserScopingAuditTest do
     "lib/cash_lens/privacy.ex",
     # Defines `scope/2` itself and the owner lookup behind `validate_owned/3`.
     "lib/cash_lens/ownership.ex",
-    # Resolves the operator among all users, before any user is known.
-    "lib/cash_lens/operator.ex",
     # The supervision tree runs startup checks outside any user context.
     "lib/cash_lens/application.ex"
   ]
@@ -56,8 +54,8 @@ defmodule CashLens.UserScopingAuditTest do
     |> Enum.reject(&(&1 in @allow_list))
   end
 
-  test "the allow-list holds only the seven documented files" do
-    assert length(@allow_list) == 7
+  test "the allow-list holds only the six documented files" do
+    assert length(@allow_list) == 6
     assert Enum.all?(@allow_list, &File.regular?/1)
   end
 

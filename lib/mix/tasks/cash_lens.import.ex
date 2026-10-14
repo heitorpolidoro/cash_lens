@@ -20,7 +20,7 @@ defmodule Mix.Tasks.CashLens.Import do
 
   @impl Mix.Task
   def run(args) do
-    case CashLens.Operator.parse_args(args) do
+    case CashLens.Ownership.operator_parse_args(args) do
       {email, [path]} -> import_path(email, path)
       _ -> usage()
     end
@@ -34,7 +34,7 @@ defmodule Mix.Tasks.CashLens.Import do
   defp import_path(email, path) do
     Application.put_env(:cash_lens, :start_console_reporter, false)
     Mix.Task.run("app.start")
-    user = CashLens.Operator.user!(email)
+    user = CashLens.Ownership.operator_user!(email)
 
     previous_level = Logger.level()
     Logger.configure(level: :warning)

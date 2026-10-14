@@ -20,8 +20,8 @@ defmodule Mix.Tasks.CashLens.MigrateOurocardTxt do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
-    {email, _rest} = CashLens.Operator.parse_args(args)
-    user = CashLens.Operator.user!(email)
+    {email, _rest} = CashLens.Ownership.operator_parse_args(args)
+    user = CashLens.Ownership.operator_user!(email)
 
     accounts =
       from(a in Account, where: a.parser_type == "ourocard_ofx")

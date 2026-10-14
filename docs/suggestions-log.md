@@ -1647,3 +1647,9 @@ commit claimed none were added. Fixed; back to 23.
 - Code review: `Operator.user!/1` catch-all clause treats a non-binary or empty email as `nil`, so `--user ""` silently falls back to the only user. Consider raising for an empty string.
 - Code review: The audit scan is textual and coarse by design; a `user_id` mention anywhere in a function block satisfies it, even when it is not used as a filter.
 - Code review: Spec says `:parent_id` but the code correctly uses `:parent_transaction_id`; fix the spec wording.
+
+## [CL-62] Remove operator.ex from the user scoping audit allow-list — 2026-10-14
+- Spec review: Result 3 bundled deletion, relocation, arity and a second function; consider splitting into single-assertion lines.
+- Spec review: Say explicitly that test/cash_lens/operator_test.exs (CashLens.OperatorTest) is removed or merged into ownership_test.exs, so no test references the deleted module.
+- Code review: AGENTS.md:161 and AGENTS.md:195 still reference the deleted `CashLens.Operator.user!/1` / `operator.ex`; update to `CashLens.Ownership.operator_user!/1`.
+- Code review: Pre-existing (moved verbatim): `operator_user!("")` silently falls back to the only user.

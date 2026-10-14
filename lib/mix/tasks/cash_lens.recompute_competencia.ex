@@ -13,8 +13,8 @@ defmodule Mix.Tasks.CashLens.RecomputeCompetencia do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
-    {email, _rest} = CashLens.Operator.parse_args(args)
-    user = CashLens.Operator.user!(email)
+    {email, _rest} = CashLens.Ownership.operator_parse_args(args)
+    user = CashLens.Ownership.operator_user!(email)
     n = CashLens.CreditCards.recompute_competencia(user)
     Mix.shell().info("Recomputed competência for #{n} statement(s).")
   end

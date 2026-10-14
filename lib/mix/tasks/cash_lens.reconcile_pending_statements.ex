@@ -13,8 +13,8 @@ defmodule Mix.Tasks.CashLens.ReconcilePendingStatements do
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
-    {email, _rest} = CashLens.Operator.parse_args(args)
-    user = CashLens.Operator.user!(email)
+    {email, _rest} = CashLens.Ownership.operator_parse_args(args)
+    user = CashLens.Ownership.operator_user!(email)
     n = CashLens.CreditCards.reconcile_pending(user)
     Mix.shell().info("Reconciled: #{n} statement(s) absorbed.")
   end

@@ -106,4 +106,49 @@ defmodule CashLens.OwnershipTest do
       assert CashLens.CreditCardsFixtures.statement_fixture(%{user: b}).user_id == b.id
     end
   end
+
+  describe "operator_user!/1" do
+    @describetag :no_current_user
+
+    test "returns the user having the given email and pins it" do
+      user_fixture()
+      target = user_fixture()
+
+      assert Ownership.operator_user!(target.email).id == target.id
+      assert Repo.current_user_id() == target.id
+    end
+
+    test "raises Mix.Error for an unknown email" do
+      user_fixture()
+
+      assert_raise Mix.Error, ~r/ghost@example.com/, fn ->
+        Ownership.operator_user!("ghost@example.com")
+      end
+    end
+
+    test "returns the only user when no email is given" do
+      user = user_fixture()
+      assert Ownership.operator_user!(nil).id == user.id
+      assert Ownership.operator_user!("").id == user.id
+    end
+
+    test "raises Mix.Error when no user exists" do
+      assert_raise Mix.Error, ~r/no user exists/, fn -> Ownership.operator_user!(nil) end
+    end
+
+    test "raises Mix.Error when several users exist and no email is given" do
+      user_fixture()
+      user_fixture()
+      assert_raise Mix.Error, ~r/--user <email>/, fn -> Ownership.operator_user!(nil) end
+    end
+  end
+
+  describe "operator_parse_args/1" do
+    test "splits --user from the other arguments" do
+      assert Ownership.operator_parse_args(["--user", "a@x.com", "/tmp/x"]) ==
+               {"a@x.com", ["/tmp/x"]}
+
+      assert Ownership.operator_parse_args(["/tmp/x"]) == {nil, ["/tmp/x"]}
+    end
+  end
 end
