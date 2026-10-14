@@ -4,6 +4,9 @@
 #
 #   ./run         start the Phoenix server
 #   ./run --iex   start it inside an IEx shell
+#   ./run --db    start only the Postgres, migrated and provisioned, and leave
+#                 it running (for Meridian's runs); stop it with
+#                 `docker rm -f cash_lens-db-native`
 #
 # Why this script exists at all: docker-compose.yml deliberately does not publish
 # Postgres to the host, so nothing outside the compose network can reach it. A
@@ -37,10 +40,12 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 iex_mode=false
+db_mode=false
 case "${1:-}" in
   --iex)  iex_mode=true ;;
+  --db)   db_mode=true ;;
   "")     ;;
-  *)      echo "usage: ./run [--iex]" >&2; exit 2 ;;
+  *)      echo "usage: ./run [--iex|--db]" >&2; exit 2 ;;
 esac
 
 PG_IMAGE="postgres:16-alpine"
@@ -48,6 +53,14 @@ PG_CONTAINER="cash_lens-db-native"
 PG_VOLUME="$(docker compose config --format json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["name"] + "_cash_lens_pgdata")')"
 HOST_PORT="${DATABASE_PORT:-5432}"
+
+# --db is called before every Meridian run. A Postgres already up and healthy
+# is left alone: recreating it would cut off whatever is using it.
+if [ "$db_mode" = true ] \
+  && [ "$(docker inspect -f '{{.State.Health.Status}}' "$PG_CONTAINER" 2>/dev/null)" = "healthy" ]; then
+  echo "🐘 Postgres is already up at localhost:$HOST_PORT."
+  exit 0
+fi
 
 _cleaned=false
 _pg_started=false
@@ -146,6 +159,13 @@ export PORT="${PORT:-4444}"
 # server connects as (docs/security.md).
 mix ecto.migrate
 mix cash_lens.db.provision
+
+if [ "$db_mode" = true ]; then
+  # Leave the container running: disarm the trap that would remove it.
+  trap - EXIT INT TERM HUP
+  echo "🐘 Postgres is up at localhost:$HOST_PORT. Stop it with: docker rm -f $PG_CONTAINER"
+  exit 0
+fi
 
 echo "💻 Starting Phoenix natively on port $PORT..."
 # Deliberately not `exec`: exec replaces this shell, which would discard the
