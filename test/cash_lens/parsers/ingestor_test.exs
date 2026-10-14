@@ -788,7 +788,11 @@ defmodule CashLens.Parsers.IngestorTest do
       account = account_fixture(parser_type: "bb_csv")
 
       assert {:ok, %{imported: 3}} = Ingestor.import_file(account, @bb_sample)
-      assert_enqueued(worker: SyncRecurringWorker)
+
+      assert_enqueued(
+        worker: SyncRecurringWorker,
+        args: %{user_id: CashLens.Tenancy.current_user().id}
+      )
     end
 
     test "a dry run queues nothing: it wrote no history to re-derive from" do

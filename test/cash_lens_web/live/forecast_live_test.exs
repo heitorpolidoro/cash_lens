@@ -35,7 +35,7 @@ defmodule CashLensWeb.ForecastLiveTest do
         is_salary: true
       })
 
-      projection = Forecast.project()
+      projection = Forecast.project(CashLens.Tenancy.current_user())
       income_date = Forecast.next_income_date(projection)
       pre_salary = Forecast.balance_on(projection, Date.add(income_date, -1))
       minimum = Forecast.minimum_point(projection, 30)
@@ -51,7 +51,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       refute html =~ "Mínimo Projetado"
       refute html =~ "Projeção em 12 Meses"
 
-      trough = Forecast.trough(Forecast.project(365), 365)
+      trough = Forecast.trough(Forecast.project(CashLens.Tenancy.current_user(), 365), 365)
 
       card = scoped(view, "[data-role='kpi-bankruptcy']")
       assert card =~ format_currency(trough.balance)
@@ -144,7 +144,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       today = Date.utc_today()
       recurring_item_fixture(%{day_of_month: today.day, amount: "-5000.00"})
 
-      zero_date = Forecast.project().zero_date
+      zero_date = Forecast.project(CashLens.Tenancy.current_user()).zero_date
       assert zero_date
 
       {:ok, view, _html} = live(conn, ~p"/forecast")
@@ -228,7 +228,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       account_fixture(%{balance: "100.00"})
       recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-5000.00"})
 
-      zero_date = Forecast.project().zero_date
+      zero_date = Forecast.project(CashLens.Tenancy.current_user()).zero_date
       assert zero_date
 
       {:ok, view, _html} = live(conn, ~p"/forecast")
@@ -245,7 +245,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       account_fixture(%{balance: "100000.00"})
       recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-10.00"})
 
-      refute Forecast.project().zero_date
+      refute Forecast.project(CashLens.Tenancy.current_user()).zero_date
 
       {:ok, view, _html} = live(conn, ~p"/forecast")
 
@@ -299,7 +299,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       account_fixture(%{balance: "10000.00"})
       recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-500.00"})
 
-      projection = Forecast.project()
+      projection = Forecast.project(CashLens.Tenancy.current_user())
       expected = Forecast.occurrences_within(projection, 90)
 
       {:ok, view, html} = live(conn, ~p"/forecast")
@@ -344,7 +344,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       account_fixture(%{balance: "10000.00"})
       recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-500.00"})
 
-      projection = Forecast.project()
+      projection = Forecast.project(CashLens.Tenancy.current_user())
       min_30 = Forecast.minimum_point(projection, 30)
       min_90 = Forecast.minimum_point(projection, 90)
 
@@ -378,7 +378,7 @@ defmodule CashLensWeb.ForecastLiveTest do
         total_a_pagar: Decimal.new("500.00")
       })
 
-      projection = Forecast.project()
+      projection = Forecast.project(CashLens.Tenancy.current_user())
 
       bill =
         Enum.find(projection.occurrences, &(Map.get(&1, :origin) == :boleto))
@@ -514,7 +514,8 @@ defmodule CashLensWeb.ForecastLiveTest do
       {:ok, view, _html} = live(conn, ~p"/forecast")
       view |> element("button[phx-click='toggle_active']") |> render_click()
 
-      assert Forecast.get_recurring_item!(item.id).active == false
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active ==
+               false
     end
 
     test "toggle_salary marks the item as the main salary", %{conn: conn} do
@@ -526,13 +527,13 @@ defmodule CashLensWeb.ForecastLiveTest do
       |> element("button[phx-click='toggle_salary'][phx-value-id='#{item.id}']")
       |> render_click()
 
-      assert Forecast.get_recurring_item!(item.id).is_salary
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).is_salary
 
       view
       |> element("button[phx-click='toggle_salary'][phx-value-id='#{item.id}']")
       |> render_click()
 
-      refute Forecast.get_recurring_item!(item.id).is_salary
+      refute Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).is_salary
     end
   end
 
@@ -584,7 +585,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       |> element("form[phx-submit='save_item']")
       |> render_submit(%{"day_of_month" => "20", "amount" => item.amount})
 
-      reloaded = Forecast.get_recurring_item!(item.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id)
       assert reloaded.day_of_month == 20
       assert reloaded.manually_edited == true
       refute has_element?(view, "form[phx-submit='save_item']")
@@ -602,7 +603,9 @@ defmodule CashLensWeb.ForecastLiveTest do
       view |> element("button[phx-click='close_modal']") |> render_click()
 
       refute has_element?(view, "form[phx-submit='save_item']")
-      assert Forecast.get_recurring_item!(item.id).day_of_month == 5
+
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).day_of_month ==
+               5
     end
 
     test "keeps the modal open and reports invalid values", %{conn: conn} do
@@ -621,7 +624,9 @@ defmodule CashLensWeb.ForecastLiveTest do
 
       assert html =~ "Valores inválidos"
       assert has_element?(view, "form[phx-submit='save_item']")
-      assert Forecast.get_recurring_item!(item.id).day_of_month == 5
+
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).day_of_month ==
+               5
     end
 
     test "reports insufficient history when re-syncing an item without transactions", %{
@@ -675,7 +680,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       |> element("button[phx-click='resync_item'][phx-value-id='#{item.id}']")
       |> render_click()
 
-      reloaded = Forecast.get_recurring_item!(item.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id)
       refute reloaded.manually_edited
       assert Decimal.equal?(reloaded.amount, Decimal.new("-50.00"))
     end
@@ -739,7 +744,7 @@ defmodule CashLensWeb.ForecastLiveTest do
           "amount" => "-480.00"
         })
 
-      assert [item] = Forecast.list_recurring_items()
+      assert [item] = Forecast.list_recurring_items(CashLens.Tenancy.current_user())
       assert item.category_id == category.id
       assert item.day_of_month == 9
       assert item.manually_edited == true
@@ -772,7 +777,7 @@ defmodule CashLensWeb.ForecastLiveTest do
         })
       end
 
-      {:ok, suggestion} = Forecast.suggest_for_category(category)
+      {:ok, suggestion} = Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category)
 
       {:ok, view, _html} = live(conn, ~p"/forecast")
       render_click(view, "open_new", %{})
@@ -786,13 +791,13 @@ defmodule CashLensWeb.ForecastLiveTest do
         "amount" => "-42.00"
       })
 
-      assert [created] = Forecast.list_recurring_items()
+      assert [created] = Forecast.list_recurring_items(CashLens.Tenancy.current_user())
       refute suggestion["day_of_month"] == created.day_of_month
       refute Decimal.equal?(suggestion["amount"], created.amount)
 
-      assert %{updated: 0} = Forecast.sync_all()
+      assert %{updated: 0} = Forecast.sync_all(CashLens.Tenancy.current_user())
 
-      reloaded = Forecast.get_recurring_item!(created.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), created.id)
       assert reloaded.day_of_month == 3
       assert Decimal.equal?(reloaded.amount, Decimal.new("-42.00"))
     end
@@ -813,7 +818,7 @@ defmodule CashLensWeb.ForecastLiveTest do
           "amount" => "-10.00"
         })
 
-      assert Forecast.list_recurring_items() == []
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
       assert html =~ "Valores inválidos"
       assert has_element?(view, "form[phx-submit='save_item']")
 
@@ -826,7 +831,7 @@ defmodule CashLensWeb.ForecastLiveTest do
         "amount" => "0"
       })
 
-      assert Forecast.list_recurring_items() == []
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
       assert has_element?(view, "form[phx-submit='save_item']")
     end
 
@@ -835,7 +840,9 @@ defmodule CashLensWeb.ForecastLiveTest do
 
       {:ok, view, html} = live(conn, ~p"/forecast")
 
-      assert Forecast.list_categories_without_recurring_item() == []
+      assert Forecast.list_categories_without_recurring_item(CashLens.Tenancy.current_user()) ==
+               []
+
       assert has_element?(view, "button[phx-click='open_new'][disabled]")
       assert html =~ "Todas as categorias já possuem um lançamento recorrente"
 
@@ -899,7 +906,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       html = view |> element("button[phx-click='sync_all']") |> render_click()
 
       assert html =~ "Água"
-      assert [_item] = Forecast.list_recurring_items()
+      assert [_item] = Forecast.list_recurring_items(CashLens.Tenancy.current_user())
     end
   end
 
@@ -910,6 +917,61 @@ defmodule CashLensWeb.ForecastLiveTest do
       assert html =~ "Previsão"
       assert html =~ "Nenhum lançamento recorrente cadastrado"
       assert count(html, "data-role=\"ruler-event\"") == 0
+    end
+  end
+
+  describe "another user's items" do
+    setup do
+      other = CashLens.UsersFixtures.user_fixture(%{enabled: true})
+      category = category_fixture(%{user: other, type: "fixed", name: "Segredo"})
+
+      foreign =
+        recurring_item_fixture(%{
+          user: other,
+          category_id: category.id,
+          label: "ContaSecretaDoOutro",
+          amount: "-777.77"
+        })
+
+      %{other: other, foreign: foreign}
+    end
+
+    test "the screen lists only the logged-in user's items", %{conn: conn, user: me} do
+      recurring_item_fixture(%{user: me, label: "MinhaConta", amount: "-12.34"})
+
+      {:ok, _view, html} = live(conn, ~p"/forecast")
+
+      assert html =~ "MinhaConta"
+      refute html =~ "ContaSecretaDoOutro"
+      refute html =~ "777,77"
+    end
+
+    test "a forged foreign id gives an error flash and changes nothing", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, view, _html} = live(conn, ~p"/forecast")
+
+      for {event, params} <- [
+            {"toggle_active", %{"id" => foreign.id}},
+            {"toggle_salary", %{"id" => foreign.id}},
+            {"resync_item", %{"id" => foreign.id}},
+            {"open_edit", %{"id" => foreign.id}}
+          ] do
+        html = render_click(view, event, params)
+        assert html =~ "não encontrada"
+        refute html =~ "ContaSecretaDoOutro"
+      end
+
+      reloaded =
+        CashLens.Tenancy.acting_as(other, fn ->
+          Forecast.get_recurring_item!(other, foreign.id)
+        end)
+
+      assert reloaded.active == foreign.active
+      assert reloaded.is_salary == foreign.is_salary
+      assert reloaded.updated_at == foreign.updated_at
     end
   end
 end

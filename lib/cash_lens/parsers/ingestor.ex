@@ -105,7 +105,8 @@ defmodule CashLens.Parsers.Ingestor do
   # changed. A dry run wrote nothing, and a run that imported nothing changed no
   # history, so neither has anything to re-derive.
   defp maybe_sync_recurring({:ok, %{imported: imported}} = result, false) when imported > 0 do
-    SyncRecurringWorker.enqueue()
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    SyncRecurringWorker.enqueue(CashLens.Ownership.current_user_id!())
     result
   end
 

@@ -663,7 +663,7 @@ defmodule CashLensWeb.PageControllerTest do
       category = category_fixture(%{type: "fixed", name: "Aluguel"})
 
       {:ok, _} =
-        CashLens.Forecast.create_recurring_item(%{
+        CashLens.Forecast.create_recurring_item(CashLens.Tenancy.current_user(), %{
           "category_id" => category.id,
           "label" => "Aluguel",
           "day_of_month" => Date.utc_today().day,
@@ -678,6 +678,42 @@ defmodule CashLensWeb.PageControllerTest do
 
       assert severity in ~w(critical near distant safe)
       assert dashboard =~ "Projeção de Falência"
+    end
+  end
+
+  describe "another user's forecast" do
+    test "the dashboard forecast and bills cover only the logged-in user", %{conn: conn} do
+      other = CashLens.UsersFixtures.user_fixture(%{enabled: true})
+      day = Date.utc_today() |> Date.add(2) |> Map.fetch!(:day)
+      category = CashLens.CategoriesFixtures.category_fixture(%{user: other, type: "fixed"})
+
+      CashLens.ForecastFixtures.recurring_item_fixture(%{
+        user: other,
+        category_id: category.id,
+        label: "ContaSecretaDoOutro",
+        day_of_month: day,
+        amount: "-777.77"
+      })
+
+      html = conn |> get(~p"/") |> html_response(200)
+
+      refute html =~ "ContaSecretaDoOutro"
+      refute html =~ "777,77"
+    end
+
+    test "the logged-in user's own bill is listed", %{conn: conn, user: me} do
+      day = Date.utc_today() |> Date.add(2) |> Map.fetch!(:day)
+      category = CashLens.CategoriesFixtures.category_fixture(%{user: me, type: "fixed"})
+
+      CashLens.ForecastFixtures.recurring_item_fixture(%{
+        user: me,
+        category_id: category.id,
+        label: "MinhaConta",
+        day_of_month: day,
+        amount: "-55.55"
+      })
+
+      assert conn |> get(~p"/") |> html_response(200) =~ "MinhaConta"
     end
   end
 end

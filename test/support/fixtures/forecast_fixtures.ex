@@ -22,7 +22,7 @@ defmodule CashLens.ForecastFixtures do
           day_of_month: 10,
           amount: "-100.00"
         })
-        |> CashLens.Forecast.create_recurring_item()
+        |> then(&CashLens.Forecast.create_recurring_item(user, &1))
       end)
 
     item

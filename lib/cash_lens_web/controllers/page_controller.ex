@@ -29,7 +29,7 @@ defmodule CashLensWeb.PageController do
     # 30-day slice of a 365-day projection is the same slice, so building two
     # would only cost twice.
     projection =
-      Forecast.project(@forecast_horizon_days, Date.utc_today(),
+      Forecast.project(user, @forecast_horizon_days, Date.utc_today(),
         accounts: all_accounts,
         latest_balances: latest_balances
       )
@@ -100,7 +100,7 @@ defmodule CashLensWeb.PageController do
       historical: historical,
       closed_statements: CreditCards.closed_without_statement(user),
       upcoming: Forecast.upcoming_bills(projection),
-      bankruptcy_card: BankruptcyCard.assigns_from(projection, @forecast_horizon_days),
+      bankruptcy_card: BankruptcyCard.assigns_from(user, projection, @forecast_horizon_days),
       today: Date.utc_today()
     )
   end

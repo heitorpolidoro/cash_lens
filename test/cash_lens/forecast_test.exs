@@ -34,7 +34,8 @@ defmodule CashLens.ForecastTest do
         amount: "-50.00"
       })
 
-      assert Forecast.suggest_for_category(category) == :insufficient_history
+      assert Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category) ==
+               :insufficient_history
     end
 
     test "suggests the median day and the most recent amount" do
@@ -63,7 +64,7 @@ defmodule CashLens.ForecastTest do
       })
 
       assert {:ok, %{"day_of_month" => 12, "amount" => amount}} =
-               Forecast.suggest_for_category(category)
+               Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category)
 
       assert Decimal.equal?(amount, "-55.00")
     end
@@ -86,7 +87,8 @@ defmodule CashLens.ForecastTest do
         amount: "-50.00"
       })
 
-      assert Forecast.suggest_for_category(category) == :insufficient_history
+      assert Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category) ==
+               :insufficient_history
     end
   end
 
@@ -95,7 +97,7 @@ defmodule CashLens.ForecastTest do
       category = category_fixture(%{type: "fixed"})
 
       assert {:ok, %RecurringItem{} = item} =
-               Forecast.create_recurring_item(%{
+               Forecast.create_recurring_item(CashLens.Tenancy.current_user(), %{
                  category_id: category.id,
                  label: category.name,
                  day_of_month: 10,
@@ -112,7 +114,7 @@ defmodule CashLens.ForecastTest do
       category = category_fixture(%{type: "fixed"})
 
       assert {:error, changeset} =
-               Forecast.create_recurring_item(%{
+               Forecast.create_recurring_item(CashLens.Tenancy.current_user(), %{
                  category_id: category.id,
                  label: "x",
                  day_of_month: 32,
@@ -126,7 +128,7 @@ defmodule CashLens.ForecastTest do
       category = category_fixture(%{type: "fixed"})
 
       assert {:error, changeset} =
-               Forecast.create_recurring_item(%{
+               Forecast.create_recurring_item(CashLens.Tenancy.current_user(), %{
                  category_id: category.id,
                  label: "x",
                  day_of_month: 10,
@@ -141,7 +143,7 @@ defmodule CashLens.ForecastTest do
       recurring_item_fixture(%{category_id: category.id})
 
       assert {:error, changeset} =
-               Forecast.create_recurring_item(%{
+               Forecast.create_recurring_item(CashLens.Tenancy.current_user(), %{
                  category_id: category.id,
                  label: "dup",
                  day_of_month: 5,
@@ -157,14 +159,14 @@ defmodule CashLens.ForecastTest do
       recurring_item_fixture(%{day_of_month: 20})
       recurring_item_fixture(%{day_of_month: 5})
 
-      assert [first, second] = Forecast.list_recurring_items()
+      assert [first, second] = Forecast.list_recurring_items(CashLens.Tenancy.current_user())
       assert first.day_of_month == 5
       assert second.day_of_month == 20
     end
 
     test "get_recurring_item!/1 fetches by id" do
       item = recurring_item_fixture()
-      assert Forecast.get_recurring_item!(item.id).id == item.id
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).id == item.id
     end
   end
 
@@ -190,7 +192,8 @@ defmodule CashLens.ForecastTest do
       account = account_fixture()
       three_months(category, account, 4)
 
-      assert Forecast.suggest_for_category(category) == :no_recent_occurrence
+      assert Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category) ==
+               :no_recent_occurrence
     end
 
     test "last month counts, because this month may not be imported yet" do
@@ -201,7 +204,7 @@ defmodule CashLens.ForecastTest do
       account = account_fixture()
       three_months(category, account, 1)
 
-      assert {:ok, _} = Forecast.suggest_for_category(category)
+      assert {:ok, _} = Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category)
     end
 
     test "two months back is already too old" do
@@ -209,7 +212,8 @@ defmodule CashLens.ForecastTest do
       account = account_fixture()
       three_months(category, account, 2)
 
-      assert Forecast.suggest_for_category(category) == :no_recent_occurrence
+      assert Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category) ==
+               :no_recent_occurrence
     end
 
     test "sync_all creates nothing for a bill that stopped" do
@@ -217,8 +221,13 @@ defmodule CashLens.ForecastTest do
       account = account_fixture()
       three_months(category, account, 4)
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
-      assert Forecast.list_recurring_items() == []
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
     end
 
     test "sync_all switches off an item whose bill stopped arriving" do
@@ -228,8 +237,13 @@ defmodule CashLens.ForecastTest do
 
       item = recurring_item_fixture(%{category_id: category.id})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 1}
-      refute Forecast.get_recurring_item!(item.id).active
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 1
+             }
+
+      refute Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "switching off is not deleting: the label and the edits survive" do
@@ -241,9 +255,9 @@ defmodule CashLens.ForecastTest do
 
       item = recurring_item_fixture(%{category_id: category.id, label: "Netflix"})
 
-      Forecast.sync_all()
+      Forecast.sync_all(CashLens.Tenancy.current_user())
 
-      reloaded = Forecast.get_recurring_item!(item.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id)
       assert reloaded.label == "Netflix"
       assert Decimal.equal?(reloaded.amount, item.amount)
     end
@@ -255,7 +269,11 @@ defmodule CashLens.ForecastTest do
 
       recurring_item_fixture(%{category_id: category.id, active: false})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
     end
 
     test "a manually edited item is left on, like the rest of the sync leaves it" do
@@ -266,8 +284,13 @@ defmodule CashLens.ForecastTest do
 
       item = recurring_item_fixture(%{category_id: category.id, manually_edited: true})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
-      assert Forecast.get_recurring_item!(item.id).active
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "an item that is still arriving is updated, not switched off" do
@@ -277,9 +300,13 @@ defmodule CashLens.ForecastTest do
 
       item = recurring_item_fixture(%{category_id: category.id, day_of_month: 1})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 1, deactivated: 0}
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 1,
+               deactivated: 0
+             }
 
-      reloaded = Forecast.get_recurring_item!(item.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id)
       assert reloaded.active
       assert reloaded.day_of_month == 10
     end
@@ -300,16 +327,26 @@ defmodule CashLens.ForecastTest do
 
       item = recurring_item_fixture(%{category_id: category.id})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 1}
-      refute Forecast.get_recurring_item!(item.id).active
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 1
+             }
+
+      refute Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "sync_all switches off an item with no transactions in the window" do
       category = category_fixture(%{type: "fixed", name: "Igreja"})
       item = recurring_item_fixture(%{category_id: category.id})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 1}
-      refute Forecast.get_recurring_item!(item.id).active
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 1
+             }
+
+      refute Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "sync_all leaves an item with a single recent transaction alone" do
@@ -319,15 +356,24 @@ defmodule CashLens.ForecastTest do
 
       item = recurring_item_fixture(%{category_id: category.id})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
-      assert Forecast.get_recurring_item!(item.id).active
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "sync_all does not count an already inactive item with no history" do
       category = category_fixture(%{type: "fixed", name: "Igreja"})
       recurring_item_fixture(%{category_id: category.id, active: false})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
     end
 
     test "sync_all leaves a manually edited item on even with stale history" do
@@ -337,8 +383,13 @@ defmodule CashLens.ForecastTest do
 
       item = recurring_item_fixture(%{category_id: category.id, manually_edited: true})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
-      assert Forecast.get_recurring_item!(item.id).active
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "sync_all creates nothing for a category without an item and stale or thin history" do
@@ -348,8 +399,13 @@ defmodule CashLens.ForecastTest do
       one_transaction(stale, account, 4)
       one_transaction(recent, account, 0)
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
-      assert Forecast.list_recurring_items() == []
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
     end
 
     test "resync says why it cannot, rather than reporting no history" do
@@ -359,7 +415,8 @@ defmodule CashLens.ForecastTest do
 
       item = recurring_item_fixture(%{category_id: category.id})
 
-      assert Forecast.resync_item(item) == {:error, :no_recent_occurrence}
+      assert Forecast.resync_item(CashLens.Tenancy.current_user(), item) ==
+               {:error, :no_recent_occurrence}
     end
   end
 
@@ -387,7 +444,8 @@ defmodule CashLens.ForecastTest do
       account = account_fixture()
       on_days(category, account, [20, 14, 14])
 
-      assert {:ok, %{"day_of_month" => 14}} = Forecast.suggest_for_category(category)
+      assert {:ok, %{"day_of_month" => 14}} =
+               Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category)
     end
 
     test "a repeated late day beats a single early one" do
@@ -395,7 +453,8 @@ defmodule CashLens.ForecastTest do
       account = account_fixture()
       on_days(category, account, [25, 25, 3])
 
-      assert {:ok, %{"day_of_month" => 25}} = Forecast.suggest_for_category(category)
+      assert {:ok, %{"day_of_month" => 25}} =
+               Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category)
     end
 
     test "the most frequent day wins even when it sits at one end" do
@@ -405,7 +464,8 @@ defmodule CashLens.ForecastTest do
       account = account_fixture()
       on_days(category, account, [28, 28, 3, 10, 15])
 
-      assert {:ok, %{"day_of_month" => 28}} = Forecast.suggest_for_category(category)
+      assert {:ok, %{"day_of_month" => 28}} =
+               Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category)
     end
 
     test "falls back to the median when every day is distinct" do
@@ -415,7 +475,8 @@ defmodule CashLens.ForecastTest do
       account = account_fixture()
       on_days(category, account, [18, 15, 12])
 
-      assert {:ok, %{"day_of_month" => 15}} = Forecast.suggest_for_category(category)
+      assert {:ok, %{"day_of_month" => 15}} =
+               Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category)
     end
   end
 
@@ -441,8 +502,13 @@ defmodule CashLens.ForecastTest do
         amount: "-52.00"
       })
 
-      assert Forecast.sync_all() == %{created: 1, updated: 0, deactivated: 0}
-      assert [item] = Forecast.list_recurring_items()
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 1,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert [item] = Forecast.list_recurring_items(CashLens.Tenancy.current_user())
       assert item.label == "Água"
       assert item.day_of_month == 10
     end
@@ -450,14 +516,23 @@ defmodule CashLens.ForecastTest do
     test "does not create an item for a category with insufficient history" do
       category_fixture(%{type: "fixed", name: "Sem histórico"})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
-      assert Forecast.list_recurring_items() == []
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
     end
 
     test "ignores variable categories" do
       category_fixture(%{type: "variable", name: "Mercado"})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
     end
 
     test "updates an existing non-manually-edited item, leaves manually-edited ones alone" do
@@ -481,9 +556,13 @@ defmodule CashLens.ForecastTest do
       auto_item =
         recurring_item_fixture(%{category_id: category.id, day_of_month: 1, amount: "-1.00"})
 
-      assert Forecast.sync_all() == %{created: 0, updated: 1, deactivated: 0}
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 1,
+               deactivated: 0
+             }
 
-      reloaded = Forecast.get_recurring_item!(auto_item.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), auto_item.id)
       assert reloaded.day_of_month == 10
       assert Decimal.equal?(reloaded.amount, "-60.00")
     end
@@ -514,9 +593,13 @@ defmodule CashLens.ForecastTest do
           manually_edited: true
         })
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
 
-      reloaded = Forecast.get_recurring_item!(edited_item.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), edited_item.id)
       assert reloaded.day_of_month == 1
       assert Decimal.equal?(reloaded.amount, "-1.00")
     end
@@ -540,8 +623,13 @@ defmodule CashLens.ForecastTest do
         })
       end
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
-      assert Forecast.list_recurring_items() == []
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
     end
   end
 
@@ -575,7 +663,7 @@ defmodule CashLens.ForecastTest do
           manually_edited: true
         })
 
-      assert {:ok, updated} = Forecast.resync_item(item)
+      assert {:ok, updated} = Forecast.resync_item(CashLens.Tenancy.current_user(), item)
       assert updated.day_of_month == 10
       assert Decimal.equal?(updated.amount, "-99.00")
       assert updated.manually_edited == false
@@ -583,7 +671,9 @@ defmodule CashLens.ForecastTest do
 
     test "returns an error when there isn't enough history" do
       item = recurring_item_fixture()
-      assert Forecast.resync_item(item) == {:error, :insufficient_history}
+
+      assert Forecast.resync_item(CashLens.Tenancy.current_user(), item) ==
+               {:error, :insufficient_history}
     end
   end
 
@@ -592,7 +682,10 @@ defmodule CashLens.ForecastTest do
       item = recurring_item_fixture(%{day_of_month: 5, amount: "-10.00"})
 
       assert {:ok, updated} =
-               Forecast.manual_update(item, %{"day_of_month" => "20", "amount" => "-15.00"})
+               Forecast.manual_update(CashLens.Tenancy.current_user(), item, %{
+                 "day_of_month" => "20",
+                 "amount" => "-15.00"
+               })
 
       assert updated.day_of_month == 20
       assert Decimal.equal?(updated.amount, "-15.00")
@@ -601,7 +694,12 @@ defmodule CashLens.ForecastTest do
 
     test "returns an error changeset for an invalid day" do
       item = recurring_item_fixture()
-      assert {:error, changeset} = Forecast.manual_update(item, %{"day_of_month" => "40"})
+
+      assert {:error, changeset} =
+               Forecast.manual_update(CashLens.Tenancy.current_user(), item, %{
+                 "day_of_month" => "40"
+               })
+
       assert "must be less than or equal to 31" in errors_on(changeset).day_of_month
     end
   end
@@ -610,8 +708,11 @@ defmodule CashLens.ForecastTest do
     test "flips active from true to false and back" do
       item = recurring_item_fixture(%{active: true})
 
-      assert {:ok, %{active: false} = toggled} = Forecast.toggle_active(item)
-      assert {:ok, %{active: true}} = Forecast.toggle_active(toggled)
+      assert {:ok, %{active: false} = toggled} =
+               Forecast.toggle_active(CashLens.Tenancy.current_user(), item)
+
+      assert {:ok, %{active: true}} =
+               Forecast.toggle_active(CashLens.Tenancy.current_user(), toggled)
     end
   end
 
@@ -631,7 +732,7 @@ defmodule CashLens.ForecastTest do
       cc_account: cc_account
     } do
       closed = account_fixture(%{balance: "2000.00", is_closed: true})
-      projection = Forecast.project()
+      projection = Forecast.project(CashLens.Tenancy.current_user())
 
       assert Decimal.equal?(projection.starting_balance, "1000.00")
       refute cc_account.is_credit_card == false
@@ -650,7 +751,7 @@ defmodule CashLens.ForecastTest do
           total_a_pagar: Decimal.new("800.00")
         })
 
-      projection = Forecast.project(60)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 60)
 
       assert Enum.any?(projection.occurrences, fn occ ->
                occ.origin == :boleto and occ.date == s.due_date and
@@ -665,7 +766,7 @@ defmodule CashLens.ForecastTest do
 
     test "inactive items don't appear in the projection" do
       recurring_item_fixture(%{day_of_month: 1, amount: "-2000.00", active: false})
-      projection = Forecast.project()
+      projection = Forecast.project(CashLens.Tenancy.current_user())
       assert projection.occurrences == []
       assert projection.zero_date == nil
     end
@@ -676,7 +777,7 @@ defmodule CashLens.ForecastTest do
 
       recurring_item_fixture(%{day_of_month: future_day, amount: "-2000.00"})
 
-      projection = Forecast.project()
+      projection = Forecast.project(CashLens.Tenancy.current_user())
 
       assert projection.zero_date == today
       assert %{date: ^today, balance_after: balance} = hd(projection.occurrences)
@@ -685,7 +786,7 @@ defmodule CashLens.ForecastTest do
 
     test "zero_date is nil when the balance never reaches zero" do
       recurring_item_fixture(%{day_of_month: 15, amount: "-1.00"})
-      projection = Forecast.project()
+      projection = Forecast.project(CashLens.Tenancy.current_user())
       assert projection.zero_date == nil
     end
 
@@ -697,7 +798,7 @@ defmodule CashLens.ForecastTest do
       # short of it.
       recurring_item_fixture(%{day_of_month: today.day, amount: "-1000.00"})
 
-      projection = Forecast.project()
+      projection = Forecast.project(CashLens.Tenancy.current_user())
 
       assert %{date: ^today, balance_after: balance} = hd(projection.occurrences)
       assert Decimal.equal?(balance, "0.00")
@@ -846,7 +947,13 @@ defmodule CashLens.ForecastTest do
           total_a_pagar: Decimal.new("1500.00")
         })
 
-      [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      [occ] =
+        CashLens.Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          ~D[2026-08-01],
+          ~D[2026-08-31]
+        )
+
       assert occ.date == s.due_date
       assert Decimal.equal?(occ.item.amount, Decimal.new("-1500.00"))
       assert occ.origin == :boleto
@@ -866,7 +973,13 @@ defmodule CashLens.ForecastTest do
         total_a_pagar: Decimal.new("-226.32")
       })
 
-      [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      [occ] =
+        CashLens.Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          ~D[2026-08-01],
+          ~D[2026-08-31]
+        )
+
       assert occ.origin == :boleto
       assert Decimal.equal?(occ.item.amount, Decimal.new("0"))
       refute Decimal.positive?(occ.item.amount)
@@ -892,7 +1005,13 @@ defmodule CashLens.ForecastTest do
         amount: Decimal.new("80.00")
       })
 
-      [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      [occ] =
+        CashLens.Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          ~D[2026-08-01],
+          ~D[2026-08-31]
+        )
+
       assert occ.origin == :boleto
       assert Decimal.equal?(occ.item.amount, Decimal.new("0"))
     end
@@ -914,7 +1033,11 @@ defmodule CashLens.ForecastTest do
       future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
 
       [occ] =
-        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+        CashLens.Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          future_first,
+          Date.end_of_month(future_first)
+        )
 
       assert occ.origin == :estimado
       # (1200 + 0 + 900) / 3 = 700. Counting the credit as -300 gives 600.
@@ -936,7 +1059,11 @@ defmodule CashLens.ForecastTest do
         payment_transaction_id: payment.id
       })
 
-      assert CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31]) == []
+      assert CashLens.Forecast.card_occurrences(
+               CashLens.Tenancy.current_user(),
+               ~D[2026-08-01],
+               ~D[2026-08-31]
+             ) == []
     end
 
     test "no boleto for the month estimates from the recent boleto plus that month's installments",
@@ -989,7 +1116,11 @@ defmodule CashLens.ForecastTest do
       })
 
       occurrences =
-        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+        CashLens.Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          future_first,
+          Date.end_of_month(future_first)
+        )
 
       assert [occ] = occurrences
       assert occ.origin == :estimado
@@ -1026,7 +1157,11 @@ defmodule CashLens.ForecastTest do
       future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
 
       occurrences =
-        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+        CashLens.Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          future_first,
+          Date.end_of_month(future_first)
+        )
 
       assert [occ] = occurrences
       assert occ.origin == :estimado
@@ -1078,7 +1213,11 @@ defmodule CashLens.ForecastTest do
       future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
 
       occurrences =
-        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+        CashLens.Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          future_first,
+          Date.end_of_month(future_first)
+        )
 
       assert [occ] = occurrences
       assert Decimal.equal?(occ.item.amount, Decimal.new("-2000.00"))
@@ -1141,7 +1280,11 @@ defmodule CashLens.ForecastTest do
       })
 
       assert [occ] =
-               CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+               CashLens.Forecast.card_occurrences(
+                 CashLens.Tenancy.current_user(),
+                 future_first,
+                 Date.end_of_month(future_first)
+               )
 
       # variable = -2000 + 300 = -1700 ; the month's own 1500 beats the 300
       # typical load, so it is charged whole: -1700 - 1500 = -3200.
@@ -1167,7 +1310,11 @@ defmodule CashLens.ForecastTest do
       future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
 
       assert [occ] =
-               CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+               CashLens.Forecast.card_occurrences(
+                 CashLens.Tenancy.current_user(),
+                 future_first,
+                 Date.end_of_month(future_first)
+               )
 
       assert Decimal.equal?(occ.item.amount, Decimal.new("-777.00"))
     end
@@ -1182,14 +1329,23 @@ defmodule CashLens.ForecastTest do
 
       future_month = Date.add(Date.utc_today(), 60)
 
-      assert CashLens.Forecast.card_occurrences(future_month, Date.end_of_month(future_month)) ==
+      assert CashLens.Forecast.card_occurrences(
+               CashLens.Tenancy.current_user(),
+               future_month,
+               Date.end_of_month(future_month)
+             ) ==
                []
     end
 
     test "account without a configured cycle yields no occurrences" do
       CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
       today = Date.utc_today()
-      assert CashLens.Forecast.card_occurrences(today, Date.add(today, 60)) == []
+
+      assert CashLens.Forecast.card_occurrences(
+               CashLens.Tenancy.current_user(),
+               today,
+               Date.add(today, 60)
+             ) == []
     end
 
     test "estimate subtracts the recent boleto's installment using its competencia month, not its due_date month",
@@ -1250,7 +1406,11 @@ defmodule CashLens.ForecastTest do
       })
 
       occurrences =
-        CashLens.Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+        CashLens.Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          future_first,
+          Date.end_of_month(future_first)
+        )
 
       assert [occ] = occurrences
       assert occ.origin == :estimado
@@ -1279,7 +1439,13 @@ defmodule CashLens.ForecastTest do
           total_a_pagar: Decimal.new("300.00")
         })
 
-      assert [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      assert [occ] =
+               CashLens.Forecast.card_occurrences(
+                 CashLens.Tenancy.current_user(),
+                 ~D[2026-08-01],
+                 ~D[2026-08-31]
+               )
+
       assert occ.date == s2.due_date
       assert Decimal.equal?(occ.item.amount, Decimal.new("-300.00"))
     end
@@ -1311,7 +1477,13 @@ defmodule CashLens.ForecastTest do
         )
       end
 
-      assert [occ] = CashLens.Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      assert [occ] =
+               CashLens.Forecast.card_occurrences(
+                 CashLens.Tenancy.current_user(),
+                 ~D[2026-08-01],
+                 ~D[2026-08-31]
+               )
+
       assert Decimal.equal?(occ.item.amount, Decimal.new("-200.00"))
     end
   end
@@ -1348,7 +1520,7 @@ defmodule CashLens.ForecastTest do
       spend(account, variable, Date.add(Date.utc_today(), -10), "-1000.00")
       spend(account, variable, Date.add(Date.utc_today(), -100), "-800.00")
 
-      rate = Forecast.variable_baseline_rate()
+      rate = Forecast.variable_baseline_rate(CashLens.Tenancy.current_user())
 
       assert Decimal.equal?(rate.daily, Decimal.new("-10.00"))
       assert Decimal.equal?(rate.monthly, Decimal.new("-300.00"))
@@ -1382,7 +1554,10 @@ defmodule CashLens.ForecastTest do
       )
 
       # Still -10,00/day: the 3.000,00 parcel is not averaged in.
-      assert Decimal.equal?(Forecast.variable_baseline_rate().daily, Decimal.new("-10.00"))
+      assert Decimal.equal?(
+               Forecast.variable_baseline_rate(CashLens.Tenancy.current_user()).daily,
+               Decimal.new("-10.00")
+             )
     end
 
     test "carries the arithmetic behind the rate, not just its result", %{
@@ -1393,7 +1568,7 @@ defmodule CashLens.ForecastTest do
       # derive is worse than no number.
       spend(account, variable, Date.add(Date.utc_today(), -10), "-1800.00")
 
-      rate = Forecast.variable_baseline_rate()
+      rate = Forecast.variable_baseline_rate(CashLens.Tenancy.current_user())
 
       assert Decimal.equal?(rate.total, Decimal.new("-1800.00"))
       assert rate.days == 180
@@ -1405,13 +1580,16 @@ defmodule CashLens.ForecastTest do
     end
 
     test "returns nil when the window holds no variable spending" do
-      refute Forecast.variable_baseline_rate()
+      refute Forecast.variable_baseline_rate(CashLens.Tenancy.current_user())
     end
 
     test "an uncategorized outflow counts -- unfiled money is still gone", %{account: account} do
       spend(account, nil, Date.add(Date.utc_today(), -5), "-1800.00")
 
-      assert Decimal.equal?(Forecast.variable_baseline_rate().daily, Decimal.new("-10.00"))
+      assert Decimal.equal?(
+               Forecast.variable_baseline_rate(CashLens.Tenancy.current_user()).daily,
+               Decimal.new("-10.00")
+             )
     end
 
     test "ignores what the projection already models, and what never left", %{
@@ -1433,7 +1611,7 @@ defmodule CashLens.ForecastTest do
       # Outside the window.
       spend(account, variable, Date.add(Date.utc_today(), -400), "-5000.00")
 
-      refute Forecast.variable_baseline_rate()
+      refute Forecast.variable_baseline_rate(CashLens.Tenancy.current_user())
     end
 
     test "a transfer between the user's own accounts is not spending", %{
@@ -1441,12 +1619,16 @@ defmodule CashLens.ForecastTest do
       variable: variable
     } do
       tx = spend(account, variable, Date.add(Date.utc_today(), -20), "-1800.00")
-      assert Decimal.equal?(Forecast.variable_baseline_rate().daily, Decimal.new("-10.00"))
+
+      assert Decimal.equal?(
+               Forecast.variable_baseline_rate(CashLens.Tenancy.current_user()).daily,
+               Decimal.new("-10.00")
+             )
 
       {:ok, _} =
         CashLens.Transactions.update_transaction(user(), tx, %{transfer_key: Ecto.UUID.generate()})
 
-      refute Forecast.variable_baseline_rate()
+      refute Forecast.variable_baseline_rate(CashLens.Tenancy.current_user())
     end
 
     test "project/1 charges the rate once per day, starting tomorrow", %{
@@ -1455,7 +1637,7 @@ defmodule CashLens.ForecastTest do
     } do
       spend(account, variable, Date.add(Date.utc_today(), -10), "-1800.00")
 
-      projection = Forecast.project(10)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 10)
       baseline = Enum.filter(projection.occurrences, & &1[:baseline])
 
       # Today's variable spending is already inside the starting balance, so
@@ -1482,7 +1664,7 @@ defmodule CashLens.ForecastTest do
       # 1000,00 without touching the -100,00/day rate the outflow above sets.
       spend(account, variable, Date.add(Date.utc_today(), -10), "18000.00")
 
-      projection = Forecast.project(30)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 30)
 
       assert Decimal.equal?(projection.starting_balance, Decimal.new("1000.00"))
       assert projection.zero_date == Date.add(Date.utc_today(), 10)
@@ -1500,7 +1682,7 @@ defmodule CashLens.ForecastTest do
           amount: "-100.00"
         })
 
-      projection = Forecast.project(10)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 10)
       ruler = Forecast.ruler_occurrences(projection, 10)
 
       # The average is not an event: there is no bill to go look at behind any
@@ -1532,7 +1714,11 @@ defmodule CashLens.ForecastTest do
 
       recurring_item_fixture(%{category_id: taken.id})
 
-      names = Enum.map(Forecast.list_categories_without_recurring_item(), & &1.name)
+      names =
+        Enum.map(
+          Forecast.list_categories_without_recurring_item(CashLens.Tenancy.current_user()),
+          & &1.name
+        )
 
       assert "Academia" in names
       refute "Aluguel" in names
@@ -1540,7 +1726,10 @@ defmodule CashLens.ForecastTest do
 
       recurring_item_fixture(%{category_id: free.id, label: "Academia"})
 
-      refute "Academia" in Enum.map(Forecast.list_categories_without_recurring_item(), & &1.name)
+      refute "Academia" in Enum.map(
+               Forecast.list_categories_without_recurring_item(CashLens.Tenancy.current_user()),
+               & &1.name
+             )
     end
   end
 
@@ -1559,7 +1748,7 @@ defmodule CashLens.ForecastTest do
       recurring_item_fixture(%{day_of_month: near.day, amount: "-10.00", label: "perto"})
       recurring_item_fixture(%{day_of_month: far.day, amount: "-20.00", label: "longe"})
 
-      projection = Forecast.project(90)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 90)
       within = Forecast.occurrences_within(projection, 30)
       limit = Date.add(Date.utc_today(), 30)
 
@@ -1574,7 +1763,7 @@ defmodule CashLens.ForecastTest do
       recurring_item_fixture(%{day_of_month: inside.day, amount: "-100.00", label: "dentro"})
       recurring_item_fixture(%{day_of_month: outside.day, amount: "-900.00", label: "fora"})
 
-      projection = Forecast.project(90)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 90)
       minimum = Forecast.minimum_point(projection, 30)
 
       assert Date.compare(minimum.date, Date.add(Date.utc_today(), 30)) != :gt
@@ -1587,12 +1776,13 @@ defmodule CashLens.ForecastTest do
     end
 
     test "minimum_point/2 is nil when nothing settles inside the window" do
-      assert Forecast.minimum_point(Forecast.project(90), 30) == nil
+      assert Forecast.minimum_point(Forecast.project(CashLens.Tenancy.current_user(), 90), 30) ==
+               nil
     end
 
     test "final_balance/1 reads the balance after the last occurrence" do
       recurring_item_fixture(%{day_of_month: 10, amount: "-10.00"})
-      projection = Forecast.project(365)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 365)
 
       assert Decimal.equal?(
                Forecast.final_balance(projection),
@@ -1601,13 +1791,13 @@ defmodule CashLens.ForecastTest do
     end
 
     test "final_balance/1 falls back to the starting balance without occurrences" do
-      projection = Forecast.project(365)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 365)
       assert Decimal.equal?(Forecast.final_balance(projection), projection.starting_balance)
     end
 
     test "projected_change_percent/1 is the signed whole-percent change, nil at zero balance" do
       recurring_item_fixture(%{day_of_month: 10, amount: "-50.00"})
-      projection = Forecast.project(365)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 365)
 
       expected =
         Forecast.final_balance(projection)
@@ -1663,7 +1853,12 @@ defmodule CashLens.ForecastTest do
         amount: Decimal.new("-200.00")
       })
 
-      [occ] = Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+      [occ] =
+        Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          future_first,
+          Date.end_of_month(future_first)
+        )
 
       assert occ.origin == :estimado
 
@@ -1690,7 +1885,13 @@ defmodule CashLens.ForecastTest do
       })
 
       future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
-      [occ] = Forecast.card_occurrences(future_first, Date.end_of_month(future_first))
+
+      [occ] =
+        Forecast.card_occurrences(
+          CashLens.Tenancy.current_user(),
+          future_first,
+          Date.end_of_month(future_first)
+        )
 
       assert occ.origin == :estimado
       assert Decimal.equal?(occ.installment_total, Decimal.new("0"))
@@ -1705,7 +1906,8 @@ defmodule CashLens.ForecastTest do
         total_a_pagar: Decimal.new("1500.00")
       })
 
-      [occ] = Forecast.card_occurrences(~D[2026-08-01], ~D[2026-08-31])
+      [occ] =
+        Forecast.card_occurrences(CashLens.Tenancy.current_user(), ~D[2026-08-01], ~D[2026-08-31])
 
       assert occ.origin == :boleto
       assert Decimal.equal?(occ.installment_total, Decimal.new("0"))
@@ -1763,7 +1965,8 @@ defmodule CashLens.ForecastTest do
       group = commitment_group(%{description_pattern: "FIN_OFF", commitment_type: "financing"})
       link(group, checking)
 
-      occurrences = commitment_occurrences(Forecast.project(90), group)
+      occurrences =
+        commitment_occurrences(Forecast.project(CashLens.Tenancy.current_user(), 90), group)
 
       assert length(occurrences) == 3
       parcel = Installments.parcel_value(group)
@@ -1793,7 +1996,8 @@ defmodule CashLens.ForecastTest do
 
       link(group, checking)
 
-      occurrences = commitment_occurrences(Forecast.project(365), group)
+      occurrences =
+        commitment_occurrences(Forecast.project(CashLens.Tenancy.current_user(), 365), group)
 
       assert length(occurrences) == 2
       last = List.last(occurrences)
@@ -1812,7 +2016,8 @@ defmodule CashLens.ForecastTest do
 
       link(group, checking)
 
-      assert commitment_occurrences(Forecast.project(365), group) == []
+      assert commitment_occurrences(Forecast.project(CashLens.Tenancy.current_user(), 365), group) ==
+               []
     end
 
     test "a group whose transactions sit on a credit card changes nothing in the chain", %{
@@ -1820,12 +2025,12 @@ defmodule CashLens.ForecastTest do
     } do
       recurring_item_fixture(%{day_of_month: Date.utc_today().day, amount: "-100.00"})
 
-      baseline = Forecast.project(90)
+      baseline = Forecast.project(CashLens.Tenancy.current_user(), 90)
 
       group = commitment_group(%{description_pattern: "CARD_BACKED"})
       link(group, card)
 
-      after_group = Forecast.project(90)
+      after_group = Forecast.project(CashLens.Tenancy.current_user(), 90)
 
       assert commitment_occurrences(after_group, group) == []
       assert chain(after_group) == chain(baseline)
@@ -1842,7 +2047,7 @@ defmodule CashLens.ForecastTest do
 
       link(card_type_off_card, checking)
 
-      projection = Forecast.project(90)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 90)
 
       assert commitment_occurrences(projection, financing_on_card) == []
       refute commitment_occurrences(projection, card_type_off_card) == []
@@ -1851,7 +2056,8 @@ defmodule CashLens.ForecastTest do
     test "a group with no linked transaction is included" do
       group = commitment_group(%{description_pattern: "SEM_LANCAMENTO"})
 
-      refute commitment_occurrences(Forecast.project(90), group) == []
+      refute commitment_occurrences(Forecast.project(CashLens.Tenancy.current_user(), 90), group) ==
+               []
     end
 
     test "a consorcio projects identically whether contemplated or not", %{checking: checking} do
@@ -1860,7 +2066,8 @@ defmodule CashLens.ForecastTest do
 
       link(group, checking)
 
-      pending = commitment_occurrences(Forecast.project(90), group)
+      pending =
+        commitment_occurrences(Forecast.project(CashLens.Tenancy.current_user(), 90), group)
 
       {:ok, _} =
         Installments.update_installment_group(user(), group, %{
@@ -1868,7 +2075,8 @@ defmodule CashLens.ForecastTest do
           contemplated_at: Date.utc_today()
         })
 
-      contemplated = commitment_occurrences(Forecast.project(90), group)
+      contemplated =
+        commitment_occurrences(Forecast.project(CashLens.Tenancy.current_user(), 90), group)
 
       assert Enum.map(pending, &{&1.date, &1.item.amount, &1.commitment.parcel_number}) ==
                Enum.map(contemplated, &{&1.date, &1.item.amount, &1.commitment.parcel_number})
@@ -1878,9 +2086,9 @@ defmodule CashLens.ForecastTest do
       group = commitment_group(%{description_pattern: "FIN_SYNC"})
       link(group, checking)
 
-      before = Forecast.list_recurring_items()
-      assert %{created: 0} = Forecast.sync_all()
-      assert Forecast.list_recurring_items() == before
+      before = Forecast.list_recurring_items(CashLens.Tenancy.current_user())
+      assert %{created: 0} = Forecast.sync_all(CashLens.Tenancy.current_user())
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == before
     end
 
     defp chain(projection) do
@@ -1905,8 +2113,13 @@ defmodule CashLens.ForecastTest do
         amount: "-30.00"
       })
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
-      assert Forecast.list_recurring_items() == []
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
     end
 
     test "only the last 180 days count towards the two required occurrences" do
@@ -1922,8 +2135,14 @@ defmodule CashLens.ForecastTest do
         })
       end
 
-      assert Forecast.suggest_for_category(category) == :insufficient_history
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
+      assert Forecast.suggest_for_category(CashLens.Tenancy.current_user(), category) ==
+               :insufficient_history
+
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
     end
 
     test "a manually edited item keeps its day and amount across sync_all/0" do
@@ -1948,9 +2167,9 @@ defmodule CashLens.ForecastTest do
           manually_edited: true
         })
 
-      assert %{updated: 0} = Forecast.sync_all()
+      assert %{updated: 0} = Forecast.sync_all(CashLens.Tenancy.current_user())
 
-      reloaded = Forecast.get_recurring_item!(item.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id)
       assert reloaded.day_of_month == 3
       assert Decimal.equal?(reloaded.amount, Decimal.new("-42.00"))
     end
@@ -1998,9 +2217,9 @@ defmodule CashLens.ForecastTest do
 
       grouped_spend(account, category, group, "-1000.00")
 
-      assert [switched] = Forecast.deactivate_superseded_items()
+      assert [switched] = Forecast.deactivate_superseded_items(CashLens.Tenancy.current_user())
       assert switched.id == item.id
-      refute Forecast.get_recurring_item!(item.id).active
+      refute Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "leaves an item alone while any debit in its category is unlinked" do
@@ -2020,8 +2239,8 @@ defmodule CashLens.ForecastTest do
         date: Date.add(Date.utc_today(), -5)
       })
 
-      assert Forecast.deactivate_superseded_items() == []
-      assert Forecast.get_recurring_item!(item.id).active
+      assert Forecast.deactivate_superseded_items(CashLens.Tenancy.current_user()) == []
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "never touches an item edited by hand" do
@@ -2038,16 +2257,16 @@ defmodule CashLens.ForecastTest do
       group = commitment_group()
       grouped_spend(account, category, group, "-1000.00")
 
-      assert Forecast.deactivate_superseded_items() == []
-      assert Forecast.get_recurring_item!(item.id).active
+      assert Forecast.deactivate_superseded_items(CashLens.Tenancy.current_user()) == []
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "leaves an item whose category has no transactions at all" do
       category = category_fixture(%{type: "fixed", name: "Vazia"})
       item = recurring_item_fixture(%{category_id: category.id, amount: "-1000.00"})
 
-      assert Forecast.deactivate_superseded_items() == []
-      assert Forecast.get_recurring_item!(item.id).active
+      assert Forecast.deactivate_superseded_items(CashLens.Tenancy.current_user()) == []
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "registering a commitment switches the duplicate off on its own" do
@@ -2064,7 +2283,7 @@ defmodule CashLens.ForecastTest do
           date: Date.add(Date.utc_today(), -30)
         })
 
-      assert Forecast.get_recurring_item!(item.id).active
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
 
       {:ok, _group} =
         CashLens.Installments.create_installment_group(user(), %{
@@ -2075,7 +2294,7 @@ defmodule CashLens.ForecastTest do
           total_amount: "84000.00"
         })
 
-      refute Forecast.get_recurring_item!(item.id).active
+      refute Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
   end
 
@@ -2101,7 +2320,7 @@ defmodule CashLens.ForecastTest do
         is_salary: true
       })
 
-      projection = Forecast.project(60)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 60)
       trough = Forecast.trough(projection, 60)
 
       assert Decimal.lt?(trough.balance, Forecast.final_balance(projection))
@@ -2113,7 +2332,7 @@ defmodule CashLens.ForecastTest do
 
       # Nothing moves, so every day of the horizon ties at the same balance and
       # the first of them must win.
-      projection = Forecast.project(30)
+      projection = Forecast.project(CashLens.Tenancy.current_user(), 30)
       trough = Forecast.trough(projection, 30)
 
       assert trough.date == Date.utc_today()
@@ -2151,7 +2370,7 @@ defmodule CashLens.ForecastTest do
         net_in(account, mes, if(rem(i, 2) == 0, do: "-1000.00", else: "-3000.00"))
       end)
 
-      v = Forecast.monthly_volatility(12, today)
+      v = Forecast.monthly_volatility(CashLens.Tenancy.current_user(), 12, today)
 
       assert Decimal.equal?(v.mean, Decimal.new("-2000.00"))
       assert Decimal.equal?(v.sigma, Decimal.new("1000.0"))
@@ -2168,7 +2387,7 @@ defmodule CashLens.ForecastTest do
       # A single huge debit today must not register as volatility.
       net_in(account, today, "-90000.00")
 
-      v = Forecast.monthly_volatility(12, today)
+      v = Forecast.monthly_volatility(CashLens.Tenancy.current_user(), 12, today)
 
       assert Decimal.equal?(v.sigma, Decimal.new("0.0"))
       assert Decimal.equal?(v.mean, Decimal.new("-2000.00"))
@@ -2180,7 +2399,7 @@ defmodule CashLens.ForecastTest do
 
       Enum.each(months_back(today, 12), &net_in(account, &1, "0.00"))
 
-      refute Forecast.monthly_volatility(12, today)
+      refute Forecast.monthly_volatility(CashLens.Tenancy.current_user(), 12, today)
     end
   end
 
@@ -2220,7 +2439,7 @@ defmodule CashLens.ForecastTest do
       bill_due(1, "Gás", "-47.48")
       ledger_reaches(account, today)
 
-      assert [occurrence] = Forecast.overdue_occurrences(today)
+      assert [occurrence] = Forecast.overdue_occurrences(CashLens.Tenancy.current_user(), today)
       assert occurrence.item.label == "Gás"
       assert occurrence.date == Date.new!(today.year, today.month, 1)
       assert occurrence.overdue
@@ -2240,7 +2459,7 @@ defmodule CashLens.ForecastTest do
         amount: "-6258.28"
       })
 
-      assert Forecast.overdue_occurrences(today) == []
+      assert Forecast.overdue_occurrences(CashLens.Tenancy.current_user(), today) == []
     end
 
     # Money you are waiting for is not money you owe. Projecting a salary that
@@ -2252,7 +2471,7 @@ defmodule CashLens.ForecastTest do
       bill_due(1, "APRASVI", "2167.25")
       ledger_reaches(account, today)
 
-      assert Forecast.overdue_occurrences(today) == []
+      assert Forecast.overdue_occurrences(CashLens.Tenancy.current_user(), today) == []
     end
 
     # The whole check rests on "no transaction means not paid", which only
@@ -2265,20 +2484,20 @@ defmodule CashLens.ForecastTest do
       bill_due(1, "Gás", "-47.48")
       ledger_reaches(account, Date.add(today, -40))
 
-      assert Forecast.overdue_occurrences(today) == []
+      assert Forecast.overdue_occurrences(CashLens.Tenancy.current_user(), today) == []
     end
 
     test "with an empty ledger nothing is overdue", %{today: today} do
       bill_due(1, "Gás", "-47.48")
 
-      assert Forecast.overdue_occurrences(today) == []
+      assert Forecast.overdue_occurrences(CashLens.Tenancy.current_user(), today) == []
     end
 
     test "a bill due today has not passed its day", %{account: account, today: today} do
       bill_due(today.day, "Gás", "-47.48")
       ledger_reaches(account, today)
 
-      assert Forecast.overdue_occurrences(today) == []
+      assert Forecast.overdue_occurrences(CashLens.Tenancy.current_user(), today) == []
     end
 
     test "the projection carries it, so the balance stops being optimistic", %{
@@ -2288,7 +2507,7 @@ defmodule CashLens.ForecastTest do
       bill_due(1, "Gás", "-47.48")
       ledger_reaches(account, today)
 
-      with_overdue = Forecast.project(30, today)
+      with_overdue = Forecast.project(CashLens.Tenancy.current_user(), 30, today)
       bills = Forecast.upcoming_bills(with_overdue, 30, 14, today)
 
       assert Enum.any?(bills.shown, &(&1.label == "Gás"))
@@ -2323,7 +2542,7 @@ defmodule CashLens.ForecastTest do
       bill_on(3, "Condomínio", "-461.39")
       bill_on(1, "Gás", "-47.48")
 
-      bills = Forecast.upcoming_bills(Forecast.project(10), 10)
+      bills = Forecast.upcoming_bills(Forecast.project(CashLens.Tenancy.current_user(), 10), 10)
 
       assert Enum.map(bills.shown, & &1.label) == ["Gás", "Condomínio"]
       assert Enum.map(bills.shown, & &1.kind) == [:recurring, :recurring]
@@ -2336,7 +2555,14 @@ defmodule CashLens.ForecastTest do
       bill_on(5, "Água", "-73.20")
       bill_on(12, "Seguro", "-147.69")
 
-      bills = Forecast.upcoming_bills(Forecast.project(20), 20, 14, Date.utc_today())
+      bills =
+        Forecast.upcoming_bills(
+          Forecast.project(CashLens.Tenancy.current_user(), 20),
+          20,
+          14,
+          Date.utc_today()
+        )
+
       s = bills.summary
 
       assert s.next.count == 2
@@ -2359,7 +2585,13 @@ defmodule CashLens.ForecastTest do
       bill_on(2, "Condomínio", "-461.39")
       bill_on(3, "Internet", "-241.99")
 
-      summary = Forecast.upcoming_bills(Forecast.project(10), 10, 14, Date.utc_today()).summary
+      summary =
+        Forecast.upcoming_bills(
+          Forecast.project(CashLens.Tenancy.current_user(), 10),
+          10,
+          14,
+          Date.utc_today()
+        ).summary
 
       assert summary.next.count == 1
       assert summary.next.date == Date.add(Date.utc_today(), 2)
@@ -2368,7 +2600,12 @@ defmodule CashLens.ForecastTest do
     end
 
     test "with nothing due there is no summary to show" do
-      assert Forecast.upcoming_bills(Forecast.project(10), 10, 14, Date.utc_today()).summary ==
+      assert Forecast.upcoming_bills(
+               Forecast.project(CashLens.Tenancy.current_user(), 10),
+               10,
+               14,
+               Date.utc_today()
+             ).summary ==
                nil
     end
 
@@ -2376,7 +2613,7 @@ defmodule CashLens.ForecastTest do
       bill_on(1, "Luz", "-334.16")
       bill_on(2, "Salário", "35000.00")
 
-      bills = Forecast.upcoming_bills(Forecast.project(10), 10)
+      bills = Forecast.upcoming_bills(Forecast.project(CashLens.Tenancy.current_user(), 10), 10)
 
       assert Enum.map(bills.shown, & &1.label) == ["Luz"]
       assert Decimal.equal?(bills.total, Decimal.new("334.16"))
@@ -2401,7 +2638,7 @@ defmodule CashLens.ForecastTest do
           total_a_pagar: Decimal.new("14075.87")
         })
 
-      bills = Forecast.upcoming_bills(Forecast.project(20), 20)
+      bills = Forecast.upcoming_bills(Forecast.project(CashLens.Tenancy.current_user(), 20), 20)
 
       assert [bill] = Enum.filter(bills.shown, &(&1.kind == :statement))
       assert bill.label == "Fatura Ourocard"
@@ -2429,8 +2666,8 @@ defmodule CashLens.ForecastTest do
         })
 
       occurrences =
-        today
-        |> Forecast.card_occurrences(due)
+        CashLens.Tenancy.current_user()
+        |> Forecast.card_occurrences(today, due)
         |> Enum.filter(&(&1.item.id == card.id))
 
       assert [occurrence] = occurrences
@@ -2473,7 +2710,7 @@ defmodule CashLens.ForecastTest do
           payment_transaction_id: payment.id
         })
 
-      bills = Forecast.upcoming_bills(Forecast.project(20), 20)
+      bills = Forecast.upcoming_bills(Forecast.project(CashLens.Tenancy.current_user(), 20), 20)
 
       assert Enum.filter(bills.shown, &(&1.kind == :statement)) == []
     end
@@ -2484,7 +2721,8 @@ defmodule CashLens.ForecastTest do
       # largest bill invisible behind a number of items.
       for day <- 1..4, do: bill_on(day, "Conta #{day}", "-10.00")
 
-      bills = Forecast.upcoming_bills(Forecast.project(10), 10, 2)
+      bills =
+        Forecast.upcoming_bills(Forecast.project(CashLens.Tenancy.current_user(), 10), 10, 2)
 
       assert length(bills.shown) == 2
       assert bills.hidden_count == 2
@@ -2494,7 +2732,7 @@ defmodule CashLens.ForecastTest do
     end
 
     test "nothing due is an empty list and a zero total" do
-      bills = Forecast.upcoming_bills(Forecast.project(10), 10)
+      bills = Forecast.upcoming_bills(Forecast.project(CashLens.Tenancy.current_user(), 10), 10)
 
       assert bills.shown == []
       assert bills.hidden_count == 0
@@ -2530,7 +2768,7 @@ defmodule CashLens.ForecastTest do
       group =
         mk_group(%{description_pattern: "Apto", start_date: Date.add(Date.utc_today(), -330)})
 
-      assert [row] = Forecast.list_commitment_rows()
+      assert [row] = Forecast.list_commitment_rows(CashLens.Tenancy.current_user())
       assert row.id == group.id
       assert row.label == "Apto"
       assert row.commitment_type == "financing"
@@ -2548,7 +2786,7 @@ defmodule CashLens.ForecastTest do
 
     test "a group that has not started shows parcel 1" do
       mk_group(%{start_date: Date.add(Date.utc_today(), 90)})
-      assert [%{position: 1}] = Forecast.list_commitment_rows()
+      assert [%{position: 1}] = Forecast.list_commitment_rows(CashLens.Tenancy.current_user())
     end
 
     test "omits finished groups and groups on a credit card" do
@@ -2564,7 +2802,7 @@ defmodule CashLens.ForecastTest do
         set: [installment_group_id: on_card.id, installment_number: 1]
       )
 
-      assert Forecast.list_commitment_rows() == []
+      assert Forecast.list_commitment_rows(CashLens.Tenancy.current_user()) == []
     end
 
     test "sync_all creates no item for a category wholly linked to groups" do
@@ -2587,8 +2825,13 @@ defmodule CashLens.ForecastTest do
         )
       end
 
-      assert Forecast.sync_all() == %{created: 0, updated: 0, deactivated: 0}
-      assert Forecast.list_recurring_items() == []
+      assert Forecast.sync_all(CashLens.Tenancy.current_user()) == %{
+               created: 0,
+               updated: 0,
+               deactivated: 0
+             }
+
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
     end
   end
 end

@@ -16,7 +16,7 @@ defmodule CashLens.Workers.SyncRecurringWorker do
   already started cannot see rows written after it started, so letting it stand
   in for a later request would leave the last file of a batch unaccounted for
   until the next import. A run that overlaps the one before it is the cheaper
-  mistake, and `sync_all/0` is idempotent anyway -- it skips manually edited
+  mistake, and `sync_all/1` is idempotent anyway -- it skips manually edited
   items and writes the same day and amount for everything else.
 
   The two numbers answer different questions: @delay_seconds is how long to
@@ -26,9 +26,16 @@ defmodule CashLens.Workers.SyncRecurringWorker do
   use Oban.Worker,
     queue: :default,
     max_attempts: 3,
-    unique: [period: 300, states: [:available, :scheduled]]
+    unique: [
+      period: 300,
+      states: [:available, :scheduled],
+      fields: [:worker, :args],
+      keys: [:user_id]
+    ]
 
   alias CashLens.Forecast
+  alias CashLens.Repo
+  alias CashLens.Users.User
   alias CashLensWeb.RecurringSyncFlash
 
   require Logger
@@ -38,10 +45,20 @@ defmodule CashLens.Workers.SyncRecurringWorker do
   @delay_seconds 5
 
   @impl Oban.Worker
-  def perform(%Oban.Job{}) do
-    # Row-level security: a job has no logged-in user, so it acts for the operator.
-    CashLens.Ownership.pin_operator!()
-    result = Forecast.sync_all()
+  def perform(%Oban.Job{args: %{"user_id" => user_id}}) when is_binary(user_id) do
+    # Row-level security: pin the owner before anything, the user lookup included.
+    Repo.with_user(user_id, fn ->
+      case load_user(user_id) do
+        nil -> discard("user #{user_id} no longer exists")
+        user -> sync(user)
+      end
+    end)
+  end
+
+  def perform(%Oban.Job{}), do: discard("missing user_id")
+
+  defp sync(user) do
+    result = Forecast.sync_all(user)
     %{created: created, updated: updated, deactivated: deactivated} = result
 
     if created + updated + deactivated > 0 do
@@ -51,22 +68,34 @@ defmodule CashLens.Workers.SyncRecurringWorker do
     end
 
     # The person who triggered this has usually moved on by now, so the result
-    # goes to whatever screen they are on rather than nowhere.
-    RecurringSyncFlash.broadcast(result)
+    # goes to whatever screen they are on rather than nowhere -- theirs only.
+    RecurringSyncFlash.broadcast(user.id, result)
 
     :ok
+  end
+
+  defp load_user(user_id) do
+    case Ecto.UUID.cast(user_id) do
+      {:ok, id} -> Repo.get(User, id)
+      :error -> nil
+    end
+  end
+
+  defp discard(reason) do
+    Logger.warning("Discarding recurring sync job: #{reason}")
+    {:discard, reason}
   end
 
   @doc "How long a queued sync waits before running, in seconds."
   def delay_seconds, do: @delay_seconds
 
   @doc """
-  Queues a sync. Never fails the caller: an import that wrote its rows has done
-  its job, and a projection that refreshes on the next import is a smaller
-  problem than an import reported as failed.
+  Queues a sync for `user_id`. Never fails the caller: an import that wrote its
+  rows has done its job, and a projection that refreshes on the next import is a
+  smaller problem than an import reported as failed.
   """
-  def enqueue do
-    %{}
+  def enqueue(user_id) when is_binary(user_id) do
+    %{user_id: user_id}
     |> __MODULE__.new(schedule_in: @delay_seconds)
     |> oban().insert()
     |> case do

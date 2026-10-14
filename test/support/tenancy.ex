@@ -33,6 +33,9 @@ defmodule CashLens.Tenancy do
     end
   end
 
+  @doc "The user the calling process is pinned to, as a `%User{}` (only its id is set)."
+  def current_user, do: %CashLens.Users.User{id: Repo.current_user_id()}
+
   @doc "Runs `fun` acting as `user`."
   def acting_as(%{id: user_id}, fun), do: Repo.with_user(user_id, fun)
 

@@ -1638,3 +1638,7 @@ commit claimed none were added. Fixed; back to 23.
 ## [CL-59] Scope Installments and CreditCards by the current user — 2026-10-13
 - Code review: Test compile warnings (unused import/alias) in `forecast_live_test.exs` and `transaction_live/index_test.exs`; clean up if from this change.
 - Code review: Spec says `:parent_id` but the code correctly uses `:parent_transaction_id`; fix the spec wording.
+
+## [CL-60] Scope Forecast and recurring items by the current user — 2026-10-13
+- Code review: `with_owned`/`fetch_item` re-fetch costs one extra query per write; acceptable for safety.
+- Code review: The remaining `# TRANSITIONAL` shim in Ingestor enqueue is allowed by the spec.

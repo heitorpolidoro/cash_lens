@@ -7,7 +7,7 @@ defmodule CashLensWeb.RecurringItemLive.Index do
   projection itself. A cadastro that several screens depend on belongs beside
   the other cadastros, not inside one of its readers.
 
-  One item per category is the rule the detection depends on: `sync_all/0` finds
+  One item per category is the rule the detection depends on: `sync_all/1` finds
   an item by its category, so a second one for the same category would have no
   owner. The form therefore offers only categories that are still free, exactly
   as the forecast's modal does.
@@ -17,6 +17,8 @@ defmodule CashLensWeb.RecurringItemLive.Index do
 
   alias CashLens.Forecast
   alias CashLens.Forecast.RecurringItem
+
+  @not_found "Conta recorrente não encontrada."
 
   @impl true
   def mount(_params, _session, socket) do
@@ -40,12 +42,20 @@ defmodule CashLensWeb.RecurringItemLive.Index do
   end
 
   defp apply_action(socket, :edit, %{"id" => id}) do
-    item = Forecast.get_recurring_item!(id)
+    case Forecast.fetch_recurring_item(socket.assigns.current_user, id) do
+      {:ok, item} ->
+        socket
+        |> assign(:modal, :edit)
+        |> assign(:item, item)
+        |> assign(:form, to_form(Forecast.change_recurring_item(item)))
 
-    socket
-    |> assign(:modal, :edit)
-    |> assign(:item, item)
-    |> assign(:form, to_form(Forecast.change_recurring_item(item)))
+      {:error, :not_found} ->
+        socket
+        |> assign(:modal, nil)
+        |> assign(:item, nil)
+        |> put_flash(:error, @not_found)
+        |> push_navigate(to: ~p"/recurring_items")
+    end
   end
 
   defp apply_action(socket, _index, _params) do
@@ -67,21 +77,50 @@ defmodule CashLensWeb.RecurringItemLive.Index do
   end
 
   def handle_event("toggle_active", %{"id" => id}, socket) do
-    {:ok, updated} = id |> Forecast.get_recurring_item!() |> Forecast.toggle_active()
-    state = if updated.active, do: "ativada", else: "desativada"
+    user = socket.assigns.current_user
 
-    {:noreply, socket |> load_items() |> put_flash(:info, "#{updated.label} #{state}.")}
+    with {:ok, item} <- Forecast.fetch_recurring_item(user, id),
+         {:ok, updated} <- Forecast.toggle_active(user, item) do
+      state = if updated.active, do: "ativada", else: "desativada"
+      {:noreply, socket |> load_items() |> put_flash(:info, "#{updated.label} #{state}.")}
+    else
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, @not_found)}
+    end
   end
 
   def handle_event("resync", %{"id" => id}, socket) do
-    item = Forecast.get_recurring_item!(id)
+    user = socket.assigns.current_user
 
-    case Forecast.resync_item(item) do
+    case Forecast.fetch_recurring_item(user, id) do
+      {:ok, item} -> resync(socket, user, item)
+      {:error, :not_found} -> {:noreply, put_flash(socket, :error, @not_found)}
+    end
+  end
+
+  def handle_event("delete", %{"id" => id}, socket) do
+    user = socket.assigns.current_user
+
+    with {:ok, item} <- Forecast.fetch_recurring_item(user, id),
+         {:ok, _} <- Forecast.delete_recurring_item(user, item) do
+      {:noreply,
+       socket
+       |> load_items()
+       |> put_flash(:info, "#{item.label} excluída. A categoria voltou a ficar livre.")}
+    else
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, @not_found)}
+    end
+  end
+
+  defp resync(socket, user, item) do
+    case Forecast.resync_item(user, item) do
       {:ok, updated} ->
         {:noreply,
          socket
          |> load_items()
          |> put_flash(:info, "#{updated.label} ressincronizada com o histórico.")}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, @not_found)}
 
       {:error, :insufficient_history} ->
         {:noreply, put_flash(socket, :error, "#{item.label}: histórico insuficiente.")}
@@ -92,20 +131,13 @@ defmodule CashLensWeb.RecurringItemLive.Index do
     end
   end
 
-  def handle_event("delete", %{"id" => id}, socket) do
-    item = Forecast.get_recurring_item!(id)
-    {:ok, _} = Forecast.delete_recurring_item(item)
-
-    {:noreply,
-     socket
-     |> load_items()
-     |> put_flash(:info, "#{item.label} excluída. A categoria voltou a ficar livre.")}
-  end
-
   # A hand-created item is marked as edited by hand, like any other hand-typed
   # day or amount: the next sync must not quietly overwrite what was just typed.
   defp save(socket, :new, params) do
-    case Forecast.create_recurring_item(Map.put(params, "manually_edited", true)) do
+    case Forecast.create_recurring_item(
+           socket.assigns.current_user,
+           Map.put(params, "manually_edited", true)
+         ) do
       {:ok, item} ->
         {:noreply,
          socket
@@ -119,7 +151,7 @@ defmodule CashLensWeb.RecurringItemLive.Index do
   end
 
   defp save(socket, :edit, params) do
-    case Forecast.manual_update(socket.assigns.item, params) do
+    case Forecast.manual_update(socket.assigns.current_user, socket.assigns.item, params) do
       {:ok, item} ->
         {:noreply,
          socket
@@ -127,18 +159,23 @@ defmodule CashLensWeb.RecurringItemLive.Index do
          |> put_flash(:info, "#{item.label} atualizada.")
          |> push_patch(to: ~p"/recurring_items")}
 
+      {:error, :not_found} ->
+        {:noreply,
+         socket |> put_flash(:error, @not_found) |> push_patch(to: ~p"/recurring_items")}
+
       {:error, changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset))}
     end
   end
 
   defp load_items(socket) do
-    items = Forecast.list_recurring_items_with_category()
+    user = socket.assigns.current_user
+    items = Forecast.list_recurring_items_with_category(user)
 
     socket
     |> assign(:items, items)
-    |> assign(:commitments, Forecast.list_commitment_rows())
-    |> assign(:free_categories, Forecast.list_categories_without_recurring_item())
+    |> assign(:commitments, Forecast.list_commitment_rows(user))
+    |> assign(:free_categories, Forecast.list_categories_without_recurring_item(user))
     |> assign(:monthly_total, monthly_total(items))
   end
 

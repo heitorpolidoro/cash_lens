@@ -23,13 +23,13 @@ defmodule CashLensWeb.BankruptcyCard do
   One projection serves both screens: the slice a 30-day caller reads out of a
   365-day projection is the same slice, so nothing is gained by building two.
   """
-  def assigns_from(projection, horizon_days, today \\ Date.utc_today()) do
+  def assigns_from(user, projection, horizon_days, today \\ Date.utc_today()) do
     %{
       bankruptcy: status(projection.zero_date, today),
       # Only meaningful while the curve stays above zero: once it crosses, the
       # crossing is the worst news and the trough is just a point past it.
       trough: projection.zero_date == nil && CashLens.Forecast.trough(projection, horizon_days),
-      volatility: CashLens.Forecast.monthly_volatility(),
+      volatility: CashLens.Forecast.monthly_volatility(user),
       final_balance: CashLens.Forecast.final_balance(projection)
     }
   end

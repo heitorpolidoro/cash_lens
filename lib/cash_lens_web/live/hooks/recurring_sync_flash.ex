@@ -7,6 +7,8 @@ defmodule CashLensWeb.RecurringSyncFlash do
   the registered accounts changed underneath them with nothing said; the next
   screen they opened simply disagreed with the one before.
 
+  Addressed to the user whose sync finished: a screen only hears its own user's.
+
   Attached to every LiveView in the app's `live_session`, because the message
   should reach the screen they are actually on, not only the forecast.
 
@@ -17,18 +19,19 @@ defmodule CashLensWeb.RecurringSyncFlash do
   """
   import Phoenix.LiveView, only: [attach_hook: 4, put_flash: 3, connected?: 1]
 
-  @topic "forecast:recurring_sync"
+  @doc "The PubSub topic a finished sync of `user_id` is announced on."
+  def topic(user_id), do: "forecast:recurring_sync:#{user_id}"
 
-  @doc "The PubSub topic a finished sync is announced on."
-  def topic, do: @topic
-
-  @doc "Announces a finished sync to every connected screen."
-  def broadcast(%{created: _, updated: _, deactivated: _} = result) do
-    Phoenix.PubSub.broadcast(CashLens.PubSub, @topic, {:recurring_synced, result})
+  @doc "Announces a finished sync to the connected screens of that user only."
+  def broadcast(user_id, %{created: _, updated: _, deactivated: _} = result) do
+    Phoenix.PubSub.broadcast(CashLens.PubSub, topic(user_id), {:recurring_synced, result})
   end
 
   def on_mount(:default, _params, _session, socket) do
-    if connected?(socket), do: Phoenix.PubSub.subscribe(CashLens.PubSub, @topic)
+    with true <- connected?(socket),
+         %{id: user_id} <- socket.assigns[:current_user] do
+      Phoenix.PubSub.subscribe(CashLens.PubSub, topic(user_id))
+    end
 
     {:cont,
      attach_hook(socket, :recurring_sync_flash, :handle_info, fn

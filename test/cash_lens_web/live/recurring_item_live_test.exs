@@ -103,7 +103,7 @@ defmodule CashLensWeb.RecurringItemLiveTest do
       )
       |> render_submit()
 
-      assert [item] = Forecast.list_recurring_items()
+      assert [item] = Forecast.list_recurring_items(CashLens.Tenancy.current_user())
       assert item.label == "Internet + Celular"
       assert item.day_of_month == 10
     end
@@ -125,7 +125,7 @@ defmodule CashLensWeb.RecurringItemLiveTest do
       )
       |> render_submit()
 
-      assert [item] = Forecast.list_recurring_items()
+      assert [item] = Forecast.list_recurring_items(CashLens.Tenancy.current_user())
       assert item.manually_edited
     end
 
@@ -162,7 +162,7 @@ defmodule CashLensWeb.RecurringItemLiveTest do
         )
         |> render_submit()
 
-      assert Forecast.list_recurring_items() == []
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
       assert html =~ "não pode ser zero"
     end
   end
@@ -183,7 +183,7 @@ defmodule CashLensWeb.RecurringItemLiveTest do
       )
       |> render_submit()
 
-      reloaded = Forecast.get_recurring_item!(item.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id)
       assert reloaded.day_of_month == 20
       assert Decimal.equal?(reloaded.amount, "-400.00")
     end
@@ -200,7 +200,7 @@ defmodule CashLensWeb.RecurringItemLiveTest do
       )
       |> render_submit()
 
-      assert Forecast.get_recurring_item!(item.id).manually_edited
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).manually_edited
     end
 
     test "the category cannot be moved once chosen", %{conn: conn, item: item} do
@@ -226,7 +226,7 @@ defmodule CashLensWeb.RecurringItemLiveTest do
 
       live |> element("#toggle-#{item.id}") |> render_click()
 
-      refute Forecast.get_recurring_item!(item.id).active
+      refute Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
       assert has_element?(live, "#recurring-item-#{item.id}")
     end
 
@@ -237,7 +237,7 @@ defmodule CashLensWeb.RecurringItemLiveTest do
 
       live |> element("#toggle-#{item.id}") |> render_click()
 
-      assert Forecast.get_recurring_item!(item.id).active
+      assert Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id).active
     end
 
     test "deleting frees the category again", %{conn: conn, item: item, category: category} do
@@ -245,8 +245,12 @@ defmodule CashLensWeb.RecurringItemLiveTest do
 
       live |> element("#delete-#{item.id}") |> render_click()
 
-      assert Forecast.list_recurring_items() == []
-      assert category.id in Enum.map(Forecast.list_categories_without_recurring_item(), & &1.id)
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
+
+      assert category.id in Enum.map(
+               Forecast.list_categories_without_recurring_item(CashLens.Tenancy.current_user()),
+               & &1.id
+             )
     end
 
     test "deleting asks first, because switching off is the reversible one", %{
@@ -285,7 +289,7 @@ defmodule CashLensWeb.RecurringItemLiveTest do
 
       live |> element("#resync-#{item.id}") |> render_click()
 
-      reloaded = Forecast.get_recurring_item!(item.id)
+      reloaded = Forecast.get_recurring_item!(CashLens.Tenancy.current_user(), item.id)
       assert reloaded.day_of_month == 14
       refute reloaded.manually_edited
     end
@@ -307,7 +311,12 @@ defmodule CashLensWeb.RecurringItemLiveTest do
     refute html =~ "Luz"
 
     recurring_item_fixture(%{category_id: fixed_category("Luz").id, label: "Luz"})
-    CashLensWeb.RecurringSyncFlash.broadcast(%{created: 1, updated: 0, deactivated: 0})
+
+    CashLensWeb.RecurringSyncFlash.broadcast(CashLens.Tenancy.current_user().id, %{
+      created: 1,
+      updated: 0,
+      deactivated: 0
+    })
 
     assert render(live) =~ "Luz"
   end
@@ -364,6 +373,71 @@ defmodule CashLensWeb.RecurringItemLiveTest do
       {:ok, live, html} = live(conn, ~p"/recurring_items")
       refute html =~ "2 de 2"
       assert has_element?(live, "#monthly-total", "100,00")
+    end
+  end
+
+  describe "another user's items" do
+    setup do
+      other = CashLens.UsersFixtures.user_fixture(%{enabled: true})
+      category = category_fixture(%{user: other, type: "fixed", name: "Segredo"})
+
+      foreign =
+        recurring_item_fixture(%{
+          user: other,
+          category_id: category.id,
+          label: "ContaSecretaDoOutro",
+          amount: "-777.77"
+        })
+
+      %{other: other, foreign: foreign}
+    end
+
+    test "the list shows only the logged-in user's items", %{conn: conn, user: me} do
+      mine = recurring_item_fixture(%{user: me, label: "MinhaConta"})
+
+      {:ok, live, html} = live(conn, ~p"/recurring_items")
+
+      assert has_element?(live, "#recurring-item-#{mine.id}")
+      assert html =~ "MinhaConta"
+      refute html =~ "ContaSecretaDoOutro"
+      refute html =~ "777,77"
+    end
+
+    test "editing a foreign item redirects with an error and renders none of it", %{
+      conn: conn,
+      foreign: foreign
+    } do
+      assert {:error, {:live_redirect, %{to: "/recurring_items", flash: flash}}} =
+               live(conn, ~p"/recurring_items/#{foreign.id}/edit")
+
+      assert flash["error"] =~ "não encontrada"
+
+      {:ok, _live, html} = live(conn, ~p"/recurring_items")
+      refute html =~ "ContaSecretaDoOutro"
+      refute html =~ "777,77"
+    end
+
+    test "a forged foreign id in toggle, resync and delete changes nothing", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/recurring_items")
+
+      for event <- ~w(toggle_active resync delete) do
+        assert render_click(live, event, %{"id" => foreign.id}) =~ "não encontrada"
+      end
+
+      assert render_click(live, "toggle_active", %{"id" => "not-a-uuid"}) =~ "não encontrada"
+
+      reloaded =
+        CashLens.Tenancy.acting_as(other, fn ->
+          Forecast.get_recurring_item!(other, foreign.id)
+        end)
+
+      assert reloaded.active == foreign.active
+      assert reloaded.label == foreign.label
+      assert reloaded.updated_at == foreign.updated_at
     end
   end
 end

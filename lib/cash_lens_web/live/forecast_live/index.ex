@@ -8,6 +8,7 @@ defmodule CashLensWeb.ForecastLive.Index do
 
   @ruler_days 90
   @horizon_days 365
+  @not_found "Conta recorrente não encontrada."
 
   @impl true
   def mount(_params, _session, socket) do
@@ -39,13 +40,14 @@ defmodule CashLensWeb.ForecastLive.Index do
   end
 
   defp assign_projection(socket) do
+    user = socket.assigns.current_user
     today = Date.utc_today()
 
     items =
-      Forecast.list_recurring_items()
+      Forecast.list_recurring_items(user)
       |> Enum.sort_by(&Forecast.next_occurrence_date(&1.day_of_month, today), Date)
 
-    projection = Forecast.project(@horizon_days)
+    projection = Forecast.project(user, @horizon_days)
     income_date = Forecast.next_income_date(projection)
     income_balance = Forecast.balance_on(projection, Date.add(income_date, -1))
     ruler_occurrences = Forecast.ruler_occurrences(projection, @ruler_days)
@@ -56,12 +58,12 @@ defmodule CashLensWeb.ForecastLive.Index do
     |> assign(:projection, projection)
     |> assign(:ruler_occurrences, ruler_occurrences)
     |> assign(:critical_date, critical_date(ruler_occurrences))
-    |> assign(BankruptcyCard.assigns_from(projection, @horizon_days, today))
+    |> assign(BankruptcyCard.assigns_from(user, projection, @horizon_days, today))
     |> assign(:chart_points, chart_points(projection))
     |> assign(:income_date, income_date)
     |> assign(:income_balance, income_balance)
-    |> assign(:candidate_categories, Forecast.list_categories_without_recurring_item())
-    |> assign(:baseline_rate, Forecast.variable_baseline_rate())
+    |> assign(:candidate_categories, Forecast.list_categories_without_recurring_item(user))
+    |> assign(:baseline_rate, Forecast.variable_baseline_rate(user))
   end
 
   defp critical_date([]), do: nil
@@ -74,24 +76,24 @@ defmodule CashLensWeb.ForecastLive.Index do
 
   @impl true
   def handle_event("sync_all", _params, socket) do
-    result = Forecast.sync_all()
+    result = Forecast.sync_all(socket.assigns.current_user)
     {:noreply, socket |> assign_projection() |> put_flash(:info, sync_flash(result))}
   end
 
   @impl true
   def handle_event("open_edit", %{"id" => id}, socket) do
-    item = Forecast.get_recurring_item!(id)
-
-    {:noreply,
-     socket
-     |> assign(:modal_mode, :edit)
-     |> assign(:edit_item, item)
-     |> assign(:form_error, nil)
-     |> assign(:form_params, %{
-       "label" => item.label,
-       "day_of_month" => to_string(item.day_of_month),
-       "amount" => Decimal.to_string(item.amount)
-     })}
+    with_item(socket, id, fn item ->
+      {:noreply,
+       socket
+       |> assign(:modal_mode, :edit)
+       |> assign(:edit_item, item)
+       |> assign(:form_error, nil)
+       |> assign(:form_params, %{
+         "label" => item.label,
+         "day_of_month" => to_string(item.day_of_month),
+         "amount" => Decimal.to_string(item.amount)
+       })}
+    end)
   end
 
   @impl true
@@ -134,37 +136,60 @@ defmodule CashLensWeb.ForecastLive.Index do
 
   @impl true
   def handle_event("resync_item", %{"id" => id}, socket) do
-    item = Forecast.get_recurring_item!(id)
+    user = socket.assigns.current_user
 
-    case Forecast.resync_item(item) do
-      {:ok, _} ->
-        {:noreply, socket |> close_modal() |> assign_projection()}
+    with_item(socket, id, fn item ->
+      case Forecast.resync_item(user, item) do
+        {:ok, _} ->
+          {:noreply, socket |> close_modal() |> assign_projection()}
 
-      {:error, :insufficient_history} ->
-        {:noreply, assign(socket, :form_error, "Histórico insuficiente para ressincronizar.")}
+        {:error, :not_found} ->
+          {:noreply, put_flash(socket, :error, @not_found)}
 
-      {:error, :no_recent_occurrence} ->
-        {:noreply,
-         assign(
-           socket,
-           :form_error,
-           "Sem ocorrência desde antes do mês passado: não dá para ressincronizar uma conta que parou de aparecer."
-         )}
-    end
+        {:error, :insufficient_history} ->
+          {:noreply, assign(socket, :form_error, "Histórico insuficiente para ressincronizar.")}
+
+        {:error, :no_recent_occurrence} ->
+          {:noreply,
+           assign(
+             socket,
+             :form_error,
+             "Sem ocorrência desde antes do mês passado: não dá para ressincronizar uma conta que parou de aparecer."
+           )}
+      end
+    end)
   end
 
   @impl true
   def handle_event("toggle_salary", %{"id" => id}, socket) do
-    item = Forecast.get_recurring_item!(id)
-    if item.is_salary, do: Forecast.unset_salary(item), else: Forecast.set_as_salary(item)
-    {:noreply, assign_projection(socket)}
+    user = socket.assigns.current_user
+
+    with_item(socket, id, fn item ->
+      if item.is_salary,
+        do: Forecast.unset_salary(user, item),
+        else: Forecast.set_as_salary(user, item)
+
+      {:noreply, assign_projection(socket)}
+    end)
   end
 
   @impl true
   def handle_event("toggle_active", %{"id" => id}, socket) do
-    item = Forecast.get_recurring_item!(id)
-    {:ok, _} = Forecast.toggle_active(item)
-    {:noreply, assign_projection(socket)}
+    user = socket.assigns.current_user
+
+    with_item(socket, id, fn item ->
+      {:ok, _} = Forecast.toggle_active(user, item)
+      {:noreply, assign_projection(socket)}
+    end)
+  end
+
+  # A forged or stale id is answered with a flash, never a crash and never a
+  # write: the item has to be one of the logged-in user's.
+  defp with_item(socket, id, fun) do
+    case Forecast.fetch_recurring_item(socket.assigns.current_user, id) do
+      {:ok, item} -> fun.(item)
+      {:error, :not_found} -> {:noreply, put_flash(socket, :error, @not_found)}
+    end
   end
 
   # An existing item goes through manual_update/2, which already forces
@@ -179,7 +204,7 @@ defmodule CashLensWeb.ForecastLive.Index do
       "manually_edited" => true
     }
 
-    case Forecast.create_recurring_item(attrs) do
+    case Forecast.create_recurring_item(socket.assigns.current_user, attrs) do
       {:ok, _item} -> {:noreply, socket |> close_modal() |> assign_projection()}
       {:error, _changeset} -> {:noreply, assign(socket, :form_error, "Valores inválidos.")}
     end
@@ -192,8 +217,9 @@ defmodule CashLensWeb.ForecastLive.Index do
       "is_salary" => Map.has_key?(params, "is_salary")
     }
 
-    case Forecast.manual_update(item, attrs) do
+    case Forecast.manual_update(socket.assigns.current_user, item, attrs) do
       {:ok, _} -> {:noreply, socket |> close_modal() |> assign_projection()}
+      {:error, :not_found} -> {:noreply, socket |> close_modal() |> put_flash(:error, @not_found)}
       {:error, _changeset} -> {:noreply, assign(socket, :form_error, "Valores inválidos.")}
     end
   end

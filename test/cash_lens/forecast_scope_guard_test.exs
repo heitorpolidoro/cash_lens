@@ -80,7 +80,8 @@ defmodule CashLens.ForecastScopeGuardTest do
   test "the :estimado card occurrence still discloses installment groups on the card account" do
     ctx = estimado_fixture()
 
-    occurrences = Forecast.card_occurrences(ctx.today, ctx.due_date)
+    occurrences =
+      Forecast.card_occurrences(CashLens.Tenancy.current_user(), ctx.today, ctx.due_date)
 
     assert [occurrence] = occurrences
     assert occurrence.origin == :estimado

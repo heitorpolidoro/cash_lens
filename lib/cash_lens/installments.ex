@@ -139,7 +139,7 @@ defmodule CashLens.Installments do
     |> case do
       {:ok, group} ->
         link_matching_transactions(user, group)
-        CashLens.Forecast.deactivate_superseded_items()
+        CashLens.Forecast.deactivate_superseded_items(user)
         {:ok, load_dynamic_fields(user, group)}
 
       error ->
@@ -162,7 +162,7 @@ defmodule CashLens.Installments do
         |> case do
           {:ok, updated_group} ->
             link_matching_transactions(user, updated_group)
-            CashLens.Forecast.deactivate_superseded_items()
+            CashLens.Forecast.deactivate_superseded_items(user)
             {:ok, load_dynamic_fields(user, updated_group)}
 
           error ->

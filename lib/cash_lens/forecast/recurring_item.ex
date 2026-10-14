@@ -32,6 +32,7 @@ defmodule CashLens.Forecast.RecurringItem do
     |> validate_required([:category_id, :label, :day_of_month, :amount])
     |> validate_number(:day_of_month, greater_than_or_equal_to: 1, less_than_or_equal_to: 31)
     |> validate_amount_not_zero()
+    |> CashLens.Ownership.validate_owned(:category_id, CashLens.Categories.Category)
     |> unique_constraint(:category_id)
   end
 

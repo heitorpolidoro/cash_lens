@@ -15,7 +15,7 @@ defmodule CashLens.Accounts.Scopes do
     * the transfers screens (transfer suggestions, unmatched transfers and
       manual link candidates in `CashLens.Transactions`);
     * the forecast category suggestions
-      (`CashLens.Forecast.suggest_for_category/1`).
+      (`CashLens.Forecast.suggest_for_category/2`).
 
   ## Who must NOT use this
 

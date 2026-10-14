@@ -3,11 +3,14 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
   use Oban.Testing, repo: CashLens.Repo
 
   alias CashLens.Forecast
+  alias CashLens.Tenancy
   alias CashLens.Workers.SyncRecurringWorker
 
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
   import CashLens.TransactionsFixtures
+
+  defp uid, do: CashLens.Repo.current_user_id()
 
   defp history_date(months_back, day) do
     today = Date.utc_today()
@@ -29,9 +32,9 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
       })
     end
 
-    assert :ok = perform_job(SyncRecurringWorker, %{})
+    assert :ok = perform_job(SyncRecurringWorker, %{user_id: uid()})
 
-    assert [item] = Forecast.list_recurring_items()
+    assert [item] = Forecast.list_recurring_items(CashLens.Tenancy.current_user())
     assert item.label == "Luz"
     assert item.day_of_month == 14
   end
@@ -51,20 +54,20 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
       })
     end
 
-    Phoenix.PubSub.subscribe(CashLens.PubSub, CashLensWeb.RecurringSyncFlash.topic())
+    Phoenix.PubSub.subscribe(CashLens.PubSub, CashLensWeb.RecurringSyncFlash.topic(uid()))
 
-    assert :ok = perform_job(SyncRecurringWorker, %{})
+    assert :ok = perform_job(SyncRecurringWorker, %{user_id: uid()})
 
     assert_receive {:recurring_synced, %{created: 1, updated: 0, deactivated: 0}}
   end
 
   test "perform/1 with nothing to derive still succeeds" do
-    assert :ok = perform_job(SyncRecurringWorker, %{})
-    assert Forecast.list_recurring_items() == []
+    assert :ok = perform_job(SyncRecurringWorker, %{user_id: uid()})
+    assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
   end
 
   test "enqueue/0 queues one job" do
-    assert :ok = SyncRecurringWorker.enqueue()
+    assert :ok = SyncRecurringWorker.enqueue(uid())
     assert_enqueued(worker: SyncRecurringWorker)
   end
 
@@ -72,7 +75,7 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
     # The two numbers are different things: this delay is how long to wait for
     # the rest of an import, the uniqueness period is how far back to look for a
     # request already waiting.
-    assert :ok = SyncRecurringWorker.enqueue()
+    assert :ok = SyncRecurringWorker.enqueue(uid())
 
     assert [job] = Repo.all(Oban.Job)
     assert job.state == "scheduled"
@@ -89,8 +92,8 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
   test "a second request while the first is still waiting is the same request" do
     # The delay is what makes this bite on a real import: without it the first
     # job ran and finished between two files, and every file queued its own.
-    assert :ok = SyncRecurringWorker.enqueue()
-    assert :ok = SyncRecurringWorker.enqueue()
+    assert :ok = SyncRecurringWorker.enqueue(uid())
+    assert :ok = SyncRecurringWorker.enqueue(uid())
 
     assert Repo.aggregate(Oban.Job, :count) == 1
   end
@@ -98,9 +101,9 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
   test "a request made after a run is a new request" do
     # Otherwise the last file of a batch would go unaccounted for: a finished
     # job never saw the rows written after it.
-    assert :ok = SyncRecurringWorker.enqueue()
+    assert :ok = SyncRecurringWorker.enqueue(uid())
     Oban.drain_queue(queue: :default, with_scheduled: true)
-    assert :ok = SyncRecurringWorker.enqueue()
+    assert :ok = SyncRecurringWorker.enqueue(uid())
 
     assert Repo.aggregate(Oban.Job, :count) == 2
   end
@@ -108,12 +111,12 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
   test "a request made while a run is in flight is not swallowed by it" do
     # A job that has already started cannot see rows written after it started,
     # so it must not stand in for a later request.
-    assert :ok = SyncRecurringWorker.enqueue()
+    assert :ok = SyncRecurringWorker.enqueue(uid())
 
     [job] = Repo.all(Oban.Job)
     {:ok, _} = job |> Ecto.Changeset.change(state: "executing") |> Repo.update()
 
-    assert :ok = SyncRecurringWorker.enqueue()
+    assert :ok = SyncRecurringWorker.enqueue(uid())
     assert Repo.aggregate(Oban.Job, :count) == 2
   end
 
@@ -127,7 +130,85 @@ defmodule CashLens.Workers.SyncRecurringWorkerTest do
     Application.put_env(:cash_lens, :oban_module, MockObanError)
     on_exit(fn -> Application.delete_env(:cash_lens, :oban_module) end)
 
-    assert :ok = SyncRecurringWorker.enqueue()
+    assert :ok = SyncRecurringWorker.enqueue(uid())
     refute_enqueued(worker: SyncRecurringWorker)
+  end
+
+  describe "tenancy" do
+    test "enqueue/1 puts the user id in the job args" do
+      assert :ok = SyncRecurringWorker.enqueue(uid())
+      assert [job] = Repo.all(Oban.Job)
+      assert job.args == %{"user_id" => uid()}
+      assert_enqueued(worker: SyncRecurringWorker, args: %{user_id: uid()})
+    end
+
+    test "jobs for two users are not collapsed by uniqueness" do
+      %{a: a, b: b} = cross_tenant()
+
+      assert :ok = SyncRecurringWorker.enqueue(a.id)
+      assert :ok = SyncRecurringWorker.enqueue(b.id)
+      assert :ok = SyncRecurringWorker.enqueue(a.id)
+
+      assert Repo.aggregate(Oban.Job, :count) == 2
+    end
+
+    test "a job without user_id is discarded and writes nothing" do
+      seed_history()
+      assert {:discard, _reason} = perform_job(SyncRecurringWorker, %{})
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
+    end
+
+    test "a job with a non-string user_id is discarded" do
+      assert {:discard, _reason} = perform_job(SyncRecurringWorker, %{user_id: 123})
+    end
+
+    test "a job for a user that no longer exists is discarded" do
+      seed_history()
+      missing = Ecto.UUID.generate()
+      assert {:discard, _reason} = perform_job(SyncRecurringWorker, %{user_id: missing})
+      assert {:discard, _reason} = perform_job(SyncRecurringWorker, %{user_id: "not-a-uuid"})
+      assert Forecast.list_recurring_items(CashLens.Tenancy.current_user()) == []
+    end
+
+    test "a job for A never writes B's rows, and the flash goes to A only" do
+      %{a: a, b: b} = cross_tenant()
+
+      Tenancy.acting_as(a, fn -> seed_history(a) end)
+      Tenancy.acting_as(b, fn -> seed_history(b, "Gás") end)
+
+      Phoenix.PubSub.subscribe(CashLens.PubSub, CashLensWeb.RecurringSyncFlash.topic(a.id))
+
+      assert :ok = perform_job(SyncRecurringWorker, %{user_id: a.id})
+
+      assert_receive {:recurring_synced, %{created: 1}}
+      refute_receive {:recurring_synced, _}
+
+      assert [%{label: "Luz"}] = Tenancy.acting_as(a, fn -> Forecast.list_recurring_items(a) end)
+      assert [] = Tenancy.acting_as(b, fn -> Forecast.list_recurring_items(b) end)
+    end
+
+    test "the flash of A's sync is not delivered to B's topic" do
+      %{a: a, b: b} = cross_tenant()
+      Tenancy.acting_as(a, fn -> seed_history(a) end)
+
+      Phoenix.PubSub.subscribe(CashLens.PubSub, CashLensWeb.RecurringSyncFlash.topic(b.id))
+      assert :ok = perform_job(SyncRecurringWorker, %{user_id: a.id})
+      refute_receive {:recurring_synced, _}
+    end
+  end
+
+  defp seed_history(user \\ CashLens.Tenancy.current_user(), name \\ "Luz") do
+    category = category_fixture(%{user: user, type: "fixed", name: name})
+    account = account_fixture(%{user: user})
+
+    for n <- 0..2 do
+      transaction_fixture(%{
+        user: user,
+        account_id: account.id,
+        category_id: category.id,
+        date: history_date(n, 14),
+        amount: "-334.16"
+      })
+    end
   end
 end

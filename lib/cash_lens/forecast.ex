@@ -14,8 +14,10 @@ defmodule CashLens.Forecast do
   alias CashLens.CreditCards.Statement
   alias CashLens.Forecast.RecurringItem
   alias CashLens.Installments
+  alias CashLens.Ownership
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
+  alias CashLens.Users.User
 
   @history_months 6
   @min_occurrences 2
@@ -36,12 +38,13 @@ defmodule CashLens.Forecast do
   @estimate_sample 6
 
   @doc """
-  Creates a recurring item directly. Used both by fixtures/tests and by
-  the detection sync (Task 2) when a fixed category has no item yet.
+  Creates a recurring item owned by `user` directly. Used both by fixtures/tests
+  and by the detection sync (Task 2) when a fixed category has no item yet. A
+  `"user_id"` in `attrs` is ignored.
   """
-  def create_recurring_item(attrs) do
-    %RecurringItem{}
-    |> RecurringItem.changeset(attrs)
+  def create_recurring_item(%User{} = user, attrs) do
+    %RecurringItem{user_id: user.id}
+    |> RecurringItem.changeset(Map.drop(attrs, ["user_id", :user_id]))
     |> Repo.insert()
   end
 
@@ -63,9 +66,9 @@ defmodule CashLens.Forecast do
   against the current month would drop every account whose file has not been
   loaded yet -- which, on the first days of a month, is all of them.
   """
-  def suggest_for_category(%Category{} = category) do
+  def suggest_for_category(%User{} = user, %Category{} = category) do
     today = Date.utc_today()
-    rows = window_rows(category, today)
+    rows = window_rows(user, category, today)
 
     cond do
       length(rows) < @min_occurrences ->
@@ -81,14 +84,14 @@ defmodule CashLens.Forecast do
     end
   end
 
-  defp window_rows(category, today) do
+  defp window_rows(user, category, today) do
     since = Date.add(today, -30 * @history_months)
 
-    from(t in Transaction,
+    from(t in Ownership.scope(Transaction, user),
       where: t.category_id == ^category.id and t.date >= ^since,
       select: %{date: t.date, amount: t.amount}
     )
-    |> Scopes.cash_accounts_only()
+    |> Scopes.cash_accounts_only(user)
     |> Repo.all()
   end
 
@@ -118,10 +121,11 @@ defmodule CashLens.Forecast do
   end
 
   @doc """
-  Lists all recurring items ordered by day_of_month.
+  Lists all of `user`'s recurring items ordered by day_of_month.
   """
-  def list_recurring_items do
+  def list_recurring_items(%User{} = user) do
     RecurringItem
+    |> Ownership.scope(user)
     |> order_by([r], asc: r.day_of_month)
     |> Repo.all()
   end
@@ -130,8 +134,9 @@ defmodule CashLens.Forecast do
   The same list with each item's category preloaded, for a screen that shows
   which category an item is the recurrence of.
   """
-  def list_recurring_items_with_category do
+  def list_recurring_items_with_category(%User{} = user) do
     RecurringItem
+    |> Ownership.scope(user)
     |> order_by([r], asc: r.day_of_month)
     |> Repo.all()
     |> Repo.preload(:category)
@@ -143,14 +148,13 @@ defmodule CashLens.Forecast do
 
   They reach the forecast through the temporary recurrences, so the screen only
   lists them; nothing here feeds a total. Card groups are absent because
-  `Installments.list_off_card_groups/0` excludes them, and groups whose last
+  `Installments.list_off_card_groups/1` excludes them, and groups whose last
   parcel is before the current month are finished.
   """
-  def list_commitment_rows(today \\ Date.utc_today()) do
+  def list_commitment_rows(%User{} = user, today \\ Date.utc_today()) do
     month = Date.beginning_of_month(today)
 
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    Installments.list_off_card_groups(CashLens.Ownership.current_user!())
+    Installments.list_off_card_groups(user)
     |> Enum.filter(fn g ->
       case Installments.last_installment_date(g) do
         nil -> false
@@ -180,7 +184,18 @@ defmodule CashLens.Forecast do
   next sync may well recreate the item from history -- which is the point when
   the item was wrong rather than finished.
   """
-  def delete_recurring_item(%RecurringItem{} = item), do: Repo.delete(item)
+  def delete_recurring_item(%User{} = user, %RecurringItem{} = item) do
+    case fetch_item(user, item) do
+      nil -> {:error, :not_found}
+      owned -> Repo.delete(owned)
+    end
+  end
+
+  defp fetch_item(user, %RecurringItem{id: id}) when not is_nil(id) do
+    RecurringItem |> Ownership.scope(user) |> Repo.get(id)
+  end
+
+  defp fetch_item(_user, _item), do: nil
 
   @doc """
   A changeset for a recurring item, for the form to render errors from.
@@ -190,9 +205,25 @@ defmodule CashLens.Forecast do
   end
 
   @doc """
-  Gets a single recurring item by id.
+  Gets one of `user`'s recurring items by id; raises `Ecto.NoResultsError` for
+  anyone else's.
   """
-  def get_recurring_item!(id), do: Repo.get!(RecurringItem, id)
+  def get_recurring_item!(%User{} = user, id) do
+    RecurringItem |> Ownership.scope(user) |> Repo.get!(id)
+  end
+
+  @doc """
+  Like `get_recurring_item!/2` but returns `{:ok, item}` or `{:error, :not_found}`
+  (also for a malformed id), for callers that handle a forged id themselves.
+  """
+  def fetch_recurring_item(%User{} = user, id) do
+    with {:ok, id} <- Ecto.UUID.cast(id),
+         %RecurringItem{} = item <- RecurringItem |> Ownership.scope(user) |> Repo.get(id) do
+      {:ok, item}
+    else
+      _ -> {:error, :not_found}
+    end
+  end
 
   @doc """
   Syncs all fixed categories against recurring_items: creates items for
@@ -207,35 +238,36 @@ defmodule CashLens.Forecast do
   inactive item stays on the screen, out of the projection, one click from
   coming back.
   """
-  def sync_all do
+  def sync_all(%User{} = user) do
     fixed_categories =
-      Categories.list_categories(CashLens.Ownership.current_user!())
+      Categories.list_categories(user)
       |> Enum.filter(&(&1.type == "fixed" and not credit_card_category?(&1)))
 
-    existing_by_category = Map.new(list_recurring_items(), &{&1.category_id, &1})
+    existing_by_category = Map.new(list_recurring_items(user), &{&1.category_id, &1})
 
     Enum.reduce(fixed_categories, %{created: 0, updated: 0, deactivated: 0}, fn category, acc ->
-      sync_one(category, Map.get(existing_by_category, category.id), acc)
+      sync_one(user, category, Map.get(existing_by_category, category.id), acc)
     end)
   end
 
-  defp sync_one(_category, %RecurringItem{manually_edited: true}, acc), do: acc
+  defp sync_one(_user, _category, %RecurringItem{manually_edited: true}, acc), do: acc
 
   # A category wholly covered by installment groups is projected as a commitment;
   # creating an item for it would charge the same expense twice.
-  defp sync_one(category, nil, acc) do
-    if fully_grouped_category?(category.id), do: acc, else: sync_new(category, acc)
+  defp sync_one(user, category, nil, acc) do
+    if fully_grouped_category?(user, category.id), do: acc, else: sync_new(user, category, acc)
   end
 
-  defp sync_one(category, %RecurringItem{} = item, acc) do
-    sync_existing(category, item, acc)
+  defp sync_one(user, category, %RecurringItem{} = item, acc) do
+    sync_existing(user, category, item, acc)
   end
 
-  defp sync_new(category, acc) do
-    case suggest_for_category(category) do
+  defp sync_new(user, category, acc) do
+    case suggest_for_category(user, category) do
       {:ok, suggestion} ->
         {:ok, _} =
           create_recurring_item(
+            user,
             Map.merge(suggestion, %{"category_id" => category.id, "label" => category.name})
           )
 
@@ -246,8 +278,8 @@ defmodule CashLens.Forecast do
     end
   end
 
-  defp sync_existing(category, item, acc) do
-    case suggest_for_category(category) do
+  defp sync_existing(user, category, item, acc) do
+    case suggest_for_category(user, category) do
       {:ok, suggestion} ->
         {:ok, _} = item |> RecurringItem.changeset(suggestion) |> Repo.update()
         %{acc | updated: acc.updated + 1}
@@ -260,7 +292,7 @@ defmodule CashLens.Forecast do
       :insufficient_history ->
         today = Date.utc_today()
 
-        if stale?(window_rows(category, today), today),
+        if stale?(window_rows(user, category, today), today),
           do: deactivate_stale(item, acc),
           else: acc
     end
@@ -293,11 +325,11 @@ defmodule CashLens.Forecast do
   it is left alone. Items edited by hand are never touched — the same rule
   `sync_all/0` follows.
   """
-  def deactivate_superseded_items do
+  def deactivate_superseded_items(%User{} = user) do
     superseded =
-      list_recurring_items()
+      list_recurring_items(user)
       |> Enum.filter(
-        &(&1.active and not &1.manually_edited and fully_grouped_category?(&1.category_id))
+        &(&1.active and not &1.manually_edited and fully_grouped_category?(user, &1.category_id))
       )
 
     Enum.each(superseded, fn item ->
@@ -309,9 +341,9 @@ defmodule CashLens.Forecast do
     superseded
   end
 
-  defp fully_grouped_category?(category_id) do
+  defp fully_grouped_category?(user, category_id) do
     counts =
-      from(t in Transaction,
+      from(t in Ownership.scope(Transaction, user),
         where: t.category_id == ^category_id,
         select: %{
           total: count(t.id),
@@ -333,17 +365,28 @@ defmodule CashLens.Forecast do
   Forces a single item to re-derive day_of_month/amount from history and
   resets manually_edited to false.
   """
-  def resync_item(%RecurringItem{} = item) do
-    category = Categories.get_category!(CashLens.Ownership.current_user!(), item.category_id)
+  def resync_item(%User{} = user, %RecurringItem{} = record) do
+    with_owned(user, record, fn item ->
+      category = Categories.get_category!(user, item.category_id)
 
-    case suggest_for_category(category) do
-      {:ok, suggestion} ->
-        item
-        |> RecurringItem.changeset(Map.put(suggestion, "manually_edited", false))
-        |> Repo.update()
+      case suggest_for_category(user, category) do
+        {:ok, suggestion} ->
+          item
+          |> RecurringItem.changeset(Map.put(suggestion, "manually_edited", false))
+          |> Repo.update()
 
-      reason when reason in [:insufficient_history, :no_recent_occurrence] ->
-        {:error, reason}
+        reason when reason in [:insufficient_history, :no_recent_occurrence] ->
+          {:error, reason}
+      end
+    end)
+  end
+
+  # Re-fetches `record` through the ownership scope, so a stale or forged struct
+  # never writes another user's row.
+  defp with_owned(user, record, fun) do
+    case fetch_item(user, record) do
+      nil -> {:error, :not_found}
+      item -> fun.(item)
     end
   end
 
@@ -351,25 +394,33 @@ defmodule CashLens.Forecast do
   Updates day_of_month and/or amount from the UI. Marks the item as
   manually_edited so future sync_all/0 calls leave it untouched.
   """
-  def manual_update(%RecurringItem{} = item, attrs) do
-    item
-    |> RecurringItem.changeset(Map.put(attrs, "manually_edited", true))
-    |> Repo.update()
+  def manual_update(%User{} = user, %RecurringItem{} = record, attrs) do
+    with_owned(user, record, fn item ->
+      item
+      |> RecurringItem.changeset(Map.put(attrs, "manually_edited", true))
+      |> Repo.update()
+    end)
   end
 
-  def toggle_active(%RecurringItem{} = item) do
-    item
-    |> RecurringItem.changeset(%{"active" => !item.active})
-    |> Repo.update()
+  def toggle_active(%User{} = user, %RecurringItem{} = record) do
+    with_owned(user, record, fn item ->
+      item
+      |> RecurringItem.changeset(%{"active" => !item.active})
+      |> Repo.update()
+    end)
   end
 
-  def set_as_salary(%RecurringItem{} = item) do
-    Repo.update_all(RecurringItem, set: [is_salary: false])
-    item |> RecurringItem.changeset(%{"is_salary" => true}) |> Repo.update()
+  def set_as_salary(%User{} = user, %RecurringItem{} = record) do
+    with_owned(user, record, fn item ->
+      RecurringItem |> Ownership.scope(user) |> Repo.update_all(set: [is_salary: false])
+      item |> RecurringItem.changeset(%{"is_salary" => true}) |> Repo.update()
+    end)
   end
 
-  def unset_salary(%RecurringItem{} = item) do
-    item |> RecurringItem.changeset(%{"is_salary" => false}) |> Repo.update()
+  def unset_salary(%User{} = user, %RecurringItem{} = record) do
+    with_owned(user, record, fn item ->
+      item |> RecurringItem.changeset(%{"is_salary" => false}) |> Repo.update()
+    end)
   end
 
   defp median(sorted_list) do
@@ -381,26 +432,28 @@ defmodule CashLens.Forecast do
   applying every active recurring item's future occurrences within
   `horizon_days`.
   """
-  def project(horizon_days \\ @default_horizon_days, today \\ Date.utc_today(), opts \\ []) do
-    accounts =
-      Keyword.get_lazy(opts, :accounts, fn ->
-        Accounts.list_accounts(CashLens.Ownership.current_user!())
-      end)
+  def project(
+        %User{} = user,
+        horizon_days \\ @default_horizon_days,
+        today \\ Date.utc_today(),
+        opts \\ []
+      ) do
+    accounts = Keyword.get_lazy(opts, :accounts, fn -> Accounts.list_accounts(user) end)
 
-    starting_balance = current_balance(accounts, opts)
+    starting_balance = current_balance(user, accounts, opts)
     horizon_end = Date.add(today, horizon_days)
 
     recurring_occurrences =
-      list_recurring_items()
+      list_recurring_items(user)
       |> Enum.filter(& &1.active)
       |> Enum.flat_map(&future_occurrences(&1, today, horizon_end))
 
     occurrences =
-      (overdue_occurrences(today) ++
+      (overdue_occurrences(user, today) ++
          recurring_occurrences ++
-         card_occurrences(today, horizon_end, accounts: accounts) ++
-         commitment_occurrences(today, horizon_end) ++
-         variable_baseline(today, horizon_end))
+         card_occurrences(user, today, horizon_end, accounts: accounts) ++
+         commitment_occurrences(user, today, horizon_end) ++
+         variable_baseline(user, today, horizon_end))
       |> Enum.sort_by(& &1.date, Date)
       |> with_running_balance(starting_balance)
 
@@ -589,11 +642,11 @@ defmodule CashLens.Forecast do
   Returns `nil` when the window holds no such spending, so a fresh database
   projects no baseline rather than a baseline of zero.
   """
-  def variable_baseline_rate do
+  def variable_baseline_rate(%User{} = user) do
     today = Date.utc_today()
     days = 30 * @baseline_months
     since = Date.add(today, -days)
-    total = variable_spending_total(since, Date.add(today, -1))
+    total = variable_spending_total(user, since, Date.add(today, -1))
 
     if Decimal.equal?(total, 0) do
       nil
@@ -612,13 +665,15 @@ defmodule CashLens.Forecast do
     end
   end
 
-  defp variable_spending_total(since, until) do
+  defp variable_spending_total(user, since, until) do
     fixed_category_ids =
-      from(c in Category, where: c.type == "fixed", select: c.id)
+      from(c in Ownership.scope(Category, user), where: c.type == "fixed", select: c.id)
       |> Repo.all()
 
-    from(t in Transaction,
-      left_join: c in Category,
+    categories = Ownership.scope(Category, user)
+
+    from(t in Ownership.scope(Transaction, user),
+      left_join: c in ^categories,
       on: c.id == t.category_id,
       where: t.date >= ^since and t.date <= ^until,
       where: t.amount < 0,
@@ -632,7 +687,7 @@ defmodule CashLens.Forecast do
       where: is_nil(t.installment_group_id),
       select: sum(t.amount)
     )
-    |> Scopes.cash_accounts_only()
+    |> Scopes.cash_accounts_only(user)
     |> Repo.one()
     |> case do
       nil -> Decimal.new("0")
@@ -643,8 +698,8 @@ defmodule CashLens.Forecast do
   # One occurrence per day, starting TOMORROW: today's variable spending is
   # already inside `current_balance/0`, so charging the average on top of it
   # would count the same day twice.
-  defp variable_baseline(today, horizon_end) do
-    case variable_baseline_rate() do
+  defp variable_baseline(user, today, horizon_end) do
+    case variable_baseline_rate(user) do
       nil ->
         []
 
@@ -752,9 +807,13 @@ defmodule CashLens.Forecast do
 
   Returns `nil` when there is not at least a full year to measure.
   """
-  def monthly_volatility(months \\ @volatility_months, today \\ Date.utc_today()) do
+  def monthly_volatility(
+        %User{} = user,
+        months \\ @volatility_months,
+        today \\ Date.utc_today()
+      ) do
     window = complete_months_before(today, months)
-    nets = monthly_nets(window)
+    nets = monthly_nets(user, window)
 
     if length(nets) < months or Enum.all?(nets, &Decimal.equal?(&1, Decimal.new("0"))) do
       nil
@@ -793,20 +852,20 @@ defmodule CashLens.Forecast do
 
   # The net of each month in `window` (oldest first) from one grouped read.
   # A month with no cash movement has no row and counts as zero.
-  defp monthly_nets([]), do: []
+  defp monthly_nets(_user, []), do: []
 
-  defp monthly_nets(window) do
+  defp monthly_nets(user, window) do
     first = List.first(window)
     last = window |> List.last() |> Date.end_of_month()
 
     by_month =
-      from(t in Transaction,
+      from(t in Ownership.scope(Transaction, user),
         where: t.date >= ^first and t.date <= ^last,
         where: is_nil(t.transfer_key),
         group_by: fragment("date_trunc('month', ?)::date", t.date),
         select: {type(fragment("date_trunc('month', ?)::date", t.date), :date), sum(t.amount)}
       )
-      |> Scopes.cash_accounts_only()
+      |> Scopes.cash_accounts_only(user)
       |> Repo.all()
       |> Map.new()
 
@@ -836,10 +895,10 @@ defmodule CashLens.Forecast do
   the projection through `card_occurrences/2`, so registering one would count
   the same money twice). Ordered by name.
   """
-  def list_categories_without_recurring_item do
-    taken = MapSet.new(list_recurring_items(), & &1.category_id)
+  def list_categories_without_recurring_item(%User{} = user) do
+    taken = MapSet.new(list_recurring_items(user), & &1.category_id)
 
-    Categories.list_categories(CashLens.Ownership.current_user!())
+    Categories.list_categories(user)
     |> Enum.reject(&(MapSet.member?(taken, &1.id) or credit_card_category?(&1)))
     |> Enum.sort_by(& &1.name)
   end
@@ -857,11 +916,10 @@ defmodule CashLens.Forecast do
     end
   end
 
-  defp current_balance(accounts, opts) do
+  defp current_balance(user, accounts, opts) do
     latest_balances =
       Keyword.get_lazy(opts, :latest_balances, fn ->
-        # TRANSITIONAL: removed when CL-51 converts the caller
-        Accounting.list_latest_balances(CashLens.Ownership.current_user!(), accounts: accounts)
+        Accounting.list_latest_balances(user, accounts: accounts)
       end)
 
     balances_by_account = Map.new(latest_balances, &{&1.account_id, &1.final_balance})
@@ -909,18 +967,17 @@ defmodule CashLens.Forecast do
     predates the bill's due date, the month simply has not been imported, and
     every bill in it would look unpaid. Nothing is claimed past that date.
   """
-  def overdue_occurrences(today \\ Date.utc_today()) do
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    case CashLens.Transactions.get_latest_transaction_date(CashLens.Ownership.current_user!()) do
+  def overdue_occurrences(%User{} = user, today \\ Date.utc_today()) do
+    case CashLens.Transactions.get_latest_transaction_date(user) do
       nil -> []
-      latest -> overdue_occurrences(today, latest)
+      latest -> overdue_for(user, today, latest)
     end
   end
 
-  defp overdue_occurrences(today, latest) do
-    settled = settled_categories(Date.beginning_of_month(today), today)
+  defp overdue_for(user, today, latest) do
+    settled = settled_categories(user, Date.beginning_of_month(today), today)
 
-    list_recurring_items()
+    list_recurring_items(user)
     |> Enum.filter(&overdue?(&1, today, latest, settled))
     |> Enum.map(fn item ->
       %{
@@ -944,9 +1001,10 @@ defmodule CashLens.Forecast do
 
   # Which categories already have something on them this month. One row is
   # enough: this answers "did this bill happen", not "how much of it".
-  defp settled_categories(from, to) do
+  defp settled_categories(user, from, to) do
     Transaction
-    |> Scopes.cash_accounts_only()
+    |> Ownership.scope(user)
+    |> Scopes.cash_accounts_only(user)
     |> where([t], t.date >= ^from and t.date <= ^to)
     |> where([t], not is_nil(t.category_id))
     |> select([t], t.category_id)
@@ -996,13 +1054,11 @@ defmodule CashLens.Forecast do
   month's known installments. Paid months and cycle-less accounts produce
   no occurrence.
   """
-  def card_occurrences(today, horizon_end, opts \\ []) do
+  def card_occurrences(%User{} = user, today, horizon_end, opts \\ []) do
     opts
-    |> Keyword.get_lazy(:accounts, fn ->
-      Accounts.list_accounts(CashLens.Ownership.current_user!())
-    end)
+    |> Keyword.get_lazy(:accounts, fn -> Accounts.list_accounts(user) end)
     |> card_accounts()
-    |> Enum.flat_map(&card_account_occurrences(&1, today, horizon_end))
+    |> Enum.flat_map(&card_account_occurrences(user, &1, today, horizon_end))
   end
 
   defp card_accounts(accounts) do
@@ -1023,8 +1079,8 @@ defmodule CashLens.Forecast do
   # current month once `due_day` has passed, say -- still lists a real unpaid
   # statement due inside the window (a weekend shift, a manual entry), and
   # never an estimate, so the bill is neither lost nor counted twice.
-  defp card_account_occurrences(account, today, horizon_end) do
-    statements = statements_for_months(account.id, card_months(today, horizon_end))
+  defp card_account_occurrences(user, account, today, horizon_end) do
+    statements = statements_for_months(user, account.id, card_months(today, horizon_end))
 
     walked =
       today
@@ -1035,24 +1091,23 @@ defmodule CashLens.Forecast do
     if walked == [] do
       []
     else
-      # TRANSITIONAL: removed when CL-51 converts the caller
-      groups = Installments.list_account_groups(CashLens.Ownership.current_user!(), account.id)
+      groups = Installments.list_account_groups(user, account.id)
 
       base =
         if Enum.any?(walked, &(&1.estimable? and is_nil(&1.statement))),
-          do: estimate_base(account, groups)
+          do: estimate_base(user, account, groups)
 
       walked
-      |> Enum.map(&walked_card_occurrence(&1, account, base, groups))
+      |> Enum.map(&walked_card_occurrence(user, &1, account, base, groups))
       |> Enum.reject(&is_nil/1)
     end
   end
 
-  defp walked_card_occurrence(%{estimable?: true} = m, account, base, groups),
-    do: card_occurrence_for_date(account, m.date, m.statement, base, groups)
+  defp walked_card_occurrence(user, %{estimable?: true} = m, account, base, groups),
+    do: card_occurrence_for_date(user, account, m.date, m.statement, base, groups)
 
-  defp walked_card_occurrence(m, account, _base, groups),
-    do: card_occurrence_for_date(account, m.date, m.statement, nil, groups)
+  defp walked_card_occurrence(user, m, account, _base, groups),
+    do: card_occurrence_for_date(user, account, m.date, m.statement, nil, groups)
 
   # `estimable?` marks a month whose `due_day` date is inside the window: only
   # those may fall back to an estimate. Other months are walked only to list a
@@ -1088,13 +1143,13 @@ defmodule CashLens.Forecast do
     |> Enum.take_while(&(Date.compare(&1, horizon_end) != :gt))
   end
 
-  defp card_occurrence_for_date(account, date, statement, base, groups) do
+  defp card_occurrence_for_date(user, account, date, statement, base, groups) do
     month = Date.beginning_of_month(date)
 
     case statement do
       %Statement{payment_transaction_id: nil} = s ->
         account
-        |> build_card_occurrence(s.due_date, statement_amount(s), :boleto, nil)
+        |> build_card_occurrence(s.due_date, statement_amount(user, s), :boleto, nil)
         |> Map.put(:statement_id, s.id)
 
       %Statement{} ->
@@ -1124,11 +1179,11 @@ defmodule CashLens.Forecast do
   # -- because a month is looked up whole: a statement already past today but in
   # the current month, or one due after the horizon end but in its last month,
   # still decides that month.
-  defp statements_for_months(account_id, months) do
+  defp statements_for_months(user, account_id, months) do
     from_date = List.first(months)
     to_date = months |> List.last() |> Date.end_of_month()
 
-    from(s in Statement,
+    from(s in Ownership.scope(Statement, user),
       where: s.account_id == ^account_id and s.due_date >= ^from_date and s.due_date <= ^to_date
     )
     |> Repo.all()
@@ -1165,12 +1220,11 @@ defmodule CashLens.Forecast do
   # It reaches the estimate too, through `variable_part/1`, where a bill with
   # nothing to pay now counts as a month of zero spending instead of a month of
   # negative spending that drags the card's whole average down.
-  defp statement_amount(%Statement{total_a_pagar: total}) when not is_nil(total),
+  defp statement_amount(_user, %Statement{total_a_pagar: total}) when not is_nil(total),
     do: outflow(Decimal.negate(total))
 
-  defp statement_amount(%Statement{id: id}) do
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    CashLens.Ownership.current_user!()
+  defp statement_amount(user, %Statement{id: id}) do
+    user
     |> CreditCards.statement_transactions(id)
     |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
     |> outflow()
@@ -1204,11 +1258,11 @@ defmodule CashLens.Forecast do
   # an unusually heavy schedule is still projected heavier than its neighbours.
   # The month-independent half of the estimate, computed once per card: the
   # recent-bill sample's average variable part and typical installment load.
-  defp estimate_base(account, groups) do
+  defp estimate_base(user, account, groups) do
     since = Date.add(Date.utc_today(), -30 * @history_months)
 
     recent =
-      from(s in Statement,
+      from(s in Ownership.scope(Statement, user),
         where: s.account_id == ^account.id and not is_nil(s.due_date) and s.due_date >= ^since,
         order_by: [desc: s.due_date],
         limit: @estimate_sample
@@ -1220,7 +1274,7 @@ defmodule CashLens.Forecast do
         nil
 
       statements ->
-        parts = Enum.map(statements, &variable_part(&1, groups))
+        parts = Enum.map(statements, &variable_part(user, &1, groups))
 
         %{
           variable: parts |> Enum.map(& &1.variable) |> average(),
@@ -1241,12 +1295,12 @@ defmodule CashLens.Forecast do
     }
   end
 
-  defp variable_part(%Statement{} = statement, groups) do
+  defp variable_part(user, %Statement{} = statement, groups) do
     competencia = statement.competencia || Date.beginning_of_month(statement.due_date)
     installments = Installments.total_due_in_month(groups, competencia)
 
     %{
-      variable: statement |> statement_amount() |> Decimal.add(installments),
+      variable: user |> statement_amount(statement) |> Decimal.add(installments),
       installments: installments
     }
   end
@@ -1320,15 +1374,14 @@ defmodule CashLens.Forecast do
   Temporary recurrences: one occurrence per parcel, inside the horizon, for every
   commitment whose parcels are *not* already folded into a credit-card bill.
 
-  Membership comes from `Installments.list_off_card_groups/0`, which decides by
+  Membership comes from `Installments.list_off_card_groups/1`, which decides by
   the account the parcels land on — the very fact that drives
   `Installments.account_installment_total/2` on the card-bill side. Because
   bill-inclusion is a strict subset of ruler-exclusion, a commitment can never be
   counted on both sides, whatever its `commitment_type` says.
   """
-  def commitment_occurrences(today, horizon_end) do
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    Installments.list_off_card_groups(CashLens.Ownership.current_user!())
+  def commitment_occurrences(%User{} = user, today, horizon_end) do
+    Installments.list_off_card_groups(user)
     |> Enum.flat_map(&group_occurrences(&1, today, horizon_end))
   end
 
