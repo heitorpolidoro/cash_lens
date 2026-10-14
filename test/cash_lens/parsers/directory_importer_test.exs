@@ -1,5 +1,7 @@
 defmodule CashLens.Parsers.DirectoryImporterTest do
   use CashLens.DataCase, async: false
+
+  defp user, do: CashLens.Ownership.current_user!()
   import CashLens.AccountsFixtures
   import CashLens.CreditCardsFixtures
 
@@ -170,9 +172,9 @@ defmodule CashLens.Parsers.DirectoryImporterTest do
       # this project's other tests reach for `skip_installments: true` rather
       # than mocking that function directly (grep this file for the existing
       # pattern before assuming a different one is expected).
-      assert CashLens.Installments.list_installment_groups() == []
+      assert CashLens.Installments.list_installment_groups(user()) == []
       DirectoryImporter.run(dir, dry_run: true)
-      assert CashLens.Installments.list_installment_groups() == []
+      assert CashLens.Installments.list_installment_groups(user()) == []
     end
   end
 

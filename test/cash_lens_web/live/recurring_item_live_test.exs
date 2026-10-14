@@ -1,6 +1,8 @@
 defmodule CashLensWeb.RecurringItemLiveTest do
   use CashLensWeb.ConnCase
 
+  defp user, do: CashLens.Ownership.current_user!()
+
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
@@ -314,6 +316,7 @@ defmodule CashLensWeb.RecurringItemLiveTest do
     defp commitment(attrs) do
       {:ok, group} =
         CashLens.Installments.create_installment_group(
+          user(),
           Map.merge(
             %{
               description_pattern: "Financiamento Apto",

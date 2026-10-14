@@ -1,6 +1,8 @@
 defmodule CashLensWeb.TransactionLive.IndexHandlersTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Ownership.current_user!()
+
   import Ecto.Query
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
@@ -14,7 +16,7 @@ defmodule CashLensWeb.TransactionLive.IndexHandlersTest do
   describe "installment linking" do
     test "link_installment then unlink_installment", %{conn: conn} do
       {:ok, group} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "LOJA (2x)",
           total_amount: "200.00",
           installments: 2,

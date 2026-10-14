@@ -15,6 +15,7 @@ defmodule CashLens.InstallmentsTest do
   defp group(attrs) do
     {:ok, g} =
       Installments.create_installment_group(
+        user(),
         Map.merge(
           %{description_pattern: "G", installments: 3, start_date: Date.utc_today()},
           attrs
@@ -26,7 +27,10 @@ defmodule CashLens.InstallmentsTest do
 
   test "update_installment_group/2 changes fields" do
     g = group(%{description_pattern: "Antigo"})
-    {:ok, updated} = Installments.update_installment_group(g, %{description_pattern: "Novo"})
+
+    {:ok, updated} =
+      Installments.update_installment_group(user(), g, %{description_pattern: "Novo"})
+
     assert updated.description_pattern == "Novo"
   end
 
@@ -37,7 +41,7 @@ defmodule CashLens.InstallmentsTest do
   describe "total_amount automatic calculations" do
     test "calculates total_amount from installment_amount when total_amount is nil" do
       {:ok, g} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "TEST CALC 1",
           installments: 4,
           start_date: ~D[2026-01-01],
@@ -47,7 +51,7 @@ defmodule CashLens.InstallmentsTest do
       assert Decimal.equal?(g.total_amount, Decimal.new("200.00"))
 
       # Verify it was saved to the DB
-      fetched = Installments.get_installment_group!(g.id)
+      fetched = Installments.get_installment_group!(user(), g.id)
       assert Decimal.equal?(fetched.total_amount, Decimal.new("200.00"))
       assert Decimal.equal?(fetched.installment_amount, Decimal.new("50.00"))
     end
@@ -73,7 +77,7 @@ defmodule CashLens.InstallmentsTest do
         })
 
       {:ok, g} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "TEST CALC 2",
           installments: 3,
           start_date: ~D[2026-01-01]
@@ -87,14 +91,14 @@ defmodule CashLens.InstallmentsTest do
       assert is_nil(db_group.total_amount)
 
       # But fetched via context is populated
-      fetched = Installments.get_installment_group!(g.id)
+      fetched = Installments.get_installment_group!(user(), g.id)
       assert Decimal.equal?(fetched.total_amount, Decimal.new("150.00"))
       assert Decimal.equal?(fetched.installment_amount, Decimal.new("50.00"))
     end
 
     test "leaves total_amount as nil if total_amount/installment_amount are nil and no matching transaction is found" do
       assert {:ok, g} =
-               Installments.create_installment_group(%{
+               Installments.create_installment_group(user(), %{
                  description_pattern: "NON EXISTENT MERCH",
                  installments: 3,
                  start_date: ~D[2026-01-01]
@@ -102,7 +106,7 @@ defmodule CashLens.InstallmentsTest do
 
       assert is_nil(g.total_amount)
 
-      fetched = Installments.get_installment_group!(g.id)
+      fetched = Installments.get_installment_group!(user(), g.id)
       assert is_nil(fetched.total_amount)
     end
   end
@@ -121,7 +125,7 @@ defmodule CashLens.InstallmentsTest do
       set: [installment_group_id: completed.id]
     )
 
-    ids = Installments.list_active_groups() |> Enum.map(& &1.id)
+    ids = Installments.list_active_groups(user()) |> Enum.map(& &1.id)
     assert active.id in ids
     refute completed.id in ids
   end
@@ -135,7 +139,7 @@ defmodule CashLens.InstallmentsTest do
       set: [installment_group_id: g.id]
     )
 
-    progress = Installments.get_group_with_progress(g.id)
+    progress = Installments.get_group_with_progress(user(), g.id)
     assert progress.paid_count == 1
     assert progress.remaining_count == 1
     refute progress.is_completed
@@ -143,9 +147,9 @@ defmodule CashLens.InstallmentsTest do
 
   test "find_matching_group/1 matches by description and handles nil" do
     g = group(%{description_pattern: "NETFLIX"})
-    assert Installments.find_matching_group("PAGAMENTO NETFLIX MENSAL").id == g.id
-    assert is_nil(Installments.find_matching_group("OUTRA COISA"))
-    assert is_nil(Installments.find_matching_group(nil))
+    assert Installments.find_matching_group(user(), "PAGAMENTO NETFLIX MENSAL").id == g.id
+    assert is_nil(Installments.find_matching_group(user(), "OUTRA COISA"))
+    assert is_nil(Installments.find_matching_group(user(), nil))
   end
 
   describe "last_installment_date/1" do
@@ -172,7 +176,7 @@ defmodule CashLens.InstallmentsTest do
   describe "list_group_transactions/1" do
     test "returns the group's transactions ordered by installment_number" do
       {:ok, g} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "LOJA Y",
           installments: 3,
           start_date: ~D[2026-01-01]
@@ -193,7 +197,7 @@ defmodule CashLens.InstallmentsTest do
 
       numbers =
         g.id
-        |> Installments.list_group_transactions()
+        |> then(&Installments.list_group_transactions(user(), &1))
         |> Enum.map(& &1.installment_number)
 
       assert numbers == [1, 2]
@@ -201,13 +205,13 @@ defmodule CashLens.InstallmentsTest do
 
     test "returns [] for a group with no transactions" do
       {:ok, g} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "EMPTY",
           installments: 2,
           start_date: ~D[2026-01-01]
         })
 
-      assert Installments.list_group_transactions(g.id) == []
+      assert Installments.list_group_transactions(user(), g.id) == []
     end
   end
 
@@ -230,7 +234,7 @@ defmodule CashLens.InstallmentsTest do
         start_date: first
       })
 
-      result = Installments.upcoming_installments(3)
+      result = Installments.upcoming_installments(user(), 3)
       assert is_list(result)
       assert Enum.all?(result, &Map.has_key?(&1, :total))
       # The group with a total contributes 100/month.
@@ -257,7 +261,7 @@ defmodule CashLens.InstallmentsTest do
         set: [installment_group_id: g.id]
       )
 
-      result = Installments.upcoming_installments(3)
+      result = Installments.upcoming_installments(user(), 3)
       assert is_list(result)
     end
   end
@@ -302,14 +306,14 @@ defmodule CashLens.InstallmentsTest do
         })
 
       {:ok, group} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "Curso Elixir",
           installments: 3,
           start_date: ~D[2026-01-01],
           total_amount: "150.00"
         })
 
-      linked = Installments.list_group_transactions(group.id)
+      linked = Installments.list_group_transactions(user(), group.id)
       assert length(linked) == 2
 
       [l1, l2] = linked
@@ -348,14 +352,14 @@ defmodule CashLens.InstallmentsTest do
 
       # Create group with 2 installments limit
       {:ok, group} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "Curso Elixir",
           installments: 2,
           start_date: ~D[2026-01-01],
           total_amount: "100.00"
         })
 
-      linked = Installments.list_group_transactions(group.id)
+      linked = Installments.list_group_transactions(user(), group.id)
       assert length(linked) == 2
     end
 
@@ -379,23 +383,23 @@ defmodule CashLens.InstallmentsTest do
         })
 
       {:ok, group} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "OLD MERCH",
           installments: 2,
           start_date: ~D[2026-01-01],
           total_amount: "100.00"
         })
 
-      assert [linked_old] = Installments.list_group_transactions(group.id)
+      assert [linked_old] = Installments.list_group_transactions(user(), group.id)
       assert linked_old.id == tx_old.id
 
       # Update description pattern
       {:ok, updated_group} =
-        Installments.update_installment_group(group, %{
+        Installments.update_installment_group(user(), group, %{
           description_pattern: "NEW MERCH"
         })
 
-      linked = Installments.list_group_transactions(updated_group.id)
+      linked = Installments.list_group_transactions(user(), updated_group.id)
       assert [linked_new] = linked
       assert linked_new.id == tx_new.id
 
@@ -416,14 +420,14 @@ defmodule CashLens.InstallmentsTest do
 
       # Create with auto-detected pattern format
       {:ok, group} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "AMAZON (2x · R$50)",
           installments: 2,
           start_date: ~D[2026-01-01],
           total_amount: "100.00"
         })
 
-      assert Installments.list_group_transactions(group.id) == []
+      assert Installments.list_group_transactions(user(), group.id) == []
     end
   end
 
@@ -433,7 +437,7 @@ defmodule CashLens.InstallmentsTest do
       other_card = account_fixture(%{is_credit_card: true})
 
       {:ok, group} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "FORECAST_TEST_ITEM",
           installments: 3,
           start_date: ~D[2026-06-01],
@@ -450,7 +454,7 @@ defmodule CashLens.InstallmentsTest do
 
       # A group touching a DIFFERENT account must not be counted.
       {:ok, other_group} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "FORECAST_TEST_OTHER",
           installments: 2,
           start_date: ~D[2026-06-01],
@@ -465,13 +469,13 @@ defmodule CashLens.InstallmentsTest do
         amount: Decimal.new("-100.00")
       })
 
-      total = Installments.account_installment_total(card.id, ~D[2026-07-01])
+      total = Installments.account_installment_total(user(), card.id, ~D[2026-07-01])
       assert Decimal.equal?(total, Decimal.new("100.00"))
     end
 
     test "returns 0 when nothing is due for the account in that month" do
       card = account_fixture(%{is_credit_card: true})
-      total = Installments.account_installment_total(card.id, ~D[2026-01-01])
+      total = Installments.account_installment_total(user(), card.id, ~D[2026-01-01])
       assert Decimal.equal?(total, Decimal.new("0"))
     end
   end
@@ -517,7 +521,7 @@ defmodule CashLens.InstallmentsTest do
 
     test "rejects an unknown commitment type" do
       {:error, changeset} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "X",
           installments: 3,
           start_date: Date.utc_today(),
@@ -584,7 +588,7 @@ defmodule CashLens.InstallmentsTest do
     end
 
     test "monthly_commitment/1 breaks the current month down by type with counts", %{m0: m0} do
-      metrics = Installments.monthly_commitment(m0)
+      metrics = Installments.monthly_commitment(user(), m0)
 
       assert Decimal.equal?(metrics.total, Decimal.new("2200.00"))
       assert Decimal.equal?(metrics.by_type["credit_card"].amount, Decimal.new("200.00"))
@@ -596,7 +600,7 @@ defmodule CashLens.InstallmentsTest do
     end
 
     test "monthly_commitment/1 sums its own breakdown", %{m0: m0} do
-      metrics = Installments.monthly_commitment(m0)
+      metrics = Installments.monthly_commitment(user(), m0)
 
       sum =
         metrics.by_type
@@ -607,7 +611,7 @@ defmodule CashLens.InstallmentsTest do
     end
 
     test "outstanding_balance/1 consolidates the remaining debt per type", %{m0: m0} do
-      balance = Installments.outstanding_balance(m0)
+      balance = Installments.outstanding_balance(user(), m0)
 
       assert Decimal.equal?(balance.by_type["credit_card"], Decimal.new("500.00"))
       assert Decimal.equal?(balance.by_type["financing"], Decimal.new("10000.00"))
@@ -617,7 +621,7 @@ defmodule CashLens.InstallmentsTest do
 
     test "outstanding_balance/1 shrinks as months pass", %{m0: m0} do
       later = Installments.add_months(m0, 2)
-      balance = Installments.outstanding_balance(later)
+      balance = Installments.outstanding_balance(user(), later)
 
       # CARTAO A has only its last parcel left, CARTAO B is over.
       assert Decimal.equal?(balance.by_type["credit_card"], Decimal.new("100.00"))
@@ -625,18 +629,18 @@ defmodule CashLens.InstallmentsTest do
 
     test "cash_flow_relief/1 defaults to the reference month alone", %{m0: m0} do
       # Nothing ends in m0 itself, so the default window is empty there...
-      assert Installments.cash_flow_relief(m0).items == []
+      assert Installments.cash_flow_relief(user(), m0).items == []
 
       # ...and one month on it reports CARTAO B alone, not CARTAO A, which
       # only ends the month after.
-      relief = Installments.cash_flow_relief(Installments.add_months(m0, 1))
+      relief = Installments.cash_flow_relief(user(), Installments.add_months(m0, 1))
 
       assert Enum.map(relief.items, & &1.description) == ["CARTAO B"]
       assert Decimal.equal?(relief.total, Decimal.new("100.00"))
     end
 
     test "cash_flow_relief/2 widens to the window it is given", %{m0: m0} do
-      relief = Installments.cash_flow_relief(m0, 3)
+      relief = Installments.cash_flow_relief(user(), m0, 3)
 
       assert Decimal.equal?(relief.total, Decimal.new("200.00"))
       assert length(relief.items) == 2
@@ -656,7 +660,7 @@ defmodule CashLens.InstallmentsTest do
     end
 
     test "monthly_projection/2 stacks each month by type and the parts add up", %{m0: m0} do
-      projection = Installments.monthly_projection(m0, 4)
+      projection = Installments.monthly_projection(user(), m0, 4)
 
       assert length(projection) == 4
       assert Enum.map(projection, & &1.date) == Enum.map(0..3, &Installments.add_months(m0, &1))
@@ -679,24 +683,24 @@ defmodule CashLens.InstallmentsTest do
     end
 
     test "monthly_projection/2 month 0 matches monthly_commitment/1", %{m0: m0} do
-      [first | _] = Installments.monthly_projection(m0, 4)
-      assert Decimal.equal?(first.total, Installments.monthly_commitment(m0).total)
+      [first | _] = Installments.monthly_projection(user(), m0, 4)
+      assert Decimal.equal?(first.total, Installments.monthly_commitment(user(), m0).total)
     end
 
     test "the projection from now on adds up to the outstanding balance", %{m0: m0} do
       sum =
         m0
-        |> Installments.monthly_projection(24)
+        |> then(&Installments.monthly_projection(user(), &1, 24))
         |> Enum.reduce(Decimal.new("0"), fn m, acc -> Decimal.add(acc, m.total) end)
 
-      assert Decimal.equal?(sum, Installments.outstanding_balance(m0).total)
+      assert Decimal.equal?(sum, Installments.outstanding_balance(user(), m0).total)
     end
   end
 
   describe "paid_installments" do
     test "refuses a contract with more parcels paid than it has" do
       assert {:error, changeset} =
-               Installments.create_installment_group(%{
+               Installments.create_installment_group(user(), %{
                  description_pattern: "IMPOSSIVEL",
                  installments: 10,
                  paid_installments: 11,
@@ -708,14 +712,14 @@ defmodule CashLens.InstallmentsTest do
 
     test "is never persisted" do
       assert {:ok, group} =
-               Installments.create_installment_group(%{
+               Installments.create_installment_group(user(), %{
                  description_pattern: "VIRTUAL",
                  installments: 10,
                  paid_installments: 3,
                  start_date: ~D[2026-01-10]
                })
 
-      assert Installments.get_installment_group!(group.id).paid_installments == nil
+      assert Installments.get_installment_group!(user(), group.id).paid_installments == nil
     end
   end
 
@@ -732,7 +736,7 @@ defmodule CashLens.InstallmentsTest do
           installment_group_id: g.id
         })
 
-      assert {:ok, _} = Installments.delete_installment_group(g)
+      assert {:ok, _} = Installments.delete_installment_group(user(), g)
 
       # The transaction survives the grouping being undone.
       survivor = CashLens.Transactions.get_transaction!(user(), tx.id)
@@ -756,7 +760,7 @@ defmodule CashLens.InstallmentsTest do
       end
 
       {:ok, group} =
-        Installments.create_installment_group(%{
+        Installments.create_installment_group(user(), %{
           description_pattern: "PRESTACAO DE CRED IMOB",
           commitment_type: "financing",
           installments: 360,
@@ -765,7 +769,7 @@ defmodule CashLens.InstallmentsTest do
 
       numbers =
         group.id
-        |> Installments.list_group_transactions()
+        |> then(&Installments.list_group_transactions(user(), &1))
         |> Enum.map(& &1.installment_number)
 
       # Jan/2020 is parcel 1, so Jul/2026 is parcel 79.
@@ -793,7 +797,7 @@ defmodule CashLens.InstallmentsTest do
         date: ~D[2026-05-11]
       })
 
-      assert [suggestion] = Installments.suggest_commitment_patterns()
+      assert [suggestion] = Installments.suggest_commitment_patterns(user())
       assert suggestion.description == "CONSORCIO PORTO SEGURO"
       assert suggestion.occurrences == 3
       assert Decimal.equal?(suggestion.amount, Decimal.new("850.00"))
@@ -819,7 +823,7 @@ defmodule CashLens.InstallmentsTest do
         })
       end
 
-      assert [suggestion] = Installments.suggest_commitment_patterns()
+      assert [suggestion] = Installments.suggest_commitment_patterns(user())
       assert Decimal.equal?(suggestion.amount, Decimal.new("3524.55"))
     end
 
@@ -836,15 +840,15 @@ defmodule CashLens.InstallmentsTest do
         })
       end
 
-      assert length(Installments.suggest_commitment_patterns()) == 2
+      assert length(Installments.suggest_commitment_patterns(user())) == 2
 
       assert [%{description: "PRESTACAO DE CRED IMOB"}] =
-               Installments.suggest_commitment_patterns("prestacao")
+               Installments.suggest_commitment_patterns(user(), "prestacao")
 
       assert [%{description: "PRESTACAO DE CRED IMOB"}] =
-               Installments.suggest_commitment_patterns("CRED IMOB")
+               Installments.suggest_commitment_patterns(user(), "CRED IMOB")
 
-      assert Installments.suggest_commitment_patterns("NAO EXISTE") == []
+      assert Installments.suggest_commitment_patterns(user(), "NAO EXISTE") == []
     end
 
     test "ignores transactions already linked to a group" do
@@ -861,7 +865,7 @@ defmodule CashLens.InstallmentsTest do
         })
       end
 
-      assert Installments.suggest_commitment_patterns() == []
+      assert Installments.suggest_commitment_patterns(user()) == []
     end
   end
 
@@ -917,7 +921,7 @@ defmodule CashLens.InstallmentsTest do
         amount: Decimal.new("-100.00")
       })
 
-      groups = Installments.account_installment_groups(card.id, ~D[2026-07-01])
+      groups = Installments.account_installment_groups(user(), card.id, ~D[2026-07-01])
 
       assert Enum.map(groups, & &1.id) == [due.id]
     end
@@ -946,15 +950,15 @@ defmodule CashLens.InstallmentsTest do
 
       sum =
         card.id
-        |> Installments.account_installment_groups(month)
+        |> then(&Installments.account_installment_groups(user(), &1, month))
         |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, Installments.parcel_value(&1)))
 
-      assert Decimal.equal?(sum, Installments.account_installment_total(card.id, month))
+      assert Decimal.equal?(sum, Installments.account_installment_total(user(), card.id, month))
     end
 
     test "returns an empty list when nothing is due for the account in that month" do
       card = account_fixture(%{is_credit_card: true})
-      assert Installments.account_installment_groups(card.id, ~D[2020-01-01]) == []
+      assert Installments.account_installment_groups(user(), card.id, ~D[2020-01-01]) == []
     end
   end
 
@@ -1016,7 +1020,7 @@ defmodule CashLens.InstallmentsTest do
         amount: Decimal.new("-100.00")
       })
 
-      assert g.id in Enum.map(Installments.list_off_card_groups(), & &1.id)
+      assert g.id in Enum.map(Installments.list_off_card_groups(user()), & &1.id)
     end
 
     test "excludes a group with at least one credit-card transaction", %{
@@ -1045,13 +1049,13 @@ defmodule CashLens.InstallmentsTest do
         amount: Decimal.new("-100.00")
       })
 
-      refute g.id in Enum.map(Installments.list_off_card_groups(), & &1.id)
+      refute g.id in Enum.map(Installments.list_off_card_groups(user()), & &1.id)
     end
 
     test "includes a group with no linked transactions at all" do
       g = group(%{description_pattern: "NO_TXN", installments: 3, start_date: ~D[2026-06-01]})
 
-      assert g.id in Enum.map(Installments.list_off_card_groups(), & &1.id)
+      assert g.id in Enum.map(Installments.list_off_card_groups(user()), & &1.id)
     end
 
     test "decides by the account, never by commitment_type", %{card: card, checking: checking} do
@@ -1087,7 +1091,7 @@ defmodule CashLens.InstallmentsTest do
         amount: Decimal.new("-100.00")
       })
 
-      ids = Enum.map(Installments.list_off_card_groups(), & &1.id)
+      ids = Enum.map(Installments.list_off_card_groups(user()), & &1.id)
 
       refute financing_on_card.id in ids
       assert card_type_off_card.id in ids

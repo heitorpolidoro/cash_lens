@@ -9,7 +9,7 @@ defmodule CashLens.CreditCardsTest do
 
   test "create_statement and get_statement!" do
     s = statement_fixture()
-    assert CreditCards.get_statement!(s.id).id == s.id
+    assert CreditCards.get_statement!(user(), s.id).id == s.id
   end
 
   test "get_statement_by_account_and_competencia/2 tolerates duplicate rows for the same account+competencia, returning the most recent" do
@@ -17,7 +17,7 @@ defmodule CashLens.CreditCardsTest do
     competencia = ~D[2026-06-01]
 
     {:ok, older} =
-      CreditCards.create_statement(%{
+      CreditCards.create_statement(user(), %{
         account_id: account.id,
         competencia: competencia,
         due_date: ~D[2026-06-15],
@@ -31,7 +31,7 @@ defmodule CashLens.CreditCardsTest do
     |> CashLens.Repo.update!()
 
     {:ok, newer} =
-      CreditCards.create_statement(%{
+      CreditCards.create_statement(user(), %{
         account_id: account.id,
         competencia: competencia,
         due_date: ~D[2026-06-15],
@@ -39,7 +39,7 @@ defmodule CashLens.CreditCardsTest do
         source_file: "fatura2.pdf"
       })
 
-    result = CreditCards.get_statement_by_account_and_competencia(account.id, competencia)
+    result = CreditCards.get_statement_by_account_and_competencia(user(), account.id, competencia)
 
     assert result.id == newer.id
   end
@@ -150,7 +150,7 @@ defmodule CashLens.CreditCardsTest do
       import_batch_id: s.id
     })
 
-    [row] = CashLens.CreditCards.list_statements()
+    [row] = CashLens.CreditCards.list_statements(user())
     assert row.statement.id == s.id
     assert Decimal.equal?(row.line_total, Decimal.new("30.00"))
     assert row.line_count == 2
@@ -164,7 +164,7 @@ defmodule CashLens.CreditCardsTest do
     newer = statement_fixture(%{account: account, competencia: ~D[2026-03-01]})
     no_comp = statement_fixture(%{account: account, competencia: nil, due_date: nil})
 
-    ids = CashLens.CreditCards.list_statements() |> Enum.map(& &1.statement.id)
+    ids = CashLens.CreditCards.list_statements(user()) |> Enum.map(& &1.statement.id)
     assert ids == [newer.id, older.id, no_comp.id]
   end
 
@@ -178,7 +178,7 @@ defmodule CashLens.CreditCardsTest do
       import_batch_id: s.id
     })
 
-    detail = CashLens.CreditCards.get_statement_detail(s.id)
+    detail = CashLens.CreditCards.get_statement_detail(user(), s.id)
     assert length(detail.transactions) == 1
     assert detail.payment == nil
   end
@@ -201,13 +201,13 @@ defmodule CashLens.CreditCardsTest do
         amount: Decimal.new("30.00")
       })
 
-    {:ok, s2} = CashLens.CreditCards.link_payment(s, payment.id)
+    {:ok, s2} = CashLens.CreditCards.link_payment(user(), s, payment.id)
     assert s2.payment_transaction_id == payment.id
 
     assert CashLens.Repo.get!(CashLens.Transactions.Transaction, child.id).parent_transaction_id ==
              payment.id
 
-    {:ok, s3} = CashLens.CreditCards.unlink_payment(s2)
+    {:ok, s3} = CashLens.CreditCards.unlink_payment(user(), s2)
     assert s3.payment_transaction_id == nil
 
     assert CashLens.Repo.get!(CashLens.Transactions.Transaction, child.id).parent_transaction_id ==
@@ -251,7 +251,7 @@ defmodule CashLens.CreditCardsTest do
 
     payment = CashLens.TransactionsFixtures.transaction_fixture(%{account_id: bank.id})
 
-    {:ok, _} = CashLens.CreditCards.link_payment(boleto, payment.id)
+    {:ok, _} = CashLens.CreditCards.link_payment(user(), boleto, payment.id)
 
     reload = fn id ->
       CashLens.Repo.get!(CashLens.Transactions.Transaction, id).parent_transaction_id
@@ -260,7 +260,7 @@ defmodule CashLens.CreditCardsTest do
     assert reload.(boleto_tx.id) == payment.id
     assert reload.(absorbed_tx.id) == payment.id
 
-    {:ok, _} = CashLens.CreditCards.unlink_payment(boleto)
+    {:ok, _} = CashLens.CreditCards.unlink_payment(user(), boleto)
     assert reload.(boleto_tx.id) == nil
     assert reload.(absorbed_tx.id) == nil
   end
@@ -301,14 +301,14 @@ defmodule CashLens.CreditCardsTest do
         due_date: today
       })
 
-    assert CashLens.CreditCards.suggest_payment(other) == nil
+    assert CashLens.CreditCards.suggest_payment(user(), other) == nil
   end
 
   test "suggest_payment returns nil when no category exists" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     s = statement_fixture(%{account: card})
 
-    assert CashLens.CreditCards.suggest_payment(s) == nil
+    assert CashLens.CreditCards.suggest_payment(user(), s) == nil
   end
 
   describe "payment matching with real-world signs" do
@@ -358,7 +358,7 @@ defmodule CashLens.CreditCardsTest do
       _small = payment(ctx.bank, ctx.category, "-100.00", ctx.today)
       near = payment(ctx.bank, ctx.category, "-11900.00", ctx.today)
 
-      assert [first | _] = CashLens.CreditCards.payment_candidates(statement)
+      assert [first | _] = CashLens.CreditCards.payment_candidates(user(), statement)
 
       # Under the old unsigned comparison the -100,00 payment won, because
       # |amount| + total is monotonic in |amount|.
@@ -387,10 +387,11 @@ defmodule CashLens.CreditCardsTest do
           due_date: ctx.today
         })
 
-      ids = mine |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
+      ids =
+        mine |> then(&CashLens.CreditCards.payment_candidates(user(), &1)) |> Enum.map(& &1.id)
 
       refute taken.id in ids
-      assert CashLens.CreditCards.suggest_payment(mine) == nil
+      assert CashLens.CreditCards.suggest_payment(user(), mine) == nil
     end
 
     test "no suggestion when the amount does not match the total", ctx do
@@ -404,8 +405,8 @@ defmodule CashLens.CreditCardsTest do
       payment(ctx.bank, ctx.category, "-11938.58", ctx.today)
 
       # Still listed for manual linking -- just not announced as detected.
-      assert length(CashLens.CreditCards.payment_candidates(statement)) == 1
-      assert CashLens.CreditCards.suggest_payment(statement) == nil
+      assert length(CashLens.CreditCards.payment_candidates(user(), statement)) == 1
+      assert CashLens.CreditCards.suggest_payment(user(), statement) == nil
     end
 
     test "suggests one of two identical payments the auto-matcher refused as ambiguous", ctx do
@@ -423,7 +424,7 @@ defmodule CashLens.CreditCardsTest do
       # first one auto-links on its own and there is never any ambiguity.
       assert CashLens.Repo.get!(Statement, statement.id).payment_transaction_id == nil
 
-      suggestion = CashLens.CreditCards.suggest_payment(statement)
+      suggestion = CashLens.CreditCards.suggest_payment(user(), statement)
       assert suggestion.id in [a.id, b.id]
     end
 
@@ -438,7 +439,7 @@ defmodule CashLens.CreditCardsTest do
       # Fine and interest push a late payment ABOVE the bill.
       late = payment(ctx.bank, ctx.category, "-1047.30", Date.add(ctx.today, 5))
 
-      assert CashLens.CreditCards.suggest_payment(statement).id == late.id
+      assert CashLens.CreditCards.suggest_payment(user(), statement).id == late.id
     end
 
     test "the same amount BEFORE the due date is not a late payment", ctx do
@@ -451,7 +452,7 @@ defmodule CashLens.CreditCardsTest do
 
       payment(ctx.bank, ctx.category, "-1047.30", Date.add(ctx.today, -5))
 
-      assert CashLens.CreditCards.suggest_payment(statement) == nil
+      assert CashLens.CreditCards.suggest_payment(user(), statement) == nil
     end
 
     test "a payment BELOW the total is never suggested, late or not", ctx do
@@ -465,7 +466,7 @@ defmodule CashLens.CreditCardsTest do
       # A partial payment is not a settlement.
       payment(ctx.bank, ctx.category, "-900.00", Date.add(ctx.today, 5))
 
-      assert CashLens.CreditCards.suggest_payment(statement) == nil
+      assert CashLens.CreditCards.suggest_payment(user(), statement) == nil
     end
 
     test "a late payment more than 20% over the total is not suggested", ctx do
@@ -477,7 +478,7 @@ defmodule CashLens.CreditCardsTest do
         })
 
       at_ceiling = payment(ctx.bank, ctx.category, "-1200.00", Date.add(ctx.today, 5))
-      assert CashLens.CreditCards.suggest_payment(statement).id == at_ceiling.id
+      assert CashLens.CreditCards.suggest_payment(user(), statement).id == at_ceiling.id
 
       {:ok, _} =
         CashLens.Transactions.delete_transaction(
@@ -486,7 +487,7 @@ defmodule CashLens.CreditCardsTest do
         )
 
       payment(ctx.bank, ctx.category, "-1200.01", Date.add(ctx.today, 5))
-      assert CashLens.CreditCards.suggest_payment(statement) == nil
+      assert CashLens.CreditCards.suggest_payment(user(), statement) == nil
     end
 
     test "a late payment beyond 30 days is not suggested", ctx do
@@ -499,7 +500,7 @@ defmodule CashLens.CreditCardsTest do
 
       payment(ctx.bank, ctx.category, "-1050.00", Date.add(ctx.today, 31))
 
-      assert CashLens.CreditCards.suggest_payment(statement) == nil
+      assert CashLens.CreditCards.suggest_payment(user(), statement) == nil
     end
 
     test "an exact match wins over a late one even when the late one is nearer in date", ctx do
@@ -530,7 +531,7 @@ defmodule CashLens.CreditCardsTest do
       # only still matters here.
       in_child = payment(ctx.bank, child, "-800.00", ctx.today, "Pagto Ourocard")
 
-      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(user()), & &1.id)
       assert in_child.id in ids
     end
 
@@ -553,8 +554,8 @@ defmodule CashLens.CreditCardsTest do
       # anything at all.
       payment(other_card, ctx.category, "499.00", ctx.today)
 
-      assert CashLens.CreditCards.payment_candidates(statement) == []
-      assert CashLens.CreditCards.suggest_payment(statement) == nil
+      assert CashLens.CreditCards.payment_candidates(user(), statement) == []
+      assert CashLens.CreditCards.suggest_payment(user(), statement) == nil
     end
 
     test "a payment with an unrelated category is still a candidate", ctx do
@@ -576,7 +577,11 @@ defmodule CashLens.CreditCardsTest do
       pix =
         payment(ctx.bank, outros, "-1357.95", ctx.today, "Pix - Enviado - MERCADO PAGO")
 
-      ids = statement |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
+      ids =
+        statement
+        |> then(&CashLens.CreditCards.payment_candidates(user(), &1))
+        |> Enum.map(& &1.id)
+
       assert pix.id in ids
     end
 
@@ -590,7 +595,7 @@ defmodule CashLens.CreditCardsTest do
 
       payment(ctx.bank, ctx.category, "499.00", ctx.today)
 
-      assert CashLens.CreditCards.payment_candidates(statement) == []
+      assert CashLens.CreditCards.payment_candidates(user(), statement) == []
     end
 
     test "candidates outside the due-date window are not listed", ctx do
@@ -605,7 +610,11 @@ defmodule CashLens.CreditCardsTest do
       _early = payment(ctx.bank, ctx.category, "-470.00", Date.add(ctx.today, -46))
       _late = payment(ctx.bank, ctx.category, "-460.00", Date.add(ctx.today, 31))
 
-      ids = statement |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
+      ids =
+        statement
+        |> then(&CashLens.CreditCards.payment_candidates(user(), &1))
+        |> Enum.map(& &1.id)
+
       assert ids == [inside.id]
     end
 
@@ -626,7 +635,7 @@ defmodule CashLens.CreditCardsTest do
       pix = payment(ctx.bank, outros, "-1300.00", ctx.today, "Pix - Enviado")
       assert pix.category_id == outros.id
 
-      {:ok, _} = CashLens.CreditCards.link_payment(statement, pix.id)
+      {:ok, _} = CashLens.CreditCards.link_payment(user(), statement, pix.id)
 
       assert CashLens.Transactions.get_transaction!(user(), pix.id).category_id == ctx.category.id
     end
@@ -648,7 +657,7 @@ defmodule CashLens.CreditCardsTest do
 
       already = payment(ctx.bank, child, "-880.00", ctx.today)
 
-      {:ok, _} = CashLens.CreditCards.link_payment(statement, already.id)
+      {:ok, _} = CashLens.CreditCards.link_payment(user(), statement, already.id)
 
       # The operator's own, narrower choice is not overwritten by the parent.
       assert CashLens.Transactions.get_transaction!(user(), already.id).category_id == child.id
@@ -674,7 +683,11 @@ defmodule CashLens.CreditCardsTest do
           transfer_key: Ecto.UUID.generate()
         })
 
-      ids = statement |> CashLens.CreditCards.payment_candidates() |> Enum.map(& &1.id)
+      ids =
+        statement
+        |> then(&CashLens.CreditCards.payment_candidates(user(), &1))
+        |> Enum.map(& &1.id)
+
       refute transfer.id in ids
     end
 
@@ -698,7 +711,7 @@ defmodule CashLens.CreditCardsTest do
       claimed = payment(ctx.bank, ctx.category, "-777.00", ctx.today, "Pagto da fatura")
       assert CashLens.Repo.get!(Statement, statement.id).payment_transaction_id == claimed.id
 
-      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(user()), & &1.id)
 
       assert loose.id in ids
       refute claimed.id in ids
@@ -719,14 +732,14 @@ defmodule CashLens.CreditCardsTest do
       {:ok, _} =
         CashLens.Transactions.update_transaction(user(), receipt, %{import_batch_id: statement.id})
 
-      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(user()), & &1.id)
       refute receipt.id in ids
     end
 
     test "a card credit belonging to no statement is still surfaced", ctx do
       stray = payment(ctx.card, ctx.category, "1412.10", ctx.today, "Credito orfao")
 
-      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(user()), & &1.id)
       assert stray.id in ids
     end
 
@@ -739,7 +752,7 @@ defmodule CashLens.CreditCardsTest do
 
       not_card = payment(ctx.bank, outros, "-50.00", ctx.today, "Mercado")
 
-      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(), & &1.id)
+      ids = Enum.map(CashLens.CreditCards.unlinked_card_payments(user()), & &1.id)
 
       refute not_card.id in ids
     end
@@ -756,8 +769,8 @@ defmodule CashLens.CreditCardsTest do
           due_date: nil
         })
 
-      assert CashLens.CreditCards.suggest_payment(no_total) == nil
-      assert CashLens.CreditCards.suggest_payment(no_due) == nil
+      assert CashLens.CreditCards.suggest_payment(user(), no_total) == nil
+      assert CashLens.CreditCards.suggest_payment(user(), no_due) == nil
     end
   end
 
@@ -774,7 +787,7 @@ defmodule CashLens.CreditCardsTest do
       # October competência.
       account = card(%{name: "AMAZON", closing_day: 3, due_day: 10})
 
-      assert [gap] = CreditCards.closed_without_statement(~D[2026-10-06], 1)
+      assert [gap] = CreditCards.closed_without_statement(user(), ~D[2026-10-06], 1)
       assert gap.account.id == account.id
       assert gap.competencia == ~D[2026-10-01]
       assert gap.closed_on == ~D[2026-10-03]
@@ -791,7 +804,7 @@ defmodule CashLens.CreditCardsTest do
         due_date: ~D[2026-09-17]
       })
 
-      assert CreditCards.closed_without_statement(~D[2026-10-06], 1) == []
+      assert CreditCards.closed_without_statement(user(), ~D[2026-10-06], 1) == []
     end
 
     test "says nothing once the statement is on record" do
@@ -803,7 +816,7 @@ defmodule CashLens.CreditCardsTest do
         due_date: ~D[2026-10-16]
       })
 
-      assert CreditCards.closed_without_statement(~D[2026-10-07], 1) == []
+      assert CreditCards.closed_without_statement(user(), ~D[2026-10-07], 1) == []
     end
 
     test "does not report a cycle on its closing day itself" do
@@ -811,7 +824,7 @@ defmodule CashLens.CreditCardsTest do
       # the newest closed cycle is still September's.
       card(%{name: "HOJE", closing_day: 6, due_day: 16})
 
-      assert [gap] = CreditCards.closed_without_statement(~D[2026-10-06], 1)
+      assert [gap] = CreditCards.closed_without_statement(user(), ~D[2026-10-06], 1)
       assert gap.competencia == ~D[2026-09-01]
       assert gap.closed_on == ~D[2026-09-06]
     end
@@ -819,7 +832,7 @@ defmodule CashLens.CreditCardsTest do
     test "reports the cycle the day after its closing day" do
       card(%{name: "ONTEM", closing_day: 6, due_day: 16})
 
-      assert [gap] = CreditCards.closed_without_statement(~D[2026-10-07], 1)
+      assert [gap] = CreditCards.closed_without_statement(user(), ~D[2026-10-07], 1)
       assert gap.competencia == ~D[2026-10-01]
       assert gap.closed_on == ~D[2026-10-06]
     end
@@ -829,7 +842,7 @@ defmodule CashLens.CreditCardsTest do
       # October, so its competência is October.
       card(%{name: "TARDIO", closing_day: 25, due_day: 5})
 
-      assert [gap] = CreditCards.closed_without_statement(~D[2026-10-06], 1)
+      assert [gap] = CreditCards.closed_without_statement(user(), ~D[2026-10-06], 1)
       assert gap.competencia == ~D[2026-10-01]
       assert gap.closed_on == ~D[2026-09-25]
     end
@@ -837,7 +850,7 @@ defmodule CashLens.CreditCardsTest do
     test "looks back over several cycles, newest first" do
       card(%{name: "ATRASADO", closing_day: 3, due_day: 10})
 
-      gaps = CreditCards.closed_without_statement(~D[2026-10-06], 3)
+      gaps = CreditCards.closed_without_statement(user(), ~D[2026-10-06], 3)
 
       assert Enum.map(gaps, & &1.competencia) == [~D[2026-10-01], ~D[2026-09-01], ~D[2026-08-01]]
     end
@@ -846,7 +859,7 @@ defmodule CashLens.CreditCardsTest do
       card(%{name: "SEM CICLO", closing_day: nil, due_day: nil})
       card(%{name: "ENCERRADO", closing_day: 3, due_day: 10, is_closed: true})
 
-      assert CreditCards.closed_without_statement(~D[2026-10-06], 3) == []
+      assert CreditCards.closed_without_statement(user(), ~D[2026-10-06], 3) == []
     end
   end
 
@@ -874,17 +887,17 @@ defmodule CashLens.CreditCardsTest do
       outro = account_fixture(%{is_credit_card: true, name: "OUTRO"})
       transaction_fixture(%{account_id: outro.id, amount: "-70.00", description: "OUTRO CARTAO"})
 
-      assert [offered] = CreditCards.attachable_transactions(st)
+      assert [offered] = CreditCards.attachable_transactions(user(), st)
       assert offered.id == loose.id
     end
 
     test "attaches a loose debit", %{card: card, statement: st} do
       tx = transaction_fixture(%{account_id: card.id, amount: "-50.00"})
 
-      assert {:ok, 1} = CreditCards.attach_transactions(st, [tx.id])
-      assert [line] = CreditCards.statement_transactions(st.id)
+      assert {:ok, 1} = CreditCards.attach_transactions(user(), st, [tx.id])
+      assert [line] = CreditCards.statement_transactions(user(), st.id)
       assert line.id == tx.id
-      assert CreditCards.attachable_transactions(st) == []
+      assert CreditCards.attachable_transactions(user(), st) == []
     end
 
     test "refuses a debit that belongs to another statement", %{card: card, statement: st} do
@@ -894,7 +907,7 @@ defmodule CashLens.CreditCardsTest do
       tx =
         transaction_fixture(%{account_id: card.id, amount: "-50.00", import_batch_id: other.id})
 
-      assert {:ok, 0} = CreditCards.attach_transactions(st, [tx.id])
+      assert {:ok, 0} = CreditCards.attach_transactions(user(), st, [tx.id])
       assert CashLens.Transactions.get_transaction!(user(), tx.id).import_batch_id == other.id
     end
 
@@ -902,15 +915,15 @@ defmodule CashLens.CreditCardsTest do
       outro = account_fixture(%{is_credit_card: true, name: "OUTRO"})
       tx = transaction_fixture(%{account_id: outro.id, amount: "-50.00"})
 
-      assert {:ok, 0} = CreditCards.attach_transactions(st, [tx.id])
+      assert {:ok, 0} = CreditCards.attach_transactions(user(), st, [tx.id])
       assert CashLens.Transactions.get_transaction!(user(), tx.id).import_batch_id == nil
     end
 
     test "detaching leaves the transaction itself alone", %{card: card, statement: st} do
       tx = transaction_fixture(%{account_id: card.id, amount: "-50.00"})
-      {:ok, 1} = CreditCards.attach_transactions(st, [tx.id])
+      {:ok, 1} = CreditCards.attach_transactions(user(), st, [tx.id])
 
-      assert {:ok, 1} = CreditCards.detach_transaction(st, tx.id)
+      assert {:ok, 1} = CreditCards.detach_transaction(user(), st, tx.id)
 
       survivor = CashLens.Transactions.get_transaction!(user(), tx.id)
       assert survivor.import_batch_id == nil
@@ -927,7 +940,7 @@ defmodule CashLens.CreditCardsTest do
       tx =
         transaction_fixture(%{account_id: card.id, amount: "-50.00", import_batch_id: other.id})
 
-      assert {:ok, 0} = CreditCards.detach_transaction(st, tx.id)
+      assert {:ok, 0} = CreditCards.detach_transaction(user(), st, tx.id)
       assert CashLens.Transactions.get_transaction!(user(), tx.id).import_batch_id == other.id
     end
   end
@@ -949,37 +962,37 @@ defmodule CashLens.CreditCardsTest do
     end
 
     test "folds one statement into another by hand", %{julho: julho, agosto: agosto} do
-      assert {:ok, updated} = CreditCards.absorb_into(julho, agosto)
+      assert {:ok, updated} = CreditCards.absorb_into(user(), julho, agosto)
       assert updated.absorbed_by_statement_id == agosto.id
     end
 
     test "releasing puts it back on its own feet", %{julho: julho, agosto: agosto} do
-      {:ok, absorbed} = CreditCards.absorb_into(julho, agosto)
+      {:ok, absorbed} = CreditCards.absorb_into(user(), julho, agosto)
 
-      assert {:ok, released} = CreditCards.release_absorption(absorbed)
+      assert {:ok, released} = CreditCards.release_absorption(user(), absorbed)
       assert released.absorbed_by_statement_id == nil
     end
 
     test "refuses to absorb a statement into itself", %{julho: julho} do
-      assert {:error, :same_statement} = CreditCards.absorb_into(julho, julho)
+      assert {:error, :same_statement} = CreditCards.absorb_into(user(), julho, julho)
     end
 
     test "refuses to absorb across cards", %{julho: julho} do
       outro = account_fixture(%{is_credit_card: true, name: "OUTRO"})
       alheia = statement_fixture(%{account: outro, competencia: ~D[2026-08-01]})
 
-      assert {:error, :different_account} = CreditCards.absorb_into(julho, alheia)
+      assert {:error, :different_account} = CreditCards.absorb_into(user(), julho, alheia)
     end
 
     test "refuses a target that is itself absorbed", %{card: card, julho: julho, agosto: agosto} do
       setembro =
         statement_fixture(%{account: card, competencia: ~D[2026-09-01], due_date: ~D[2026-09-15]})
 
-      {:ok, agosto} = CreditCards.absorb_into(agosto, setembro)
+      {:ok, agosto} = CreditCards.absorb_into(user(), agosto, setembro)
 
       # A chain would leave julho pointing at something that no longer stands
       # on its own.
-      assert {:error, :target_absorbed} = CreditCards.absorb_into(julho, agosto)
+      assert {:error, :target_absorbed} = CreditCards.absorb_into(user(), julho, agosto)
     end
 
     test "offers only same-card statements that are not themselves absorbed", %{
@@ -993,9 +1006,9 @@ defmodule CashLens.CreditCardsTest do
       setembro =
         statement_fixture(%{account: card, competencia: ~D[2026-09-01], due_date: ~D[2026-09-15]})
 
-      {:ok, _} = CreditCards.absorb_into(agosto, setembro)
+      {:ok, _} = CreditCards.absorb_into(user(), agosto, setembro)
 
-      ids = julho |> CreditCards.absorption_targets() |> Enum.map(& &1.id)
+      ids = julho |> then(&CreditCards.absorption_targets(user(), &1)) |> Enum.map(& &1.id)
 
       assert ids == [setembro.id]
     end
@@ -1021,15 +1034,15 @@ defmodule CashLens.CreditCardsTest do
     test "refuses an earlier cycle as the target", %{julho: julho, agosto: agosto} do
       # A cycle rolls what it did not settle onto the NEXT bill. Backwards reads
       # as a bill paid before it existed.
-      assert {:error, :target_earlier} = CreditCards.absorb_into(agosto, julho)
-      assert CreditCards.get_statement!(agosto.id).absorbed_by_statement_id == nil
+      assert {:error, :target_earlier} = CreditCards.absorb_into(user(), agosto, julho)
+      assert CreditCards.get_statement!(user(), agosto.id).absorbed_by_statement_id == nil
     end
 
     test "refuses a target in the same cycle", %{card: card, julho: julho} do
       # Two rows for one competência happen (two files for the same month), and
       # neither rolls into the other: they are the same cycle.
       gemea =
-        %Statement{}
+        %Statement{user_id: user().id}
         |> Statement.changeset(%{
           account_id: card.id,
           competencia: ~D[2026-07-01],
@@ -1039,12 +1052,12 @@ defmodule CashLens.CreditCardsTest do
         })
         |> CashLens.Repo.insert!()
 
-      assert {:error, :target_earlier} = CreditCards.absorb_into(julho, gemea)
+      assert {:error, :target_earlier} = CreditCards.absorb_into(user(), julho, gemea)
     end
 
     test "allows a later cycle", %{julho: julho, agosto: agosto} do
-      assert {:ok, _} = CreditCards.absorb_into(julho, agosto)
-      assert CreditCards.get_statement!(julho.id).absorbed_by_statement_id == agosto.id
+      assert {:ok, _} = CreditCards.absorb_into(user(), julho, agosto)
+      assert CreditCards.get_statement!(user(), julho.id).absorbed_by_statement_id == agosto.id
     end
 
     test "offers only later cycles as targets, nearest first", %{
@@ -1061,7 +1074,7 @@ defmodule CashLens.CreditCardsTest do
 
       statement_fixture(%{account: card, competencia: ~D[2026-06-01], due_date: ~D[2026-06-15]})
 
-      ids = julho |> CreditCards.absorption_targets() |> Enum.map(& &1.id)
+      ids = julho |> then(&CreditCards.absorption_targets(user(), &1)) |> Enum.map(& &1.id)
 
       assert ids == [agosto.id, setembro.id]
     end
@@ -1072,8 +1085,8 @@ defmodule CashLens.CreditCardsTest do
     } do
       pendente = statement_fixture(%{account: card, competencia: nil, due_date: ~D[2026-09-20]})
 
-      assert {:error, :target_earlier} = CreditCards.absorb_into(pendente, agosto)
-      assert {:ok, _} = CreditCards.absorb_into(agosto, pendente)
+      assert {:error, :target_earlier} = CreditCards.absorb_into(user(), pendente, agosto)
+      assert {:ok, _} = CreditCards.absorb_into(user(), agosto, pendente)
     end
   end
 
@@ -1112,10 +1125,10 @@ defmodule CashLens.CreditCardsTest do
           import_batch_id: julho.id
         })
 
-      {:ok, _} = CreditCards.absorb_into(junho, boleto)
-      {:ok, _} = CreditCards.absorb_into(julho, boleto)
+      {:ok, _} = CreditCards.absorb_into(user(), junho, boleto)
+      {:ok, _} = CreditCards.absorb_into(user(), julho, boleto)
 
-      assert [jun, jul] = CreditCards.absorbed_groups(boleto.id)
+      assert [jun, jul] = CreditCards.absorbed_groups(user(), boleto.id)
 
       assert jun.statement.id == junho.id
       assert Enum.map(jun.transactions, & &1.id) == [jun_line.id]
@@ -1137,11 +1150,13 @@ defmodule CashLens.CreditCardsTest do
         })
 
       julho = statement_fixture(%{account: card, competencia: ~D[2026-07-01], due_date: nil})
-      {:ok, _} = CreditCards.absorb_into(julho, boleto)
+      {:ok, _} = CreditCards.absorb_into(user(), julho, boleto)
 
-      assert [%{statement: %{id: id}}] = CreditCards.get_statement_detail(boleto.id).absorbed
+      assert [%{statement: %{id: id}}] =
+               CreditCards.get_statement_detail(user(), boleto.id).absorbed
+
       assert id == julho.id
-      assert CreditCards.get_statement_detail(julho.id).absorbed == []
+      assert CreditCards.get_statement_detail(user(), julho.id).absorbed == []
     end
   end
 
@@ -1153,7 +1168,7 @@ defmodule CashLens.CreditCardsTest do
     test "a card past its closing day with no statement is waiting for one" do
       card = account_fixture(%{name: "Ourocard", is_credit_card: true, closing_day: 3})
 
-      assert [pending] = CreditCards.pending_cycles([], @today)
+      assert [pending] = CreditCards.pending_cycles(user(), [], @today)
       assert pending.account.id == card.id
       assert pending.lifecycle == :awaiting
       assert pending.competencia == ~D[2026-10-01]
@@ -1164,7 +1179,7 @@ defmodule CashLens.CreditCardsTest do
     test "a card whose cycle has not closed yet is not late" do
       account_fixture(%{name: "Amex", is_credit_card: true, closing_day: 20})
 
-      assert [pending] = CreditCards.pending_cycles([], @today)
+      assert [pending] = CreditCards.pending_cycles(user(), [], @today)
       assert pending.lifecycle == :not_closed
     end
 
@@ -1173,7 +1188,7 @@ defmodule CashLens.CreditCardsTest do
     test "a card with no closing day is never accused of a late statement" do
       account_fixture(%{name: "Sem ciclo", is_credit_card: true, closing_day: nil})
 
-      assert [pending] = CreditCards.pending_cycles([], @today)
+      assert [pending] = CreditCards.pending_cycles(user(), [], @today)
       assert pending.lifecycle == :not_closed
     end
 
@@ -1183,9 +1198,10 @@ defmodule CashLens.CreditCardsTest do
       statement =
         statement_fixture(%{account: card, competencia: ~D[2026-10-01], due_date: ~D[2026-10-10]})
 
-      entries = Enum.filter(CreditCards.list_statements(), &(&1.statement.id == statement.id))
+      entries =
+        Enum.filter(CreditCards.list_statements(user()), &(&1.statement.id == statement.id))
 
-      assert CreditCards.pending_cycles(entries, @today) == []
+      assert CreditCards.pending_cycles(user(), entries, @today) == []
     end
 
     # Last month's statement says nothing about this month's.
@@ -1193,20 +1209,22 @@ defmodule CashLens.CreditCardsTest do
       card = account_fixture(%{name: "Ourocard", is_credit_card: true, closing_day: 3})
       statement_fixture(%{account: card, competencia: ~D[2026-09-01], due_date: ~D[2026-09-10]})
 
-      assert [pending] = CreditCards.pending_cycles(CreditCards.list_statements(), @today)
+      assert [pending] =
+               CreditCards.pending_cycles(user(), CreditCards.list_statements(user()), @today)
+
       assert pending.account.id == card.id
     end
 
     test "archived cards are waiting for nothing" do
       account_fixture(%{name: "Antigo", is_credit_card: true, closing_day: 3, is_closed: true})
 
-      assert CreditCards.pending_cycles([], @today) == []
+      assert CreditCards.pending_cycles(user(), [], @today) == []
     end
 
     test "bank accounts are not cards and are never listed" do
       account_fixture(%{name: "Conta Corrente", is_credit_card: false})
 
-      assert CreditCards.pending_cycles([], @today) == []
+      assert CreditCards.pending_cycles(user(), [], @today) == []
     end
   end
 end

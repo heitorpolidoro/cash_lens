@@ -953,7 +953,7 @@ defmodule CashLens.ForecastTest do
         })
 
       {:ok, recent_group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "RECENT_PARCEL",
           installments: 2,
           start_date: Date.beginning_of_month(recent.due_date),
@@ -973,7 +973,7 @@ defmodule CashLens.ForecastTest do
       future_first = Date.beginning_of_month(future_month)
 
       {:ok, future_group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "FUTURE_PARCEL",
           installments: 2,
           start_date: future_first,
@@ -1058,7 +1058,7 @@ defmodule CashLens.ForecastTest do
       end
 
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "ENDED_PARCEL",
           installments: 2,
           start_date: older_competencia,
@@ -1107,7 +1107,7 @@ defmodule CashLens.ForecastTest do
       })
 
       {:ok, past_group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "USUAL_PARCEL",
           installments: 2,
           start_date: competencia,
@@ -1125,7 +1125,7 @@ defmodule CashLens.ForecastTest do
       future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
 
       {:ok, heavy_group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "HEAVY_PARCEL",
           installments: 2,
           start_date: future_first,
@@ -1207,7 +1207,7 @@ defmodule CashLens.ForecastTest do
         })
 
       {:ok, competencia_group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "COMPETENCIA_PARCEL",
           installments: 2,
           start_date: competencia_month,
@@ -1234,7 +1234,7 @@ defmodule CashLens.ForecastTest do
       # typical load wins instead, it cancels against the variable part it was
       # subtracted from, and both keyings would give the same number.
       {:ok, heavy_group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "HEAVY_PARCEL",
           installments: 2,
           start_date: future_first,
@@ -1366,7 +1366,7 @@ defmodule CashLens.ForecastTest do
       # group membership keeps it out of the average — and it is already
       # projected on its own due date by commitment_occurrences/2.
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "FINANCIAMENTO",
           commitment_type: "financing",
           installments: 60,
@@ -1648,7 +1648,7 @@ defmodule CashLens.ForecastTest do
       future_first = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
 
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "DISCLOSED_PARCEL",
           installments: 2,
           start_date: future_first,
@@ -1669,7 +1669,7 @@ defmodule CashLens.ForecastTest do
 
       assert Decimal.equal?(
                occ.installment_total,
-               CashLens.Installments.account_installment_total(card.id, future_first)
+               CashLens.Installments.account_installment_total(user(), card.id, future_first)
              )
 
       assert [disclosed] = occ.installment_groups
@@ -1731,6 +1731,7 @@ defmodule CashLens.ForecastTest do
     defp commitment_group(attrs) do
       {:ok, group} =
         Installments.create_installment_group(
+          user(),
           Enum.into(attrs, %{
             description_pattern: "COMPROMISSO",
             installments: 3,
@@ -1862,7 +1863,7 @@ defmodule CashLens.ForecastTest do
       pending = commitment_occurrences(Forecast.project(90), group)
 
       {:ok, _} =
-        Installments.update_installment_group(group, %{
+        Installments.update_installment_group(user(), group, %{
           is_contemplated: true,
           contemplated_at: Date.utc_today()
         })
@@ -1978,7 +1979,7 @@ defmodule CashLens.ForecastTest do
 
     defp commitment_group do
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "COMPROMISSO #{System.unique_integer([:positive])}",
           commitment_type: "financing",
           installments: 60,
@@ -2066,7 +2067,7 @@ defmodule CashLens.ForecastTest do
       assert Forecast.get_recurring_item!(item.id).active
 
       {:ok, _group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "BOLETO CONSORCIO PORTO",
           commitment_type: "consorcio",
           installments: 60,
@@ -2468,7 +2469,9 @@ defmodule CashLens.ForecastTest do
         })
 
       {:ok, _} =
-        CashLens.CreditCards.update_statement(statement, %{payment_transaction_id: payment.id})
+        CashLens.CreditCards.update_statement(user(), statement, %{
+          payment_transaction_id: payment.id
+        })
 
       bills = Forecast.upcoming_bills(Forecast.project(20), 20)
 
@@ -2507,6 +2510,7 @@ defmodule CashLens.ForecastTest do
     defp mk_group(attrs) do
       {:ok, group} =
         CashLens.Installments.create_installment_group(
+          user(),
           Map.merge(
             %{
               description_pattern: "G #{System.unique_integer([:positive])}",

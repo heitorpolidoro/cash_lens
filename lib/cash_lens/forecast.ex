@@ -149,7 +149,8 @@ defmodule CashLens.Forecast do
   def list_commitment_rows(today \\ Date.utc_today()) do
     month = Date.beginning_of_month(today)
 
-    Installments.list_off_card_groups()
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    Installments.list_off_card_groups(CashLens.Ownership.current_user!())
     |> Enum.filter(fn g ->
       case Installments.last_installment_date(g) do
         nil -> false
@@ -1034,7 +1035,8 @@ defmodule CashLens.Forecast do
     if walked == [] do
       []
     else
-      groups = Installments.list_account_groups(account.id)
+      # TRANSITIONAL: removed when CL-51 converts the caller
+      groups = Installments.list_account_groups(CashLens.Ownership.current_user!(), account.id)
 
       base =
         if Enum.any?(walked, &(&1.estimable? and is_nil(&1.statement))),
@@ -1167,8 +1169,9 @@ defmodule CashLens.Forecast do
     do: outflow(Decimal.negate(total))
 
   defp statement_amount(%Statement{id: id}) do
-    id
-    |> CreditCards.statement_transactions()
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    CashLens.Ownership.current_user!()
+    |> CreditCards.statement_transactions(id)
     |> Enum.reduce(Decimal.new("0"), &Decimal.add(&2, &1.amount))
     |> outflow()
   end
@@ -1324,7 +1327,8 @@ defmodule CashLens.Forecast do
   counted on both sides, whatever its `commitment_type` says.
   """
   def commitment_occurrences(today, horizon_end) do
-    Installments.list_off_card_groups()
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    Installments.list_off_card_groups(CashLens.Ownership.current_user!())
     |> Enum.flat_map(&group_occurrences(&1, today, horizon_end))
   end
 

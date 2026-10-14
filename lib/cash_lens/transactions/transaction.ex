@@ -76,6 +76,12 @@ defmodule CashLens.Transactions.Transaction do
     |> validate_inclusion(:source, ["file", "manual"])
     |> CashLens.Ownership.validate_owned(:account_id, CashLens.Accounts.Account)
     |> CashLens.Ownership.validate_owned(:category_id, CashLens.Categories.Category)
+    |> CashLens.Ownership.validate_owned(
+      :installment_group_id,
+      CashLens.Installments.InstallmentGroup
+    )
+    |> CashLens.Ownership.validate_owned(:parent_transaction_id, __MODULE__)
+    |> CashLens.Ownership.validate_owned(:import_batch_id, CashLens.CreditCards.Statement)
     |> put_dedup_key()
     |> generate_fingerprint()
     |> unique_constraint(:fingerprint)

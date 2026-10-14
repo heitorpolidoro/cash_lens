@@ -21,7 +21,9 @@ defmodule CashLens.Accounts.Scopes do
 
   `CashLens.Installments`, `CashLens.CreditCards` (including
   `CashLens.CreditCards.Matcher`) and the credit-card branches of
-  `CashLens.Forecast` must never apply these scopes.
+  `CashLens.Forecast` must never apply these scopes. (The per-user filter
+  `CashLens.Ownership.scope/2` is a different thing: those modules apply it on
+  every table they read or write.)
 
   Installment purchases are made *on* credit-card accounts: every
   installment-linked transaction in the production database sits on one. The

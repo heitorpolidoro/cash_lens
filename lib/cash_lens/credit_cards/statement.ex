@@ -32,6 +32,12 @@ defmodule CashLens.CreditCards.Statement do
       :absorbed_by_statement_id
     ])
     |> validate_required([:account_id])
+    |> CashLens.Ownership.validate_owned(:account_id, CashLens.Accounts.Account)
+    |> CashLens.Ownership.validate_owned(
+      :payment_transaction_id,
+      CashLens.Transactions.Transaction
+    )
+    |> CashLens.Ownership.validate_owned(:absorbed_by_statement_id, __MODULE__)
     |> foreign_key_constraint(:account_id)
     |> foreign_key_constraint(:payment_transaction_id)
     |> foreign_key_constraint(:absorbed_by_statement_id)

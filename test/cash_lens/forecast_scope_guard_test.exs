@@ -13,6 +13,8 @@ defmodule CashLens.ForecastScopeGuardTest do
   """
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Ownership.current_user!()
+
   import CashLens.AccountsFixtures
   import CashLens.CreditCardsFixtures
   import CashLens.TransactionsFixtures
@@ -50,7 +52,7 @@ defmodule CashLens.ForecastScopeGuardTest do
     group_start = Date.beginning_of_month(past_due_date)
 
     {:ok, group} =
-      Installments.create_installment_group(%{
+      Installments.create_installment_group(user(), %{
         description_pattern: @group_pattern,
         installments: @parcel_count,
         start_date: group_start,

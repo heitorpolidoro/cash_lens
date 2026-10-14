@@ -52,23 +52,24 @@ defmodule CashLensWeb.InstallmentLive.Index do
   end
 
   defp load_data(socket) do
+    user = socket.assigns.current_user
     reference = Installments.current_month()
-    groups = Enum.map(Installments.list_installment_groups(), &decorate/1)
+    groups = Enum.map(Installments.list_installment_groups(user), &decorate(user, &1))
 
     socket
     |> assign(:commitments, filter_commitments(groups, socket.assigns))
     |> assign(:counts, active_counts(groups))
     |> assign(:active_count, Enum.count(groups, &(not &1.is_finished)))
-    |> assign(:month_metrics, Installments.monthly_commitment(reference))
-    |> assign(:balance, Installments.outstanding_balance(reference))
-    |> assign(:relief, Installments.cash_flow_relief(reference))
-    |> assign(:projection, Installments.monthly_projection(reference, @projection_months))
+    |> assign(:month_metrics, Installments.monthly_commitment(user, reference))
+    |> assign(:balance, Installments.outstanding_balance(user, reference))
+    |> assign(:relief, Installments.cash_flow_relief(user, reference))
+    |> assign(:projection, Installments.monthly_projection(user, reference, @projection_months))
     |> assign(:reference_month, reference)
   end
 
-  defp decorate(group) do
-    group.id
-    |> Installments.get_group_with_progress()
+  defp decorate(user, group) do
+    user
+    |> Installments.get_group_with_progress(group.id)
     |> then(fn g ->
       g
       |> Map.put(:last_installment_date, Installments.last_installment_date(g))
@@ -156,15 +157,19 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   @impl true
   def handle_event("edit", %{"id" => id}, socket) do
-    group = Installments.get_installment_group!(id)
+    case fetch_group(socket, id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Compromisso não encontrado.")}
 
-    {:noreply,
-     socket
-     |> assign(:show_modal, true)
-     |> assign(:commitment, group)
-     |> assign(:commitment_params, edit_params(group))
-     |> reset_suggestions()
-     |> assign_form()}
+      group ->
+        {:noreply,
+         socket
+         |> assign(:show_modal, true)
+         |> assign(:commitment, group)
+         |> assign(:commitment_params, edit_params(group))
+         |> reset_suggestions()
+         |> assign_form()}
+    end
   end
 
   @impl true
@@ -184,7 +189,10 @@ defmodule CashLensWeb.InstallmentLive.Index do
     {:noreply,
      socket
      |> assign(:suggestion_query, query)
-     |> assign(:suggestions, Installments.suggest_commitment_patterns(query))}
+     |> assign(
+       :suggestions,
+       Installments.suggest_commitment_patterns(socket.assigns.current_user, query)
+     )}
   end
 
   @impl true
@@ -243,9 +251,25 @@ defmodule CashLensWeb.InstallmentLive.Index do
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    group = Installments.get_installment_group!(id)
-    {:ok, _} = Installments.delete_installment_group(group)
-    {:noreply, socket |> assign(:delete_candidate, nil) |> load_data()}
+    case fetch_group(socket, id) do
+      nil ->
+        {:noreply,
+         socket
+         |> assign(:delete_candidate, nil)
+         |> put_flash(:error, "Compromisso não encontrado.")}
+
+      group ->
+        case Installments.delete_installment_group(socket.assigns.current_user, group) do
+          {:ok, _} ->
+            {:noreply, socket |> assign(:delete_candidate, nil) |> load_data()}
+
+          {:error, :not_found} ->
+            {:noreply,
+             socket
+             |> assign(:delete_candidate, nil)
+             |> put_flash(:error, "Compromisso não encontrado.")}
+        end
+    end
   end
 
   @impl true
@@ -268,17 +292,33 @@ defmodule CashLensWeb.InstallmentLive.Index do
     {:noreply, assign(socket, :show_relief, false)}
   end
 
+  # The user's own group, or `nil` for an id that is unknown or someone else's.
+  defp fetch_group(socket, id) do
+    Installments.get_installment_group!(socket.assigns.current_user, id)
+  rescue
+    Ecto.NoResultsError -> nil
+  end
+
   defp save_commitment(socket, %InstallmentGroup{id: nil}, params) do
-    case Installments.create_installment_group(params) do
+    case Installments.create_installment_group(socket.assigns.current_user, params) do
       {:ok, _group} -> {:noreply, close_and_reload(socket, "Compromisso criado com sucesso!")}
       {:error, changeset} -> {:noreply, assign(socket, :form, to_form(changeset))}
     end
   end
 
   defp save_commitment(socket, group, params) do
-    case Installments.update_installment_group(group, params) do
-      {:ok, _group} -> {:noreply, close_and_reload(socket, "Compromisso atualizado!")}
-      {:error, changeset} -> {:noreply, assign(socket, :form, to_form(changeset))}
+    case Installments.update_installment_group(socket.assigns.current_user, group, params) do
+      {:ok, _group} ->
+        {:noreply, close_and_reload(socket, "Compromisso atualizado!")}
+
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> assign(:show_modal, false)
+         |> put_flash(:error, "Compromisso não encontrado.")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, :form, to_form(changeset))}
     end
   end
 
@@ -527,7 +567,7 @@ defmodule CashLensWeb.InstallmentLive.Index do
   defp reset_suggestions(socket) do
     socket
     |> assign(:suggestion_query, "")
-    |> assign(:suggestions, Installments.suggest_commitment_patterns())
+    |> assign(:suggestions, Installments.suggest_commitment_patterns(socket.assigns.current_user))
     |> assign(:applied_suggestion, nil)
   end
 

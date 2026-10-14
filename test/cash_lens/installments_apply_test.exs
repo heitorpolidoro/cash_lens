@@ -1,6 +1,8 @@
 defmodule CashLens.InstallmentsApplyTest do
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Ownership.current_user!()
+
   import Ecto.Query
 
   alias CashLens.Categories
@@ -33,9 +35,9 @@ defmodule CashLens.InstallmentsApplyTest do
       t2 = ourocard_tx(account.id, "CAPRICHO VEIC PARC 02/03 SAO JOSE DOSBR", "-100.00", purchase)
       t3 = ourocard_tx(account.id, "CAPRICHO VEIC PARC 03/03 SAO JOSE DOSBR", "-100.00", purchase)
 
-      assert Installments.detect_and_apply([t1, t2, t3]) == 3
+      assert Installments.detect_and_apply(user(), [t1, t2, t3]) == 3
 
-      [group] = Installments.list_installment_groups()
+      [group] = Installments.list_installment_groups(user())
       assert group.description_pattern == "CAPRICHO VEIC (3x · R$100)"
       assert group.installments == 3
       # start_date is the inferred purchase month (parcel 1's billing month).
@@ -85,7 +87,7 @@ defmodule CashLens.InstallmentsApplyTest do
           })
         end
 
-      assert Installments.detect_and_apply(txs) == 3
+      assert Installments.detect_and_apply(user(), txs) == 3
 
       dates =
         txs
@@ -98,7 +100,7 @@ defmodule CashLens.InstallmentsApplyTest do
       # date would have produced.
       assert dates == [~D[2026-05-29], ~D[2026-06-29], ~D[2026-07-29]]
 
-      [group] = Installments.list_installment_groups()
+      [group] = Installments.list_installment_groups(user())
       assert group.start_date == ~D[2026-05-29]
     end
 
@@ -130,7 +132,7 @@ defmodule CashLens.InstallmentsApplyTest do
           })
         end
 
-      assert Installments.detect_and_apply(txs) == 3
+      assert Installments.detect_and_apply(user(), txs) == 3
 
       dates =
         txs
@@ -143,7 +145,7 @@ defmodule CashLens.InstallmentsApplyTest do
       # The plan is anchored on the lowest-numbered parcel: parcel 1 billed in
       # May. Anchoring on the highest instead would read August minus two months
       # and claim the plan started in June, a month after it demonstrably did.
-      [group] = Installments.list_installment_groups()
+      [group] = Installments.list_installment_groups(user())
       assert group.start_date == ~D[2026-05-29]
     end
 
@@ -164,7 +166,7 @@ defmodule CashLens.InstallmentsApplyTest do
           })
         end
 
-      assert Installments.detect_and_apply(txs) == 2
+      assert Installments.detect_and_apply(user(), txs) == 2
 
       dates =
         txs
@@ -189,7 +191,7 @@ defmodule CashLens.InstallmentsApplyTest do
           })
         end
 
-      assert Installments.detect_and_apply(txs) == 2
+      assert Installments.detect_and_apply(user(), txs) == 2
 
       dates =
         txs
@@ -214,7 +216,7 @@ defmodule CashLens.InstallmentsApplyTest do
           })
         end
 
-      assert Installments.detect_and_apply(txs) == 2
+      assert Installments.detect_and_apply(user(), txs) == 2
 
       dates =
         txs
@@ -248,9 +250,9 @@ defmodule CashLens.InstallmentsApplyTest do
           import_batch_id: statement.id
         })
 
-      assert Installments.detect_and_apply([tx]) == 1
+      assert Installments.detect_and_apply(user(), [tx]) == 1
 
-      [group] = Installments.list_installment_groups()
+      [group] = Installments.list_installment_groups(user())
       # The April statement charges parcel 3, so parcel 1 billed two months
       # earlier -- in February, which no statement here ever mentioned.
       assert group.start_date == ~D[2026-02-20]
@@ -262,7 +264,7 @@ defmodule CashLens.InstallmentsApplyTest do
       tx = ourocard_tx(account.id, "CVS PARC 02/03 CACAPAVA BR", "-50.00", ~D[2026-02-16])
       original_fp = Repo.get!(Transaction, tx.id).fingerprint
 
-      Installments.scan_and_apply_all()
+      Installments.scan_and_apply_all(user())
 
       reloaded = Repo.get!(Transaction, tx.id)
       assert reloaded.description == "CVS"
@@ -279,7 +281,7 @@ defmodule CashLens.InstallmentsApplyTest do
       p3 = ourocard_tx(account.id, "ANUIDADE ADC-PARC 03/12 BR", "-22.75", ~D[2026-01-27])
       p4 = ourocard_tx(account.id, "ANUIDADE ADC-PARC 04/12 BR", "-22.75", ~D[2026-02-24])
 
-      Installments.detect_and_apply([p2, p3, p4])
+      Installments.detect_and_apply(user(), [p2, p3, p4])
 
       # parcel N bills (N - 1) months after its own DTPOSTED.
       assert Repo.get!(Transaction, p2.id).date == ~D[2026-01-24]
@@ -305,10 +307,10 @@ defmodule CashLens.InstallmentsApplyTest do
           ~D[2025-12-15]
         )
 
-      Installments.detect_and_apply([a, b])
+      Installments.detect_and_apply(user(), [a, b])
 
       patterns =
-        Installments.list_installment_groups()
+        Installments.list_installment_groups(user())
         |> Enum.map(& &1.description_pattern)
         |> Enum.sort()
 
@@ -322,10 +324,10 @@ defmodule CashLens.InstallmentsApplyTest do
       b = ourocard_tx(account.id, "DROGARIA SAO PARC 02/03 SAO JOSE DOSBR", "-191.39", p)
       c = ourocard_tx(account.id, "DROGARIA SAO PARC 03/03 SAO JOSE DOSBR", "-191.39", p)
 
-      Installments.detect_and_apply([a, b, c])
+      Installments.detect_and_apply(user(), [a, b, c])
 
       # All three land in a single group despite the one-cent difference.
-      assert [group] = Installments.list_installment_groups()
+      assert [group] = Installments.list_installment_groups(user())
       assert group.description_pattern == "DROGARIA SAO (3x · R$191)"
     end
 
@@ -336,7 +338,7 @@ defmodule CashLens.InstallmentsApplyTest do
       p2 = ourocard_tx(account.id, "LOJA Z PARC 02/03 BR", "-30.00", today)
       p3 = ourocard_tx(account.id, "LOJA Z PARC 03/03 BR", "-30.00", today)
 
-      Installments.detect_and_apply([p1, p2, p3])
+      Installments.detect_and_apply(user(), [p1, p2, p3])
 
       assert Repo.get(Transaction, p1.id)
       refute Repo.get(Transaction, p2.id)
@@ -350,8 +352,8 @@ defmodule CashLens.InstallmentsApplyTest do
       p1 = ourocard_tx(account.id, "FUTURO PARC 01/02 BR", "-30.00", future)
       p2 = ourocard_tx(account.id, "FUTURO PARC 02/02 BR", "-30.00", future)
 
-      assert Installments.detect_and_apply([p1, p2]) == 0
-      assert Installments.list_installment_groups() == []
+      assert Installments.detect_and_apply(user(), [p1, p2]) == 0
+      assert Installments.list_installment_groups(user()) == []
       refute Repo.get(Transaction, p1.id)
       refute Repo.get(Transaction, p2.id)
     end
@@ -360,15 +362,15 @@ defmodule CashLens.InstallmentsApplyTest do
       p = ~D[2026-01-12]
       a = ourocard_tx(account.id, "CVS PARC 01/03 CACAPAVA BR", "-50.00", p)
       b = ourocard_tx(account.id, "CVS PARC 02/03 CACAPAVA BR", "-50.00", p)
-      assert Installments.detect_and_apply([a, b]) == 2
-      [group] = Installments.list_installment_groups()
+      assert Installments.detect_and_apply(user(), [a, b]) == 2
+      [group] = Installments.list_installment_groups(user())
 
       # Parcel 3 arrives in a later statement (distinct, past date) and must attach
       # to the already-created group instead of spawning a new one.
       c = ourocard_tx(account.id, "CVS PARC 03/03 CACAPAVA BR", "-50.00", ~D[2026-03-12])
-      assert Installments.detect_and_apply([c]) == 1
+      assert Installments.detect_and_apply(user(), [c]) == 1
 
-      assert [reloaded] = Installments.list_installment_groups()
+      assert [reloaded] = Installments.list_installment_groups(user())
       assert reloaded.id == group.id
 
       reloaded_c = Repo.get!(Transaction, c.id)
@@ -379,10 +381,10 @@ defmodule CashLens.InstallmentsApplyTest do
 
     test "is idempotent: re-running does not duplicate groups", %{account: account} do
       t1 = ourocard_tx(account.id, "LOJA X PARC 01/02 BR", "-10.00", ~D[2026-01-01])
-      Installments.detect_and_apply([t1])
-      Installments.scan_and_apply_all()
+      Installments.detect_and_apply(user(), [t1])
+      Installments.scan_and_apply_all(user())
 
-      assert length(Installments.list_installment_groups()) == 1
+      assert length(Installments.list_installment_groups(user())) == 1
     end
 
     test "re-dates parcels from different purchases each by its own DTPOSTED",
@@ -397,7 +399,7 @@ defmodule CashLens.InstallmentsApplyTest do
       viagem =
         ourocard_tx(account.id, "VIAGEM PARC 04/04 SAO PAULO BR", "-150.00", ~D[2026-01-20])
 
-      assert Installments.detect_and_apply([eletro, viagem]) == 2
+      assert Installments.detect_and_apply(user(), [eletro, viagem]) == 2
 
       assert Repo.get!(Transaction, eletro.id).date == ~D[2026-05-15]
       assert Repo.get!(Transaction, viagem.id).date == ~D[2026-04-20]
@@ -410,16 +412,16 @@ defmodule CashLens.InstallmentsApplyTest do
       t2 = ourocard_tx(account.id, "CAPRICHO VEIC PARC 02/03 SAO JOSE DOSBR", "-100.00", purchase)
       t3 = ourocard_tx(account.id, "CAPRICHO VEIC PARC 03/03 SAO JOSE DOSBR", "-100.00", purchase)
 
-      assert Installments.detect_and_apply([t1, t2, t3]) == 3
+      assert Installments.detect_and_apply(user(), [t1, t2, t3]) == 3
 
       dates_after_first =
         [t1, t2, t3]
         |> Enum.map(&Repo.get!(Transaction, &1.id).date)
 
       # Re-running detection (e.g. a re-import) must not duplicate groups or shift dates.
-      Installments.scan_and_apply_all()
+      Installments.scan_and_apply_all(user())
 
-      assert length(Installments.list_installment_groups()) == 1
+      assert length(Installments.list_installment_groups(user())) == 1
 
       dates_after_second =
         [t1, t2, t3]
@@ -467,7 +469,7 @@ defmodule CashLens.InstallmentsApplyTest do
           date: ~D[2026-01-10]
         })
 
-      Installments.detect_and_apply(Repo.all(Transaction))
+      Installments.detect_and_apply(user(), Repo.all(Transaction))
 
       cats =
         Repo.all(
@@ -501,7 +503,7 @@ defmodule CashLens.InstallmentsApplyTest do
         date: ~D[2026-01-10]
       })
 
-      Installments.detect_and_apply(Repo.all(Transaction))
+      Installments.detect_and_apply(user(), Repo.all(Transaction))
 
       cats =
         Repo.all(
@@ -537,7 +539,7 @@ defmodule CashLens.InstallmentsApplyTest do
         date: ~D[2026-01-10]
       })
 
-      Installments.detect_and_apply(Repo.all(Transaction))
+      Installments.detect_and_apply(user(), Repo.all(Transaction))
 
       # t1 keeps its manual category, not overwritten by the keyword-matched `other`.
       assert Repo.get(Transaction, t1.id).category_id == keep.id
@@ -558,7 +560,7 @@ defmodule CashLens.InstallmentsApplyTest do
         date: ~D[2026-01-10]
       })
 
-      Installments.detect_and_apply(Repo.all(Transaction))
+      Installments.detect_and_apply(user(), Repo.all(Transaction))
 
       cats =
         Repo.all(

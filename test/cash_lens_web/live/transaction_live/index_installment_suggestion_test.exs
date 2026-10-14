@@ -52,7 +52,7 @@ defmodule CashLensWeb.TransactionLive.IndexInstallmentSuggestionTest do
 
   setup do
     {:ok, in_progress} =
-      Installments.create_installment_group(%{
+      Installments.create_installment_group(user(), %{
         description_pattern: "ACADEMIA",
         total_amount: "300.00",
         installments: 3,
@@ -70,7 +70,7 @@ defmodule CashLensWeb.TransactionLive.IndexInstallmentSuggestionTest do
   # preload either.
   defp completed_group_transaction do
     {:ok, completed} =
-      Installments.create_installment_group(%{
+      Installments.create_installment_group(user(), %{
         description_pattern: "COMPLETO",
         total_amount: "200.00",
         installments: 2,

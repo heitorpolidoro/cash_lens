@@ -4,6 +4,8 @@ defmodule CashLens.Installments do
   """
 
   import Ecto.Query, warn: false
+
+  alias CashLens.Ownership
   alias CashLens.Repo
 
   alias CashLens.Accounts.Account
@@ -12,14 +14,15 @@ defmodule CashLens.Installments do
   alias CashLens.Transactions.AutoCategorizer
   alias CashLens.Transactions.InstallmentDetector
   alias CashLens.Transactions.Transaction
+  alias CashLens.Users.User
 
   @doc """
-  Returns the list of installment groups.
+  Returns the user's installment groups.
   """
-  def list_installment_groups do
-    from(g in InstallmentGroup, order_by: [desc: g.inserted_at])
+  def list_installment_groups(%User{} = user) do
+    from(g in Ownership.scope(InstallmentGroup, user), order_by: [desc: g.inserted_at])
     |> Repo.all()
-    |> Enum.map(&load_dynamic_fields/1)
+    |> Enum.map(&load_dynamic_fields(user, &1))
   end
 
   @doc """
@@ -28,9 +31,9 @@ defmodule CashLens.Installments do
   that account). Positive magnitude, same convention as the internal
   month-total helper used by `upcoming_installments/1`.
   """
-  def account_installment_total(account_id, %Date{} = month) do
-    account_id
-    |> list_account_groups()
+  def account_installment_total(%User{} = user, account_id, %Date{} = month) do
+    user
+    |> list_account_groups(account_id)
     |> total_due_in_month(month)
   end
 
@@ -39,9 +42,9 @@ defmodule CashLens.Installments do
   touch `account_id` and whose plan bills a parcel in `month`. The sum of their
   `parcel_value/1` is exactly what `account_installment_total/2` returns.
   """
-  def account_installment_groups(account_id, %Date{} = month) do
-    account_id
-    |> list_account_groups()
+  def account_installment_groups(%User{} = user, account_id, %Date{} = month) do
+    user
+    |> list_account_groups(account_id)
     |> groups_due_in_month(month)
   end
 
@@ -50,9 +53,12 @@ defmodule CashLens.Installments do
   the account scoping stays in it. Callers that need several months filter this
   result with `groups_due_in_month/2` / `total_due_in_month/2`.
   """
-  def list_account_groups(account_id) do
-    from(g in InstallmentGroup,
-      join: t in assoc(g, :transactions),
+  def list_account_groups(%User{} = user, account_id) do
+    transactions = Ownership.scope(Transaction, user)
+
+    from(g in Ownership.scope(InstallmentGroup, user),
+      join: t in ^transactions,
+      on: t.installment_group_id == g.id,
       where: t.account_id == ^account_id,
       distinct: true,
       select: g
@@ -87,16 +93,18 @@ defmodule CashLens.Installments do
   impossible for a commitment to be counted twice. A group with no transaction
   at all is included: contributing to no account's total, it is in no bill.
   """
-  def list_off_card_groups do
+  def list_off_card_groups(%User{} = user) do
+    accounts = Ownership.scope(Account, user)
+
     on_card =
-      from(t in Transaction,
-        join: a in Account,
+      from(t in Ownership.scope(Transaction, user),
+        join: a in ^accounts,
         on: a.id == t.account_id,
         where: parent_as(:group).id == t.installment_group_id and a.is_credit_card == true,
         select: 1
       )
 
-    from(g in InstallmentGroup,
+    from(g in Ownership.scope(InstallmentGroup, user),
       as: :group,
       where: not exists(subquery(on_card)),
       order_by: [asc: g.start_date, asc: g.inserted_at]
@@ -107,23 +115,32 @@ defmodule CashLens.Installments do
   @doc """
   Gets a single installment group.
   """
-  def get_installment_group!(id) do
-    Repo.get!(InstallmentGroup, id)
-    |> load_dynamic_fields()
+  def get_installment_group!(%User{} = user, id) do
+    case fetch_group(user, id) do
+      nil -> raise Ecto.NoResultsError, queryable: InstallmentGroup
+      group -> load_dynamic_fields(user, group)
+    end
+  end
+
+  defp fetch_group(user, id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, id} -> InstallmentGroup |> Ownership.scope(user) |> Repo.get(id)
+      :error -> nil
+    end
   end
 
   @doc """
-  Creates an installment group.
+  Creates an installment group owned by `user`; a `"user_id"` in `attrs` is ignored.
   """
-  def create_installment_group(attrs \\ %{}) do
-    %InstallmentGroup{}
+  def create_installment_group(%User{} = user, attrs \\ %{}) do
+    %InstallmentGroup{user_id: user.id}
     |> InstallmentGroup.changeset(attrs)
     |> Repo.insert()
     |> case do
       {:ok, group} ->
-        associate_matching_transactions(group)
+        link_matching_transactions(user, group)
         CashLens.Forecast.deactivate_superseded_items()
-        {:ok, load_dynamic_fields(group)}
+        {:ok, load_dynamic_fields(user, group)}
 
       error ->
         error
@@ -131,33 +148,46 @@ defmodule CashLens.Installments do
   end
 
   @doc """
-  Updates an installment group.
+  Updates one of the user's installment groups; `{:error, :not_found}` for anyone else's.
   """
-  def update_installment_group(%InstallmentGroup{} = group, attrs) do
-    group
-    |> InstallmentGroup.changeset(attrs)
-    |> Repo.update()
-    |> case do
-      {:ok, updated_group} ->
-        associate_matching_transactions(updated_group)
-        CashLens.Forecast.deactivate_superseded_items()
-        {:ok, load_dynamic_fields(updated_group)}
+  def update_installment_group(%User{} = user, %InstallmentGroup{id: id}, attrs) do
+    case fetch_group(user, id) do
+      nil ->
+        {:error, :not_found}
 
-      error ->
-        error
+      group ->
+        group
+        |> InstallmentGroup.changeset(attrs)
+        |> Repo.update()
+        |> case do
+          {:ok, updated_group} ->
+            link_matching_transactions(user, updated_group)
+            CashLens.Forecast.deactivate_superseded_items()
+            {:ok, load_dynamic_fields(user, updated_group)}
+
+          error ->
+            error
+        end
     end
   end
 
   @doc """
-  Deletes an installment group.
+  Deletes one of the user's installment groups; `{:error, :not_found}` for anyone else's.
   """
-  def delete_installment_group(%InstallmentGroup{} = group) do
+  def delete_installment_group(%User{} = user, %InstallmentGroup{id: id}) do
+    case fetch_group(user, id) do
+      nil -> {:error, :not_found}
+      group -> do_delete_group(user, group)
+    end
+  end
+
+  defp do_delete_group(user, group) do
     # The parcels outlive the grouping: deleting a commitment undoes how its
     # transactions were read together, never the transactions themselves. The
     # foreign key is NO ACTION, so they have to be unlinked first or Postgres
     # refuses the delete outright.
     Repo.transaction(fn ->
-      from(t in Transaction, where: t.installment_group_id == ^group.id)
+      from(t in Ownership.scope(Transaction, user), where: t.installment_group_id == ^group.id)
       |> Repo.update_all(set: [installment_group_id: nil, installment_number: nil])
 
       Repo.delete!(group)
@@ -167,12 +197,12 @@ defmodule CashLens.Installments do
   @doc """
   Returns a group with its calculated progress.
   """
-  def get_group_with_progress(group_id) do
-    group = get_installment_group!(group_id)
+  def get_group_with_progress(%User{} = user, group_id) do
+    group = get_installment_group!(user, group_id)
 
     paid_count =
       Repo.aggregate(
-        from(t in Transaction, where: t.installment_group_id == ^group.id),
+        from(t in Ownership.scope(Transaction, user), where: t.installment_group_id == ^group.id),
         :count
       )
 
@@ -212,8 +242,8 @@ defmodule CashLens.Installments do
   Lists the transactions (parcels) linked to an installment group,
   ordered by installment number, then by date.
   """
-  def list_group_transactions(group_id) do
-    from(t in Transaction,
+  def list_group_transactions(%User{} = user, group_id) do
+    from(t in Ownership.scope(Transaction, user),
       where: t.installment_group_id == ^group_id,
       order_by: [asc_nulls_last: t.installment_number, asc: t.date]
     )
@@ -240,12 +270,12 @@ defmodule CashLens.Installments do
   `%{date: Date.t(), total: Decimal.t(), pending: boolean()}`, where `pending` marks
   a month that already passed but whose statement hasn't been imported.
   """
-  def upcoming_installments(max_months \\ 12) do
+  def upcoming_installments(%User{} = user, max_months \\ 12) do
     today = Date.utc_today()
     current = Date.new!(today.year, today.month, 1)
-    groups = list_installment_groups()
+    groups = list_installment_groups(user)
 
-    start_month = min_date(first_incomplete_month(), current)
+    start_month = min_date(first_incomplete_month(user), current)
     last_month = add_months(current, max_months - 1)
     count = month_diff(start_month, last_month)
 
@@ -270,9 +300,11 @@ defmodule CashLens.Installments do
 
   # First month whose installment data isn't fully imported (based on the latest
   # imported installment transaction).
-  defp first_incomplete_month do
+  defp first_incomplete_month(user) do
     case Repo.one(
-           from t in Transaction, where: not is_nil(t.installment_group_id), select: max(t.date)
+           from t in Ownership.scope(Transaction, user),
+             where: not is_nil(t.installment_group_id),
+             select: max(t.date)
          ) do
       nil ->
         today = Date.utc_today()
@@ -331,12 +363,12 @@ defmodule CashLens.Installments do
   @doc """
   Returns all active (non-completed) installment groups.
   """
-  def list_active_groups do
-    groups = list_installment_groups()
+  def list_active_groups(%User{} = user) do
+    groups = list_installment_groups(user)
 
     # Simple in-memory filtering for now; can be optimized with SQL if needed.
     Enum.filter(groups, fn g ->
-      progress = get_group_with_progress(g.id)
+      progress = get_group_with_progress(user, g.id)
       !progress.is_completed
     end)
   end
@@ -351,19 +383,19 @@ defmodule CashLens.Installments do
   @doc """
   Finds a matching installment group for a given description.
   """
-  def find_matching_group(nil), do: nil
+  def find_matching_group(%User{}, nil), do: nil
 
-  def find_matching_group(description) when is_binary(description) do
+  def find_matching_group(%User{} = user, description) when is_binary(description) do
     desc = String.downcase(description)
 
     # We look for groups whose description_pattern is contained in the transaction description.
     # Case-insensitive.
     Repo.one(
-      from g in InstallmentGroup,
+      from g in Ownership.scope(InstallmentGroup, user),
         where: fragment("? ILIKE '%' || ? || '%'", ^desc, g.description_pattern),
         limit: 1
     )
-    |> load_dynamic_fields()
+    |> then(&load_dynamic_fields(user, &1))
   end
 
   @doc """
@@ -372,12 +404,13 @@ defmodule CashLens.Installments do
 
   Used both for one-off backfills and for the "detect installments" UI action.
   """
-  def scan_and_apply_all do
+  def scan_and_apply_all(%User{} = user) do
     Transaction
+    |> Ownership.scope(user)
     |> where([t], like(t.description, "%PARC %"))
     |> where([t], is_nil(t.installment_group_id))
     |> Repo.all()
-    |> detect_and_apply()
+    |> then(&detect_and_apply(user, &1))
   end
 
   @doc """
@@ -391,9 +424,10 @@ defmodule CashLens.Installments do
 
   Returns the number of transactions linked.
   """
-  def detect_and_apply(transactions) when is_list(transactions) do
+  def detect_and_apply(%User{} = user, transactions) when is_list(transactions) do
     detected =
-      transactions
+      user
+      |> owned_only(transactions)
       |> Enum.map(fn tx -> {tx, InstallmentDetector.detect(tx.description)} end)
       |> Enum.reject(fn {_tx, detection} -> is_nil(detection) end)
 
@@ -403,13 +437,12 @@ defmodule CashLens.Installments do
       # at most a few cents (the first carries the rounding remainder), while distinct
       # purchases at the same merchant differ by reais — so round to the nearest real.
       |> Enum.group_by(fn {tx, d} -> {d.base, d.total, amount_key(tx.amount)} end)
-      |> Enum.reduce(0, fn {key, items}, acc -> acc + apply_installment_group(key, items) end)
+      |> Enum.reduce(0, fn {key, items}, acc ->
+        acc + apply_installment_group(user, key, items)
+      end)
 
     # Re-dating parcels moves them across months, so rebuild the affected accounts'
     # balance chains to keep monthly summaries correct.
-    # TRANSITIONAL: removed when CL-51 converts the caller
-    user = CashLens.Ownership.current_user!()
-
     detected
     |> Enum.map(fn {tx, _d} -> tx.account_id end)
     |> Enum.uniq()
@@ -418,15 +451,29 @@ defmodule CashLens.Installments do
     count
   end
 
+  # Only transactions the user owns are ever read from or written to.
+  defp owned_only(_user, []), do: []
+
+  defp owned_only(user, transactions) do
+    ids = Enum.map(transactions, & &1.id)
+
+    owned =
+      from(t in Ownership.scope(Transaction, user), where: t.id in ^ids, select: t.id)
+      |> Repo.all()
+      |> MapSet.new()
+
+    Enum.filter(transactions, &MapSet.member?(owned, &1.id))
+  end
+
   # Spreads one purchase's parcels to their billing months, drops not-yet-charged
   # future parcels, links the rest to a group, and returns how many were applied.
-  defp apply_installment_group({base, total, amount_key}, items) do
+  defp apply_installment_group(user, {base, total, amount_key}, items) do
     # "PARC xx/yy" denotes one installment purchase whose parcels are each
     # reported on the ORIGINAL purchase date, so every parcel of a plan carries
     # the same date and must be re-dated to the month it is actually billed.
     today = Date.utc_today()
-    competencias = competencias_for(items)
-    closing_days = closing_days_for(items)
+    competencias = competencias_for(user, items)
+    closing_days = closing_days_for(user, items)
 
     dated =
       Enum.map(items, fn {tx, d} ->
@@ -438,9 +485,11 @@ defmodule CashLens.Installments do
     {future, present} =
       Enum.split_with(dated, fn {_tx, _d, billed} -> Date.compare(billed, today) == :gt end)
 
-    Enum.each(future, fn {tx, _d, _billed} -> Repo.delete(tx) end)
+    Enum.each(future, fn {tx, _d, _billed} ->
+      from(t in Ownership.scope(Transaction, user), where: t.id == ^tx.id) |> Repo.delete_all()
+    end)
 
-    apply_present_parcels(base, total, amount_key, present)
+    apply_present_parcels(user, base, total, amount_key, present)
   end
 
   # The month a parcel is billed in. Preferred source: the statement the row was
@@ -476,7 +525,7 @@ defmodule CashLens.Installments do
     Date.new!(year, month, min(day, last_day))
   end
 
-  defp competencias_for(items) do
+  defp competencias_for(user, items) do
     ids =
       items
       |> Enum.map(fn {tx, _d} -> tx.import_batch_id end)
@@ -486,7 +535,7 @@ defmodule CashLens.Installments do
     if ids == [] do
       %{}
     else
-      from(s in Statement,
+      from(s in Ownership.scope(Statement, user),
         where: s.id in ^ids and not is_nil(s.competencia),
         select: {s.id, s.competencia}
       )
@@ -495,23 +544,23 @@ defmodule CashLens.Installments do
     end
   end
 
-  defp closing_days_for(items) do
+  defp closing_days_for(user, items) do
     ids = items |> Enum.map(fn {tx, _d} -> tx.account_id end) |> Enum.uniq()
 
-    from(a in Account, where: a.id in ^ids, select: {a.id, a.closing_day})
+    from(a in Ownership.scope(Account, user), where: a.id in ^ids, select: {a.id, a.closing_day})
     |> Repo.all()
     |> Map.new()
   end
 
-  defp apply_present_parcels(_base, _total, _amount_key, []), do: 0
+  defp apply_present_parcels(_user, _base, _total, _amount_key, []), do: 0
 
-  defp apply_present_parcels(base, total, amount_key, present) do
-    group = find_or_create_group(base, total, amount_key, present)
+  defp apply_present_parcels(user, base, total, amount_key, present) do
+    group = find_or_create_group(user, base, total, amount_key, present)
 
-    Enum.each(present, fn {tx, d, billed} -> link_and_clean(tx, group, d, billed) end)
+    Enum.each(present, fn {tx, d, billed} -> link_and_clean(user, tx, group, d, billed) end)
 
     account_id = present |> hd() |> elem(0) |> Map.get(:account_id)
-    fill_group_categories(group, base, account_id)
+    fill_group_categories(user, group, base, account_id)
 
     length(present)
   end
@@ -520,20 +569,20 @@ defmodule CashLens.Installments do
   # common category among already-categorized parcels; if none exist, falls back to
   # AutoCategorizer over the cleaned merchant-base description. Never overwrites an
   # existing category and never touches the fingerprint.
-  defp fill_group_categories(group, base, account_id) do
+  defp fill_group_categories(user, group, base, account_id) do
     txs =
       Repo.all(
-        from t in Transaction,
+        from t in Ownership.scope(Transaction, user),
           where: t.installment_group_id == ^group.id,
           select: %{id: t.id, category_id: t.category_id}
       )
 
-    case group_category_id(txs, base, account_id) do
+    case group_category_id(user, txs, base, account_id) do
       nil ->
         :ok
 
       category_id ->
-        from(t in Transaction,
+        from(t in Ownership.scope(Transaction, user),
           where: t.installment_group_id == ^group.id and is_nil(t.category_id)
         )
         |> Repo.update_all(set: [category_id: category_id])
@@ -542,14 +591,13 @@ defmodule CashLens.Installments do
     end
   end
 
-  defp group_category_id(txs, base, account_id) do
+  defp group_category_id(user, txs, base, account_id) do
     existing = txs |> Enum.map(& &1.category_id) |> Enum.reject(&is_nil/1)
 
     case existing do
       [] ->
         %{description: base, account_id: account_id}
-        # TRANSITIONAL: removed when CL-51 converts the caller
-        |> then(&AutoCategorizer.categorize(CashLens.Ownership.current_user!(), &1))
+        |> then(&AutoCategorizer.categorize(user, &1))
         |> Map.get(:category_id)
 
       ids ->
@@ -579,17 +627,17 @@ defmodule CashLens.Installments do
     add_months(billed, -(detection.number - 1))
   end
 
-  defp find_or_create_group(base, total, amount_key, items) do
+  defp find_or_create_group(user, base, total, amount_key, items) do
     pattern = "#{base} (#{total}x · R$#{amount_key})"
 
-    case Repo.get_by(InstallmentGroup, description_pattern: pattern) do
+    case InstallmentGroup |> Ownership.scope(user) |> Repo.get_by(description_pattern: pattern) do
       nil ->
         {tx, _d, _billed} = hd(items)
         start_date = plan_start_date(items)
         total_amount = tx.amount |> Decimal.abs() |> Decimal.mult(total)
 
         {:ok, group} =
-          create_installment_group(%{
+          create_installment_group(user, %{
             description_pattern: pattern,
             installments: total,
             start_date: start_date,
@@ -612,10 +660,10 @@ defmodule CashLens.Installments do
   # recomputes those raw values and still de-duplicates. The "PARC xx/yy" marker
   # in the raw memo also self-disambiguates parcels, so each installment lands on
   # its own dedup_key (occurrence index 0) without relying on the ordinal.
-  defp link_and_clean(tx, group, detection, billed_date) do
+  defp link_and_clean(user, tx, group, detection, billed_date) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    from(t in Transaction, where: t.id == ^tx.id)
+    from(t in Ownership.scope(Transaction, user), where: t.id == ^tx.id)
     |> Repo.update_all(
       set: [
         description: detection.base,
@@ -632,20 +680,27 @@ defmodule CashLens.Installments do
   If the group is edited, it first unlinks any existing associated transactions before re-associating.
   Auto-detected groups are ignored since their parcels are explicitly linked by the scan process.
   """
-  def associate_matching_transactions(%InstallmentGroup{} = group) do
+  def associate_matching_transactions(%User{} = user, %InstallmentGroup{id: id}) do
+    case fetch_group(user, id) do
+      nil -> {:error, :not_found}
+      group -> link_matching_transactions(user, group)
+    end
+  end
+
+  defp link_matching_transactions(user, %InstallmentGroup{} = group) do
     if Regex.match?(~r/\(\d+x · R\$\d+\)$/, group.description_pattern) do
       # Auto-detected groups are handled by detect_and_apply/1, do not auto-associate
       :ok
     else
       # Manual groups: unlink existing and re-associate by pattern
-      from(t in Transaction, where: t.installment_group_id == ^group.id)
+      from(t in Ownership.scope(Transaction, user), where: t.installment_group_id == ^group.id)
       |> Repo.update_all(set: [installment_group_id: nil, installment_number: nil])
 
       pattern = "%#{group.description_pattern}%"
 
       unlinked_matches =
         Repo.all(
-          from t in Transaction,
+          from t in Ownership.scope(Transaction, user),
             where:
               is_nil(t.installment_group_id) and ilike(t.description, ^pattern) and
                 t.date >= ^group.start_date,
@@ -654,7 +709,7 @@ defmodule CashLens.Installments do
         )
 
       Enum.each(unlinked_matches, fn tx ->
-        from(t in Transaction, where: t.id == ^tx.id)
+        from(t in Ownership.scope(Transaction, user), where: t.id == ^tx.id)
         |> Repo.update_all(
           set: [
             installment_group_id: group.id,
@@ -685,9 +740,9 @@ defmodule CashLens.Installments do
   @doc """
   Dynamically calculates total_amount and installment_amount at read-time if total_amount is nil.
   """
-  def load_dynamic_fields(nil), do: nil
+  def load_dynamic_fields(%User{}, nil), do: nil
 
-  def load_dynamic_fields(%InstallmentGroup{} = group) do
+  def load_dynamic_fields(%User{} = user, %InstallmentGroup{} = group) do
     cond do
       not is_nil(group.total_amount) ->
         inst_val = Decimal.round(Decimal.div(group.total_amount, group.installments), 2)
@@ -697,7 +752,7 @@ defmodule CashLens.Installments do
         pattern = "%#{group.description_pattern}%"
 
         query =
-          from t in Transaction,
+          from t in Ownership.scope(Transaction, user),
             where: ilike(t.description, ^pattern),
             order_by: [desc: t.date, desc: t.inserted_at],
             limit: 1
@@ -741,8 +796,8 @@ defmodule CashLens.Installments do
   where `count` is how many commitments of that type have a parcel due in the
   month. The breakdown always sums back to `:total`.
   """
-  def monthly_commitment(month \\ current_month()) do
-    groups = list_installment_groups()
+  def monthly_commitment(%User{} = user, month \\ current_month()) do
+    groups = list_installment_groups(user)
 
     by_type =
       Map.new(commitment_types(), fn type ->
@@ -766,8 +821,8 @@ defmodule CashLens.Installments do
   `monthly_projection/2` from `month` to the end of every plan therefore yields
   exactly this total.
   """
-  def outstanding_balance(month \\ current_month()) do
-    groups = list_installment_groups()
+  def outstanding_balance(%User{} = user, month \\ current_month()) do
+    groups = list_installment_groups(user)
 
     by_type =
       Map.new(commitment_types(), fn type ->
@@ -800,11 +855,12 @@ defmodule CashLens.Installments do
   ends. Commitments *starting* inside the window are not netted out: this metric
   answers "how much breathing room is coming", not "what the net balance will be".
   """
-  def cash_flow_relief(month \\ current_month(), window \\ @relief_window_months) do
+  def cash_flow_relief(%User{} = user, month \\ current_month(), window \\ @relief_window_months) do
     last_month = add_months(month, window - 1)
 
     items =
-      list_installment_groups()
+      user
+      |> list_installment_groups()
       |> Enum.filter(&ends_between?(&1, month, last_month))
       |> Enum.map(fn g ->
         %{
@@ -829,8 +885,8 @@ defmodule CashLens.Installments do
   current?:}`
   and the three type amounts always add up to `:total`.
   """
-  def monthly_projection(month \\ current_month(), months \\ 10) do
-    groups = list_installment_groups()
+  def monthly_projection(%User{} = user, month \\ current_month(), months \\ 10) do
+    groups = list_installment_groups(user)
     current = current_month()
 
     Enum.map(0..(months - 1), fn offset ->
@@ -874,9 +930,9 @@ defmodule CashLens.Installments do
   the value `load_dynamic_fields/1` reads back once the group exists, so the form
   and the screen agree.
   """
-  def suggest_commitment_patterns(query \\ "", limit \\ 20) do
+  def suggest_commitment_patterns(%User{} = user, query \\ "", limit \\ 20) do
     rows =
-      from(t in Transaction,
+      from(t in Ownership.scope(Transaction, user),
         where: is_nil(t.installment_group_id) and t.amount < 0,
         group_by: t.description,
         having: count(t.id) >= @suggestion_min_occurrences,
@@ -892,7 +948,7 @@ defmodule CashLens.Installments do
       |> filter_by_description(query)
       |> Repo.all()
 
-    latest = latest_amounts(Enum.map(rows, & &1.description))
+    latest = latest_amounts(user, Enum.map(rows, & &1.description))
 
     Enum.map(rows, &Map.put(&1, :amount, Map.get(latest, &1.description, Decimal.new("0"))))
   end
@@ -905,10 +961,10 @@ defmodule CashLens.Installments do
 
   # The newest debit per description. Ordered exactly like `load_dynamic_fields/1`
   # so both answer "the last parcel" with the same row when two share a date.
-  defp latest_amounts([]), do: %{}
+  defp latest_amounts(_user, []), do: %{}
 
-  defp latest_amounts(descriptions) do
-    from(t in Transaction,
+  defp latest_amounts(user, descriptions) do
+    from(t in Ownership.scope(Transaction, user),
       where: t.description in ^descriptions and t.amount < 0,
       distinct: t.description,
       order_by: [asc: t.description, desc: t.date, desc: t.inserted_at],

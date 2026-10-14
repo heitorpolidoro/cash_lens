@@ -150,7 +150,7 @@ defmodule CashLensWeb.AdminDatabaseLive do
 
   @impl true
   def handle_event("detect_installments", _params, socket) do
-    count = CashLens.Installments.scan_and_apply_all()
+    count = CashLens.Installments.scan_and_apply_all(socket.assigns.current_user)
 
     {:noreply,
      put_flash(

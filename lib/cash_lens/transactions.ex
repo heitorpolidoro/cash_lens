@@ -1432,7 +1432,7 @@ defmodule CashLens.Transactions do
           where: t.id not in subquery(linked_parent_ids)
         )
         |> Repo.all()
-        |> Enum.each(&CreditCardMatcher.match_payment/1)
+        |> Enum.each(&CreditCardMatcher.match_payment(user, &1))
     end
   end
 
@@ -1483,7 +1483,7 @@ defmodule CashLens.Transactions do
     cc_id = get_credit_card_category_id(user)
 
     if cc_id && tx.category_id == cc_id do
-      CreditCardMatcher.match_payment(tx)
+      CreditCardMatcher.match_payment(user, tx)
     end
 
     :ok
@@ -2091,10 +2091,10 @@ defmodule CashLens.Transactions do
       when owner_id != user_id,
       do: nil
 
-  def suggest_installment_link(%User{id: user_id}, %Transaction{} = tx) do
-    case CashLens.Installments.find_matching_group(tx.description) do
+  def suggest_installment_link(%User{id: user_id} = user, %Transaction{} = tx) do
+    case CashLens.Installments.find_matching_group(user, tx.description) do
       %{user_id: ^user_id} = group ->
-        progress = CashLens.Installments.get_group_with_progress(group.id)
+        progress = CashLens.Installments.get_group_with_progress(user, group.id)
 
         if progress.is_completed do
           nil

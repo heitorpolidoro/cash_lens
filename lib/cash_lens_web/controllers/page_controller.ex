@@ -98,7 +98,7 @@ defmodule CashLensWeb.PageController do
       summary_month: month_name,
       chart_data: chart_data,
       historical: historical,
-      closed_statements: CreditCards.closed_without_statement(),
+      closed_statements: CreditCards.closed_without_statement(user),
       upcoming: Forecast.upcoming_bills(projection),
       bankruptcy_card: BankruptcyCard.assigns_from(projection, @forecast_horizon_days),
       today: Date.utc_today()

@@ -144,6 +144,11 @@ defmodule Mix.Tasks.MigrateCreditCardTransfers do
     end)
 
     updated_payer = Repo.get!(Transaction, payer.id)
-    CreditCardMatcher.match_payment(updated_payer, card_account.id)
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    CreditCardMatcher.match_payment(
+      CashLens.Ownership.current_user!(),
+      updated_payer,
+      card_account.id
+    )
   end
 end

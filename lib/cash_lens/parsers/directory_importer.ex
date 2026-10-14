@@ -96,7 +96,8 @@ defmodule CashLens.Parsers.DirectoryImporter do
       |> add_skipped_warnings(skipped_dirs)
 
     unless dry_run or Keyword.get(opts, :skip_installments, false) do
-      CashLens.Installments.scan_and_apply_all()
+      # TRANSITIONAL: removed when CL-51 converts the caller
+      CashLens.Installments.scan_and_apply_all(CashLens.Ownership.current_user!())
     end
 
     result
@@ -268,7 +269,13 @@ defmodule CashLens.Parsers.DirectoryImporter do
 
     entry = Map.merge(summary, %{account: account, bank: bank, name: name, folder_path: label})
 
-    statements = CashLens.CreditCards.list_boletos_for_account(account.id)
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    statements =
+      CashLens.CreditCards.list_boletos_for_account(
+        CashLens.Ownership.current_user!(),
+        account.id
+      )
+
     divergences = cycle_divergences(account, statements)
 
     %{

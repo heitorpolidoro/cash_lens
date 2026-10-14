@@ -824,7 +824,7 @@ defmodule CashLensWeb.ImportLive.Index do
 
     case Ingestor.import_file(account, entry.absolute_path, import_root: root) do
       {:ok, summary} ->
-        grouped = regroup_installments(summary)
+        grouped = regroup_installments(socket.assigns.current_user, summary)
 
         {:noreply,
          socket
@@ -995,7 +995,7 @@ defmodule CashLensWeb.ImportLive.Index do
 
     case result do
       {:ok, summary} ->
-        grouped = regroup_installments(summary)
+        grouped = regroup_installments(socket.assigns.current_user, summary)
 
         {:noreply,
          socket
@@ -1092,10 +1092,10 @@ defmodule CashLensWeb.ImportLive.Index do
   # Guarded on `imported > 0` because the scan is not free — it re-dates parcels
   # and rebuilds the affected accounts' balance chains — and an import that
   # wrote nothing has nothing to regroup.
-  defp regroup_installments(%{imported: imported}) when imported > 0,
-    do: Installments.scan_and_apply_all()
+  defp regroup_installments(user, %{imported: imported}) when imported > 0,
+    do: Installments.scan_and_apply_all(user)
 
-  defp regroup_installments(_summary), do: 0
+  defp regroup_installments(_user, _summary), do: 0
 
   # `scan_and_apply_all/0` is **global**: it regroups every ungrouped
   # transaction in the database, so `grouped` can exceed what this file

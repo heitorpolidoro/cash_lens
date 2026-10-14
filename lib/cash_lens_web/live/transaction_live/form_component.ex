@@ -160,7 +160,7 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
     |> add_reimbursement_links(user, transaction)
     |> add_transfer_links(user, transaction)
     |> add_installment_link(transaction)
-    |> add_statement_link(transaction)
+    |> add_statement_link(user, transaction)
     |> Enum.reverse()
   end
 
@@ -200,8 +200,8 @@ defmodule CashLensWeb.TransactionLive.FormComponent do
 
   defp add_installment_link(links, _transaction), do: links
 
-  defp add_statement_link(links, transaction) do
-    case CreditCards.get_statement_paid_by(transaction.id) do
+  defp add_statement_link(links, user, transaction) do
+    case CreditCards.get_statement_paid_by(user, transaction.id) do
       nil ->
         links
 

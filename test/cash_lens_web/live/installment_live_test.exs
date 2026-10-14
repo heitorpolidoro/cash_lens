@@ -1,6 +1,8 @@
 defmodule CashLensWeb.InstallmentLiveTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Ownership.current_user!()
+
   import Ecto.Query
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
@@ -18,6 +20,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
   defp commitment(attrs) do
     {:ok, group} =
       Installments.create_installment_group(
+        user(),
         Map.merge(
           %{
             description_pattern: "G",
@@ -366,7 +369,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
 
       group =
         Enum.find(
-          Installments.list_installment_groups(),
+          Installments.list_installment_groups(user()),
           &(&1.description_pattern == "FINANC HAB CAIXA")
         )
 
@@ -394,7 +397,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
 
       group =
         Enum.find(
-          Installments.list_installment_groups(),
+          Installments.list_installment_groups(user()),
           &(&1.description_pattern == "CONSORCIO PORTO SEGURO")
         )
 
@@ -593,7 +596,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
         }
       })
 
-      assert Installments.list_installment_groups() == []
+      assert Installments.list_installment_groups(user()) == []
     end
 
     test "close_modal hides the form", %{conn: conn} do
@@ -651,7 +654,9 @@ defmodule CashLensWeb.InstallmentLiveTest do
       })
 
       assert render(live) =~ "Compromisso atualizado!"
-      assert Installments.get_installment_group!(group.id).description_pattern == "NOVO NOME"
+
+      assert Installments.get_installment_group!(user(), group.id).description_pattern ==
+               "NOVO NOME"
     end
 
     test "editing with invalid data re-renders the form", %{conn: conn} do
@@ -664,7 +669,8 @@ defmodule CashLensWeb.InstallmentLiveTest do
         "installment_group" => %{"description_pattern" => "", "installments" => "1"}
       })
 
-      assert Installments.get_installment_group!(group.id).description_pattern == "IMUTAVEL"
+      assert Installments.get_installment_group!(user(), group.id).description_pattern ==
+               "IMUTAVEL"
     end
 
     test "edit loads an existing commitment into the modal", %{conn: conn} do
@@ -726,7 +732,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
       # Cancelling keeps the commitment.
       render_click(live, "cancel_delete", %{})
       refute has_element?(live, "#delete-modal")
-      assert length(Installments.list_installment_groups()) == 2
+      assert length(Installments.list_installment_groups(user())) == 2
 
       render_click(live, "ask_delete", %{"id" => vazio.id})
 
@@ -798,7 +804,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
       )
       |> render_submit()
 
-      assert [group] = Installments.list_installment_groups()
+      assert [group] = Installments.list_installment_groups(user())
       assert group.installments == 60
       assert Decimal.equal?(Installments.parcel_value(group), Decimal.new("1471.52"))
     end
@@ -811,7 +817,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
       live |> element("#delete-#{group.id}") |> render_click()
 
       assert has_element?(live, "#delete-modal")
-      assert length(Installments.list_installment_groups()) == 1
+      assert length(Installments.list_installment_groups(user())) == 1
     end
 
     test "confirming in the modal deletes and closes it", %{conn: conn} do
@@ -823,7 +829,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
       live |> element("#delete-modal-confirm") |> render_click()
 
       refute has_element?(live, "#delete-modal")
-      assert Installments.list_installment_groups() == []
+      assert Installments.list_installment_groups(user()) == []
     end
 
     test "the confirmation pluralises for several parcels", %{conn: conn} do
@@ -872,7 +878,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
       html = render_click(live, "delete", %{"id" => group.id})
 
       refute html =~ "COM PARCELAS"
-      assert Installments.list_installment_groups() == []
+      assert Installments.list_installment_groups(user()) == []
     end
 
     test "bands the table by payoff month, not by row", %{conn: conn} do
@@ -930,7 +936,7 @@ defmodule CashLensWeb.InstallmentLiveTest do
       {:ok, live, _html} = live(conn, ~p"/installments")
       render_click(live, "delete", %{"id" => group.id})
 
-      assert Installments.list_installment_groups() == []
+      assert Installments.list_installment_groups(user()) == []
     end
   end
 
@@ -939,5 +945,74 @@ defmodule CashLensWeb.InstallmentLiveTest do
 
     refute html =~ "Detectar Parcelamentos"
     refute html =~ "detect_installments"
+  end
+
+  describe "another user's commitments" do
+    setup do
+      %{a: other} = cross_tenant()
+
+      foreign =
+        CashLens.Tenancy.acting_as(other, fn ->
+          {:ok, group} =
+            Installments.create_installment_group(other, %{
+              description_pattern: "FOREIGN FINANCING",
+              installments: 12,
+              start_date: month_start(0),
+              total_amount: "1200.00"
+            })
+
+          Repo.get!(CashLens.Installments.InstallmentGroup, group.id)
+        end)
+
+      {:ok, other: other, foreign: foreign}
+    end
+
+    defp reload_foreign(other, foreign) do
+      CashLens.Tenancy.acting_as(other, fn ->
+        Repo.get(CashLens.Installments.InstallmentGroup, foreign.id)
+      end)
+    end
+
+    test "are not listed or counted", %{conn: conn} do
+      commitment(%{description_pattern: "MINE ONLY"})
+
+      {:ok, _live, html} = live(conn, ~p"/installments")
+
+      assert html =~ "MINE ONLY"
+      refute html =~ "FOREIGN FINANCING"
+    end
+
+    test "a forged edit answers with an error flash and opens nothing", %{
+      conn: conn,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      html = render_click(live, "edit", %{"id" => foreign.id})
+
+      assert html =~ "Compromisso não encontrado."
+      refute html =~ "FOREIGN FINANCING"
+    end
+
+    test "a forged delete answers with an error flash and changes nothing", %{
+      conn: conn,
+      other: other,
+      foreign: foreign
+    } do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      html = render_click(live, "delete", %{"id" => foreign.id})
+
+      assert html =~ "Compromisso não encontrado."
+      assert reload_foreign(other, foreign) == foreign
+    end
+
+    test "a forged ask_delete exposes nothing", %{conn: conn, foreign: foreign} do
+      {:ok, live, _html} = live(conn, ~p"/installments")
+
+      html = render_click(live, "ask_delete", %{"id" => foreign.id})
+
+      refute html =~ "FOREIGN FINANCING"
+    end
   end
 end

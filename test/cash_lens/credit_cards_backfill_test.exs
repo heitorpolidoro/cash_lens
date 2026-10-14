@@ -1,6 +1,8 @@
 defmodule CashLens.CreditCardsBackfillTest do
   use CashLens.DataCase, async: true
 
+  defp user, do: CashLens.Ownership.current_user!()
+
   test "backfill_file stamps existing rows by fingerprint without touching category" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     cat = CashLens.CategoriesFixtures.category_fixture(%{name: "Food", slug: "food"})
@@ -22,7 +24,8 @@ defmodule CashLens.CreditCardsBackfillTest do
       competencia: ~D[2026-06-01]
     }
 
-    {:ok, statement} = CashLens.CreditCards.backfill_file(card, parsed, meta, "fatura.pdf")
+    {:ok, statement} =
+      CashLens.CreditCards.backfill_file(user(), card, parsed, meta, "fatura.pdf")
 
     reloaded = CashLens.Repo.get!(CashLens.Transactions.Transaction, existing.id)
     assert reloaded.import_batch_id == statement.id
@@ -51,7 +54,8 @@ defmodule CashLens.CreditCardsBackfillTest do
       competencia: ~D[2026-06-01]
     }
 
-    {:ok, _statement} = CashLens.CreditCards.backfill_file(card, parsed, meta, "fatura2.pdf")
+    {:ok, _statement} =
+      CashLens.CreditCards.backfill_file(user(), card, parsed, meta, "fatura2.pdf")
 
     after_count =
       CashLens.Repo.aggregate(CashLens.Transactions.Transaction, :count)
@@ -86,7 +90,8 @@ defmodule CashLens.CreditCardsBackfillTest do
 
     meta = %{due_date: nil, total_a_pagar: nil, competencia: nil}
 
-    {:ok, statement} = CashLens.CreditCards.backfill_file(card, parsed, meta, "fatura3.pdf")
+    {:ok, statement} =
+      CashLens.CreditCards.backfill_file(user(), card, parsed, meta, "fatura3.pdf")
 
     r0 = CashLens.Repo.get!(CashLens.Transactions.Transaction, t0.id)
     r1 = CashLens.Repo.get!(CashLens.Transactions.Transaction, t1.id)

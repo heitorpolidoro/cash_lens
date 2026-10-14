@@ -27,7 +27,16 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
 
   @impl true
   def handle_params(%{"id" => id}, _url, socket) do
-    {:noreply, assign_detail(socket, id)}
+    case fetch_detail(socket, id) do
+      {:ok, detail} ->
+        {:noreply, assign_detail(socket, detail)}
+
+      :error ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Fatura não encontrada.")
+         |> push_navigate(to: ~p"/statements")}
+    end
   end
 
   def handle_params(_params, _url, socket) do
@@ -76,16 +85,23 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   def handle_event("save_total", %{"total_a_pagar" => raw}, socket) do
     case parse_total(raw) do
       {:ok, total} ->
-        {:ok, _} =
-          CreditCards.update_statement(socket.assigns.selected.statement, %{total_a_pagar: total})
+        case CreditCards.update_statement(
+               socket.assigns.current_user,
+               socket.assigns.selected.statement,
+               %{total_a_pagar: total}
+             ) do
+          {:ok, _} ->
+            {:noreply,
+             socket
+             |> assign(:editing_total, nil)
+             |> assign(:total_error, nil)
+             |> load_statements()
+             |> reload_selected()
+             |> put_flash(:info, total_flash(total))}
 
-        {:noreply,
-         socket
-         |> assign(:editing_total, nil)
-         |> assign(:total_error, nil)
-         |> load_statements()
-         |> reload_selected()
-         |> put_flash(:info, total_flash(total))}
+          {:error, _reason} ->
+            {:noreply, put_flash(socket, :error, "Não foi possível atualizar a fatura.")}
+        end
 
       {:error, message} ->
         {:noreply, assign(socket, :total_error, message)}
@@ -94,9 +110,12 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
 
   def handle_event("absorb_into", %{"target_id" => target_id}, socket) do
     statement = socket.assigns.selected.statement
-    target = CreditCards.get_statement!(target_id)
 
-    case CreditCards.absorb_into(statement, target) do
+    case CreditCards.absorb_into(
+           socket.assigns.current_user,
+           statement,
+           %CreditCards.Statement{id: target_id}
+         ) do
       {:ok, _} ->
         {:noreply,
          socket
@@ -110,35 +129,52 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   end
 
   def handle_event("release_absorption", _params, socket) do
-    {:ok, _} = CreditCards.release_absorption(socket.assigns.selected.statement)
+    case CreditCards.release_absorption(
+           socket.assigns.current_user,
+           socket.assigns.selected.statement
+         ) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Fatura desincorporada.")
+         |> load_statements()
+         |> reload_selected()}
 
-    {:noreply,
-     socket
-     |> put_flash(:info, "Fatura desincorporada.")
-     |> load_statements()
-     |> reload_selected()}
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Fatura não encontrada.")}
+    end
   end
 
   def handle_event("attach_transaction", %{"id" => id}, socket) do
     statement = socket.assigns.selected.statement
-    {:ok, count} = CreditCards.attach_transactions(statement, [id])
 
-    {:noreply,
-     socket
-     |> put_flash(flash_kind(count), attach_message(count))
-     |> load_statements()
-     |> reload_selected()}
+    case CreditCards.attach_transactions(socket.assigns.current_user, statement, [id]) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> put_flash(flash_kind(count), attach_message(count))
+         |> load_statements()
+         |> reload_selected()}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Lançamento não encontrado.")}
+    end
   end
 
   def handle_event("detach_transaction", %{"id" => id}, socket) do
     statement = socket.assigns.selected.statement
-    {:ok, _count} = CreditCards.detach_transaction(statement, id)
 
-    {:noreply,
-     socket
-     |> put_flash(:info, "Lançamento removido da fatura.")
-     |> load_statements()
-     |> reload_selected()}
+    case CreditCards.detach_transaction(socket.assigns.current_user, statement, id) do
+      {:ok, _count} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Lançamento removido da fatura.")
+         |> load_statements()
+         |> reload_selected()}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Lançamento não encontrado.")}
+    end
   end
 
   def handle_event("add_line", _params, socket) do
@@ -173,7 +209,11 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
          |> assign(:new_error, message)}
 
       {:ok, attrs} ->
-        case CreditCards.create_manual_statement(attrs, build_manual_lines(lines)) do
+        case CreditCards.create_manual_statement(
+               socket.assigns.current_user,
+               attrs,
+               build_manual_lines(lines)
+             ) do
           {:ok, _statement} ->
             {:noreply,
              socket
@@ -214,9 +254,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   end
 
   def handle_event("link", %{"payment-id" => payment_id} = params, socket) do
-    statement = target_statement(socket, params)
-
-    case CreditCards.link_payment(statement, payment_id) do
+    case link_result(socket, params, payment_id) do
       {:ok, _} ->
         {:noreply,
          socket
@@ -233,7 +271,7 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   def handle_event("unlink", _params, socket) do
     statement = socket.assigns.selected.statement
 
-    case CreditCards.unlink_payment(statement) do
+    case CreditCards.unlink_payment(socket.assigns.current_user, statement) do
       {:ok, _} ->
         {:noreply,
          socket
@@ -246,22 +284,46 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     end
   end
 
-  defp target_statement(_socket, %{"statement-id" => id}), do: CreditCards.get_statement!(id)
+  defp link_result(socket, params, payment_id) do
+    case target_statement(socket, params) do
+      nil -> {:error, :not_found}
+      statement -> CreditCards.link_payment(socket.assigns.current_user, statement, payment_id)
+    end
+  end
+
+  defp target_statement(socket, %{"statement-id" => id}),
+    do: CreditCards.get_statement(socket.assigns.current_user, id)
+
   defp target_statement(socket, _params), do: socket.assigns.selected.statement
 
   defp reload_selected(socket) do
     case socket.assigns.selected do
       nil -> socket
-      %{statement: statement} -> assign_detail(socket, statement.id)
+      %{statement: statement} -> reselect(socket, statement.id)
     end
   end
 
-  defp assign_detail(socket, id) do
-    detail = CreditCards.get_statement_detail(id)
+  defp reselect(socket, id) do
+    case fetch_detail(socket, id) do
+      {:ok, detail} -> assign_detail(socket, detail)
+      :error -> assign(socket, :selected, nil)
+    end
+  end
+
+  # The detail of one of the user's statements, or `:error` for an id that is
+  # unknown or someone else's.
+  defp fetch_detail(socket, id) do
+    {:ok, CreditCards.get_statement_detail(socket.assigns.current_user, id)}
+  rescue
+    Ecto.NoResultsError -> :error
+  end
+
+  defp assign_detail(socket, detail) do
+    user = socket.assigns.current_user
 
     {suggestion, candidates} =
       if detail.lifecycle in @unpaid do
-        candidates = CreditCards.payment_candidates(detail.statement)
+        candidates = CreditCards.payment_candidates(user, detail.statement)
         {List.first(candidates), candidates}
       else
         {nil, []}
@@ -274,38 +336,39 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
     |> assign(:new_transaction_account_id, detail.account.id)
     |> assign(:suggestion, suggestion)
     |> assign(:candidates, candidates)
-    |> assign(:attachable, attachable_for(detail))
-    |> assign(:absorption_targets, CreditCards.absorption_targets(detail.statement))
+    |> assign(:attachable, attachable_for(user, detail))
+    |> assign(:absorption_targets, CreditCards.absorption_targets(user, detail.statement))
   end
 
   # Only a live cycle adopts loose purchases: an absorbed or already-paid
   # statement is settled history, and moving spend into it would change a total
   # that has been reconciled against the bank.
-  defp attachable_for(%{lifecycle: lifecycle, statement: statement})
+  defp attachable_for(user, %{lifecycle: lifecycle, statement: statement})
        when lifecycle in [:open, :closed],
-       do: CreditCards.attachable_transactions(statement)
+       do: CreditCards.attachable_transactions(user, statement)
 
-  defp attachable_for(_detail), do: []
+  defp attachable_for(_user, _detail), do: []
 
   defp load_statements(socket) do
-    entries = CreditCards.list_statements()
+    user = socket.assigns.current_user
+    entries = CreditCards.list_statements(user)
     card_groups = CreditCards.group_by_card(entries)
 
     socket
     |> assign(:entries, entries)
     # Kept apart from `entries`: the metrics, the gap report and the
     # reconciliation suggestions are all about statements that exist.
-    |> assign(:pending, CreditCards.pending_cycles(entries))
+    |> assign(:pending, CreditCards.pending_cycles(user, entries))
     |> assign(:metrics, CreditCards.hub_metrics(entries))
     |> assign(:gaps, CreditCards.statement_gaps(entries))
     # Every credit-card account, not just those that already have a statement:
     # the whole point of "Nova fatura" is the card that has none.
     |> assign(
       :cards,
-      CashLens.Accounts.list_credit_cards(socket.assigns.current_user) |> Enum.sort_by(& &1.name)
+      CashLens.Accounts.list_credit_cards(user) |> Enum.sort_by(& &1.name)
     )
-    |> assign(:suggestions, current_suggestions(card_groups))
-    |> assign(:unlinked_payments, CreditCards.unlinked_card_payments())
+    |> assign(:suggestions, current_suggestions(user, card_groups))
+    |> assign(:unlinked_payments, CreditCards.unlinked_card_payments(user))
     |> apply_filters()
   end
 
@@ -476,10 +539,12 @@ defmodule CashLensWeb.CreditCardStatementLive.Index do
   # The one-click reconcile block is offered for the cycle currently shown on
   # each card, which is the only statement the operator can act on from the
   # overview. Older closed cycles are reconciled from their detail view.
-  defp current_suggestions(card_groups) do
+  defp current_suggestions(user, card_groups) do
     card_groups
     |> Enum.filter(&(&1.current.lifecycle == :closed))
-    |> Enum.map(&{&1.current.statement.id, CreditCards.suggest_payment(&1.current.statement)})
+    |> Enum.map(
+      &{&1.current.statement.id, CreditCards.suggest_payment(user, &1.current.statement)}
+    )
     |> Enum.reject(fn {_id, suggestion} -> is_nil(suggestion) end)
     |> Map.new()
   end

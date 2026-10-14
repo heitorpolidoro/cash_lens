@@ -1,5 +1,7 @@
 defmodule CashLens.CreditCards.MatcherTest do
   use CashLens.DataCase, async: true
+
+  defp user, do: CashLens.Ownership.current_user!()
   import CashLens.CreditCardsFixtures
   import Ecto.Query
   alias CashLens.CreditCards.Matcher
@@ -61,9 +63,9 @@ defmodule CashLens.CreditCards.MatcherTest do
 
     pay = payment(bank, cat, Decimal.new("30.00"), ~D[2026-06-16])
 
-    assert {:linked, linked} = Matcher.auto_link(s, Decimal.new("30.00"))
+    assert {:linked, linked} = Matcher.auto_link(user(), s, Decimal.new("30.00"))
     assert linked.id == pay.id
-    assert CashLens.CreditCards.get_statement!(s.id).payment_transaction_id == pay.id
+    assert CashLens.CreditCards.get_statement!(user(), s.id).payment_transaction_id == pay.id
   end
 
   test "auto_link matches a payment categorized under a descendant category" do
@@ -100,15 +102,46 @@ defmodule CashLens.CreditCards.MatcherTest do
     # Bank-side debit filed under the per-card CHILD category, as the user does.
     pay = payment(bank, child, Decimal.new("-1099.28"), ~D[2026-05-11])
 
-    assert {:linked, linked} = Matcher.auto_link(s, Decimal.new("-1099.28"))
+    assert {:linked, linked} = Matcher.auto_link(user(), s, Decimal.new("-1099.28"))
     assert linked.id == pay.id
-    assert CashLens.CreditCards.get_statement!(s.id).payment_transaction_id == pay.id
+    assert CashLens.CreditCards.get_statement!(user(), s.id).payment_transaction_id == pay.id
+  end
+
+  test "auto_link answers :no_match for a statement the user does not own" do
+    %{a: other} = cross_tenant()
+
+    foreign =
+      statement_fixture(%{
+        user: other,
+        total_a_pagar: Decimal.new("30.00"),
+        due_date: ~D[2026-06-15]
+      })
+
+    bank = CashLens.AccountsFixtures.account_fixture(%{})
+
+    cat =
+      CashLens.Categories.get_category_by_slug(
+        CashLens.Ownership.current_user!(),
+        "cartao-de-credito"
+      )
+
+    # An exact-amount payment of the current user, within the window.
+    _pay = payment(bank, cat, Decimal.new("30.00"), ~D[2026-06-16])
+
+    assert Matcher.auto_link(user(), foreign, Decimal.new("30.00")) == :no_match
+
+    reloaded =
+      CashLens.Tenancy.acting_as(other, fn ->
+        Repo.get!(CashLens.CreditCards.Statement, foreign.id)
+      end)
+
+    assert reloaded.payment_transaction_id == nil
   end
 
   test "auto_link returns :no_match when no candidate amount matches" do
     card = CashLens.AccountsFixtures.account_fixture(%{is_credit_card: true})
     s = statement_fixture(%{account: card, total_a_pagar: Decimal.new("99.00")})
-    assert Matcher.auto_link(s, Decimal.new("99.00")) == :no_match
+    assert Matcher.auto_link(user(), s, Decimal.new("99.00")) == :no_match
   end
 
   test "auto_link returns :ambiguous and does not link when two candidates match" do
@@ -131,8 +164,8 @@ defmodule CashLens.CreditCards.MatcherTest do
     _pay1 = payment(bank, cat, Decimal.new("30.00"), ~D[2026-06-16])
     _pay2 = payment(bank, cat, Decimal.new("30.00"), ~D[2026-06-17])
 
-    assert Matcher.auto_link(s, Decimal.new("30.00")) == :ambiguous
-    assert CashLens.CreditCards.get_statement!(s.id).payment_transaction_id == nil
+    assert Matcher.auto_link(user(), s, Decimal.new("30.00")) == :ambiguous
+    assert CashLens.CreditCards.get_statement!(user(), s.id).payment_transaction_id == nil
   end
 
   describe "match_payment/2" do
@@ -163,9 +196,12 @@ defmodule CashLens.CreditCards.MatcherTest do
 
       pay = payment(bank, cat, Decimal.new("-30.00"), ~D[2026-06-16])
 
-      assert {:linked, linked} = Matcher.match_payment(pay)
+      assert {:linked, linked} = Matcher.match_payment(user(), pay)
       assert linked.id == statement.id
-      assert CashLens.CreditCards.get_statement!(statement.id).payment_transaction_id == pay.id
+
+      assert CashLens.CreditCards.get_statement!(user(), statement.id).payment_transaction_id ==
+               pay.id
+
       assert Repo.get!(Transaction, child.id).parent_transaction_id == pay.id
     end
 
@@ -183,7 +219,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
       pay = payment(bank, cat, Decimal.new("-30.00"), ~D[2026-06-16])
 
-      assert Matcher.match_payment(pay) == :no_match
+      assert Matcher.match_payment(user(), pay) == :no_match
     end
 
     test "returns :not_credit_card_category when the payment's category is not Cartão de Crédito" do
@@ -194,7 +230,7 @@ defmodule CashLens.CreditCards.MatcherTest do
 
       pay = payment(bank, other_category, Decimal.new("-30.00"), ~D[2026-06-16])
 
-      assert Matcher.match_payment(pay) == :not_credit_card_category
+      assert Matcher.match_payment(user(), pay) == :not_credit_card_category
     end
 
     test "credit_card_account_id scopes matching to a single card account" do
@@ -224,13 +260,14 @@ defmodule CashLens.CreditCards.MatcherTest do
 
       pay = payment(bank, cat, Decimal.new("-30.00"), ~D[2026-06-16])
 
-      assert {:linked, linked} = Matcher.match_payment(pay, card_a.id)
+      assert {:linked, linked} = Matcher.match_payment(user(), pay, card_a.id)
       assert linked.id == statement_a.id
 
-      assert CashLens.CreditCards.get_statement!(statement_a.id).payment_transaction_id ==
+      assert CashLens.CreditCards.get_statement!(user(), statement_a.id).payment_transaction_id ==
                pay.id
 
-      assert CashLens.CreditCards.get_statement!(statement_b.id).payment_transaction_id == nil
+      assert CashLens.CreditCards.get_statement!(user(), statement_b.id).payment_transaction_id ==
+               nil
     end
 
     test "returns :no_match and leaves other open statements untouched when the payment is already linked" do
@@ -260,15 +297,16 @@ defmodule CashLens.CreditCards.MatcherTest do
 
       pay = payment(bank, cat, Decimal.new("-30.00"), ~D[2026-06-16])
 
-      assert {:linked, _linked} = Matcher.match_payment(pay, card_a.id)
+      assert {:linked, _linked} = Matcher.match_payment(user(), pay, card_a.id)
       linked_pay = Repo.get!(Transaction, pay.id)
 
-      assert Matcher.match_payment(linked_pay) == :no_match
+      assert Matcher.match_payment(user(), linked_pay) == :no_match
 
-      assert CashLens.CreditCards.get_statement!(statement_a.id).payment_transaction_id ==
+      assert CashLens.CreditCards.get_statement!(user(), statement_a.id).payment_transaction_id ==
                pay.id
 
-      assert CashLens.CreditCards.get_statement!(statement_b.id).payment_transaction_id == nil
+      assert CashLens.CreditCards.get_statement!(user(), statement_b.id).payment_transaction_id ==
+               nil
     end
   end
 end

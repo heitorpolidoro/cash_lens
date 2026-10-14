@@ -130,6 +130,7 @@ defmodule CashLens.Transactions.TransferRuleApplier do
         set_category(user, tx, category)
 
         CreditCardMatcher.match_payment(
+          user,
           %{tx | category_id: category.id},
           rule.destination_account_id
         )

@@ -15,7 +15,9 @@ defmodule Mix.Tasks.CashLens.RecomputeCompetencia do
     Mix.Task.run("app.start")
     # Row-level security: maintenance work acts for the operator (CL-53).
     CashLens.Ownership.pin_operator!()
-    n = CashLens.CreditCards.recompute_competencia()
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    user = CashLens.Ownership.current_user!()
+    n = CashLens.CreditCards.recompute_competencia(user)
     Mix.shell().info("Recomputed competência for #{n} statement(s).")
   end
 end

@@ -892,7 +892,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       transfer_key = Ecto.UUID.generate()
 
       group =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "GELADEIRA",
           installments: 12,
           start_date: ~D[2026-01-10],
@@ -937,7 +937,7 @@ defmodule CashLensWeb.TransactionLiveTest do
       card = account_fixture(%{name: "Cartao", is_credit_card: true})
 
       {:ok, statement} =
-        CashLens.CreditCards.create_statement(%{
+        CashLens.CreditCards.create_statement(user(), %{
           account_id: card.id,
           competencia: ~D[2026-06-01],
           due_date: ~D[2026-06-15],
@@ -952,7 +952,7 @@ defmodule CashLensWeb.TransactionLiveTest do
           description: "Pagamento fatura"
         })
 
-      {:ok, _result} = CashLens.CreditCards.link_payment(statement, payment.id)
+      {:ok, _result} = CashLens.CreditCards.link_payment(user(), statement, payment.id)
 
       {:ok, live, html} = live(conn, ~p"/transactions/#{payment}/edit")
 

@@ -128,7 +128,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
           due_date: ~D[2026-03-10]
         })
 
-      {:ok, _} = CreditCards.link_payment(paid_statement, payment.id)
+      {:ok, _} = CreditCards.link_payment(user(), paid_statement, payment.id)
 
       {:ok, _view, html} = live(conn, ~p"/statements")
 
@@ -513,6 +513,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       # banner, now with two candidates to choose between.
       {:ok, _} =
         CashLens.CreditCards.unlink_payment(
+          user(),
           CashLens.Repo.get!(CashLens.CreditCards.Statement, statement.id)
         )
 
@@ -551,7 +552,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
           description: "PAGAMENTO FATURA NUBANK"
         })
 
-      {:ok, _} = CreditCards.link_payment(statement, debit.id)
+      {:ok, _} = CreditCards.link_payment(user(), statement, debit.id)
 
       {:ok, view, _html} = live(conn, ~p"/statements?id=#{statement.id}")
 
@@ -632,7 +633,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
         })
 
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "NOTEBOOK DELL",
           total_amount: Decimal.new("4999.00"),
           installments: 10,
@@ -712,14 +713,14 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
 
       render_submit(view, "absorb_into", %{"target_id" => agosto.id})
 
-      assert CreditCards.get_statement!(julho.id).absorbed_by_statement_id == agosto.id
+      assert CreditCards.get_statement!(user(), julho.id).absorbed_by_statement_id == agosto.id
       assert render(view) =~ "Incorporada na fatura"
       assert has_element?(view, "#release-absorption")
       refute has_element?(view, "#absorb-into")
 
       render_click(view, "release_absorption", %{})
 
-      assert CreditCards.get_statement!(julho.id).absorbed_by_statement_id == nil
+      assert CreditCards.get_statement!(user(), julho.id).absorbed_by_statement_id == nil
       assert has_element?(view, "#absorb-into")
     end
 
@@ -735,7 +736,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       html = render_submit(view, "absorb_into", %{"target_id" => alheia.id})
 
       assert html =~ "precisam ser do mesmo cartão"
-      assert CreditCards.get_statement!(julho.id).absorbed_by_statement_id == nil
+      assert CreditCards.get_statement!(user(), julho.id).absorbed_by_statement_id == nil
     end
 
     test "the next-due card names every statement sharing the date", %{conn: conn} do
@@ -924,7 +925,8 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
           description: "PAGAMENTO FATURA"
         })
 
-      {:ok, _} = CreditCards.update_statement(statement, %{payment_transaction_id: payment.id})
+      {:ok, _} =
+        CreditCards.update_statement(user(), statement, %{payment_transaction_id: payment.id})
 
       {:ok, live, _html} = live(conn, ~p"/statements?id=#{statement.id}")
 
@@ -970,8 +972,8 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       cycle_transaction(setembro, %{description: "COMPRA DE SETEMBRO", amount: "-66.28"})
       cycle_transaction(agosto, %{description: "COMPRA DE AGOSTO", amount: "-120.00"})
 
-      {:ok, _} = CreditCards.absorb_into(setembro, boleto)
-      {:ok, _} = CreditCards.absorb_into(agosto, boleto)
+      {:ok, _} = CreditCards.absorb_into(user(), setembro, boleto)
+      {:ok, _} = CreditCards.absorb_into(user(), agosto, boleto)
 
       %{card: card, boleto: boleto, setembro: setembro, agosto: agosto}
     end
@@ -1012,7 +1014,7 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
     } do
       # Detaching belongs on that cycle's own screen; from here it would move a
       # line out of a statement this screen is not editing.
-      [line] = CreditCards.statement_transactions(setembro.id)
+      [line] = CreditCards.statement_transactions(user(), setembro.id)
 
       {:ok, live, _html} = live(conn, ~p"/statements?id=#{boleto.id}")
 
@@ -1211,6 +1213,136 @@ defmodule CashLensWeb.CreditCardStatementLiveTest do
       |> Enum.flat_map(fn [_, row] ->
         month_re |> Regex.scan(row) |> Enum.map(fn [_, month] -> month end)
       end)
+    end
+  end
+
+  describe "another user's statements" do
+    setup %{user: user} do
+      %{a: other} = cross_tenant()
+
+      foreign_card =
+        account_fixture(%{user: other, is_credit_card: true, name: "Foreign Card"})
+
+      foreign_bank = account_fixture(%{user: other, name: "Foreign Bank"})
+
+      foreign =
+        statement_fixture(%{
+          user: other,
+          account: foreign_card,
+          competencia: ~D[2026-06-01],
+          due_date: ~D[2026-06-15],
+          total_a_pagar: Decimal.new("100.00")
+        })
+
+      foreign_line =
+        transaction_fixture(%{
+          user: other,
+          account_id: foreign_card.id,
+          import_batch_id: foreign.id,
+          description: "foreign line",
+          amount: "-100.00"
+        })
+
+      foreign_loose =
+        transaction_fixture(%{
+          user: other,
+          account_id: foreign_card.id,
+          description: "foreign loose",
+          amount: "-5.00"
+        })
+
+      foreign_payment =
+        transaction_fixture(%{
+          user: other,
+          account_id: foreign_bank.id,
+          description: "foreign payment",
+          amount: "-100.00",
+          date: ~D[2026-06-16]
+        })
+
+      mine_card = account_fixture(%{user: user, is_credit_card: true, name: "Mine Card"})
+
+      mine =
+        statement_fixture(%{
+          user: user,
+          account: mine_card,
+          competencia: ~D[2026-06-01],
+          due_date: ~D[2026-06-15],
+          total_a_pagar: Decimal.new("50.00")
+        })
+
+      {:ok,
+       other: other,
+       foreign: foreign,
+       foreign_line: foreign_line,
+       foreign_loose: foreign_loose,
+       foreign_payment: foreign_payment,
+       mine: mine}
+    end
+
+    # The foreign rows, read back as their owner.
+    defp foreign_rows(other, foreign, tx_ids) do
+      CashLens.Tenancy.acting_as(other, fn ->
+        {Repo.get!(Statement, foreign.id), Enum.map(tx_ids, &Repo.get!(Transaction, &1))}
+      end)
+    end
+
+    test "are not listed", %{conn: conn} do
+      {:ok, _live, html} = live(conn, ~p"/statements")
+
+      assert html =~ "Mine Card"
+      refute html =~ "Foreign Card"
+    end
+
+    test "a foreign id in the URL redirects to the list with an error flash", %{
+      conn: conn,
+      foreign: foreign
+    } do
+      assert {:error, {:live_redirect, %{to: "/statements"}}} =
+               result = live(conn, ~p"/statements?id=#{foreign.id}")
+
+      {:ok, _live, html} = follow_redirect(result, conn)
+
+      assert html =~ "Fatura não encontrada."
+      refute html =~ "Foreign Card"
+      refute html =~ "foreign line"
+    end
+
+    test "forged events change nothing and show an error", %{
+      conn: conn,
+      other: other,
+      foreign: foreign,
+      foreign_line: line,
+      foreign_loose: loose,
+      foreign_payment: payment,
+      mine: mine
+    } do
+      tx_ids = [line.id, loose.id, payment.id]
+      before = foreign_rows(other, foreign, tx_ids)
+      mine_before = Repo.get!(Statement, mine.id)
+
+      {:ok, live, _html} = live(conn, ~p"/statements?id=#{mine.id}")
+
+      html = render_click(live, "link", %{"payment-id" => payment.id})
+      assert html =~ "Não foi possível vincular a fatura."
+
+      html =
+        render_click(live, "link", %{"payment-id" => payment.id, "statement-id" => foreign.id})
+
+      assert html =~ "Não foi possível vincular a fatura."
+
+      html = render_click(live, "attach_transaction", %{"id" => loose.id})
+      assert html =~ "Lançamento não encontrado."
+
+      html = render_click(live, "detach_transaction", %{"id" => line.id})
+      assert html =~ "Lançamento não encontrado."
+
+      html = render_click(live, "absorb_into", %{"target_id" => foreign.id})
+      assert html =~ "Não foi possível incorporar a fatura."
+
+      refute html =~ "Foreign Card"
+      assert foreign_rows(other, foreign, tx_ids) == before
+      assert Repo.get!(Statement, mine.id) == mine_before
     end
   end
 end

@@ -68,7 +68,10 @@ defmodule CashLensWeb.TransactionLive.Index do
        Transactions.count_pending_transactions(socket.assigns.current_user)
      )
      |> assign(:statement_health, Transactions.statement_health(socket.assigns.current_user))
-     |> assign(:installment_groups, CashLens.Installments.list_installment_groups())
+     |> assign(
+       :installment_groups,
+       CashLens.Installments.list_installment_groups(socket.assigns.current_user)
+     )
      |> assign(:installment_suggestions, %{})
      |> assign_transfer_category_id()}
   end
@@ -256,12 +259,27 @@ defmodule CashLensWeb.TransactionLive.Index do
   def handle_event("link_installment", %{"id" => id, "group_id" => group_id}, socket) do
     with_own_transaction(socket, id, fn tx ->
       socket = forget_installment_suggestion(socket, id)
-      group = CashLens.Installments.get_group_with_progress(group_id)
+      user = socket.assigns.current_user
 
-      case Transactions.update_transaction(socket.assigns.current_user, tx, %{
-             installment_group_id: group_id,
-             installment_number: group.paid_count + 1
-           }) do
+      # A group id that is not the user's own (forged event) links nothing.
+      group =
+        try do
+          CashLens.Installments.get_group_with_progress(user, group_id)
+        rescue
+          Ecto.NoResultsError -> nil
+        end
+
+      result =
+        if group do
+          Transactions.update_transaction(user, tx, %{
+            installment_group_id: group_id,
+            installment_number: group.paid_count + 1
+          })
+        else
+          {:error, :not_found}
+        end
+
+      case result do
         {:ok, updated_tx} ->
           # Reload so the installment_group association is preloaded for rendering.
           {:noreply,

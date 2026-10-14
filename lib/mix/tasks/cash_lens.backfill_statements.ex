@@ -49,7 +49,14 @@ defmodule Mix.Tasks.CashLens.BackfillStatements do
 
       parsed ->
         {:ok, _statement} =
-          CreditCards.backfill_file(account, parsed, meta, Path.basename(file_path))
+          CreditCards.backfill_file(
+            # TRANSITIONAL: removed when CL-51 converts the caller
+            CashLens.Ownership.current_user!(),
+            account,
+            parsed,
+            meta,
+            Path.basename(file_path)
+          )
 
         Mix.shell().info("#{account.name} — #{Path.basename(file_path)}: ok")
     end

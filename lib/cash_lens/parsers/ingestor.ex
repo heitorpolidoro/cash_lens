@@ -194,8 +194,11 @@ defmodule CashLens.Parsers.Ingestor do
   defp maybe_create_statement(%{is_credit_card: true} = account, content, file_path, transactions) do
     meta = statement_meta(content, file_path)
 
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    user = CashLens.Ownership.current_user!()
+
     {:ok, statement} =
-      CashLens.CreditCards.create_statement(%{
+      CashLens.CreditCards.create_statement(user, %{
         account_id: account.id,
         due_date: meta.due_date,
         total_a_pagar: meta.total_a_pagar,
@@ -458,8 +461,8 @@ defmodule CashLens.Parsers.Ingestor do
     # 3b. Try to link a freshly-imported credit-card invoice batch to an
     # existing "Cartão de Crédito" payment transaction.
     if statement_id do
-      statement = CashLens.CreditCards.get_statement!(statement_id)
-      CashLens.CreditCards.absorb_pending(statement)
+      statement = CashLens.CreditCards.get_statement!(user, statement_id)
+      CashLens.CreditCards.absorb_pending(user, statement)
 
       # The cycle's total is every line of the statement, not only the rows
       # this run happened to insert. Summing the inserted ones alone made a
@@ -467,7 +470,7 @@ defmodule CashLens.Parsers.Ingestor do
       line_total =
         Enum.reduce(statement_lines, Decimal.new(0), &Decimal.add(&2, &1.amount))
 
-      Matcher.auto_link(statement, line_total)
+      Matcher.auto_link(user, statement, line_total)
     end
 
     # 4. Run TransferMatcher for new transactions (including mirrors) in batch

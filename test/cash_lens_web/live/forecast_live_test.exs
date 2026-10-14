@@ -1,6 +1,8 @@
 defmodule CashLensWeb.ForecastLiveTest do
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Ownership.current_user!()
+
   import Phoenix.LiveViewTest
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
@@ -413,7 +415,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       month = Date.beginning_of_month(Date.add(Date.utc_today(), 60))
 
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "NOTEBOOK DELL",
           installments: 10,
           start_date: month,
@@ -428,7 +430,7 @@ defmodule CashLensWeb.ForecastLiveTest do
         amount: Decimal.new("-620.00")
       })
 
-      total = CashLens.Installments.account_installment_total(card.id, month)
+      total = CashLens.Installments.account_installment_total(user(), card.id, month)
 
       {:ok, _view, html} = live(conn, ~p"/forecast")
 
@@ -451,7 +453,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       checking = account_fixture(%{balance: "0.00"})
 
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "FINANCIAMENTO IMOVEL",
           commitment_type: "financing",
           installments: 3,
@@ -541,7 +543,7 @@ defmodule CashLensWeb.ForecastLiveTest do
       checking = account_fixture(%{balance: "0.00"})
 
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "COMPROMISSO AMANHA",
           installments: 2,
           start_date: Date.add(today, 1),

@@ -10,6 +10,8 @@ defmodule CashLens.InstallmentsScopeGuardTest do
   """
   use CashLens.DataCase, async: false
 
+  defp user, do: CashLens.Ownership.current_user!()
+
   import CashLens.AccountsFixtures
   import CashLens.TransactionsFixtures
 
@@ -21,7 +23,7 @@ defmodule CashLens.InstallmentsScopeGuardTest do
     card = account_fixture(%{is_credit_card: true})
 
     {:ok, group} =
-      Installments.create_installment_group(%{
+      Installments.create_installment_group(user(), %{
         description_pattern: "SCOPE_GUARD_CARD_GROUP",
         installments: 4,
         start_date: ~D[2026-06-01],
@@ -41,7 +43,7 @@ defmodule CashLens.InstallmentsScopeGuardTest do
   test "account_installment_groups/2 still returns a group living on a credit-card account" do
     {card, group} = card_group_fixture()
 
-    ids = Installments.account_installment_groups(card.id, @month) |> Enum.map(& &1.id)
+    ids = Installments.account_installment_groups(user(), card.id, @month) |> Enum.map(& &1.id)
 
     assert group.id in ids
   end
@@ -49,7 +51,7 @@ defmodule CashLens.InstallmentsScopeGuardTest do
   test "account_installment_total/2 returns the non-zero parcel sum of the card group" do
     {card, group} = card_group_fixture()
 
-    total = Installments.account_installment_total(card.id, @month)
+    total = Installments.account_installment_total(user(), card.id, @month)
     expected = Installments.parcel_value(group)
 
     refute Decimal.equal?(total, Decimal.new("0"))

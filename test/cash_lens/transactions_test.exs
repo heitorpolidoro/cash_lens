@@ -109,7 +109,7 @@ defmodule CashLens.TransactionsTest do
 
     test "suggest_installment_link/1 suggests an in-progress group" do
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "ACADEMIA",
           total_amount: "300.00",
           installments: 3,
@@ -126,7 +126,7 @@ defmodule CashLens.TransactionsTest do
 
     test "suggest_installment_link/1 returns nil for completed groups and no match" do
       {:ok, group} =
-        CashLens.Installments.create_installment_group(%{
+        CashLens.Installments.create_installment_group(user(), %{
           description_pattern: "COMPLETO",
           total_amount: "200.00",
           installments: 2,

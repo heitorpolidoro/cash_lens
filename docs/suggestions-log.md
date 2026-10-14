@@ -1634,3 +1634,7 @@ commit claimed none were added. Fixed; back to 23.
 - Code review: `list_latest_balances` (`accounts:` option) filters with `a.user_id == user.id` in memory rather than through `scope/2`; acceptable since it is not a query predicate.
 - Code review: `balance_adjuster.ex` uses `struct()` in specs; `User.t()` would be more precise.
 - Code review: Unused `user` var in accounts_test.exs:279 and unused import in credit_cards_test.exs (pre-existing warnings).
+
+## [CL-59] Scope Installments and CreditCards by the current user — 2026-10-13
+- Code review: Test compile warnings (unused import/alias) in `forecast_live_test.exs` and `transaction_live/index_test.exs`; clean up if from this change.
+- Code review: Spec says `:parent_id` but the code correctly uses `:parent_transaction_id`; fix the spec wording.

@@ -1,5 +1,7 @@
 defmodule CashLens.Parsers.IngestorTest do
   use CashLens.DataCase, async: false
+
+  defp user, do: CashLens.Ownership.current_user!()
   import Mox
   alias CashLens.Parsers.Ingestor
   alias CashLens.Parsers.MercadoPagoPDFParser
@@ -397,7 +399,8 @@ defmodule CashLens.Parsers.IngestorTest do
 
       assert {:ok, %{imported: 1}} = Ingestor.import_file(account, path)
 
-      assert CashLens.CreditCards.get_statement!(pending.id).absorbed_by_statement_id != nil
+      assert CashLens.CreditCards.get_statement!(user(), pending.id).absorbed_by_statement_id !=
+               nil
     end
 
     test "dry_run: true returns the same counts a real import would, with zero writes" do

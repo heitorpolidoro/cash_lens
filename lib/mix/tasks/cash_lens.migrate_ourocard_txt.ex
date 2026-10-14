@@ -22,13 +22,15 @@ defmodule Mix.Tasks.CashLens.MigrateOurocardTxt do
     Mix.Task.run("app.start")
     # Row-level security: maintenance work acts for the operator (CL-53).
     CashLens.Ownership.pin_operator!()
+    # TRANSITIONAL: removed when CL-51 converts the caller
+    user = CashLens.Ownership.current_user!()
 
     accounts =
       from(a in Account, where: a.parser_type == "ourocard_ofx")
       |> Repo.all()
 
     Enum.each(accounts, fn account ->
-      {stmts, txns} = CreditCards.reset_account_statements(account.id)
+      {stmts, txns} = CreditCards.reset_account_statements(user, account.id)
 
       {:ok, _} =
         account

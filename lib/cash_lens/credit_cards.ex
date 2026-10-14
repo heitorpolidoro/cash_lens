@@ -1,39 +1,53 @@
 defmodule CashLens.CreditCards do
-  @moduledoc "Credit-card statement (fatura) context."
+  @moduledoc """
+  Credit-card statement (fatura) context.
+
+  Every function that touches rows takes the `%CashLens.Users.User{}` it acts
+  for as its first argument and filters every table it reads or writes (joins
+  and subqueries included) through `CashLens.Ownership.scope/2`. Another user's
+  statement, payment or transaction is never read or changed: getters raise
+  `Ecto.NoResultsError`, writes return `{:error, :not_found}`.
+  """
   import Ecto.Query
-  alias CashLens.Accounts
   alias CashLens.Accounts.Account
   alias CashLens.CreditCards.Matcher
   alias CashLens.CreditCards.Statement
+  alias CashLens.Ownership
   alias CashLens.Repo
   alias CashLens.Transactions.Transaction
+  alias CashLens.Users.User
   alias Ecto.Multi
 
   @closing_offset 7
 
-  def create_statement(attrs) do
+  @doc """
+  Creates a statement owned by `user`, or updates the one already recorded for
+  the same account and cycle. A `"user_id"` in `attrs` is ignored.
+  """
+  def create_statement(%User{} = user, attrs) do
     account_id = Map.get(attrs, :account_id) || Map.get(attrs, "account_id")
     competencia = Map.get(attrs, :competencia) || Map.get(attrs, "competencia")
     due_date = Map.get(attrs, :due_date) || Map.get(attrs, "due_date")
 
-    existing = find_existing_statement(account_id, competencia, due_date)
+    existing = find_existing_statement(user, account_id, competencia, due_date)
 
     case existing do
       %Statement{} = statement ->
-        update_statement(statement, attrs)
+        update_statement(user, statement, attrs)
 
       nil ->
-        %Statement{}
+        %Statement{user_id: user.id}
         |> Statement.changeset(attrs)
         |> Repo.insert()
     end
   end
 
-  defp find_existing_statement(nil, _competencia, _due_date), do: nil
-  defp find_existing_statement(false, _competencia, _due_date), do: nil
+  defp find_existing_statement(_user, nil, _competencia, _due_date), do: nil
+  defp find_existing_statement(_user, false, _competencia, _due_date), do: nil
 
-  defp find_existing_statement(account_id, nil, due_date) when due_date not in [nil, false] do
-    from(s in Statement,
+  defp find_existing_statement(user, account_id, nil, due_date)
+       when due_date not in [nil, false] do
+    from(s in Ownership.scope(Statement, user),
       where: s.account_id == ^account_id and s.due_date == ^due_date and is_nil(s.competencia),
       order_by: [desc: s.inserted_at],
       limit: 1
@@ -41,17 +55,50 @@ defmodule CashLens.CreditCards do
     |> Repo.one()
   end
 
-  defp find_existing_statement(account_id, competencia, _due_date)
+  defp find_existing_statement(user, account_id, competencia, _due_date)
        when competencia not in [nil, false] do
-    get_statement_by_account_and_competencia(account_id, competencia)
+    get_statement_by_account_and_competencia(user, account_id, competencia)
   end
 
-  defp find_existing_statement(_account_id, _competencia, _due_date), do: nil
+  defp find_existing_statement(_user, _account_id, _competencia, _due_date), do: nil
 
-  def get_statement!(id), do: Repo.get!(Statement, id)
+  def get_statement!(%User{} = user, id) do
+    case fetch_statement(user, id) do
+      nil -> raise Ecto.NoResultsError, queryable: Statement
+      statement -> statement
+    end
+  end
 
-  def get_statement_by_account_and_competencia(account_id, %Date{} = competencia) do
-    from(s in Statement,
+  @doc "One of the user's statements, or `nil` for an unknown id or anyone else's."
+  def get_statement(%User{} = user, id), do: fetch_statement(user, id)
+
+  defp fetch_statement(user, id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, id} -> Statement |> Ownership.scope(user) |> Repo.get(id)
+      :error -> nil
+    end
+  end
+
+  # Whether every id names a transaction the user owns.
+  defp all_transactions_owned?(_user, []), do: true
+
+  defp all_transactions_owned?(user, ids) do
+    casted = Enum.map(ids, &Ecto.UUID.cast/1)
+
+    if Enum.all?(casted, &match?({:ok, _}, &1)) do
+      ids = casted |> Enum.map(fn {:ok, id} -> id end) |> Enum.uniq()
+
+      owned =
+        Repo.aggregate(from(t in Ownership.scope(Transaction, user), where: t.id in ^ids), :count)
+
+      owned == length(ids)
+    else
+      false
+    end
+  end
+
+  def get_statement_by_account_and_competencia(%User{} = user, account_id, %Date{} = competencia) do
+    from(s in Ownership.scope(Statement, user),
       where: s.account_id == ^account_id and s.competencia == ^competencia,
       order_by: [desc: s.inserted_at],
       limit: 1
@@ -59,18 +106,29 @@ defmodule CashLens.CreditCards do
     |> Repo.one()
   end
 
-  def update_statement(%Statement{} = statement, attrs) do
-    statement
-    |> Statement.changeset(attrs)
-    |> Repo.update()
+  @doc """
+  Updates one of the user's statements; `{:error, :not_found}` for anyone else's.
+  """
+  def update_statement(%User{} = user, %Statement{id: id}, attrs) do
+    case fetch_statement(user, id) do
+      nil ->
+        {:error, :not_found}
+
+      statement ->
+        statement
+        |> Statement.changeset(attrs)
+        |> Repo.update()
+    end
   end
 
   @doc """
   Lists the boletos (statements with a `due_date`) belonging to an account.
   Used by the directory importer to detect billing-cycle divergences.
   """
-  def list_boletos_for_account(account_id) do
-    from(s in Statement, where: s.account_id == ^account_id and not is_nil(s.due_date))
+  def list_boletos_for_account(%User{} = user, account_id) do
+    from(s in Ownership.scope(Statement, user),
+      where: s.account_id == ^account_id and not is_nil(s.due_date)
+    )
     |> Repo.all()
   end
 
@@ -167,16 +225,31 @@ defmodule CashLens.CreditCards do
   fingerprint isn't found (e.g. already deleted) are simply not matched;
   no transactions are inserted here.
   """
-  def backfill_file(account, parsed_transactions, meta, source_file) do
-    {:ok, statement} =
-      create_statement(%{
-        account_id: account.id,
-        due_date: meta.due_date,
-        total_a_pagar: meta.total_a_pagar,
-        competencia: competencia_from(meta.competencia, parsed_transactions),
-        source_file: source_file
-      })
+  def backfill_file(%User{} = user, account, parsed_transactions, meta, source_file) do
+    with %Account{} <- Account |> Ownership.scope(user) |> Repo.get(account.id),
+         {:ok, statement} <-
+           create_statement(user, %{
+             account_id: account.id,
+             due_date: meta.due_date,
+             total_a_pagar: meta.total_a_pagar,
+             competencia: competencia_from(meta.competencia, parsed_transactions),
+             source_file: source_file
+           }) do
+      stamp_batch(user, account, parsed_transactions, statement)
 
+      line_total =
+        Enum.reduce(parsed_transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
+
+      Matcher.auto_link(user, statement, line_total)
+
+      {:ok, statement}
+    else
+      nil -> {:error, :not_found}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp stamp_batch(user, account, parsed_transactions, statement) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     parsed_transactions
@@ -184,16 +257,9 @@ defmodule CashLens.CreditCards do
     |> Enum.each(fn {data, index} ->
       fp = fingerprint_for(data, account.id, index)
 
-      from(t in Transaction, where: t.fingerprint == ^fp)
+      from(t in Ownership.scope(Transaction, user), where: t.fingerprint == ^fp)
       |> Repo.update_all(set: [import_batch_id: statement.id, updated_at: now])
     end)
-
-    line_total =
-      Enum.reduce(parsed_transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
-
-    Matcher.auto_link(statement, line_total)
-
-    {:ok, statement}
   end
 
   # Mirrors CashLens.Parsers.Ingestor's assign_occurrence_indices/2: the
@@ -236,7 +302,13 @@ defmodule CashLens.CreditCards do
   def statement_status(%Statement{payment_transaction_id: nil}, _line_total), do: :open
 
   def statement_status(%Statement{} = statement, line_total) do
-    payment = Repo.get!(Transaction, statement.payment_transaction_id)
+    # The payment is the statement owner's own transaction (the foreign key is
+    # validated on write); it is read through the same owner filter.
+    payment =
+      Transaction
+      |> Ownership.scope(%User{id: statement.user_id})
+      |> Repo.get!(statement.payment_transaction_id)
+
     target = statement.total_a_pagar || line_total
 
     if Decimal.equal?(payment.amount, target) or
@@ -247,8 +319,8 @@ defmodule CashLens.CreditCards do
     end
   end
 
-  def statement_transactions(statement_id) do
-    from(t in Transaction,
+  def statement_transactions(%User{} = user, statement_id) do
+    from(t in Ownership.scope(Transaction, user),
       where: t.import_batch_id == ^statement_id,
       order_by: [asc: t.date, asc: t.inserted_at],
       preload: [:category, :installment_group]
@@ -267,8 +339,8 @@ defmodule CashLens.CreditCards do
   Restricted to the statement's own account: a card's bill can only ever contain
   that card's spending.
   """
-  def attachable_transactions(%Statement{} = statement, limit \\ 50) do
-    from(t in Transaction,
+  def attachable_transactions(%User{} = user, %Statement{} = statement, limit \\ 50) do
+    from(t in Ownership.scope(Transaction, user),
       where: t.account_id == ^statement.account_id,
       where: is_nil(t.import_batch_id),
       order_by: [desc: t.date, desc: t.inserted_at],
@@ -286,35 +358,45 @@ defmodule CashLens.CreditCards do
   belong to no statement. A stale page offering a transaction that has since
   been claimed elsewhere therefore moves nothing instead of stealing it.
   """
-  def attach_transactions(%Statement{} = statement, transaction_ids)
+  def attach_transactions(%User{} = user, %Statement{id: id}, transaction_ids)
       when is_list(transaction_ids) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    with %Statement{} = statement <- fetch_statement(user, id),
+         true <- all_transactions_owned?(user, transaction_ids) do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    {count, _} =
-      from(t in Transaction,
-        where: t.id in ^transaction_ids,
-        where: t.account_id == ^statement.account_id,
-        where: is_nil(t.import_batch_id)
-      )
-      |> Repo.update_all(set: [import_batch_id: statement.id, updated_at: now])
+      {count, _} =
+        from(t in Ownership.scope(Transaction, user),
+          where: t.id in ^transaction_ids,
+          where: t.account_id == ^statement.account_id,
+          where: is_nil(t.import_batch_id)
+        )
+        |> Repo.update_all(set: [import_batch_id: statement.id, updated_at: now])
 
-    {:ok, count}
+      {:ok, count}
+    else
+      _ -> {:error, :not_found}
+    end
   end
 
   @doc """
   Takes a transaction back off its statement, leaving the transaction itself
   untouched. The inverse of `attach_transactions/2`.
   """
-  def detach_transaction(%Statement{} = statement, transaction_id) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+  def detach_transaction(%User{} = user, %Statement{id: id}, transaction_id) do
+    with %Statement{} = statement <- fetch_statement(user, id),
+         true <- all_transactions_owned?(user, [transaction_id]) do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    {count, _} =
-      from(t in Transaction,
-        where: t.id == ^transaction_id and t.import_batch_id == ^statement.id
-      )
-      |> Repo.update_all(set: [import_batch_id: nil, updated_at: now])
+      {count, _} =
+        from(t in Ownership.scope(Transaction, user),
+          where: t.id == ^transaction_id and t.import_batch_id == ^statement.id
+        )
+        |> Repo.update_all(set: [import_batch_id: nil, updated_at: now])
 
-    {:ok, count}
+      {:ok, count}
+    else
+      _ -> {:error, :not_found}
+    end
   end
 
   @doc """
@@ -348,7 +430,7 @@ defmodule CashLens.CreditCards do
   stays in the first state rather than accusing an import that was never late.
   Archived cards are left out; a card nobody uses is not waiting for anything.
   """
-  def pending_cycles(entries, today \\ Date.utc_today()) do
+  def pending_cycles(%User{} = user, entries, today \\ Date.utc_today()) do
     competencia = Date.beginning_of_month(today)
 
     covered =
@@ -356,8 +438,8 @@ defmodule CashLens.CreditCards do
       |> Enum.filter(&(&1.statement.competencia == competencia))
       |> MapSet.new(& &1.account.id)
 
-    CashLens.Ownership.current_user!()
-    |> Accounts.list_credit_cards(include_closed: false)
+    user
+    |> CashLens.Accounts.list_credit_cards(include_closed: false)
     |> Enum.reject(&MapSet.member?(covered, &1.id))
     |> Enum.map(&pending_entry(&1, competencia, today))
     |> Enum.sort_by(& &1.account.name)
@@ -380,16 +462,16 @@ defmodule CashLens.CreditCards do
   defp cycle_closed?(%{closing_day: nil}, _today), do: false
   defp cycle_closed?(%{closing_day: closing_day}, today), do: today.day > closing_day
 
-  def list_statements do
+  def list_statements(%User{} = user) do
     statements =
-      from(s in Statement,
+      from(s in Ownership.scope(Statement, user),
         preload: [:account, :absorbed_by, :payment_transaction],
         order_by: [desc_nulls_last: s.competencia, desc_nulls_last: s.due_date]
       )
       |> Repo.all()
 
     totals =
-      from(t in Transaction,
+      from(t in Ownership.scope(Transaction, user),
         where: not is_nil(t.import_batch_id),
         group_by: t.import_batch_id,
         select: {t.import_batch_id, sum(t.amount), count(t.id)}
@@ -435,31 +517,31 @@ defmodule CashLens.CreditCards do
   negative bill, which leaves the payment in the account with nothing to
   reconcile against.
   """
-  def create_manual_statement(attrs, lines \\ []) do
+  def create_manual_statement(%User{} = user, attrs, lines \\ []) do
     Multi.new()
     |> Multi.run(:statement, fn _repo, _ ->
       attrs
       |> Map.put(:source_file, @manual_source)
-      |> create_statement()
+      |> then(&create_statement(user, &1))
     end)
     |> Multi.run(:lines, fn _repo, %{statement: statement} ->
-      insert_manual_lines(statement, lines)
+      insert_manual_lines(user, statement, lines)
     end)
     |> Repo.transaction()
     |> case do
       {:ok, %{statement: statement, lines: inserted}} ->
         line_total = Enum.reduce(inserted, Decimal.new(0), &Decimal.add(&2, &1.amount))
-        Matcher.auto_link(statement, line_total)
-        {:ok, Repo.get!(Statement, statement.id)}
+        Matcher.auto_link(user, statement, line_total)
+        {:ok, get_statement!(user, statement.id)}
 
       {:error, _step, reason, _} ->
         {:error, reason}
     end
   end
 
-  defp insert_manual_lines(_statement, []), do: {:ok, []}
+  defp insert_manual_lines(_user, _statement, []), do: {:ok, []}
 
-  defp insert_manual_lines(statement, lines) do
+  defp insert_manual_lines(user, statement, lines) do
     Enum.reduce_while(lines, {:ok, []}, fn line, {:ok, acc} ->
       attrs =
         line
@@ -467,8 +549,7 @@ defmodule CashLens.CreditCards do
         |> Map.put(:import_batch_id, statement.id)
         |> Map.put(:source, "manual")
 
-      # TRANSITIONAL: removed when CL-51 converts the caller
-      case CashLens.Transactions.create_transaction(CashLens.Ownership.current_user!(), attrs) do
+      case CashLens.Transactions.create_transaction(user, attrs) do
         {:ok, :duplicate} -> {:cont, {:ok, acc}}
         {:ok, transaction} -> {:cont, {:ok, [transaction | acc]}}
         {:error, changeset} -> {:halt, {:error, changeset}}
@@ -524,9 +605,9 @@ defmodule CashLens.CreditCards do
   without both `closing_day` and `due_day` are skipped: with no cycle configured
   there is no closing date to have passed.
   """
-  def closed_without_statement(today \\ Date.utc_today(), cycles \\ 3) do
+  def closed_without_statement(%User{} = user, today \\ Date.utc_today(), cycles \\ 3) do
     accounts =
-      from(a in Account,
+      from(a in Ownership.scope(Account, user),
         where: a.is_credit_card == true and a.is_closed == false,
         where: not is_nil(a.closing_day) and not is_nil(a.due_day),
         order_by: a.name
@@ -534,7 +615,7 @@ defmodule CashLens.CreditCards do
       |> Repo.all()
 
     recorded =
-      from(s in Statement, select: {s.account_id, s.competencia})
+      from(s in Ownership.scope(Statement, user), select: {s.account_id, s.competencia})
       |> Repo.all()
       |> MapSet.new()
 
@@ -704,24 +785,32 @@ defmodule CashLens.CreditCards do
   Used by the transaction edit modal to warn that editing the payment would
   affect a reconciled statement.
   """
-  def get_statement_paid_by(nil), do: nil
+  def get_statement_paid_by(%User{}, nil), do: nil
 
-  def get_statement_paid_by(transaction_id) do
-    from(s in Statement, where: s.payment_transaction_id == ^transaction_id, preload: [:account])
+  def get_statement_paid_by(%User{} = user, transaction_id) do
+    from(s in Ownership.scope(Statement, user),
+      where: s.payment_transaction_id == ^transaction_id,
+      preload: [:account]
+    )
     |> Repo.one()
   end
 
-  def get_statement_detail(id) do
+  def get_statement_detail(%User{} = user, id) do
     statement =
-      from(s in Statement, where: s.id == ^id, preload: [:account, :absorbed_by])
-      |> Repo.one!()
+      case fetch_statement(user, id) do
+        nil -> raise Ecto.NoResultsError, queryable: Statement
+        found -> Repo.preload(found, [:account, :absorbed_by])
+      end
 
-    transactions = statement_transactions(id)
+    transactions = statement_transactions(user, id)
     line_total = Enum.reduce(transactions, Decimal.new(0), &Decimal.add(&2, &1.amount))
 
     payment =
       statement.payment_transaction_id &&
-        Repo.get(Transaction, statement.payment_transaction_id) |> Repo.preload(:account)
+        Transaction
+        |> Ownership.scope(user)
+        |> Repo.get(statement.payment_transaction_id)
+        |> Repo.preload(:account)
 
     %{
       statement: statement,
@@ -734,7 +823,7 @@ defmodule CashLens.CreditCards do
       amount: statement.total_a_pagar || line_total,
       absorbed_into: statement.absorbed_by && statement.absorbed_by.competencia,
       absorbed_by_id: statement.absorbed_by_statement_id,
-      absorbed: absorbed_groups(id)
+      absorbed: absorbed_groups(user, id)
     }
   end
 
@@ -747,14 +836,14 @@ defmodule CashLens.CreditCards do
   "Incorporada". Keeping each cycle's lines under its own heading answers the
   question the flat list could not: which month a charge came from.
   """
-  def absorbed_groups(statement_id) do
-    from(s in Statement,
+  def absorbed_groups(%User{} = user, statement_id) do
+    from(s in Ownership.scope(Statement, user),
       where: s.absorbed_by_statement_id == ^statement_id,
       order_by: [asc: s.competencia, asc: s.due_date]
     )
     |> Repo.all()
     |> Enum.map(fn absorbed ->
-      transactions = statement_transactions(absorbed.id)
+      transactions = statement_transactions(user, absorbed.id)
 
       %{
         statement: absorbed,
@@ -765,24 +854,31 @@ defmodule CashLens.CreditCards do
     end)
   end
 
-  def link_payment(%Statement{} = statement, payment_id) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+  def link_payment(%User{} = user, %Statement{id: id}, payment_id) do
+    with %Statement{} = statement <- fetch_statement(user, id),
+         true <- all_transactions_owned?(user, [payment_id]) do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    Multi.new()
-    |> Multi.update_all(
-      :children,
-      from(t in Transaction, where: t.import_batch_id in ^covered_statement_ids(statement)),
-      set: [parent_transaction_id: payment_id, updated_at: now]
-    )
-    |> categorize_payment(payment_id, now)
-    |> Multi.update(
-      :statement,
-      Statement.changeset(statement, %{payment_transaction_id: payment_id})
-    )
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{statement: s}} -> {:ok, s}
-      {:error, _, reason, _} -> {:error, reason}
+      Multi.new()
+      |> Multi.update_all(
+        :children,
+        from(t in Ownership.scope(Transaction, user),
+          where: t.import_batch_id in ^covered_statement_ids(user, statement)
+        ),
+        set: [parent_transaction_id: payment_id, updated_at: now]
+      )
+      |> categorize_payment(user, payment_id, now)
+      |> Multi.update(
+        :statement,
+        Statement.changeset(statement, %{payment_transaction_id: payment_id})
+      )
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{statement: s}} -> {:ok, s}
+        {:error, _, reason, _} -> {:error, reason}
+      end
+    else
+      _ -> {:error, :not_found}
     end
   end
 
@@ -795,25 +891,18 @@ defmodule CashLens.CreditCards do
   # would be guessing at which card, and the link already records that.
   # A payment already somewhere in the subtree is left alone, so a more
   # specific child the operator chose by hand is not overwritten.
-  defp categorize_payment(multi, payment_id, now) do
-    case CashLens.Categories.get_category_by_slug(
-           CashLens.Ownership.current_user!(),
-           "cartao-de-credito"
-         ) do
+  defp categorize_payment(multi, user, payment_id, now) do
+    case CashLens.Categories.get_category_by_slug(user, "cartao-de-credito") do
       nil ->
         multi
 
       category ->
-        keep =
-          CashLens.Categories.get_category_ids_with_children(
-            CashLens.Ownership.current_user!(),
-            category.id
-          )
+        keep = CashLens.Categories.get_category_ids_with_children(user, category.id)
 
         Multi.update_all(
           multi,
           :payment_category,
-          from(t in Transaction,
+          from(t in Ownership.scope(Transaction, user),
             where: t.id == ^payment_id,
             where: is_nil(t.category_id) or t.category_id not in ^keep
           ),
@@ -822,20 +911,31 @@ defmodule CashLens.CreditCards do
     end
   end
 
-  def unlink_payment(%Statement{} = statement) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+  def unlink_payment(%User{} = user, %Statement{id: id}) do
+    case fetch_statement(user, id) do
+      nil ->
+        {:error, :not_found}
 
-    Multi.new()
-    |> Multi.update_all(
-      :children,
-      from(t in Transaction, where: t.import_batch_id in ^covered_statement_ids(statement)),
-      set: [parent_transaction_id: nil, updated_at: now]
-    )
-    |> Multi.update(:statement, Statement.changeset(statement, %{payment_transaction_id: nil}))
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{statement: s}} -> {:ok, s}
-      {:error, _, reason, _} -> {:error, reason}
+      statement ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        Multi.new()
+        |> Multi.update_all(
+          :children,
+          from(t in Ownership.scope(Transaction, user),
+            where: t.import_batch_id in ^covered_statement_ids(user, statement)
+          ),
+          set: [parent_transaction_id: nil, updated_at: now]
+        )
+        |> Multi.update(
+          :statement,
+          Statement.changeset(statement, %{payment_transaction_id: nil})
+        )
+        |> Repo.transaction()
+        |> case do
+          {:ok, %{statement: s}} -> {:ok, s}
+          {:error, _, reason, _} -> {:error, reason}
+        end
     end
   end
 
@@ -862,15 +962,25 @@ defmodule CashLens.CreditCards do
   # keeps a few hundred rows out of the DOM.
   @candidate_limit 50
 
-  def payment_candidates(%Statement{} = statement) do
+  def payment_candidates(%User{} = user, %Statement{id: id} = statement) do
+    if statement_owned?(user, id), do: ranked_candidates(user, statement), else: []
+  end
+
+  defp statement_owned?(user, id) do
+    Repo.exists?(from(s in Ownership.scope(Statement, user), where: s.id == ^id))
+  end
+
+  defp ranked_candidates(user, statement) do
     reconciled =
-      from(s in Statement,
+      from(s in Ownership.scope(Statement, user),
         where: not is_nil(s.payment_transaction_id),
         select: s.payment_transaction_id
       )
 
-    from(t in Transaction,
-      join: a in Account,
+    accounts = Ownership.scope(Account, user)
+
+    from(t in Ownership.scope(Transaction, user),
+      join: a in ^accounts,
       on: a.id == t.account_id,
       # Money settling a bill leaves a bank account, so: a debit, and never on
       # another card. Category is deliberately NOT consulted -- a payment that
@@ -909,19 +1019,19 @@ defmodule CashLens.CreditCards do
   What remains is the thing worth acting on: money that left an account as a
   card payment and that no bill in the system accounts for.
   """
-  def unlinked_card_payments do
-    case credit_card_category_ids() do
+  def unlinked_card_payments(%User{} = user) do
+    case credit_card_category_ids(user) do
       [] ->
         []
 
       category_ids ->
         reconciled =
-          from(s in Statement,
+          from(s in Ownership.scope(Statement, user),
             where: not is_nil(s.payment_transaction_id),
             select: s.payment_transaction_id
           )
 
-        from(t in Transaction,
+        from(t in Ownership.scope(Transaction, user),
           where: t.category_id in ^category_ids,
           where: is_nil(t.parent_transaction_id),
           where: is_nil(t.import_batch_id),
@@ -935,19 +1045,10 @@ defmodule CashLens.CreditCards do
 
   # The whole `cartao-de-credito` subtree, matching what
   # `CashLens.CreditCards.Matcher` does.
-  defp credit_card_category_ids do
-    case CashLens.Categories.get_category_by_slug(
-           CashLens.Ownership.current_user!(),
-           "cartao-de-credito"
-         ) do
-      nil ->
-        []
-
-      category ->
-        CashLens.Categories.get_category_ids_with_children(
-          CashLens.Ownership.current_user!(),
-          category.id
-        )
+  defp credit_card_category_ids(user) do
+    case CashLens.Categories.get_category_by_slug(user, "cartao-de-credito") do
+      nil -> []
+      category -> CashLens.Categories.get_category_ids_with_children(user, category.id)
     end
   end
 
@@ -1016,11 +1117,11 @@ defmodule CashLens.CreditCards do
   manualmente", which lists every candidate. Announcing a weak match under
   "Pagamento Detectado no Extrato Bancário!" is worse than announcing nothing.
   """
-  def suggest_payment(%Statement{total_a_pagar: nil}), do: nil
-  def suggest_payment(%Statement{due_date: nil}), do: nil
+  def suggest_payment(%User{}, %Statement{total_a_pagar: nil}), do: nil
+  def suggest_payment(%User{}, %Statement{due_date: nil}), do: nil
 
-  def suggest_payment(%Statement{} = statement) do
-    candidates = payment_candidates(statement)
+  def suggest_payment(%User{} = user, %Statement{} = statement) do
+    candidates = payment_candidates(user, statement)
 
     Enum.find(candidates, &exact_match?(&1, statement)) ||
       Enum.find(candidates, &late_match?(&1, statement))
@@ -1046,14 +1147,27 @@ defmodule CashLens.CreditCards do
   deletes its `credit_card_statements` and all its `transactions`. Returns
   `{deleted_statements, deleted_transactions}`.
   """
-  def reset_account_statements(account_id) do
-    {stmts, _} =
-      from(s in Statement, where: s.account_id == ^account_id) |> Repo.delete_all()
+  def reset_account_statements(%User{} = user, account_id) do
+    if account_owned?(user, account_id) do
+      {stmts, _} =
+        from(s in Ownership.scope(Statement, user), where: s.account_id == ^account_id)
+        |> Repo.delete_all()
 
-    {txns, _} =
-      from(t in Transaction, where: t.account_id == ^account_id) |> Repo.delete_all()
+      {txns, _} =
+        from(t in Ownership.scope(Transaction, user), where: t.account_id == ^account_id)
+        |> Repo.delete_all()
 
-    {stmts, txns}
+      {stmts, txns}
+    else
+      {:error, :not_found}
+    end
+  end
+
+  defp account_owned?(user, account_id) do
+    case Ecto.UUID.cast(account_id) do
+      {:ok, id} -> Repo.exists?(from(a in Ownership.scope(Account, user), where: a.id == ^id))
+      :error -> false
+    end
   end
 
   @doc """
@@ -1070,10 +1184,18 @@ defmodule CashLens.CreditCards do
   that no longer stands on its own — or backwards in time: a cycle rolls its
   balance forward onto a later bill, never onto one that closed before it.
   """
-  def absorb_into(%Statement{id: id}, %Statement{id: id}),
-    do: {:error, :same_statement}
+  def absorb_into(%User{} = user, %Statement{id: id}, %Statement{id: target_id}) do
+    with %Statement{} = statement <- fetch_statement(user, id),
+         %Statement{} = target <- fetch_statement(user, target_id) do
+      do_absorb_into(statement, target)
+    else
+      nil -> {:error, :not_found}
+    end
+  end
 
-  def absorb_into(%Statement{} = statement, %Statement{} = target) do
+  defp do_absorb_into(%Statement{id: id}, %Statement{id: id}), do: {:error, :same_statement}
+
+  defp do_absorb_into(%Statement{} = statement, %Statement{} = target) do
     cond do
       statement.account_id != target.account_id ->
         {:error, :different_account}
@@ -1095,10 +1217,16 @@ defmodule CashLens.CreditCards do
   Undoes an absorption, manual or automatic, putting the statement back on its
   own feet.
   """
-  def release_absorption(%Statement{} = statement) do
-    statement
-    |> Ecto.Changeset.change(%{absorbed_by_statement_id: nil})
-    |> Repo.update()
+  def release_absorption(%User{} = user, %Statement{id: id}) do
+    case fetch_statement(user, id) do
+      nil ->
+        {:error, :not_found}
+
+      statement ->
+        statement
+        |> Ecto.Changeset.change(%{absorbed_by_statement_id: nil})
+        |> Repo.update()
+    end
   end
 
   @doc """
@@ -1110,8 +1238,8 @@ defmodule CashLens.CreditCards do
   recording it the wrong way round, which then reads as a bill that was paid
   before it existed.
   """
-  def absorption_targets(%Statement{} = statement) do
-    from(s in Statement,
+  def absorption_targets(%User{} = user, %Statement{} = statement) do
+    from(s in Ownership.scope(Statement, user),
       where: s.account_id == ^statement.account_id,
       where: s.id != ^statement.id,
       where: is_nil(s.absorbed_by_statement_id),
@@ -1141,16 +1269,16 @@ defmodule CashLens.CreditCards do
   `absorbed_by_statement_id = boleto.id` and returns them. Returns [] for
   non-boletos, boletos without a total, or when the sum does not match.
   """
-  def absorb_pending(%Statement{due_date: nil}), do: []
-  def absorb_pending(%Statement{total_a_pagar: nil}), do: []
+  def absorb_pending(%User{}, %Statement{due_date: nil}), do: []
+  def absorb_pending(%User{}, %Statement{total_a_pagar: nil}), do: []
 
-  def absorb_pending(%Statement{} = boleto) do
-    pending = eligible_pending(boleto)
+  def absorb_pending(%User{} = user, %Statement{} = boleto) do
+    pending = eligible_pending(user, boleto)
 
     if pending == [] do
       []
     else
-      line_total = boleto.id |> statement_transactions() |> sum_amounts()
+      line_total = user |> statement_transactions(boleto.id) |> sum_amounts()
       rolled = Decimal.sub(boleto.total_a_pagar, Decimal.abs(line_total))
 
       sum_pending =
@@ -1160,7 +1288,7 @@ defmodule CashLens.CreditCards do
         now = DateTime.utc_now() |> DateTime.truncate(:second)
         ids = Enum.map(pending, & &1.id)
 
-        from(s in Statement, where: s.id in ^ids)
+        from(s in Ownership.scope(Statement, user), where: s.id in ^ids)
         |> Repo.update_all(set: [absorbed_by_statement_id: boleto.id, updated_at: now])
 
         pending
@@ -1170,8 +1298,8 @@ defmodule CashLens.CreditCards do
     end
   end
 
-  defp eligible_pending(%Statement{} = boleto) do
-    from(s in Statement,
+  defp eligible_pending(user, %Statement{} = boleto) do
+    from(s in Ownership.scope(Statement, user),
       where: s.account_id == ^boleto.account_id,
       where: is_nil(s.due_date),
       where: is_nil(s.absorbed_by_statement_id),
@@ -1187,9 +1315,12 @@ defmodule CashLens.CreditCards do
 
   # Statement ids whose transactions a boleto's payment covers: the boleto
   # itself plus every statement absorbed into it.
-  defp covered_statement_ids(%Statement{} = boleto) do
+  defp covered_statement_ids(user, %Statement{} = boleto) do
     absorbed =
-      from(s in Statement, where: s.absorbed_by_statement_id == ^boleto.id, select: s.id)
+      from(s in Ownership.scope(Statement, user),
+        where: s.absorbed_by_statement_id == ^boleto.id,
+        select: s.id
+      )
       |> Repo.all()
 
     [boleto.id | absorbed]
@@ -1200,29 +1331,29 @@ defmodule CashLens.CreditCards do
   propagating an already-linked payment to newly-absorbed transactions.
   Returns the number of statements newly absorbed. Idempotent.
   """
-  def reconcile_pending do
+  def reconcile_pending(%User{} = user) do
     boletos =
-      from(s in Statement,
+      from(s in Ownership.scope(Statement, user),
         where: not is_nil(s.due_date),
         order_by: [asc: s.competencia, asc: s.inserted_at]
       )
       |> Repo.all()
 
     Enum.reduce(boletos, 0, fn boleto, count ->
-      case absorb_pending(boleto) do
+      case absorb_pending(user, boleto) do
         [] ->
           count
 
         absorbed ->
-          relink_payment(boleto)
+          relink_payment(user, boleto)
           count + length(absorbed)
       end
     end)
   end
 
-  defp relink_payment(%{payment_transaction_id: nil}), do: :ok
+  defp relink_payment(_user, %{payment_transaction_id: nil}), do: :ok
 
-  defp relink_payment(boleto), do: link_payment(boleto, boleto.payment_transaction_id)
+  defp relink_payment(user, boleto), do: link_payment(user, boleto, boleto.payment_transaction_id)
 
   @doc """
   Best-effort billing-cycle estimate from the account's imported boletos:
@@ -1231,7 +1362,7 @@ defmodule CashLens.CreditCards do
   """
   def estimate_cycle(account) do
     days =
-      from(s in Statement,
+      from(s in Ownership.scope(Statement, %User{id: account.user_id}),
         where: s.account_id == ^account.id and not is_nil(s.due_date),
         select: s.due_date
       )
@@ -1256,27 +1387,29 @@ defmodule CashLens.CreditCards do
   count updated. Idempotent. Boletos (with due_date) resolve to their due month
   either way.
   """
-  def recompute_competencia do
+  def recompute_competencia(%User{} = user) do
     accounts =
-      from(a in Account,
+      from(a in Ownership.scope(Account, user),
         where: a.is_credit_card == true and not is_nil(a.closing_day) and not is_nil(a.due_day)
       )
       |> Repo.all()
 
     Enum.reduce(accounts, 0, fn account, count ->
-      statements = from(s in Statement, where: s.account_id == ^account.id) |> Repo.all()
+      statements =
+        from(s in Ownership.scope(Statement, user), where: s.account_id == ^account.id)
+        |> Repo.all()
 
-      Enum.reduce(statements, count, &recompute_statement_competencia(&1, &2, account))
+      Enum.reduce(statements, count, &recompute_statement_competencia(user, &1, &2, account))
     end)
   end
 
-  defp recompute_statement_competencia(s, acc, account) do
+  defp recompute_statement_competencia(user, s, acc, account) do
     meta = %{
       due_date: s.due_date,
       competencia: s.due_date && Date.beginning_of_month(s.due_date)
     }
 
-    new_comp = competencia_for(account, meta, statement_transactions(s.id))
+    new_comp = competencia_for(account, meta, statement_transactions(user, s.id))
 
     if new_comp && new_comp != s.competencia do
       {:ok, _} = update_statement_competencia(s, new_comp)

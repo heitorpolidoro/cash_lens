@@ -462,7 +462,7 @@
                   </div>
                 </div>
 
-                <% parcels = Installments.list_group_transactions(group.id) %>
+                <% parcels = Installments.list_group_transactions(@current_user, group.id) %>
                 <div :if={parcels == []} class="text-xs opacity-40 py-2">
                   Nenhuma parcela importada ainda.
                 </div>

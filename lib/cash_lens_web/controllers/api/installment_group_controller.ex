@@ -4,38 +4,44 @@ defmodule CashLensWeb.Api.InstallmentGroupController do
   alias CashLens.Installments
 
   def index(conn, _params) do
-    groups = Installments.list_installment_groups()
+    groups = Installments.list_installment_groups(conn.assigns.current_user)
     json(conn, %{data: Enum.map(groups, &serialize/1)})
   end
 
   def show(conn, %{"id" => id}) do
-    group = Installments.get_installment_group!(id)
+    group = Installments.get_installment_group!(conn.assigns.current_user, id)
     json(conn, %{data: serialize(group)})
   rescue
-    Ecto.NoResultsError -> send_resp(conn, 404, ~s({"error":"not found"}))
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   def update(conn, %{"id" => id} = params) do
-    group = Installments.get_installment_group!(id)
+    user = conn.assigns.current_user
+    group = Installments.get_installment_group!(user, id)
 
-    case Installments.update_installment_group(group, params) do
+    case Installments.update_installment_group(user, group, params) do
       {:ok, updated} -> json(conn, %{data: serialize(updated)})
+      {:error, :not_found} -> not_found(conn)
       {:error, cs} -> conn |> put_status(422) |> json(%{error: format_errors(cs)})
     end
   rescue
-    Ecto.NoResultsError -> send_resp(conn, 404, ~s({"error":"not found"}))
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   def delete(conn, %{"id" => id}) do
-    group = Installments.get_installment_group!(id)
+    user = conn.assigns.current_user
+    group = Installments.get_installment_group!(user, id)
 
-    case Installments.delete_installment_group(group) do
+    case Installments.delete_installment_group(user, group) do
       {:ok, _} -> send_resp(conn, 204, "")
+      {:error, :not_found} -> not_found(conn)
       {:error, cs} -> conn |> put_status(422) |> json(%{error: format_errors(cs)})
     end
   rescue
-    Ecto.NoResultsError -> send_resp(conn, 404, ~s({"error":"not found"}))
+    Ecto.NoResultsError -> not_found(conn)
   end
+
+  defp not_found(conn), do: send_resp(conn, 404, ~s({"error":"not found"}))
 
   defp serialize(g) do
     %{

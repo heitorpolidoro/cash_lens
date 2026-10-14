@@ -18,6 +18,8 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
   # fixed numeric budget is no place to also be racing other tests.
   use CashLensWeb.ConnCase, async: false
 
+  defp user, do: CashLens.Ownership.current_user!()
+
   import CashLens.AccountsFixtures
   import CashLens.CategoriesFixtures
   import CashLens.CreditCardsFixtures
@@ -356,7 +358,7 @@ defmodule CashLensWeb.DashboardQueryBudgetTest do
 
   defp installment_group(pattern, start_date, installments) do
     {:ok, group} =
-      Installments.create_installment_group(%{
+      Installments.create_installment_group(user(), %{
         description_pattern: pattern,
         total_amount: "#{installments * 250}.00",
         installments: installments,

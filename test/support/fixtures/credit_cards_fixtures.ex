@@ -22,7 +22,7 @@ defmodule CashLens.CreditCardsFixtures do
           total_a_pagar: Decimal.new("100.00"),
           source_file: "fatura.pdf"
         })
-        |> CashLens.CreditCards.create_statement()
+        |> then(&CashLens.CreditCards.create_statement(user, &1))
       end)
 
     statement
